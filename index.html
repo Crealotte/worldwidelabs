@@ -991,6 +991,7 @@
             if (changed && $('bt-okonly').checked) drawBaldrRows();
         }, 1000);
     }
+    function baldrStateColor(state) {
         if (state === 'Okay') return 'var(--reagent)';
         if (state === 'Hospital') return 'var(--nerve)';
         if (state === 'Traveling' || state === 'Abroad') return 'var(--life)';
