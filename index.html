@@ -1027,8 +1027,10 @@
         btStopFlag = false;
         $('bt-check').disabled = true;
         $('bt-stop').style.display = 'inline-block';
+        startBtTicker(); // tick already-known hospital times live while the rest of the list is still being checked
 
-        // One API call per target, spaced out to stay well inside Torn's 100 requests/minute limit.
+        let backoffMs = 15000;
+        // One API call per target, spaced out to stay well inside Torn's request limit.
         for (let i = 0; i < btTargets.length; i++) {
             if (btStopFlag) break;
             const t = btTargets[i];
@@ -1037,13 +1039,15 @@
                 const res = await fetch(`https://api.torn.com/user/${t.id}?selections=profile&key=${encodeURIComponent(apiKey)}`);
                 const data = await res.json();
                 if (data.error) {
-                    if (data.error.code === 5) { // rate limited — take a breather
-                        btStatus('Torn API asked us to slow down — pausing 15s…');
-                        await new Promise(r => setTimeout(r, 15000));
+                    if (data.error.code === 5) { // rate limited — back off, a little longer each time it recurs
+                        btStatus(`Torn API asked us to slow down — pausing ${Math.round(backoffMs / 1000)}s…`);
+                        await new Promise(r => setTimeout(r, backoffMs));
+                        backoffMs = Math.min(backoffMs * 1.5, 60000);
                         i--; continue;
                     }
                     t.state = 'Unknown';
                 } else {
+                    backoffMs = 15000; // reset after a clean response
                     t.state = data.status?.state || 'Unknown';
                     t.until = data.status?.until || null;
                 }
@@ -1056,10 +1060,8 @@
                 cell.style.color = baldrStateColor(t.state);
                 cell.style.fontWeight = t.state === 'Okay' ? '700' : '400';
             }
-            await new Promise(r => setTimeout(r, 700));
+            await new Promise(r => setTimeout(r, 1100));
         }
-
-        startBtTicker();
 
         const okCount = btTargets.filter(t => t.state === 'Okay').length;
         btStatus(btStopFlag ? `Stopped. ${okCount} targets Okay so far.` : `Done — ${okCount} of ${btTargets.length} targets are Okay.`);
