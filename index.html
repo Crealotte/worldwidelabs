@@ -288,62 +288,31 @@
 
         <!-- ========== ENERGY PLANNER ========== -->
         <section class="page" id="page-energy">
-            <div class="lab-label">WWL·02 / training projection</div>
-            <h2>Energy planner</h2>
-            <p class="pagedesc">Work out how much energy your training goal costs this week or month — and how many Xanax or refills it takes to get there.</p>
+            <div class="lab-label">WWL·02 / weekly energy goals</div>
+            <h2>Weekly energy goals</h2>
+            <p class="pagedesc">Our week is 4 training days + 2 war prep days + 1 war day. Tick things off as you do them — the bar fills itself.</p>
 
-            <div class="grid2">
-                <div class="panel">
-                    <h3>Your goal</h3>
-                    <div class="field">
-                        <label for="ep-period">Period</label>
-                        <select id="ep-period">
-                            <option value="7">This week (7 days)</option>
-                            <option value="30">This month (30 days)</option>
-                            <option value="custom">Custom number of days</option>
-                        </select>
-                    </div>
-                    <div class="field" id="ep-days-wrap" style="display:none;">
-                        <label for="ep-days">Days</label>
-                        <input type="number" id="ep-days" value="14" min="1">
-                    </div>
-                    <div class="field">
-                        <label for="ep-gymcost">Gym — energy per train</label>
-                        <select id="ep-gymcost">
-                            <option value="5">Lightweight gyms — 5 E</option>
-                            <option value="10" selected>Middleweight gyms — 10 E</option>
-                            <option value="25">Heavyweight gyms — 25 E</option>
-                            <option value="50">Specialist gyms — 50 E</option>
-                        </select>
-                    </div>
-                    <div class="field">
-                        <label for="ep-trains">Trains per day (goal)</label>
-                        <input type="number" id="ep-trains" value="48" min="1">
-                    </div>
-                    <div class="lab-label" style="margin-top:20px;">energy sources</div>
-                    <div class="field">
-                        <label for="ep-max">Max energy bar</label>
-                        <select id="ep-max">
-                            <option value="100">100 (default)</option>
-                            <option value="150" selected>150 (donator)</option>
-                        </select>
-                    </div>
-                    <div class="field">
-                        <label for="ep-xanax">Xanax per day you're willing to take (+250 E each)</label>
-                        <input type="number" id="ep-xanax" value="0" min="0" max="4">
-                    </div>
-                    <div class="field">
-                        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
-                            <input type="checkbox" id="ep-refill" style="width:auto;"> Daily energy refill (25 points → full bar)
-                        </label>
-                    </div>
-                    <button id="ep-calc" style="width:100%;">Run projection</button>
+            <div class="panel">
+                <h3>Which group are you in?</h3>
+                <div class="row" style="display:flex;gap:12px;">
+                    <button id="eg-group-a" class="ghost" style="flex:1;">1,500,000+ total battle stats</button>
+                    <button id="eg-group-b" class="ghost" style="flex:1;">Under 1,500,000 total battle stats</button>
+                </div>
+            </div>
+
+            <div class="panel" id="eg-panel" style="display:none;">
+                <h3 id="eg-title"></h3>
+                <p class="pagedesc" id="eg-sub" style="margin-bottom:16px;"></p>
+
+                <div class="bar-block">
+                    <div class="bar-head"><span>This week</span><span id="eg-progress-text"></span></div>
+                    <div class="bar-track"><div class="bar-fill" id="eg-progress-fill" style="background:var(--reagent);width:0%;"></div></div>
                 </div>
 
-                <div class="panel">
-                    <h3>Projection</h3>
-                    <div id="ep-results"><p style="color:var(--muted)">Set your goal and run the projection.</p></div>
-                </div>
+                <div id="eg-days" style="margin-top:18px;"></div>
+                <div id="eg-extra" style="margin-top:10px;"></div>
+
+                <button class="ghost small" id="eg-reset" style="margin-top:16px;">Reset this week's checklist</button>
             </div>
         </section>
 
@@ -720,51 +689,146 @@
         } catch (e) { toast('Refresh failed'); }
     });
 
-    // ================= ENERGY PLANNER =================
-    $('ep-period').addEventListener('change', () => {
-        $('ep-days-wrap').style.display = $('ep-period').value === 'custom' ? 'block' : 'none';
+    // ================= WEEKLY ENERGY GOALS =================
+    const EG_STORAGE = 'wwl_energy_group'; // remembers which group this browser picked
+
+    const EG_PLANS = {
+        a: {
+            title: '1,500,000+ total battle stats — 4,400 E this week',
+            sub: 'Each of your 4 training days: 3 full natural energy bars, 2 Xanax, and 1 energy refill.',
+            target: 4400,
+            blocks: [
+                { title: 'Training day 1', items: [
+                    { key: 'd1nat', label: 'Natural energy — spent 3× as it fills (450 E)', value: 450 },
+                    { key: 'd1xan', label: 'Xanax ×2 (500 E)', value: 500 },
+                    { key: 'd1ref', label: 'Energy refill ×1 (150 E)', value: 150 },
+                ]},
+                { title: 'Training day 2', items: [
+                    { key: 'd2nat', label: 'Natural energy — spent 3× as it fills (450 E)', value: 450 },
+                    { key: 'd2xan', label: 'Xanax ×2 (500 E)', value: 500 },
+                    { key: 'd2ref', label: 'Energy refill ×1 (150 E)', value: 150 },
+                ]},
+                { title: 'Training day 3', items: [
+                    { key: 'd3nat', label: 'Natural energy — spent 3× as it fills (450 E)', value: 450 },
+                    { key: 'd3xan', label: 'Xanax ×2 (500 E)', value: 500 },
+                    { key: 'd3ref', label: 'Energy refill ×1 (150 E)', value: 150 },
+                ]},
+                { title: 'Training day 4', items: [
+                    { key: 'd4nat', label: 'Natural energy — spent 3× as it fills (450 E)', value: 450 },
+                    { key: 'd4xan', label: 'Xanax ×2 (500 E)', value: 500 },
+                    { key: 'd4ref', label: 'Energy refill ×1 (150 E)', value: 150 },
+                ]},
+            ],
+        },
+        b: {
+            title: 'Under 1,500,000 total battle stats — 2,200 E this week',
+            sub: 'First bank up energy with Xanax, then spend it all in one big jump. The last two days are lighter, since you\'re newer.',
+            target: 2200,
+            blocks: [
+                { title: 'Stacking phase — days 1 & 2', note: 'Take a Xanax roughly every 8 hours without spending the energy, until you\'re holding around 1,000 E — then spend it all in one big training session.', items: [
+                    { key: 'stack1', label: 'Xanax #1 (250 E)', value: 250 },
+                    { key: 'stack2', label: 'Xanax #2, ~8h later (250 E)', value: 250 },
+                    { key: 'stack3', label: 'Xanax #3, ~8h later (250 E)', value: 250 },
+                    { key: 'stack4', label: 'Xanax #4, ~8h later (250 E) — then do the big jump', value: 250 },
+                ]},
+                { title: 'Training day 3', items: [
+                    { key: 'd3combo', label: '3 natural energy tops + 1 Xanax (≈600 E)', value: 600 },
+                ]},
+                { title: 'Training day 4', items: [
+                    { key: 'd4combo', label: '3 natural energy tops + 1 Xanax (≈600 E)', value: 600 },
+                ]},
+            ],
+        },
+    };
+
+    function isoWeekKey(d = new Date()) {
+        const date = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+        const dayNum = date.getUTCDay() || 7;
+        date.setUTCDate(date.getUTCDate() + 4 - dayNum);
+        const yearStart = new Date(Date.UTC(date.getUTCFullYear(), 0, 1));
+        const week = Math.ceil((((date - yearStart) / 86400000) + 1) / 7);
+        return `${date.getUTCFullYear()}-W${week}`;
+    }
+
+    function egStorageKey(group) { return `wwl_energy_check_${group}_${isoWeekKey()}`; }
+
+    function egLoadChecks(group) {
+        try { return JSON.parse(localStorage.getItem(egStorageKey(group))) || {}; } catch { return {}; }
+    }
+    function egSaveChecks(group, checks) {
+        localStorage.setItem(egStorageKey(group), JSON.stringify(checks));
+    }
+
+    let egGroup = localStorage.getItem(EG_STORAGE) || null;
+
+    function selectEgGroup(group) {
+        egGroup = group;
+        localStorage.setItem(EG_STORAGE, group);
+        $('eg-group-a').style.borderColor = group === 'a' ? 'var(--reagent)' : 'var(--line)';
+        $('eg-group-a').style.color = group === 'a' ? 'var(--reagent)' : 'var(--text)';
+        $('eg-group-b').style.borderColor = group === 'b' ? 'var(--reagent)' : 'var(--line)';
+        $('eg-group-b').style.color = group === 'b' ? 'var(--reagent)' : 'var(--text)';
+        renderEgPlan();
+    }
+
+    function renderEgPlan() {
+        const plan = EG_PLANS[egGroup];
+        if (!plan) return;
+        $('eg-panel').style.display = 'block';
+        $('eg-title').textContent = plan.title;
+        $('eg-sub').textContent = plan.sub;
+
+        const checks = egLoadChecks(egGroup);
+
+        let blocksHtml = '';
+        plan.blocks.forEach(block => {
+            const itemsHtml = block.items.map(it => {
+                const checked = checks[it.key] ? 'checked' : '';
+                return `<label style="display:flex;align-items:center;gap:8px;padding:6px 0;cursor:pointer;">
+                    <input type="checkbox" class="eg-check" id="${it.key}" data-value="${it.value}" style="width:auto;" ${checked}>
+                    ${esc(it.label)}
+                </label>`;
+            }).join('');
+            blocksHtml += `
+                <div class="stat" style="margin-bottom:10px;">
+                    <div class="k">${esc(block.title)}</div>
+                    ${block.note ? `<div class="s" style="margin:4px 0 8px;line-height:1.5;">${esc(block.note)}</div>` : ''}
+                    ${itemsHtml}
+                </div>`;
+        });
+        $('eg-days').innerHTML = blocksHtml;
+        $('eg-extra').innerHTML = '';
+
+        document.querySelectorAll('.eg-check').forEach(cb => {
+            cb.addEventListener('change', () => {
+                const c = egLoadChecks(egGroup);
+                c[cb.id] = cb.checked;
+                egSaveChecks(egGroup, c);
+                updateEgProgress();
+            });
+        });
+
+        updateEgProgress();
+    }
+
+    function updateEgProgress() {
+        const plan = EG_PLANS[egGroup];
+        let done = 0;
+        document.querySelectorAll('.eg-check').forEach(cb => { if (cb.checked) done += parseInt(cb.dataset.value, 10); });
+        const pct = Math.min(100, (done / plan.target) * 100);
+        $('eg-progress-fill').style.width = pct + '%';
+        $('eg-progress-text').textContent = `${fmtN(done)} / ${fmtN(plan.target)} E`;
+    }
+
+    $('eg-group-a').addEventListener('click', () => selectEgGroup('a'));
+    $('eg-group-b').addEventListener('click', () => selectEgGroup('b'));
+    $('eg-reset').addEventListener('click', () => {
+        if (!confirm("Reset this week's checklist?")) return;
+        egSaveChecks(egGroup, {});
+        renderEgPlan();
     });
 
-    $('ep-calc').addEventListener('click', () => {
-        const days = $('ep-period').value === 'custom'
-            ? Math.max(1, parseInt($('ep-days').value, 10) || 1)
-            : parseInt($('ep-period').value, 10);
-        const costPerTrain = parseInt($('ep-gymcost').value, 10);
-        const trainsPerDay = Math.max(0, parseInt($('ep-trains').value, 10) || 0);
-        const maxBar = parseInt($('ep-max').value, 10);
-        const xanaxPerDay = Math.max(0, parseInt($('ep-xanax').value, 10) || 0);
-        const refillDaily = $('ep-refill').checked;
-
-        const need = trainsPerDay * costPerTrain * days;
-        const natural = NATURAL_REGEN_PER_DAY * days;
-        const fromXanax = xanaxPerDay * XANAX_ENERGY * days;
-        const fromRefill = refillDaily ? maxBar * days : 0;
-        const available = natural + fromXanax + fromRefill;
-        const diff = available - need;
-
-        let closer = '';
-        if (diff < 0) {
-            const xanaxToClose = Math.ceil(-diff / XANAX_ENERGY);
-            const refillsToClose = Math.ceil(-diff / maxBar);
-            closer = `
-                <div class="lab-label" style="margin-top:16px;">to close the gap</div>
-                <div class="result-line"><span class="rk">Extra Xanax needed (total)</span><span class="rv">${fmtN(xanaxToClose)} <span style="color:var(--muted)">(${(xanaxToClose / days).toFixed(1)}/day)</span></span></div>
-                <div class="result-line"><span class="rk">…or extra energy refills</span><span class="rv">${fmtN(refillsToClose)} <span style="color:var(--muted)">(${(refillsToClose / days).toFixed(1)}/day)</span></span></div>`;
-        }
-
-        $('ep-results').innerHTML = `
-            <div class="result-line"><span class="rk">Goal</span><span class="rv">${fmtN(trainsPerDay)} trains/day × ${costPerTrain} E × ${days} days</span></div>
-            <div class="result-line"><span class="rk">Energy needed</span><span class="rv">${fmtN(need)} E</span></div>
-            <div class="lab-label" style="margin-top:16px;">energy available</div>
-            <div class="result-line"><span class="rk">Natural regen</span><span class="rv">${fmtN(natural)} E</span></div>
-            ${xanaxPerDay ? `<div class="result-line"><span class="rk">Xanax (${xanaxPerDay}/day)</span><span class="rv">${fmtN(fromXanax)} E</span></div>` : ''}
-            ${refillDaily ? `<div class="result-line"><span class="rk">Daily refill</span><span class="rv">${fmtN(fromRefill)} E</span></div>` : ''}
-            <div class="result-line"><span class="rk">Total available</span><span class="rv">${fmtN(available)} E</span></div>
-            <div class="result-line"><span class="rk"><b>${diff >= 0 ? 'Surplus' : 'Shortfall'}</b></span>
-                <span class="rv ${diff >= 0 ? 'good' : 'bad'}">${diff >= 0 ? '+' : '−'}${fmtN(Math.abs(diff))} E</span></div>
-            ${closer}
-            <p style="font-size:11px;color:var(--muted);margin-top:14px;">Natural regen assumes +5 E / 15 min (${NATURAL_REGEN_PER_DAY}/day) with no energy wasted at a full bar. Xanax = +${XANAX_ENERGY} E. Refill = one full bar (${maxBar} E) per day.</p>`;
-    });
+    if (egGroup) selectEgGroup(egGroup);
 
     // ================= CHAIN PAYOUT =================
     const chains = [];
