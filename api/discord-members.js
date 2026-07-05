@@ -1,7 +1,12 @@
 // api/discord-members.js — reads your Discord server's member list via a bot token,
 // and matches each member to a Torn ID by parsing the "Name [ID] TAG" nickname format
-// that the YATA verification bot sets. Leaders only (same faction-API-access check
-// used by Chain Payout and Announcements).
+// that the YATA verification bot sets.
+//
+// Multi-faction: one shared Discord server, but each faction has its own "verified" role.
+// DISCORD_ROLE_MAP is a JSON object mapping Torn faction ID -> Discord role ID, e.g.
+//   {"12345": "111111111111111111", "67890": "222222222222222222"}
+// "Verified" for any given person is always checked against THEIR OWN faction's role,
+// resolved server-side from their key — never something the client can choose.
 
 const DISCORD_API = 'https://discord.com/api/v10';
 
@@ -25,11 +30,19 @@ async function fetchAllMembers(guildId, token) {
     return members;
 }
 
+async function getFactionId(key) {
+    const r = await fetch(`https://api.torn.com/user/?selections=profile&key=${encodeURIComponent(key)}`);
+    const profile = await r.json();
+    if (profile.error || !profile.faction?.faction_id) return null;
+    return String(profile.faction.faction_id);
+}
+
 module.exports = async function handler(req, res) {
     try {
         const BOT_TOKEN = process.env.DISCORD_BOT_TOKEN;
         const GUILD_ID = process.env.DISCORD_GUILD_ID;
-        const VERIFIED_ROLE_ID = process.env.DISCORD_VERIFIED_ROLE_ID || null; // optional
+        let ROLE_MAP = {};
+        try { ROLE_MAP = JSON.parse(process.env.DISCORD_ROLE_MAP || '{}'); } catch (e) { /* treat a bad JSON value as "no roles configured" */ }
 
         if (!BOT_TOKEN || !GUILD_ID) {
             return res.status(500).json({ error: 'Discord bot not configured yet. Set DISCORD_BOT_TOKEN and DISCORD_GUILD_ID in Vercel environment variables.' });
@@ -38,24 +51,33 @@ module.exports = async function handler(req, res) {
         const key = req.query.key;
         if (!key) return res.status(400).json({ error: 'Missing key' });
 
+        const factionId = await getFactionId(key);
+        if (!factionId) return res.status(403).json({ error: 'Could not determine your faction from this key' });
+        const roleId = ROLE_MAP[factionId] || null; // this faction's own verified role — if unset, "in server" counts as verified
+
         const members = await fetchAllMembers(GUILD_ID, BOT_TOKEN);
 
         // Match by Torn ID found in "Name [ID] TAG" — never by name alone, since names can collide.
+        // Store the raw roles list per member; "verified" gets computed per-request against
+        // whichever faction's role is relevant, since one shared server holds all factions' roles.
         const byTornId = {};
         for (const m of members) {
             const label = m.nick || m.user?.global_name || m.user?.username || '';
             const match = label.match(/\[(\d+)\]/);
             if (!match) continue;
-            const tornId = match[1];
-            const verified = VERIFIED_ROLE_ID ? (m.roles || []).includes(VERIFIED_ROLE_ID) : true;
-            byTornId[tornId] = { discordName: label, verified };
+            byTornId[match[1]] = { discordName: label, roles: m.roles || [] };
         }
+
+        const withVerified = (entry) => entry && {
+            discordName: entry.discordName,
+            verified: roleId ? entry.roles.includes(roleId) : true,
+        };
 
         // Every caller can see their own match — this only reveals info about themselves.
         let mine = null;
         const profileRes = await fetch(`https://api.torn.com/user/?selections=profile&key=${encodeURIComponent(key)}`);
         const profile = await profileRes.json();
-        if (!profile.error) mine = byTornId[String(profile.player_id)] || { discordName: null, verified: false };
+        if (!profile.error) mine = withVerified(byTornId[String(profile.player_id)]) || { discordName: null, verified: false };
 
         // The full faction roster is a leadership-overview feature — keep that part leader-gated.
         const leaderRes = await fetch(`https://api.torn.com/v2/faction/balance?key=${encodeURIComponent(key)}`,
@@ -63,9 +85,15 @@ module.exports = async function handler(req, res) {
         const leaderData = await leaderRes.json();
         const isLeader = !leaderData.error;
 
+        let members_out;
+        if (isLeader) {
+            members_out = {};
+            for (const [tornId, entry] of Object.entries(byTornId)) members_out[tornId] = withVerified(entry);
+        }
+
         return res.status(200).json({
             mine,
-            members: isLeader ? byTornId : undefined,
+            members: members_out,
             totalDiscordMembers: members.length,
         });
     } catch (e) {
