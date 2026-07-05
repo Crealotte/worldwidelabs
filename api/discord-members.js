@@ -38,12 +38,6 @@ module.exports = async function handler(req, res) {
         const key = req.query.key;
         if (!key) return res.status(400).json({ error: 'Missing key' });
 
-        // Leaders only.
-        const leaderRes = await fetch(`https://api.torn.com/v2/faction/balance?key=${encodeURIComponent(key)}`,
-            { headers: { accept: 'application/json' } });
-        const leaderData = await leaderRes.json();
-        if (leaderData.error) return res.status(403).json({ error: 'Leaders only' });
-
         const members = await fetchAllMembers(GUILD_ID, BOT_TOKEN);
 
         // Match by Torn ID found in "Name [ID] TAG" — never by name alone, since names can collide.
@@ -57,7 +51,23 @@ module.exports = async function handler(req, res) {
             byTornId[tornId] = { discordName: label, verified };
         }
 
-        return res.status(200).json({ members: byTornId, totalDiscordMembers: members.length });
+        // Every caller can see their own match — this only reveals info about themselves.
+        let mine = null;
+        const profileRes = await fetch(`https://api.torn.com/user/?selections=profile&key=${encodeURIComponent(key)}`);
+        const profile = await profileRes.json();
+        if (!profile.error) mine = byTornId[String(profile.player_id)] || { discordName: null, verified: false };
+
+        // The full faction roster is a leadership-overview feature — keep that part leader-gated.
+        const leaderRes = await fetch(`https://api.torn.com/v2/faction/balance?key=${encodeURIComponent(key)}`,
+            { headers: { accept: 'application/json' } });
+        const leaderData = await leaderRes.json();
+        const isLeader = !leaderData.error;
+
+        return res.status(200).json({
+            mine,
+            members: isLeader ? byTornId : undefined,
+            totalDiscordMembers: members.length,
+        });
     } catch (e) {
         return res.status(500).json({ error: String(e.message || e) });
     }
