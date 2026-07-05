@@ -103,6 +103,23 @@
     .whoami { padding: 10px 12px; border-top: 1px solid var(--line); font-size: 12px; color: var(--muted); }
     .whoami b { color: var(--text); display: block; }
 
+    .nav-group { margin: 2px 0; }
+    .nav-group-header {
+        display: flex; align-items: center; justify-content: space-between;
+        padding: 9px 12px; cursor: pointer; user-select: none;
+        font-family: var(--mono); font-size: 11px; text-transform: uppercase; letter-spacing: .09em;
+        color: var(--muted);
+    }
+    .nav-group-header:hover { color: var(--text); }
+    .nav-chevron { transition: transform .18s ease; flex: none; }
+    .nav-group.collapsed .nav-chevron { transform: rotate(-90deg); }
+    .nav-group-items {
+        display: flex; flex-direction: column; gap: 2px;
+        padding-left: 10px; border-left: 1px solid var(--line); margin: 0 0 4px 14px;
+        overflow: hidden;
+    }
+    .nav-group.collapsed .nav-group-items { display: none; }
+
     main { flex: 1; padding: 28px; max-width: 1000px; }
     section.page { display: none; }
     section.page.visible { display: block; }
@@ -194,6 +211,9 @@
         nav.side .spacer, .whoami { display: none; }
         .nav-item { padding: 8px 10px; font-size: 13px; }
         .nav-item .idx { display: none; }
+        .nav-group { display: contents; }
+        .nav-group-header { display: none; }
+        .nav-group-items { display: flex !important; flex-direction: row; flex-wrap: wrap; border-left: none; padding-left: 0; margin: 0; gap: 4px; }
         main { padding: 18px; }
         .grid2, .grid3 { grid-template-columns: 1fr; }
     }
@@ -245,12 +265,41 @@
             </svg>
             <h1>WW<span style="color:var(--reagent)">Labs</span></h1>
         </div>
-        <div class="nav-item active" data-page="dashboard"><span class="idx">01</span> Dashboard</div>
-        <div class="nav-item" data-page="energy"><span class="idx">02</span> Energy planner</div>
-        <div class="nav-item" data-page="payout"><span class="idx">03</span> Chain payout</div>
-        <div class="nav-item" data-page="targets"><span class="idx">04</span> Level targets</div>
-        <div class="nav-item" data-page="links"><span class="idx">05</span> Tools &amp; links</div>
-        <div class="nav-item" data-page="targetfinder"><span class="idx">06</span> Target finder</div>
+        <div class="nav-item active" data-page="dashboard">Dashboard</div>
+
+        <div class="nav-group">
+            <div class="nav-group-header" data-group="training">
+                <span>Training</span>
+                <svg class="nav-chevron" width="10" height="10" viewBox="0 0 10 10"><path d="M2 3.5L5 6.5L8 3.5" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </div>
+            <div class="nav-group-items" data-group-items="training">
+                <div class="nav-item" data-page="energy">Energy planner</div>
+            </div>
+        </div>
+
+        <div class="nav-group">
+            <div class="nav-group-header" data-group="targets">
+                <span>Targets</span>
+                <svg class="nav-chevron" width="10" height="10" viewBox="0 0 10 10"><path d="M2 3.5L5 6.5L8 3.5" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </div>
+            <div class="nav-group-items" data-group-items="targets">
+                <div class="nav-item" data-page="targets">Level targets</div>
+                <div class="nav-item" data-page="targetfinder">Target finder</div>
+            </div>
+        </div>
+
+        <div class="nav-group">
+            <div class="nav-group-header" data-group="leadership">
+                <span>Leadership</span>
+                <svg class="nav-chevron" width="10" height="10" viewBox="0 0 10 10"><path d="M2 3.5L5 6.5L8 3.5" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </div>
+            <div class="nav-group-items" data-group-items="leadership">
+                <div class="nav-item" data-page="payout">Chain payout</div>
+            </div>
+        </div>
+
+        <div class="nav-item" data-page="links">Tools &amp; links</div>
+
         <div class="spacer"></div>
         <div class="whoami" id="whoami"></div>
         <button class="ghost small" id="logout-btn" style="margin:10px 12px 0;">Log out</button>
@@ -718,6 +767,32 @@
     }
 
     // ================= NAV =================
+    const NAV_GROUP_KEY = 'wwl_nav_collapsed'; // stores an array of collapsed group names
+
+    function getCollapsedGroups() {
+        try { return JSON.parse(localStorage.getItem(NAV_GROUP_KEY)) || []; } catch { return []; }
+    }
+
+    document.querySelectorAll('.nav-group').forEach(group => {
+        const name = group.querySelector('.nav-group-header').dataset.group;
+        if (getCollapsedGroups().includes(name)) group.classList.add('collapsed');
+    });
+
+    document.querySelectorAll('.nav-group-header').forEach(header => {
+        header.addEventListener('click', () => {
+            const group = header.closest('.nav-group');
+            const name = header.dataset.group;
+            group.classList.toggle('collapsed');
+            let collapsed = getCollapsedGroups();
+            if (group.classList.contains('collapsed')) {
+                if (!collapsed.includes(name)) collapsed.push(name);
+            } else {
+                collapsed = collapsed.filter(g => g !== name);
+            }
+            localStorage.setItem(NAV_GROUP_KEY, JSON.stringify(collapsed));
+        });
+    });
+
     document.querySelectorAll('.nav-item').forEach(item => {
         item.addEventListener('click', () => {
             document.querySelectorAll('.nav-item').forEach(i => i.classList.remove('active'));
