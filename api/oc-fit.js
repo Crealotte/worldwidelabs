@@ -15,7 +15,11 @@
 // on Torn's own wiki description of how CPR works, not a precise formula — presented as general
 // guidance, not gospel.
 //
-// POST { key, action: 'read' } -> the caller's full cached+refreshed OC fit catalog
+// POST { key, action: 'read' }        -> the caller's full cached+refreshed OC fit catalog
+//                                         (also feeds the leadership team-builder view below —
+//                                         disclosed to every member on the login screen)
+// POST { key, action: 'team-builder' } -> leader-only: every open slot faction-wide, ranked by
+//                                          members' predicted fit for that exact role
 
 const REDIS_URL = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL;
 const REDIS_TOKEN = process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN;
@@ -34,6 +38,19 @@ async function redis(command) {
 }
 
 const fitKey = (playerId) => `wwl:ocfit:${playerId}`;
+
+async function getFactionId(key) {
+    const r = await fetch(`https://api.torn.com/user/?selections=profile&key=${encodeURIComponent(key)}`);
+    const profile = await r.json();
+    if (profile.error || !profile.faction?.faction_id) return null;
+    return String(profile.faction.faction_id);
+}
+async function isLeader(key) {
+    const r = await fetch(`https://api.torn.com/v2/faction/balance?key=${encodeURIComponent(key)}`,
+        { headers: { accept: 'application/json' } });
+    const d = await r.json();
+    return !d.error;
+}
 
 // Normalises an OC/scenario name for stable grouping (strips version suffixes like "V2").
 function normScenario(name) {
@@ -124,6 +141,63 @@ module.exports = async function handler(req, res) {
 
         const { key, action } = req.body || {};
         if (!key) return res.status(400).json({ error: 'Missing key' });
+
+        if (action === 'team-builder') {
+            if (!(await isLeader(key))) return res.status(403).json({ error: 'Leaders only' });
+            const factionId = await getFactionId(key);
+            if (!factionId) return res.status(403).json({ error: 'Could not determine your faction from this key' });
+
+            // Every open slot, faction-wide, right now.
+            const crimesRes = await fetch(`https://api.torn.com/v2/faction?selections=crimes&key=${encodeURIComponent(key)}`,
+                { headers: { accept: 'application/json' } });
+            const crimesData = await crimesRes.json();
+            if (crimesData.error) return res.status(403).json({ error: crimesData.error.error || 'Could not load faction crimes' });
+
+            const ACTIVE = new Set(['recruiting', 'planning', 'ready', 'blocked', 'awaiting', 'initiated']);
+            const openSlots = []; // { ocId, scenario, difficulty, role }
+            for (const oc of Object.values(crimesData.crimes || {})) {
+                if (!oc || !ACTIVE.has((oc.status || '').toLowerCase())) continue;
+                const slots = Array.isArray(oc.slots) ? oc.slots : Object.values(oc.slots || []);
+                for (const slot of slots) {
+                    if (slot.user?.id) continue; // only open slots need a candidate
+                    openSlots.push({
+                        ocId: oc.id, scenario: oc.name || 'Unknown', difficulty: oc.difficulty ?? '?',
+                        role: slot.position_info?.label || slot.position || 'Unknown role',
+                    });
+                }
+            }
+            if (openSlots.length === 0) return res.status(200).json({ openSlots: [] });
+
+            // Faction roster, so we know who to check and can show names.
+            const membersRes = await fetch(`https://api.torn.com/v2/faction/members?key=${encodeURIComponent(key)}`,
+                { headers: { accept: 'application/json' } });
+            const membersData = await membersRes.json();
+            const members = membersData.members || [];
+
+            // Pull each member's cached fit catalog once, reuse across all open slots.
+            const memberCatalogs = {}; // id -> {entryKey: entry}
+            for (const m of members) {
+                const id = String(m.id);
+                const raw = await redis(['GET', fitKey(id)]);
+                if (raw) memberCatalogs[id] = { name: m.name, catalog: JSON.parse(raw) };
+            }
+
+            const results = openSlots.map(slot => {
+                const wantKey = normRole(slot.role);
+                const wantScenario = normScenario(slot.scenario);
+                const candidates = [];
+                for (const [id, { name, catalog }] of Object.entries(memberCatalogs)) {
+                    const match = Object.values(catalog).find(e =>
+                        normScenario(e.scenario) === wantScenario && normRole(e.role) === wantKey);
+                    if (match) candidates.push({ id, name, cpr: match.cpr, live: match.live, lastSeenLive: match.lastSeenLive });
+                }
+                candidates.sort((a, b) => b.cpr - a.cpr);
+                return { ...slot, candidates };
+            });
+
+            return res.status(200).json({ openSlots: results });
+        }
+
         if (action !== 'read') return res.status(400).json({ error: 'Unknown action' });
 
         // Live pull: whatever this member's faction currently has spawned, from their own POV.
