@@ -177,12 +177,6 @@ const WEIGHT_HIGH = 25;
 const WEIGHT_LOW = 15;
 const CPR_WARN = 70;
 
-// Fallback display name for a role nobody's personal tracker has seen yet (we only know its
-// normalized form from a currently-open live slot) — just tidies up capitalization.
-function titleCase(s) {
-    return (s || '').replace(/\b\w/g, c => c.toUpperCase());
-}
-
 // Some scenarios have multiple slots that share the exact same role label — e.g. Mob Mentality
 // has four separate "Looter" slots, each with a genuinely different importance weight per the
 // community's data. Keying purely by role name within a scenario would collapse those into one
@@ -245,19 +239,24 @@ module.exports = async function handler(req, res) {
             }
             if (rewardsChanged) await redis(['SET', rewardsKey, JSON.stringify(rewards)]);
 
-            // ---- Which scenarios/roles are live right now, and which roles are still open ----
+            // ---- Which scenarios/roles are live right now, and which of those are still open ----
+            // Tracks EVERY role in a live instance — filled or open — not just open ones. A role
+            // that's currently occupied by someone who's never opened their own OC Fit Tracker
+            // would otherwise be completely invisible here, which was the bigger of the two bugs.
             const ACTIVE = new Set(['recruiting', 'planning', 'ready', 'blocked', 'awaiting', 'initiated']);
-            const liveByKey = {}; // `${difficulty}::${normScenario}` -> { scenario, difficulty, openRoles:Set }
+            const liveByKey = {}; // `${difficulty}::${normScenario}` -> { scenario, difficulty, roles: { normRole: {role, open} } }
             for (const oc of crimesList) {
                 if (!oc || !ACTIVE.has((oc.status || '').toLowerCase())) continue;
                 const difficulty = oc.difficulty ?? '?';
                 const scenario = oc.name || 'Unknown';
                 const sKey = `${difficulty}::${normScenario(scenario)}`;
                 const slots = Array.isArray(oc.slots) ? oc.slots : Object.values(oc.slots || []);
-                if (!liveByKey[sKey]) liveByKey[sKey] = { scenario, difficulty, openRoles: new Set() };
+                if (!liveByKey[sKey]) liveByKey[sKey] = { scenario, difficulty, roles: {} };
                 for (const slot of dedupeSlotRoles(slots)) {
-                    if (slot.user?.id) continue;
-                    liveByKey[sKey].openRoles.add(normRole(slot._role));
+                    const rKey = normRole(slot._role);
+                    const isOpen = !slot.user?.id;
+                    const already = liveByKey[sKey].roles[rKey];
+                    liveByKey[sKey].roles[rKey] = { role: slot._role, open: isOpen || (already?.open ?? false) };
                 }
             }
 
@@ -281,12 +280,12 @@ module.exports = async function handler(req, res) {
                     merged[sKey].roles[rKey].candidates.push({ id, name: m.name, cpr: entry.cpr, live: entry.live, lastSeenLive: entry.lastSeenLive });
                 }
             }
-            // A scenario that's live right now but nobody's personal tracker has ever seen still
-            // needs to show up — self-building, faction-wide, exactly like the personal one.
+            // Every role in every currently-live OC instance needs to show up, even ones nobody's
+            // personal tracker has ever cached — self-building, faction-wide, filled or open alike.
             for (const [sKey, live] of Object.entries(liveByKey)) {
                 if (!merged[sKey]) merged[sKey] = { scenario: live.scenario, difficulty: live.difficulty, roles: {} };
-                for (const rKeyNorm of live.openRoles) {
-                    if (!merged[sKey].roles[rKeyNorm]) merged[sKey].roles[rKeyNorm] = { role: titleCase(rKeyNorm), candidates: [] };
+                for (const [rKeyNorm, info] of Object.entries(live.roles)) {
+                    if (!merged[sKey].roles[rKeyNorm]) merged[sKey].roles[rKeyNorm] = { role: info.role, candidates: [] };
                 }
             }
 
@@ -301,14 +300,14 @@ module.exports = async function handler(req, res) {
                 const roles = Object.entries(data.roles).map(([rKeyNorm, r]) => {
                     const sortedCandidates = [...r.candidates].sort((a, b) => b.cpr - a.cpr);
                     const weight = findWeight(weights, data.scenario, r.role);
-                    const isOpen = live ? live.openRoles.has(rKeyNorm) : false;
+                    const isOpen = !!live?.roles[rKeyNorm]?.open;
                     const assigned = plan?.roles?.[rKeyNorm] || null;
                     return { roleKey: rKeyNorm, role: r.role, candidates: sortedCandidates, weight, open: isOpen, assigned };
                 }).sort((a, b) => (b.weight ?? -1) - (a.weight ?? -1));
 
                 return {
                     scenarioKey: sKey, scenario: data.scenario, difficulty: data.difficulty,
-                    live: !!live, openSlotCount: live ? live.openRoles.size : 0,
+                    live: !!live, openSlotCount: live ? Object.values(live.roles).filter(r => r.open).length : 0,
                     roles,
                     estimatedPayout: rewardInfo && rewardInfo.successCount > 0
                         ? { money: Math.round(rewardInfo.totalMoney / rewardInfo.successCount), respect: Math.round(rewardInfo.totalRespect / rewardInfo.successCount), sample: rewardInfo.successCount }
