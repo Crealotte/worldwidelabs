@@ -1,7 +1,12 @@
 // api/announcement.js — WorldWideLabs faction announcements + optional poll.
-// GET  ?key=...                            -> current announcement, tally, per-option voters, the
-//                                              caller's own vote, and whether the poll has closed
-// POST { key, text, poll }                 -> leaders only: create/replace the announcement.
+// Multi-faction: every request resolves the caller's OWN faction ID from their key first
+// (server-side, never trusted from the client), then reads/writes that faction's own slot.
+// This is what lets multiple factions share one WorldWideLabs deployment safely — a leader
+// from Faction A can never see or overwrite Faction B's announcement.
+//
+// GET  ?key=...                            -> the caller's faction's announcement, tally,
+//                                              per-option voters, their own vote, and whether closed
+// POST { key, text, poll }                 -> leaders only: create/replace THEIR faction's announcement.
 //                                              poll: { question, options, durationMs } | null.
 //                                              Votes only reset if the poll's question actually changed
 //                                              (or there was no previous poll) — editing just the
@@ -10,7 +15,6 @@
 
 const REDIS_URL = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL;
 const REDIS_TOKEN = process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN;
-const ANNOUNCEMENT_KEY = 'wwl:announcement';
 
 async function redis(command) {
     const res = await fetch(REDIS_URL, {
@@ -28,12 +32,22 @@ async function tornProfile(key) {
     return r.json();
 }
 
+// Resolves which faction a key belongs to. Never trust a faction ID supplied by the client —
+// always derive it from the key itself, so nobody can address another faction's data.
+async function getFactionId(key) {
+    const profile = await tornProfile(key);
+    if (profile.error || !profile.faction?.faction_id) return null;
+    return String(profile.faction.faction_id);
+}
+
 async function isLeader(key) {
     const r = await fetch(`https://api.torn.com/v2/faction/balance?key=${encodeURIComponent(key)}`,
         { headers: { accept: 'application/json' } });
     const d = await r.json();
     return !d.error;
 }
+
+const announcementKey = (factionId) => `wwl:announcement:${factionId}`;
 
 module.exports = async function handler(req, res) {
     try {
@@ -43,7 +57,12 @@ module.exports = async function handler(req, res) {
 
         if (req.method === 'GET') {
             const key = req.query.key;
-            const raw = await redis(['GET', ANNOUNCEMENT_KEY]);
+            if (!key) return res.status(400).json({ error: 'Missing key' });
+
+            const factionId = await getFactionId(key);
+            if (!factionId) return res.status(403).json({ error: 'Could not determine your faction from this key' });
+
+            const raw = await redis(['GET', announcementKey(factionId)]);
             const announcement = raw ? JSON.parse(raw) : null;
 
             let tally = {};
@@ -55,7 +74,7 @@ module.exports = async function handler(req, res) {
             if (announcement?.poll) {
                 closed = !!(announcement.poll.expiresAt && Date.now() > announcement.poll.expiresAt);
 
-                const voteKey = `wwl:poll:votes:${announcement.poll.pollId}`;
+                const voteKey = `wwl:poll:votes:${factionId}:${announcement.poll.pollId}`;
                 const flat = await redis(['HGETALL', voteKey]); // [playerId, jsonValue, playerId, jsonValue, ...]
                 const votes = {}; // playerId -> { optionIndex, name }
                 for (let i = 0; i < flat.length; i += 2) {
@@ -67,12 +86,10 @@ module.exports = async function handler(req, res) {
                     (voters[v.optionIndex] ||= []).push({ playerId, name: v.name });
                 }
 
-                if (key) {
-                    const profile = await tornProfile(key);
-                    if (!profile.error) {
-                        const mine = votes[String(profile.player_id)];
-                        myVote = mine ? mine.optionIndex : null;
-                    }
+                const profile = await tornProfile(key);
+                if (!profile.error) {
+                    const mine = votes[String(profile.player_id)];
+                    myVote = mine ? mine.optionIndex : null;
                 }
             }
 
@@ -83,11 +100,14 @@ module.exports = async function handler(req, res) {
             const { key, action } = req.body || {};
             if (!key) return res.status(400).json({ error: 'Missing key' });
 
+            const factionId = await getFactionId(key);
+            if (!factionId) return res.status(403).json({ error: 'Could not determine your faction from this key' });
+
             if (action === 'vote') {
                 const { optionIndex } = req.body;
                 if (optionIndex === undefined) return res.status(400).json({ error: 'Missing optionIndex' });
 
-                const raw = await redis(['GET', ANNOUNCEMENT_KEY]);
+                const raw = await redis(['GET', announcementKey(factionId)]);
                 const announcement = raw ? JSON.parse(raw) : null;
                 if (!announcement?.poll) return res.status(400).json({ error: 'There is no active poll right now.' });
                 if (announcement.poll.expiresAt && Date.now() > announcement.poll.expiresAt) {
@@ -97,16 +117,16 @@ module.exports = async function handler(req, res) {
                 const profile = await tornProfile(key);
                 if (profile.error) return res.status(403).json({ error: 'Torn rejected the key' });
 
-                const voteKey = `wwl:poll:votes:${announcement.poll.pollId}`;
+                const voteKey = `wwl:poll:votes:${factionId}:${announcement.poll.pollId}`;
                 await redis(['HSET', voteKey, String(profile.player_id), JSON.stringify({ optionIndex, name: profile.name })]);
                 return res.status(200).json({ ok: true });
             }
 
-            // Anything else = create/replace the announcement — leaders only.
+            // Anything else = create/replace this faction's announcement — leaders only.
             if (!(await isLeader(key))) return res.status(403).json({ error: 'Leaders only' });
 
             const { text, poll } = req.body; // poll: { question, options, durationMs } | null
-            const existingRaw = await redis(['GET', ANNOUNCEMENT_KEY]);
+            const existingRaw = await redis(['GET', announcementKey(factionId)]);
             const existing = existingRaw ? JSON.parse(existingRaw) : null;
 
             let newPoll = null;
@@ -131,7 +151,7 @@ module.exports = async function handler(req, res) {
             }
 
             const announcement = { text: text || '', poll: newPoll, updatedAt: Date.now() };
-            await redis(['SET', ANNOUNCEMENT_KEY, JSON.stringify(announcement)]);
+            await redis(['SET', announcementKey(factionId), JSON.stringify(announcement)]);
             return res.status(200).json({ ok: true, announcement });
         }
 
