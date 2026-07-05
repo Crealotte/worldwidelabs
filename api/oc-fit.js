@@ -270,6 +270,11 @@ module.exports = async function handler(req, res) {
                 if (!raw) continue;
                 const catalog = JSON.parse(raw);
                 for (const entry of Object.values(catalog)) {
+                    // Skip placeholder entries (roles this member has never personally had a real
+                    // CPR for — just filled-by-teammate awareness for their own tracker). Without
+                    // this, a null cpr behaves like 0 in sorting/math and quietly shows up as a
+                    // fake "0%" candidate here — that's exactly the bug that just got reported.
+                    if (entry.noPersonalData || entry.cpr == null) continue;
                     const sKey = `${entry.difficulty}::${normScenario(entry.scenario)}`;
                     if (!merged[sKey]) merged[sKey] = { scenario: entry.scenario, difficulty: entry.difficulty, roles: {} };
                     const rKey = normRole(entry.role);
