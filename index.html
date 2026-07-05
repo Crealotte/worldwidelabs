@@ -304,6 +304,13 @@
                 <h3 id="eg-title"></h3>
                 <p class="pagedesc" id="eg-sub" style="margin-bottom:16px;"></p>
 
+                <div class="field" id="eg-donator-wrap" style="display:none;background:var(--bench-2);border:1px solid var(--line);border-radius:var(--radius);padding:12px;">
+                    <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin:0;color:var(--text);">
+                        <input type="checkbox" id="eg-donator" style="width:auto;">
+                        I have donator status (150 E natural energy bar instead of 100 E)
+                    </label>
+                </div>
+
                 <div class="bar-block">
                     <div class="bar-head"><span>This week</span><span id="eg-progress-text"></span></div>
                     <div class="bar-track"><div class="bar-fill" id="eg-progress-fill" style="background:var(--reagent);width:0%;"></div></div>
@@ -727,10 +734,18 @@
                 ]},
             ],
         },
-        b: {
-            title: 'Under 1,500,000 total battle stats — 2,200 E this week',
-            sub: 'First bank up energy with Xanax, then spend it all in one big jump. The last two days are lighter, since you\'re newer.',
-            target: 2200,
+    };
+
+    const EG_DONATOR_KEY = 'wwl_energy_donator';
+
+    function planForGroupB(isDonator) {
+        const fillSize = isDonator ? 150 : 100;
+        const dayTotal = fillSize * 3 + 250; // 3 natural fills + 1 Xanax
+        const weeklyTotal = 1000 + dayTotal * 2; // stacking phase + days 3 & 4
+        return {
+            title: `Under 1,500,000 total battle stats — ${fmtN(weeklyTotal)} E this week`,
+            sub: `First bank up energy with Xanax, then spend it all in one big jump. Days 3 & 4 are lighter, since you're newer. Natural energy bar: ${fillSize} E ${isDonator ? '(donator)' : '(no donator status yet)'}.`,
+            target: weeklyTotal,
             blocks: [
                 { title: 'Stacking phase — days 1 & 2', note: 'Take a Xanax roughly every 8 hours without spending the energy, until you\'re holding around 1,000 E — then spend it all in one big training session.', items: [
                     { key: 'stack1', label: 'Xanax #1 (250 E)', value: 250 },
@@ -739,14 +754,28 @@
                     { key: 'stack4', label: 'Xanax #4, ~8h later (250 E) — then do the big jump', value: 250 },
                 ]},
                 { title: 'Training day 3', items: [
-                    { key: 'd3combo', label: '3 natural energy tops + 1 Xanax (≈600 E)', value: 600 },
+                    { key: 'd3nat1', label: `Natural energy fill #1 (${fillSize} E)`, value: fillSize },
+                    { key: 'd3nat2', label: `Natural energy fill #2 (${fillSize} E)`, value: fillSize },
+                    { key: 'd3nat3', label: `Natural energy fill #3 (${fillSize} E)`, value: fillSize },
+                    { key: 'd3xan', label: 'Xanax ×1 (250 E)', value: 250 },
                 ]},
                 { title: 'Training day 4', items: [
-                    { key: 'd4combo', label: '3 natural energy tops + 1 Xanax (≈600 E)', value: 600 },
+                    { key: 'd4nat1', label: `Natural energy fill #1 (${fillSize} E)`, value: fillSize },
+                    { key: 'd4nat2', label: `Natural energy fill #2 (${fillSize} E)`, value: fillSize },
+                    { key: 'd4nat3', label: `Natural energy fill #3 (${fillSize} E)`, value: fillSize },
+                    { key: 'd4xan', label: 'Xanax ×1 (250 E)', value: 250 },
                 ]},
             ],
-        },
-    };
+        };
+    }
+
+    function getEgPlan(group) {
+        if (group === 'b') {
+            const isDonator = localStorage.getItem(EG_DONATOR_KEY) === '1';
+            return planForGroupB(isDonator);
+        }
+        return EG_PLANS[group];
+    }
 
     function isoWeekKey(d = new Date()) {
         const date = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
@@ -779,13 +808,23 @@
     }
 
     function renderEgPlan() {
-        const plan = EG_PLANS[egGroup];
+        const plan = getEgPlan(egGroup);
         if (!plan) return;
         $('eg-panel').style.display = 'block';
         $('eg-title').textContent = plan.title;
         $('eg-sub').textContent = plan.sub;
 
         const checks = egLoadChecks(egGroup);
+        const isDonator = localStorage.getItem(EG_DONATOR_KEY) === '1';
+
+        // Donator toggle only matters (and only shows) for the under-1.5M group,
+        // since their natural energy bar size depends on it (100 E vs 150 E).
+        if (egGroup === 'b') {
+            $('eg-donator-wrap').style.display = 'block';
+            $('eg-donator').checked = isDonator;
+        } else {
+            $('eg-donator-wrap').style.display = 'none';
+        }
 
         let blocksHtml = '';
         plan.blocks.forEach(block => {
@@ -819,7 +858,7 @@
     }
 
     function updateEgProgress() {
-        const plan = EG_PLANS[egGroup];
+        const plan = getEgPlan(egGroup);
         let done = 0;
         document.querySelectorAll('.eg-check').forEach(cb => { if (cb.checked) done += parseInt(cb.dataset.value, 10); });
         const pct = Math.min(100, (done / plan.target) * 100);
@@ -829,6 +868,10 @@
 
     $('eg-group-a').addEventListener('click', () => selectEgGroup('a'));
     $('eg-group-b').addEventListener('click', () => selectEgGroup('b'));
+    $('eg-donator').addEventListener('change', () => {
+        localStorage.setItem(EG_DONATOR_KEY, $('eg-donator').checked ? '1' : '0');
+        renderEgPlan(); // natural fill size (and the weekly target) changes with donator status
+    });
     $('eg-reset').addEventListener('click', () => {
         if (!confirm("Reset this week's checklist?")) return;
         egSaveChecks(egGroup, {});
