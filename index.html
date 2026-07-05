@@ -194,6 +194,20 @@
         background: rgba(53,217,155,.14); border: 1px solid var(--reagent-dim);
         border-radius: 10px; padding: 2px 7px;
     }
+    .link-card.required.joined {
+        border-color: var(--happy);
+        box-shadow: 0 0 0 1px rgba(242,193,78,.15) inset;
+    }
+    .link-card.required.joined .badge {
+        color: var(--happy); background: rgba(242,193,78,.16); border-color: var(--happy);
+    }
+    .link-card.required.joined-verified {
+        border-color: var(--reagent);
+        box-shadow: 0 0 14px rgba(53,217,155,.28);
+    }
+    .link-card.required.joined-verified .badge {
+        color: #06130d; background: var(--reagent); border-color: var(--reagent); font-weight: 700;
+    }
 
     /* ---------- chips ---------- */
     #chain-list { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
@@ -704,7 +718,7 @@
     ];
 
     const REQUIRED_LINKS = [
-        { title: 'Discord', url: 'https://discord.gg/HFmPUd2zyh', desc: 'Faction communication and coordination.' },
+        { title: 'Discord', url: 'https://discord.gg/HFmPUd2zyh', desc: 'Faction communication and coordination.', checkId: 'discord' },
         { title: 'Torn Intel', url: 'https://torn-intel.com/', desc: 'Shared faction intelligence — activity, war analytics, enemy monitoring.' },
         { title: 'CAT', url: 'https://cat-script.com/', desc: 'Required faction tool.' },
     ];
@@ -1003,6 +1017,7 @@
         if (page === 'targetfinder') initTargetFinder();
         else if (typeof stopTfLive === 'function') stopTfLive();
         if (page === 'profile') loadPlayerProfile();
+        if (page === 'links') loadRequiredToolStatus();
         if (page === 'dashboard') { startCooldownTicker(); loadAnnouncement(); } else { stopCooldownTicker(); }
         if (page === 'announce-edit') {
             $('announce-locked').style.display = isLeaderCached ? 'none' : 'block';
@@ -1762,14 +1777,42 @@
         try { return JSON.parse(localStorage.getItem(LINKS_STORAGE)) || []; } catch { return []; }
     }
 
+    // Per-tool "have they joined?" status, keyed by checkId. Only tools with a real check
+    // (currently just Discord) get an entry here — add more by writing a check function
+    // below and giving that tool a matching checkId in REQUIRED_LINKS.
+    let requiredStatus = {};
+
     function renderRequiredLinks() {
-        $('required-link-grid').innerHTML = REQUIRED_LINKS.map(l => `
-            <a class="link-card required" href="${esc(l.url)}" target="_blank" rel="noopener">
-                <span class="badge">Required</span>
-                <div class="lt">${esc(l.title)}</div>
-                <div class="ld">${esc(l.desc || '')}</div>
-                <div class="lu">${esc(l.url)}</div>
-            </a>`).join('');
+        $('required-link-grid').innerHTML = REQUIRED_LINKS.map(l => {
+            const status = l.checkId ? requiredStatus[l.checkId] : null;
+            let extraClass = '', badge = 'Required';
+            if (status?.verified) { extraClass = 'joined-verified'; badge = '✓ Verified'; }
+            else if (status?.joined) { extraClass = 'joined'; badge = '✓ Joined'; }
+            return `
+                <a class="link-card required ${extraClass}" href="${esc(l.url)}" target="_blank" rel="noopener">
+                    <span class="badge">${badge}</span>
+                    <div class="lt">${esc(l.title)}</div>
+                    <div class="ld">${esc(l.desc || '')}</div>
+                    <div class="lu">${esc(l.url)}</div>
+                </a>`;
+        }).join('');
+    }
+
+    async function checkDiscordStatus() {
+        try {
+            const res = await fetch(`/api/discord-members?key=${encodeURIComponent(apiKey)}`);
+            const data = await res.json();
+            requiredStatus.discord = data.error
+                ? null // couldn't check (bot not set up, etc.) — falls back to the plain "Required" look
+                : { joined: !!data.mine?.discordName, verified: !!data.mine?.verified };
+        } catch (e) {
+            requiredStatus.discord = null;
+        }
+        renderRequiredLinks();
+    }
+
+    async function loadRequiredToolStatus() {
+        checkDiscordStatus(); // add more checks here later, e.g. checkTornIntelStatus(), each updating requiredStatus + re-rendering
     }
 
     function renderLinks() {
