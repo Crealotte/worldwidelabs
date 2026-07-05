@@ -1,11 +1,14 @@
 // api/faction-share.js — opt-in faction overview sharing between leaders.
+// The key is ALWAYS sent in the POST body, never a URL query string — a GET with ?key=...
+// would put the key straight into Vercel's own request-path logs in plaintext.
+//
 // A leader flips a toggle to share a snapshot of their own faction's roster overview
 // (WWLabs adoption + Discord status per member) — no key ever leaves their faction.
 // Other leaders can then see that snapshot, refreshed automatically whenever the
 // sharing faction's own leader visits their Dashboard.
 //
-// GET  ?key=...              -> { mine: {enabled, ...snapshot}, others: [snapshot, ...] }
-// POST { key, enabled }      -> leaders only: turn sharing on (builds+saves a fresh snapshot) or off
+// POST { key, action:'read' }             -> { mine: {enabled, ...snapshot}, others: [snapshot, ...] }
+// POST { key, action:'toggle', enabled }  -> leaders only: turn sharing on (builds+saves a fresh snapshot) or off
 
 const REDIS_URL = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL;
 const REDIS_TOKEN = process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN;
@@ -103,13 +106,16 @@ module.exports = async function handler(req, res) {
             return res.status(500).json({ error: 'Database not connected. In Vercel: Storage -> Create Database -> Upstash Redis, and connect it to this project.' });
         }
 
-        if (req.method === 'GET') {
-            const key = req.query.key;
-            if (!key) return res.status(400).json({ error: 'Missing key' });
-            const factionId = await getFactionId(key);
-            if (!factionId) return res.status(403).json({ error: 'Could not determine your faction from this key' });
-            if (!(await isLeader(key))) return res.status(403).json({ error: 'Leaders only' });
+        if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
+        const { key, action, enabled } = req.body || {};
+        if (!key) return res.status(400).json({ error: 'Missing key' });
+
+        const factionId = await getFactionId(key);
+        if (!factionId) return res.status(403).json({ error: 'Could not determine your faction from this key' });
+        if (!(await isLeader(key))) return res.status(403).json({ error: 'Leaders only' });
+
+        if (action === 'read') {
             // Refresh my own faction's snapshot whenever I load this, but only if sharing is on.
             const mineRaw = await redis(['GET', shareKey(factionId)]);
             let mine = mineRaw ? JSON.parse(mineRaw) : { enabled: false };
@@ -134,13 +140,7 @@ module.exports = async function handler(req, res) {
             return res.status(200).json({ mine, others });
         }
 
-        if (req.method === 'POST') {
-            const { key, enabled } = req.body || {};
-            if (!key) return res.status(400).json({ error: 'Missing key' });
-            const factionId = await getFactionId(key);
-            if (!factionId) return res.status(403).json({ error: 'Could not determine your faction from this key' });
-            if (!(await isLeader(key))) return res.status(403).json({ error: 'Leaders only' });
-
+        if (action === 'toggle') {
             if (!enabled) {
                 await redis(['SET', shareKey(factionId), JSON.stringify({ enabled: false, factionId })]);
                 await redis(['SREM', SHARE_INDEX, factionId]);
@@ -154,7 +154,7 @@ module.exports = async function handler(req, res) {
             return res.status(200).json({ ok: true, data });
         }
 
-        return res.status(405).json({ error: 'Method not allowed' });
+        return res.status(400).json({ error: 'Unknown action' });
     } catch (e) {
         return res.status(500).json({ error: String(e.message || e) });
     }
