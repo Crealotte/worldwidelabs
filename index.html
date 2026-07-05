@@ -499,10 +499,21 @@
                         <label for="an-poll-question">Question</label>
                         <input id="an-poll-question" placeholder="e.g. Which night should we war?">
                     </div>
+                    <div class="field">
+                        <label for="an-poll-duration">Time limit</label>
+                        <select id="an-poll-duration">
+                            <option value="">No time limit</option>
+                            <option value="3600000">1 hour</option>
+                            <option value="21600000">6 hours</option>
+                            <option value="86400000">24 hours</option>
+                            <option value="259200000">3 days</option>
+                            <option value="604800000">7 days</option>
+                        </select>
+                    </div>
                     <label style="font-size:12px;color:var(--muted);">Options (min 2)</label>
                     <div id="an-poll-options"></div>
                     <button class="ghost small" id="an-poll-add-option" style="margin-top:8px;">+ Add option</button>
-                    <p style="color:var(--muted);font-size:11px;margin-top:10px;">Saving a poll with a new question always starts vote counts fresh at zero.</p>
+                    <p style="color:var(--muted);font-size:11px;margin-top:10px;">Editing the announcement text keeps current votes. Changing the poll question always starts a fresh vote count.</p>
                 </div>
 
                 <div class="row" style="margin-top:20px;display:flex;gap:10px;">
@@ -1152,27 +1163,36 @@
         if (ann.poll) {
             const total = data.totalVotes || 0;
             const myVote = data.myVote;
+            const closed = !!data.closed;
             html += `<div class="lab-label" style="margin-bottom:8px;">${esc(ann.poll.question)}</div>`;
             html += ann.poll.options.map((opt, i) => {
                 const count = data.tally?.[i] || 0;
                 const pct = total ? Math.round((count / total) * 100) : 0;
                 const mine = myVote !== null && Number(myVote) === i;
+                const names = (data.voters?.[i] || []).map(v => esc(v.name)).join(', ');
                 return `
                     <div class="poll-option" style="margin-bottom:10px;">
-                        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;margin-bottom:4px;">
-                            <input type="checkbox" class="an-vote-check" data-idx="${i}" style="width:auto;" ${mine ? 'checked' : ''}>
+                        <label style="display:flex;align-items:center;gap:8px;${closed ? '' : 'cursor:pointer;'}font-size:13px;margin-bottom:4px;">
+                            <input type="checkbox" class="an-vote-check" data-idx="${i}" style="width:auto;" ${mine ? 'checked' : ''} ${closed ? 'disabled' : ''}>
                             <span style="flex:1;">${esc(opt)}</span>
                             <span style="color:var(--muted);">${count} (${pct}%)</span>
                         </label>
                         <div class="bar-track"><div class="bar-fill" style="width:${pct}%;background:${mine ? 'var(--reagent)' : 'var(--line)'};"></div></div>
+                        ${names ? `<div style="font-size:11px;color:var(--muted);margin-top:3px;">Voted: ${names}</div>` : ''}
                     </div>`;
             }).join('');
-            html += `<button class="ghost small" id="an-vote-submit" style="margin-top:6px;">${myVote !== null ? 'Change vote' : 'Cast vote'}</button>`;
-            html += `<p style="color:var(--muted);font-size:11px;margin-top:8px;">${total} vote${total === 1 ? '' : 's'} so far</p>`;
+
+            if (closed) {
+                html += `<p style="color:var(--danger);font-size:12px;margin-top:8px;">Poll closed · ${total} vote${total === 1 ? '' : 's'} total</p>`;
+            } else {
+                html += `<button class="ghost small" id="an-vote-submit" style="margin-top:6px;">${myVote !== null ? 'Change vote' : 'Cast vote'}</button>`;
+                const expiryNote = ann.poll.expiresAt ? ` · closes in ${formatDuration(ann.poll.expiresAt - Date.now())}` : '';
+                html += `<p style="color:var(--muted);font-size:11px;margin-top:8px;">${total} vote${total === 1 ? '' : 's'} so far${expiryNote}</p>`;
+            }
         }
         $('announcement-body').innerHTML = html;
 
-        if (ann.poll) {
+        if (ann.poll && !data.closed) {
             const checks = $('announcement-body').querySelectorAll('.an-vote-check');
             checks.forEach(cb => {
                 cb.addEventListener('change', () => {
@@ -1185,14 +1205,16 @@
                 const btn = $('an-vote-submit');
                 btn.disabled = true; btn.textContent = 'Voting…';
                 try {
-                    await fetch('/api/announcement', {
+                    const res = await fetch('/api/announcement', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ key: apiKey, action: 'vote', optionIndex: parseInt(chosen.dataset.idx, 10) }),
                     });
+                    const result = await res.json();
+                    if (result.error) throw new Error(result.error);
                     loadAnnouncement();
                 } catch (e) {
-                    toast('Vote failed — try again');
+                    toast(e.message || 'Vote failed — try again');
                     btn.disabled = false; btn.textContent = 'Cast vote';
                 }
             });
@@ -1224,11 +1246,13 @@
                 $('an-poll-enable').checked = true;
                 $('an-poll-fields').style.display = 'block';
                 $('an-poll-question').value = ann.poll.question;
+                $('an-poll-duration').value = ''; // a saved poll's original duration isn't re-shown — set a fresh one if you want to change it
                 ann.poll.options.forEach(o => addPollOptionField(o));
             } else {
                 $('an-poll-enable').checked = false;
                 $('an-poll-fields').style.display = 'none';
                 $('an-poll-question').value = '';
+                $('an-poll-duration').value = '';
                 addPollOptionField(); addPollOptionField();
             }
         } catch (e) { /* start from a blank form if loading the current one fails */ }
@@ -1248,7 +1272,8 @@
                     st.className = 'status err'; st.textContent = 'A poll needs a question and at least 2 filled-in options.';
                     return;
                 }
-                poll = { question, options };
+                const durationMs = parseInt($('an-poll-duration').value, 10) || null;
+                poll = { question, options, durationMs };
             }
             const res = await fetch('/api/announcement', {
                 method: 'POST',
