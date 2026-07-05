@@ -319,6 +319,11 @@
             Logging in records your name and login time so faction leadership can see who's using the tool —
             your key itself is never stored anywhere except your own browser.
         </p>
+        <p class="login-note">
+            If you check the OC Fit Tracker, your predicted Organized Crime role percentages are also shared with
+            faction leadership — this helps them build stronger teams and helps you get placed where you're most
+            likely to succeed. Nothing else about your account is shared this way.
+        </p>
     </div>
 </div>
 
@@ -665,10 +670,19 @@
             <p class="pagedesc">
                 Your own predicted Checkpoint Pass Rate per role, straight from Torn's API. Builds itself over time —
                 once a crime's spawned for your faction once, it stays here (marked as cached) until it spawns again.
+                Shared with faction leadership to help build teams — see the login screen for details.
             </p>
             <button class="ghost small" id="ocfit-refresh">Refresh</button>
             <div class="status" id="ocfit-status"></div>
             <div id="ocfit-body" style="margin-top:16px;"></div>
+
+            <div class="panel" id="ocfit-team-panel" style="display:none;margin-top:20px;">
+                <h3>🧩 Team Builder <span style="font-weight:400;color:var(--muted);font-size:12px;">(leaders only)</span></h3>
+                <p style="color:var(--muted);font-size:12px;margin:0 0 12px;">
+                    Every open slot across your faction right now, ranked by members' predicted fit. Members who haven't opened their own tracker yet won't have data here.
+                </p>
+                <div id="ocfit-team-body"></div>
+            </div>
         </section>
 
         <!-- ========== LEVELLING TARGETS ========== -->
