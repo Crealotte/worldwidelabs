@@ -72,7 +72,15 @@ async function loadOcFit() {
         const data = await res.json();
         if (data.error) throw new Error(data.error);
         renderOcFit(data.catalog || []);
-        st.textContent = ''; st.className = 'status';
+        if (data.weightsSource === 'unavailable') {
+            st.className = 'status err';
+            st.textContent = 'Role importance data is temporarily unavailable (tornprobability.com unreachable) — CPR numbers are still accurate.';
+        } else if (data.weightsSource === 'stale-cache') {
+            st.className = 'status ok';
+            st.textContent = 'Role importance data is using an older cached copy — tornprobability.com didn\'t respond just now.';
+        } else {
+            st.textContent = ''; st.className = 'status';
+        }
     } catch (e) {
         st.className = 'status err'; st.textContent = e.message;
         $('ocfit-body').innerHTML = '<p style="color:var(--muted)">Could not load your OC fit data yet.</p>';
