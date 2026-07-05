@@ -327,17 +327,22 @@ function renderOcFit(catalog) {
 
             const rolesHtml = roles.map((r, i) => {
                 const rowId = `${scenId}-r${i}`;
-                const cprText = r.cpr != null ? `${Math.round(r.cpr)}%` : '—';
+                const cprText = r.cpr != null ? `${Math.round(r.cpr)}%` : (r.noPersonalData ? 'no data' : '—');
                 const weightText = r.weight != null ? `${Math.round(r.weight)}% weight` : 'weight unknown';
-                const badge = r.live
-                    ? `<span class="ocfit-live-badge" style="background:rgba(53,217,155,.15);color:var(--reagent);">live now</span>`
-                    : `<span class="ocfit-live-badge" style="background:var(--bench-2);color:var(--muted);">cached · ${esc(ocfitAgo(r.lastSeenLive))}</span>`;
-                const impact = ocfitImpact(r.cpr, r.weight);
+                const badge = r.noPersonalData
+                    ? `<span class="ocfit-live-badge" style="background:var(--bench-2);color:var(--muted);">filled by teammate</span>`
+                    : r.live
+                        ? `<span class="ocfit-live-badge" style="background:rgba(53,217,155,.15);color:var(--reagent);">live now</span>`
+                        : `<span class="ocfit-live-badge" style="background:var(--bench-2);color:var(--muted);">cached · ${esc(ocfitAgo(r.lastSeenLive))}</span>`;
+                const impact = r.noPersonalData ? null : ocfitImpact(r.cpr, r.weight);
                 const impactBadge = impact
                     ? `<span class="ocfit-live-badge" style="background:${impact.bg};color:${impact.color};">${esc(impact.label)}</span>`
                     : '';
                 const payoutLine = r.estimatedPayout
                     ? `<div style="font-size:12px;margin-top:4px;">Typical payout on success: <b style="color:var(--reagent);">$${r.estimatedPayout.money.toLocaleString()}</b> + <b style="color:var(--reagent);">${r.estimatedPayout.respect}</b> respect <span style="color:var(--muted);">(avg of ${r.estimatedPayout.sample} run${r.estimatedPayout.sample === 1 ? '' : 's'})</span></div>`
+                    : '';
+                const noDataNote = r.noPersonalData
+                    ? `<div style="font-size:11px;margin-top:6px;color:var(--muted);">This role exists in a live crime right now, but it's currently filled by someone else — Torn only shows a personal CPR prediction for roles that are open or ones you occupy yourself.</div>`
                     : '';
                 return `
                     <div class="ocfit-role-row" data-row="${rowId}">
@@ -350,6 +355,7 @@ function renderOcFit(catalog) {
                         <div style="margin-bottom:6px;"><b>${esc(r.category)}</b> — ${esc(r.categoryHint)}</div>
                         <div style="font-size:12px;">Role importance: ${esc(weightText)} · Last confirmed: ${esc(ocfitAgo(r.lastSeenLive))}${r.live ? ' (right now)' : ''}</div>
                         <div style="font-size:11px;margin-top:6px;color:var(--muted);">On top of the above: general Crime Experience (from doing any crimes at all, more advanced ones count for more) always helps every role a little, separately from any specific Crime Skill named above.</div>
+                        ${noDataNote}
                         ${payoutLine}
                     </div>`;
             }).join('');
