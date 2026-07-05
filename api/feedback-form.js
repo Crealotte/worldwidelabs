@@ -1,11 +1,13 @@
 // api/feedback-form.js — WorldWideLabs feedback form + live results chart.
-// GET  ?key=...              -> current form (title, form embed URL, chart embed URL)
-// POST { key, title, formUrl, chartUrl } -> leaders only: set/replace the current form
-// POST { key, action:'clear' }           -> leaders only: remove the current form
+// Multi-faction: resolves the caller's own faction ID from their key (never from the client),
+// so each faction gets its own form/chart and one faction's leader can never touch another's.
+//
+// GET  ?key=...                          -> the caller's faction's current form (title, form/chart URLs)
+// POST { key, title, formUrl, chartUrl } -> leaders only: set/replace THEIR faction's form
+// POST { key, action:'clear' }           -> leaders only: remove THEIR faction's form
 
 const REDIS_URL = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL;
 const REDIS_TOKEN = process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN;
-const FORM_KEY = 'wwl:feedback-form';
 
 async function redis(command) {
     const res = await fetch(REDIS_URL, {
@@ -18,6 +20,13 @@ async function redis(command) {
     return data.result;
 }
 
+async function getFactionId(key) {
+    const r = await fetch(`https://api.torn.com/user/?selections=profile&key=${encodeURIComponent(key)}`);
+    const profile = await r.json();
+    if (profile.error || !profile.faction?.faction_id) return null;
+    return String(profile.faction.faction_id);
+}
+
 async function isLeader(key) {
     const r = await fetch(`https://api.torn.com/v2/faction/balance?key=${encodeURIComponent(key)}`,
         { headers: { accept: 'application/json' } });
@@ -25,24 +34,31 @@ async function isLeader(key) {
     return !d.error;
 }
 
+const formKey = (factionId) => `wwl:feedback-form:${factionId}`;
+
 module.exports = async function handler(req, res) {
     try {
         if (!REDIS_URL || !REDIS_TOKEN) {
             return res.status(500).json({ error: 'Database not connected. In Vercel: Storage -> Create Database -> Upstash Redis, and connect it to this project.' });
         }
 
+        const key = req.method === 'GET' ? req.query.key : (req.body || {}).key;
+        if (!key) return res.status(400).json({ error: 'Missing key' });
+
+        const factionId = await getFactionId(key);
+        if (!factionId) return res.status(403).json({ error: 'Could not determine your faction from this key' });
+
         if (req.method === 'GET') {
-            const raw = await redis(['GET', FORM_KEY]);
+            const raw = await redis(['GET', formKey(factionId)]);
             return res.status(200).json({ form: raw ? JSON.parse(raw) : null });
         }
 
         if (req.method === 'POST') {
-            const { key, action } = req.body || {};
-            if (!key) return res.status(400).json({ error: 'Missing key' });
+            const { action } = req.body || {};
             if (!(await isLeader(key))) return res.status(403).json({ error: 'Leaders only' });
 
             if (action === 'clear') {
-                await redis(['DEL', FORM_KEY]);
+                await redis(['DEL', formKey(factionId)]);
                 return res.status(200).json({ ok: true });
             }
 
@@ -50,7 +66,7 @@ module.exports = async function handler(req, res) {
             if (!formUrl) return res.status(400).json({ error: 'A form embed URL is required.' });
 
             const form = { title: title || 'Faction feedback', formUrl, chartUrl: chartUrl || null, updatedAt: Date.now() };
-            await redis(['SET', FORM_KEY, JSON.stringify(form)]);
+            await redis(['SET', formKey(factionId), JSON.stringify(form)]);
             return res.status(200).json({ ok: true, form });
         }
 
