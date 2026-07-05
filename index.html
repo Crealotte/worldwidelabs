@@ -380,18 +380,19 @@
                         <tbody id="adoption-body"></tbody>
                     </table>
                 </div>
+                <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin-top:14px;padding-top:14px;border-top:1px solid var(--line);color:var(--text);">
+                    <input type="checkbox" id="share-toggle" style="width:auto;">
+                    Share this overview with other faction leaders on this site
+                    <span id="share-status" style="color:var(--muted);font-size:12px;"></span>
+                </label>
+                <p style="color:var(--muted);font-size:11px;margin:6px 0 0;">
+                    Only a snapshot of name / WWLabs status / Discord status is shared — never your API key. Refreshes automatically whenever you open this dashboard.
+                </p>
             </div>
 
-            <div class="panel" id="extra-factions-panel">
-                <h3>Other factions <span style="font-weight:400;color:var(--muted);font-size:12px;">(keys you've been given)</span></h3>
-                <p style="color:var(--muted);font-size:12px;margin:0 0 12px;">
-                    If another faction's leader gives you a faction-scoped key, add it here to see their roster overview too. Stored only in your own browser — never sent anywhere but Torn and this site.
-                </p>
-                <div class="row" style="display:flex;gap:8px;margin-bottom:10px;">
-                    <input type="password" id="extra-key-input" placeholder="Paste their API key" style="flex:1;">
-                    <button class="ghost" id="extra-key-add">Add</button>
-                </div>
-                <div id="extra-faction-list"></div>
+            <div class="panel" id="shared-factions-panel" style="display:none;">
+                <h3>Other factions <span style="font-weight:400;color:var(--muted);font-size:12px;">(shared by their own leaders)</span></h3>
+                <div id="shared-factions-list"></div>
             </div>
         </section>
 
@@ -936,6 +937,7 @@
             $('cp-locked').style.display = 'none';
             $('cp-tools').style.display = 'block';
             loadAdoption();
+            loadFactionSharing();
         } catch (e) {
             isLeaderCached = false;
             setNavLock('payout', true);
@@ -1061,104 +1063,84 @@
         }
     }
 
-    // ================= OTHER FACTIONS (extra keys) =================
-    // Fully client-side — these keys never touch our database, only your own browser's
-    // localStorage, same as your own login key. They just get used to call the same
-    // endpoints you already use, pointed at a different faction each time.
-    const EXTRA_KEYS_STORAGE = 'wwl_extra_faction_keys';
+    // ================= FACTION SHARING (opt-in, no keys exchanged) =================
+    // A leader flips a toggle to share their own faction's roster overview snapshot —
+    // built server-side from their own key, refreshed automatically each time they open
+    // this dashboard. Other leaders just see the resulting snapshot; nobody's key ever
+    // leaves their own faction.
+    const DISCORD_LABELS = {
+        verified: '<span style="color:var(--reagent)">● verified</span>',
+        in_server: '<span style="color:var(--happy)">● in server</span>',
+        not_found: '<span style="color:var(--muted)">○ not found</span>',
+    };
 
-    function getExtraKeys() {
-        try { return JSON.parse(localStorage.getItem(EXTRA_KEYS_STORAGE)) || []; } catch { return []; }
-    }
-    function saveExtraKeys(keys) { localStorage.setItem(EXTRA_KEYS_STORAGE, JSON.stringify(keys)); }
-
-    async function fetchFactionOverview(key) {
-        const profileRes = await fetch(`https://api.torn.com/user/?selections=profile&key=${encodeURIComponent(key)}`);
-        const profile = await profileRes.json();
-        if (profile.error) throw new Error(friendlyApiError(profile.error));
-        const factionName = profile.faction?.faction_name || 'Unknown faction';
-
-        const membersRes = await fetch(`https://api.torn.com/v2/faction/members?striptags=true&key=${encodeURIComponent(key)}`,
-            { headers: { accept: 'application/json' } });
-        const membersData = await membersRes.json();
-        if (membersData.error) throw new Error(membersData.error.error || 'Could not load this faction\'s roster — check the key has faction API access.');
-
-        const [trackData, discordData] = await Promise.all([
-            fetch(`/api/presence?key=${encodeURIComponent(key)}`).then(r => r.json()).catch(() => ({})),
-            fetch(`/api/discord-members?key=${encodeURIComponent(key)}`).then(r => r.json()).catch(() => null),
-        ]);
-
-        return {
-            factionName,
-            members: membersData.members || [],
-            logins: trackData.logins || {},
-            discordMembers: (discordData && !discordData.error) ? discordData.members : null,
-        };
-    }
-
-    async function renderExtraFactionPanels() {
-        const keys = getExtraKeys();
-        const container = $('extra-faction-list');
-        if (!keys.length) { container.innerHTML = '<p style="color:var(--muted);font-size:13px;">No other faction keys added yet.</p>'; return; }
-        container.innerHTML = '';
-
-        for (const key of keys) {
-            const panelId = 'extra-' + key.replace(/[^a-zA-Z0-9]/g, '').slice(0, 10);
-            const wrap = document.createElement('div');
-            wrap.style.cssText = 'border-top:1px solid var(--line);padding-top:14px;margin-top:14px;';
-            wrap.innerHTML = `
-                <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;">
-                    <h4 style="margin:0;font-size:14px;" id="${panelId}-title">Loading…</h4>
-                    <button class="ghost small" data-key="${esc(key)}">Remove</button>
-                </div>
-                <p style="color:var(--muted);font-size:12px;margin:6px 0;" id="${panelId}-summary"></p>
+    function renderSharedFactionTable(data) {
+        const onboard = data.members.filter(m => m.onWWLabs).length;
+        const hasDiscord = data.members.some(m => m.discord !== null);
+        const summary = hasDiscord
+            ? `${onboard} of ${data.members.length} on WWLabs · ${data.members.filter(m => m.discord === 'verified').length} of ${data.members.length} verified in Discord.`
+            : `${onboard} of ${data.members.length} on WWLabs.`;
+        const rows = data.members.map(m => `
+            <tr${m.onWWLabs ? '' : ' style="opacity:.5"'}>
+                <td>${esc(m.name)} [${m.id}]</td>
+                <td>${m.onWWLabs ? '<span style="color:var(--reagent)">● on board</span>' : '<span style="color:var(--muted)">○ not yet</span>'}</td>
+                <td>${m.discord !== null ? (DISCORD_LABELS[m.discord] || '—') : '<span style="color:var(--muted);font-size:11px;">—</span>'}</td>
+            </tr>`).join('');
+        const ago = Math.round((Date.now() - data.updatedAt) / 60000);
+        return `
+            <div style="border-top:1px solid var(--line);padding-top:14px;margin-top:14px;">
+                <h4 style="margin:0 0 4px;font-size:14px;">${esc(data.factionName)}</h4>
+                <p style="color:var(--muted);font-size:12px;margin:0 0 8px;">${summary} · updated ${ago < 1 ? 'just now' : ago + 'm ago'}</p>
                 <div class="table-scroll" style="max-height:280px;overflow-y:auto;">
                     <table><thead><tr><th>Member</th><th>WWLabs</th><th>Discord</th></tr></thead>
-                    <tbody id="${panelId}-body"></tbody></table>
-                </div>`;
-            container.appendChild(wrap);
+                    <tbody>${rows}</tbody></table>
+                </div>
+            </div>`;
+    }
 
-            wrap.querySelector('button').addEventListener('click', () => {
-                saveExtraKeys(getExtraKeys().filter(k => k !== key));
-                renderExtraFactionPanels();
-            });
+    async function loadFactionSharing() {
+        try {
+            const res = await fetch(`/api/faction-share?key=${encodeURIComponent(apiKey)}`);
+            const data = await res.json();
+            if (data.error) { $('shared-factions-panel').style.display = 'none'; return; }
 
-            try {
-                const data = await fetchFactionOverview(key);
-                const onboard = data.members.filter(m => data.logins[m.id]).length;
-                $(`${panelId}-title`).textContent = data.factionName;
-                $(`${panelId}-summary`).textContent = data.discordMembers
-                    ? `${onboard} of ${data.members.length} on WWLabs · ${data.members.filter(m => data.discordMembers[m.id]).length} of ${data.members.length} found in Discord.`
-                    : `${onboard} of ${data.members.length} on WWLabs.`;
-                $(`${panelId}-body`).innerHTML = data.members.map(m => {
-                    const l = data.logins[m.id];
-                    let discordCell = '<span style="color:var(--muted);font-size:11px;">—</span>';
-                    if (data.discordMembers) {
-                        const d = data.discordMembers[m.id];
-                        discordCell = d
-                            ? (d.verified ? '<span style="color:var(--reagent)">● verified</span>' : '<span style="color:var(--happy)">● in server</span>')
-                            : '<span style="color:var(--muted)">○ not found</span>';
-                    }
-                    return `<tr${l ? '' : ' style="opacity:.5"'}>
-                        <td>${esc(m.name)} [${m.id}]</td>
-                        <td>${l ? '<span style="color:var(--reagent)">● on board</span>' : '<span style="color:var(--muted)">○ not yet</span>'}</td>
-                        <td>${discordCell}</td>
-                    </tr>`;
-                }).join('');
-            } catch (e) {
-                $(`${panelId}-title`).textContent = 'Could not load this faction';
-                $(`${panelId}-summary`).textContent = e.message;
+            $('share-toggle').checked = !!data.mine?.enabled;
+            $('share-status').textContent = data.mine?.enabled
+                ? `Sharing · last updated ${new Date(data.mine.updatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
+                : '';
+
+            if (data.others?.length) {
+                $('shared-factions-panel').style.display = 'block';
+                $('shared-factions-list').innerHTML = data.others.map(renderSharedFactionTable).join('');
+            } else {
+                $('shared-factions-panel').style.display = 'none';
             }
+        } catch (e) {
+            $('shared-factions-panel').style.display = 'none';
         }
     }
 
-    $('extra-key-add').addEventListener('click', () => {
-        const val = $('extra-key-input').value.trim();
-        if (!val) return;
-        const keys = getExtraKeys();
-        if (!keys.includes(val)) { keys.push(val); saveExtraKeys(keys); }
-        $('extra-key-input').value = '';
-        renderExtraFactionPanels();
+    $('share-toggle').addEventListener('change', async () => {
+        const cb = $('share-toggle');
+        const enabling = cb.checked;
+        cb.disabled = true;
+        $('share-status').textContent = enabling ? 'Turning on…' : 'Turning off…';
+        try {
+            const res = await fetch('/api/faction-share', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ key: apiKey, enabled: enabling }),
+            });
+            const result = await res.json();
+            if (result.error) throw new Error(result.error);
+            toast(enabling ? 'Now sharing your overview' : 'Sharing turned off');
+            loadFactionSharing();
+        } catch (e) {
+            cb.checked = !enabling; // revert on failure
+            toast(e.message || 'Could not update sharing');
+        } finally {
+            cb.disabled = false;
+        }
     });
     const NAV_GROUP_KEY = 'wwl_nav_collapsed'; // stores an array of collapsed group names
 
@@ -2572,7 +2554,7 @@
 <style>
     /* Shrink the Buy Me a Coffee widget's floating button — it has no size option of its own,
        so this scales its injected container down toward its anchor corner instead. */
-    #bmc-wbtn {
+    .bmc-btn {
         transform: scale(0.6);
         transform-origin: bottom right;
     }
