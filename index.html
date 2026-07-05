@@ -330,10 +330,12 @@
             <div class="nav-group-items" data-group-items="leadership">
                 <div class="nav-item" data-page="payout">Chain payout</div>
                 <div class="nav-item" data-page="announce-edit">Announcements</div>
+                <div class="nav-item" data-page="feedback-edit">Feedback form</div>
             </div>
         </div>
 
         <div class="nav-item" data-page="links">Tools &amp; links</div>
+        <div class="nav-item" data-page="feedback">Feedback</div>
 
         <div class="spacer"></div>
         <div class="whoami" id="whoami"></div>
@@ -521,6 +523,62 @@
                     <button class="ghost" id="an-clear">Clear announcement</button>
                 </div>
                 <div class="status" id="an-status"></div>
+            </div>
+        </section>
+
+        <!-- ========== FEEDBACK (public) ========== -->
+        <section class="page" id="page-feedback">
+            <div class="lab-label">WWL·03c / faction pulse</div>
+            <h2 id="fb-title">Feedback</h2>
+            <p class="pagedesc">Have your say — this feeds straight into what leadership plans next.</p>
+            <div id="fb-empty" class="panel" style="display:none;">
+                <p style="color:var(--muted);margin:0;">No open form right now — check back soon.</p>
+            </div>
+            <div id="fb-content" style="display:none;">
+                <div class="panel">
+                    <h3>Fill it out</h3>
+                    <iframe id="fb-form-frame" style="width:100%;height:900px;border:none;border-radius:var(--radius);" loading="lazy"></iframe>
+                </div>
+                <div class="panel" id="fb-chart-panel" style="display:none;margin-top:16px;">
+                    <h3>Results so far</h3>
+                    <iframe id="fb-chart-frame" style="width:100%;height:480px;border:none;border-radius:var(--radius);" loading="lazy"></iframe>
+                </div>
+            </div>
+        </section>
+
+        <!-- ========== FEEDBACK EDITOR (leaders only) ========== -->
+        <section class="page" id="page-feedback-edit">
+            <div class="lab-label">WWL·03d / leadership tools</div>
+            <h2>Feedback form</h2>
+            <p class="pagedesc">Swap this out whenever you run a new poll — everyone sees whatever's set here, plus a live results chart if you add one.</p>
+
+            <div class="panel" id="feedback-locked" style="display:none;">
+                <h3>🔒 Leaders only</h3>
+                <p style="color:var(--muted);line-height:1.6;margin:0;">Setting the feedback form needs the same <b>API Access</b> faction permission as Chain payout.</p>
+            </div>
+
+            <div class="panel" id="feedback-editor" style="display:none;">
+                <div class="field">
+                    <label for="fb-title-input">Title</label>
+                    <input id="fb-title-input" placeholder="e.g. Leadership interest poll — July">
+                </div>
+                <div class="field">
+                    <label for="fb-form-url">Google Form embed URL</label>
+                    <input id="fb-form-url" placeholder="Paste the embed URL, or the whole <iframe> code Google gives you">
+                </div>
+                <div class="field">
+                    <label for="fb-chart-url">Results chart embed URL (optional)</label>
+                    <input id="fb-chart-url" placeholder="Paste the published Google Sheets chart embed URL">
+                </div>
+                <p style="color:var(--muted);font-size:11px;line-height:1.6;">
+                    Form: in Google Forms, <b>Send → the &lt;&gt; icon → copy</b>.<br>
+                    Chart: link the form to a Sheet, make a chart there, then <b>File → Share → Publish to web → select the chart → Embed</b>.
+                </p>
+                <div class="row" style="margin-top:14px;display:flex;gap:10px;">
+                    <button id="fb-save">Save</button>
+                    <button class="ghost" id="fb-clear">Clear</button>
+                </div>
+                <div class="status" id="fb-editor-status"></div>
             </div>
         </section>
 
@@ -862,6 +920,7 @@
             isLeaderCached = true;
             setNavLock('payout', false);
             setNavLock('announce-edit', false);
+            setNavLock('feedback-edit', false);
             $('cp-locked').style.display = 'none';
             $('cp-tools').style.display = 'block';
             loadAdoption();
@@ -869,6 +928,7 @@
             isLeaderCached = false;
             setNavLock('payout', true);
             setNavLock('announce-edit', true);
+            setNavLock('feedback-edit', true);
             $('cp-locked').style.display = 'block';
             $('cp-tools').style.display = 'none';
         }
@@ -876,6 +936,11 @@
             $('announce-locked').style.display = isLeaderCached ? 'none' : 'block';
             $('announce-editor').style.display = isLeaderCached ? 'block' : 'none';
             if (isLeaderCached) loadAnnouncementEditor();
+        }
+        if (document.querySelector('.nav-item[data-page="feedback-edit"]').classList.contains('active')) {
+            $('feedback-locked').style.display = isLeaderCached ? 'none' : 'block';
+            $('feedback-editor').style.display = isLeaderCached ? 'block' : 'none';
+            if (isLeaderCached) loadFeedbackEditor();
         }
     }
 
@@ -1029,6 +1094,12 @@
         else if (typeof stopTfLive === 'function') stopTfLive();
         if (page === 'profile') loadPlayerProfile();
         if (page === 'links') loadRequiredToolStatus();
+        if (page === 'feedback') loadFeedback();
+        if (page === 'feedback-edit') {
+            $('feedback-locked').style.display = isLeaderCached ? 'none' : 'block';
+            $('feedback-editor').style.display = isLeaderCached ? 'block' : 'none';
+            if (isLeaderCached) loadFeedbackEditor();
+        }
         if (page === 'dashboard') { startCooldownTicker(); loadAnnouncement(); } else { stopCooldownTicker(); }
         if (page === 'announce-edit') {
             $('announce-locked').style.display = isLeaderCached ? 'none' : 'block';
@@ -1301,6 +1372,93 @@
             loadAnnouncementEditor();
             toast('Announcement cleared');
         } catch (e) { toast('Could not clear announcement'); }
+    });
+
+    // ================= FEEDBACK FORM =================
+    // Extracts a URL whether the leader pastes a bare link or Google's whole <iframe> snippet,
+    // and only allows https:// URLs — this renders in an iframe for every member, so no
+    // arbitrary/unsafe schemes get through even if something odd gets pasted in.
+    function extractEmbedUrl(input) {
+        if (!input) return null;
+        const trimmed = input.trim();
+        const iframeMatch = trimmed.match(/src=["']([^"']+)["']/i);
+        const url = iframeMatch ? iframeMatch[1] : trimmed;
+        return /^https:\/\//i.test(url) ? url : null;
+    }
+
+    async function loadFeedback() {
+        try {
+            const res = await fetch('/api/feedback-form');
+            const data = await res.json();
+            const form = data?.form;
+            if (!form) { $('fb-empty').style.display = 'block'; $('fb-content').style.display = 'none'; return; }
+
+            $('fb-title').textContent = form.title || 'Feedback';
+            $('fb-empty').style.display = 'none';
+            $('fb-content').style.display = 'block';
+            $('fb-form-frame').src = form.formUrl;
+            if (form.chartUrl) {
+                $('fb-chart-panel').style.display = 'block';
+                $('fb-chart-frame').src = form.chartUrl;
+            } else {
+                $('fb-chart-panel').style.display = 'none';
+            }
+        } catch (e) {
+            $('fb-empty').style.display = 'block'; $('fb-content').style.display = 'none';
+        }
+    }
+
+    async function loadFeedbackEditor() {
+        try {
+            const res = await fetch('/api/feedback-form');
+            const data = await res.json();
+            const form = data?.form;
+            $('fb-title-input').value = form?.title || '';
+            $('fb-form-url').value = form?.formUrl || '';
+            $('fb-chart-url').value = form?.chartUrl || '';
+        } catch (e) { /* start blank if loading the current one fails */ }
+    }
+
+    $('fb-save').addEventListener('click', async () => {
+        const btn = $('fb-save');
+        const st = $('fb-editor-status');
+        btn.disabled = true; btn.textContent = 'Saving…';
+        try {
+            const title = $('fb-title-input').value.trim();
+            const formUrl = extractEmbedUrl($('fb-form-url').value);
+            const chartUrl = $('fb-chart-url').value.trim() ? extractEmbedUrl($('fb-chart-url').value) : null;
+
+            if (!formUrl) {
+                st.className = 'status err';
+                st.textContent = 'That doesn\'t look like a valid embed URL — paste the link Google gives you (or the whole <iframe> snippet), starting with https://';
+                return;
+            }
+            const res = await fetch('/api/feedback-form', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ key: apiKey, title, formUrl, chartUrl }),
+            });
+            const data = await res.json();
+            if (data.error) throw new Error(data.error);
+            st.className = 'status ok'; st.textContent = 'Saved — live on the Feedback page now.';
+        } catch (e) {
+            st.className = 'status err'; st.textContent = e.message;
+        } finally {
+            btn.disabled = false; btn.textContent = 'Save';
+        }
+    });
+
+    $('fb-clear').addEventListener('click', async () => {
+        if (!confirm('Remove the current feedback form for everyone?')) return;
+        try {
+            await fetch('/api/feedback-form', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ key: apiKey, action: 'clear' }),
+            });
+            loadFeedbackEditor();
+            toast('Feedback form cleared');
+        } catch (e) { toast('Could not clear the form'); }
     });
 
     // ================= WEEKLY ENERGY GOALS =================
