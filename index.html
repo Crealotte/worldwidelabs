@@ -381,6 +381,18 @@
                     </table>
                 </div>
             </div>
+
+            <div class="panel" id="extra-factions-panel">
+                <h3>Other factions <span style="font-weight:400;color:var(--muted);font-size:12px;">(keys you've been given)</span></h3>
+                <p style="color:var(--muted);font-size:12px;margin:0 0 12px;">
+                    If another faction's leader gives you a faction-scoped key, add it here to see their roster overview too. Stored only in your own browser — never sent anywhere but Torn and this site.
+                </p>
+                <div class="row" style="display:flex;gap:8px;margin-bottom:10px;">
+                    <input type="password" id="extra-key-input" placeholder="Paste their API key" style="flex:1;">
+                    <button class="ghost" id="extra-key-add">Add</button>
+                </div>
+                <div id="extra-faction-list"></div>
+            </div>
         </section>
 
         <!-- ========== ENERGY PLANNER ========== -->
@@ -1049,7 +1061,105 @@
         }
     }
 
-    // ================= NAV =================
+    // ================= OTHER FACTIONS (extra keys) =================
+    // Fully client-side — these keys never touch our database, only your own browser's
+    // localStorage, same as your own login key. They just get used to call the same
+    // endpoints you already use, pointed at a different faction each time.
+    const EXTRA_KEYS_STORAGE = 'wwl_extra_faction_keys';
+
+    function getExtraKeys() {
+        try { return JSON.parse(localStorage.getItem(EXTRA_KEYS_STORAGE)) || []; } catch { return []; }
+    }
+    function saveExtraKeys(keys) { localStorage.setItem(EXTRA_KEYS_STORAGE, JSON.stringify(keys)); }
+
+    async function fetchFactionOverview(key) {
+        const profileRes = await fetch(`https://api.torn.com/user/?selections=profile&key=${encodeURIComponent(key)}`);
+        const profile = await profileRes.json();
+        if (profile.error) throw new Error(friendlyApiError(profile.error));
+        const factionName = profile.faction?.faction_name || 'Unknown faction';
+
+        const membersRes = await fetch(`https://api.torn.com/v2/faction/members?striptags=true&key=${encodeURIComponent(key)}`,
+            { headers: { accept: 'application/json' } });
+        const membersData = await membersRes.json();
+        if (membersData.error) throw new Error(membersData.error.error || 'Could not load this faction\'s roster — check the key has faction API access.');
+
+        const [trackData, discordData] = await Promise.all([
+            fetch(`/api/presence?key=${encodeURIComponent(key)}`).then(r => r.json()).catch(() => ({})),
+            fetch(`/api/discord-members?key=${encodeURIComponent(key)}`).then(r => r.json()).catch(() => null),
+        ]);
+
+        return {
+            factionName,
+            members: membersData.members || [],
+            logins: trackData.logins || {},
+            discordMembers: (discordData && !discordData.error) ? discordData.members : null,
+        };
+    }
+
+    async function renderExtraFactionPanels() {
+        const keys = getExtraKeys();
+        const container = $('extra-faction-list');
+        if (!keys.length) { container.innerHTML = '<p style="color:var(--muted);font-size:13px;">No other faction keys added yet.</p>'; return; }
+        container.innerHTML = '';
+
+        for (const key of keys) {
+            const panelId = 'extra-' + key.replace(/[^a-zA-Z0-9]/g, '').slice(0, 10);
+            const wrap = document.createElement('div');
+            wrap.style.cssText = 'border-top:1px solid var(--line);padding-top:14px;margin-top:14px;';
+            wrap.innerHTML = `
+                <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;">
+                    <h4 style="margin:0;font-size:14px;" id="${panelId}-title">Loading…</h4>
+                    <button class="ghost small" data-key="${esc(key)}">Remove</button>
+                </div>
+                <p style="color:var(--muted);font-size:12px;margin:6px 0;" id="${panelId}-summary"></p>
+                <div class="table-scroll" style="max-height:280px;overflow-y:auto;">
+                    <table><thead><tr><th>Member</th><th>WWLabs</th><th>Discord</th></tr></thead>
+                    <tbody id="${panelId}-body"></tbody></table>
+                </div>`;
+            container.appendChild(wrap);
+
+            wrap.querySelector('button').addEventListener('click', () => {
+                saveExtraKeys(getExtraKeys().filter(k => k !== key));
+                renderExtraFactionPanels();
+            });
+
+            try {
+                const data = await fetchFactionOverview(key);
+                const onboard = data.members.filter(m => data.logins[m.id]).length;
+                $(`${panelId}-title`).textContent = data.factionName;
+                $(`${panelId}-summary`).textContent = data.discordMembers
+                    ? `${onboard} of ${data.members.length} on WWLabs · ${data.members.filter(m => data.discordMembers[m.id]).length} of ${data.members.length} found in Discord.`
+                    : `${onboard} of ${data.members.length} on WWLabs.`;
+                $(`${panelId}-body`).innerHTML = data.members.map(m => {
+                    const l = data.logins[m.id];
+                    let discordCell = '<span style="color:var(--muted);font-size:11px;">—</span>';
+                    if (data.discordMembers) {
+                        const d = data.discordMembers[m.id];
+                        discordCell = d
+                            ? (d.verified ? '<span style="color:var(--reagent)">● verified</span>' : '<span style="color:var(--happy)">● in server</span>')
+                            : '<span style="color:var(--muted)">○ not found</span>';
+                    }
+                    return `<tr${l ? '' : ' style="opacity:.5"'}>
+                        <td>${esc(m.name)} [${m.id}]</td>
+                        <td>${l ? '<span style="color:var(--reagent)">● on board</span>' : '<span style="color:var(--muted)">○ not yet</span>'}</td>
+                        <td>${discordCell}</td>
+                    </tr>`;
+                }).join('');
+            } catch (e) {
+                $(`${panelId}-title`).textContent = 'Could not load this faction';
+                $(`${panelId}-summary`).textContent = e.message;
+            }
+        }
+    }
+
+    $('extra-key-add').addEventListener('click', () => {
+        const val = $('extra-key-input').value.trim();
+        if (!val) return;
+        const keys = getExtraKeys();
+        if (!keys.includes(val)) { keys.push(val); saveExtraKeys(keys); }
+        $('extra-key-input').value = '';
+        renderExtraFactionPanels();
+    });
     const NAV_GROUP_KEY = 'wwl_nav_collapsed'; // stores an array of collapsed group names
 
     function getCollapsedGroups() {
@@ -1388,7 +1498,7 @@
 
     async function loadFeedback() {
         try {
-            const res = await fetch('/api/feedback-form');
+            const res = await fetch(`/api/feedback-form?key=${encodeURIComponent(apiKey)}`);
             const data = await res.json();
             const form = data?.form;
             if (!form) { $('fb-empty').style.display = 'block'; $('fb-content').style.display = 'none'; return; }
@@ -1410,7 +1520,7 @@
 
     async function loadFeedbackEditor() {
         try {
-            const res = await fetch('/api/feedback-form');
+            const res = await fetch(`/api/feedback-form?key=${encodeURIComponent(apiKey)}`);
             const data = await res.json();
             const form = data?.form;
             $('fb-title-input').value = form?.title || '';
