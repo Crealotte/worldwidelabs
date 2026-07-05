@@ -97,51 +97,201 @@ async function loadOcFitTeamBuilder() {
     try {
         const res = await fetch('/api/oc-fit', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ key: apiKey, action: 'team-builder' }),
+            body: JSON.stringify({ key: apiKey, action: 'team-catalog' }),
         });
         const data = await res.json();
         if (data.error) throw new Error(data.error);
-        renderOcFitTeamBuilder(data.openSlots || []);
+        renderOcFitTeamCatalog(data.scenarios || []);
     } catch (e) {
         $('ocfit-team-body').innerHTML = `<p style="color:var(--muted);">${esc(e.message)}</p>`;
     }
 }
 
-function renderOcFitTeamBuilder(openSlots) {
+// A safe, unique DOM-id-friendly slug for a scenario key (which contains "::").
+function ocfitSlug(s) {
+    return (s || '').replace(/[^a-zA-Z0-9]/g, '-');
+}
+
+function renderOcFitTeamCatalog(scenarios) {
     const body = $('ocfit-team-body');
-    if (!openSlots.length) {
-        body.innerHTML = '<p style="color:var(--muted);">No open slots right now.</p>';
+    if (!scenarios.length) {
+        body.innerHTML = `<p style="color:var(--muted);">
+            Nothing yet — this fills in once your faction has an active OC, or once members start
+            opening their own OC Fit Tracker. Check back after your next OC spawns.
+        </p>`;
         return;
     }
-    body.innerHTML = openSlots.map(slot => {
-        const candidatesHtml = slot.candidates.length
-            ? slot.candidates.map(c => {
-                const badge = c.live
-                    ? `<span class="ocfit-live-badge" style="background:rgba(53,217,155,.15);color:var(--reagent);">live</span>`
-                    : `<span class="ocfit-live-badge" style="background:var(--bench-2);color:var(--muted);">cached · ${esc(ocfitAgo(c.lastSeenLive))}</span>`;
-                return `<div style="display:flex;align-items:center;gap:10px;padding:5px 0;">
-                    <span style="flex:1;">${esc(c.name)}</span>
-                    <span class="ocfit-cpr" style="color:${ocfitCprColor(c.cpr)};font-family:var(--mono);font-weight:700;">${Math.round(c.cpr)}%</span>
-                    ${badge}
+
+    // Group by difficulty, same structure as the personal tracker.
+    const byDiff = {};
+    for (const s of scenarios) (byDiff[s.difficulty ?? '?'] ||= []).push(s);
+    const diffs = Object.keys(byDiff).sort((a, b) => Number(a) - Number(b));
+    const collapsed = ocfitGetCollapsed();
+
+    body.innerHTML = diffs.map(diff => {
+        const tierId = `ocfitteam-tier-${diff}`;
+        const tierScenarios = byDiff[diff];
+
+        const scenarioHtml = tierScenarios.map(s => {
+            const scenSlug = ocfitSlug(s.scenarioKey);
+            const scenId = `${tierId}-${scenSlug}`;
+            const scenCollapsed = collapsed.includes(scenId);
+
+            const statusBadge = s.live
+                ? `<span class="ocfit-live-badge" style="background:rgba(53,217,155,.15);color:var(--reagent);">🟢 live now · ${s.openSlotCount} open</span>`
+                : `<span class="ocfit-live-badge" style="background:var(--bench-2);color:var(--muted);">📋 planning ahead</span>`;
+            const payoutBadge = s.estimatedPayout
+                ? `<span class="ocfit-live-badge" style="background:var(--bench-2);color:var(--reagent);">~$${s.estimatedPayout.money.toLocaleString()} + ${s.estimatedPayout.respect} resp</span>`
+                : '';
+            const simUrl = `https://crimeshub-2b4b0.firebaseapp.com/oc/${(s.scenario || '').toLowerCase().replace(/[^a-z0-9]/g, '')}`;
+            const simLink = `<a href="${esc(simUrl)}" target="_blank" rel="noopener" style="font-size:11px;color:var(--muted);text-decoration:underline;" title="Full checkpoint-by-checkpoint outcome simulator on CrimesHub (not our tool — community-run)" onclick="event.stopPropagation()">simulate outcomes ↗</a>`;
+
+            const rolesHtml = s.roles.map(r => {
+                const selId = `ocfitteam-sel-${scenSlug}-${ocfitSlug(r.roleKey)}`;
+                const weightText = r.weight != null ? `${Math.round(r.weight)}% weight` : 'weight unknown';
+                const openBadge = r.open
+                    ? `<span class="ocfit-live-badge" style="background:rgba(53,217,155,.15);color:var(--reagent);">open now</span>`
+                    : '';
+                const impact = ocfitImpact(null, r.weight); // weight-only badge here — CPR varies per candidate
+                const options = r.candidates.map(c => {
+                    const live = c.live ? ' · live' : ` · ${ocfitAgo(c.lastSeenLive)}`;
+                    return `<option value="${esc(c.id)}" data-name="${esc(c.name)}">${esc(c.name)} — ${Math.round(c.cpr)}%${live}</option>`;
+                }).join('');
+                const selectedId = r.assigned?.memberId || '';
+                return `
+                    <div class="ocfit-role-row" style="cursor:default;">
+                        <span class="ocfit-role-name">${esc(r.role)}</span>
+                        <span style="font-size:11px;color:var(--muted);white-space:nowrap;">${esc(weightText)}</span>
+                        ${openBadge}
+                        <select id="${selId}" data-role-key="${esc(r.roleKey)}" data-role-name="${esc(r.role)}" style="flex:1;min-width:160px;max-width:240px;">
+                            <option value="">— unassigned —</option>
+                            ${options}
+                        </select>
+                    </div>`;
+            }).join('');
+
+            return `
+                <div class="ocfit-scenario ${scenCollapsed ? 'collapsed' : ''}" data-collapse="${scenId}" data-scenario-key="${esc(s.scenarioKey)}" data-scenario-name="${esc(s.scenario)}" data-difficulty="${esc(s.difficulty)}">
+                    <div class="ocfit-scenario-header">
+                        <span>${esc(s.scenario)}</span>
+                        ${statusBadge}
+                        ${payoutBadge}
+                        ${simLink}
+                        <span class="chev">▾</span>
+                    </div>
+                    <div class="ocfit-scenario-body">
+                        ${rolesHtml}
+                        <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;">
+                            <button class="ghost small ocfitteam-auto" data-scenario-key="${esc(s.scenarioKey)}">Auto-suggest team</button>
+                            <button class="ghost small ocfitteam-save" data-scenario-key="${esc(s.scenarioKey)}" data-scenario-name="${esc(s.scenario)}" data-difficulty="${esc(s.difficulty)}">Save plan</button>
+                            <button class="ghost small ocfitteam-clear" data-scenario-key="${esc(s.scenarioKey)}">Clear plan</button>
+                            <span class="status" id="ocfitteam-status-${scenSlug}" style="align-self:center;"></span>
+                        </div>
+                    </div>
                 </div>`;
-            }).join('')
-            : '<p style="color:var(--muted);font-size:12px;margin:4px 0;">No opted-in members have fit data for this role yet.</p>';
+        }).join('');
 
-        const weightText = slot.weight != null ? `${Math.round(slot.weight)}% weight` : 'weight unknown';
-        const riskyBadge = slot.risky
-            ? `<span style="font-size:10px;padding:2px 7px;border-radius:10px;background:rgba(230,90,60,.15);color:var(--danger);white-space:nowrap;">⚠ high-impact, weak coverage</span>`
-            : '';
-
+        const tierCollapsed = collapsed.includes(tierId);
         return `
-            <div style="border-top:1px solid var(--line);padding-top:12px;margin-top:12px;">
-                <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;flex-wrap:wrap;">
-                    <b>${esc(slot.role)}</b>
-                    <span style="color:var(--muted);font-size:12px;">in ${esc(slot.scenario)} · Difficulty ${esc(slot.difficulty)} · ${esc(weightText)}</span>
-                    ${riskyBadge}
+            <div class="ocfit-tier ${tierCollapsed ? 'collapsed' : ''}" data-collapse="${tierId}">
+                <div class="ocfit-tier-header">
+                    <span>Difficulty ${esc(diff)}</span>
+                    <span style="font-size:12px;color:var(--muted);font-weight:400;">${tierScenarios.length} scenario${tierScenarios.length === 1 ? '' : 's'}</span>
+                    <span class="chev">▾</span>
                 </div>
-                ${candidatesHtml}
+                <div class="ocfit-tier-body">${scenarioHtml}</div>
             </div>`;
     }).join('');
+
+    // Wire collapse toggles (shared collapse-state key with the personal tracker's tiers — fine
+    // since the ids are namespaced differently and won't collide).
+    body.querySelectorAll('.ocfit-tier-header').forEach(header => {
+        header.addEventListener('click', () => {
+            const tier = header.closest('.ocfit-tier');
+            const isCollapsed = ocfitToggleCollapsed(tier.dataset.collapse);
+            tier.classList.toggle('collapsed', isCollapsed);
+        });
+    });
+    body.querySelectorAll('.ocfit-scenario-header').forEach(header => {
+        header.addEventListener('click', () => {
+            const scen = header.closest('.ocfit-scenario');
+            const isCollapsed = ocfitToggleCollapsed(scen.dataset.collapse);
+            scen.classList.toggle('collapsed', isCollapsed);
+        });
+    });
+    // Prevent the select dropdown click from also toggling the scenario collapse.
+    body.querySelectorAll('.ocfit-scenario-body').forEach(el => {
+        el.addEventListener('click', e => e.stopPropagation());
+    });
+
+    // Auto-suggest: a simple greedy pass — highest-weight roles get first pick of the best
+    // available (not-yet-used) candidate. Only fills the dropdowns; nothing is saved until
+    // "Save plan" is clicked.
+    body.querySelectorAll('.ocfitteam-auto').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const scenSlug = ocfitSlug(btn.dataset.scenarioKey);
+            const selects = [...body.querySelectorAll(`select[id^="ocfitteam-sel-${scenSlug}-"]`)];
+            const used = new Set();
+            for (const sel of selects) {
+                let bestValue = '', bestCpr = -1;
+                for (const opt of sel.options) {
+                    if (!opt.value || used.has(opt.value)) continue;
+                    const cprMatch = opt.textContent.match(/—\s*(\d+)%/);
+                    const cpr = cprMatch ? Number(cprMatch[1]) : -1;
+                    if (cpr > bestCpr) { bestCpr = cpr; bestValue = opt.value; }
+                }
+                sel.value = bestValue;
+                if (bestValue) used.add(bestValue);
+            }
+            toast('Auto-suggested — review and Save plan when happy');
+        });
+    });
+
+    body.querySelectorAll('.ocfitteam-save').forEach(btn => {
+        btn.addEventListener('click', async () => {
+            const scenarioKey = btn.dataset.scenarioKey;
+            const scenSlug = ocfitSlug(scenarioKey);
+            const statusEl = document.getElementById(`ocfitteam-status-${scenSlug}`);
+            const selects = [...body.querySelectorAll(`select[id^="ocfitteam-sel-${scenSlug}-"]`)];
+            const roles = {};
+            for (const sel of selects) {
+                const roleKey = sel.dataset.roleKey;
+                if (!sel.value) { roles[roleKey] = null; continue; }
+                const opt = sel.options[sel.selectedIndex];
+                roles[roleKey] = { memberId: sel.value, memberName: opt.dataset.name };
+            }
+            btn.disabled = true;
+            statusEl.className = 'status ok'; statusEl.textContent = 'Saving…';
+            try {
+                await fetch('/api/oc-fit', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        key: apiKey, action: 'team-plan-save',
+                        scenarioKey, scenario: btn.dataset.scenarioName, difficulty: btn.dataset.difficulty, roles,
+                    }),
+                });
+                statusEl.textContent = 'Saved ✓';
+                setTimeout(() => { statusEl.textContent = ''; }, 2000);
+            } catch (e) {
+                statusEl.className = 'status err'; statusEl.textContent = 'Could not save';
+            } finally {
+                btn.disabled = false;
+            }
+        });
+    });
+
+    body.querySelectorAll('.ocfitteam-clear').forEach(btn => {
+        btn.addEventListener('click', async () => {
+            if (!confirm('Clear the saved plan for this crime?')) return;
+            try {
+                await fetch('/api/oc-fit', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ key: apiKey, action: 'team-plan-clear', scenarioKey: btn.dataset.scenarioKey }),
+                });
+                loadOcFitTeamBuilder();
+            } catch (e) { toast('Could not clear plan'); }
+        });
+    });
 }
 
 function renderOcFit(catalog) {
@@ -186,6 +336,9 @@ function renderOcFit(catalog) {
                 const impactBadge = impact
                     ? `<span class="ocfit-live-badge" style="background:${impact.bg};color:${impact.color};">${esc(impact.label)}</span>`
                     : '';
+                const payoutLine = r.estimatedPayout
+                    ? `<div style="font-size:12px;margin-top:4px;">Typical payout on success: <b style="color:var(--reagent);">$${r.estimatedPayout.money.toLocaleString()}</b> + <b style="color:var(--reagent);">${r.estimatedPayout.respect}</b> respect <span style="color:var(--muted);">(avg of ${r.estimatedPayout.sample} run${r.estimatedPayout.sample === 1 ? '' : 's'})</span></div>`
+                    : '';
                 return `
                     <div class="ocfit-role-row" data-row="${rowId}">
                         <span class="ocfit-role-name">${esc(r.role)}</span>
@@ -197,6 +350,7 @@ function renderOcFit(catalog) {
                         <div style="margin-bottom:6px;"><b>${esc(r.category)}</b> — ${esc(r.categoryHint)}</div>
                         <div style="font-size:12px;">Role importance: ${esc(weightText)} · Last confirmed: ${esc(ocfitAgo(r.lastSeenLive))}${r.live ? ' (right now)' : ''}</div>
                         <div style="font-size:11px;margin-top:6px;color:var(--muted);">On top of the above: general Crime Experience (from doing any crimes at all, more advanced ones count for more) always helps every role a little, separately from any specific Crime Skill named above.</div>
+                        ${payoutLine}
                     </div>`;
             }).join('');
 
