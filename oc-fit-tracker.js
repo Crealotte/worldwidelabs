@@ -21,6 +21,35 @@ function ocfitCprColor(cpr) {
     return 'var(--danger)';
 }
 
+// Same thresholds the original OC Manager script used as sensible defaults.
+const OCFIT_WEIGHT_HIGH = 25;
+const OCFIT_WEIGHT_LOW = 15;
+const OCFIT_CPR_WARN = 70;
+
+// Combines CPR with role weight into a single "does this matter, and am I good at it"
+// read — a high CPR in a low-weight role barely helps the crime either way, and a
+// mediocre CPR in a high-weight role is exactly where effort is best spent.
+function ocfitImpact(cpr, weight) {
+    if (weight == null) return null; // unknown importance — no badge, don't guess
+    if (weight >= OCFIT_WEIGHT_HIGH) {
+        return cpr != null && cpr >= OCFIT_CPR_WARN
+            ? { label: '⭐ High-impact fit', color: 'var(--reagent)', bg: 'rgba(53,217,155,.15)' }
+            : { label: '⚠ High-impact — needs work', color: 'var(--danger)', bg: 'rgba(230,90,60,.15)' };
+    }
+    if (weight <= OCFIT_WEIGHT_LOW) {
+        return { label: 'Low-impact', color: 'var(--muted)', bg: 'var(--bench-2)' };
+    }
+    return null; // moderate weight — not worth a badge, avoids visual noise
+}
+
+// Sort key blending fit and importance — unknown weight treated as moderate so it
+// doesn't unfairly sink to the bottom or jump to the top of the list.
+function ocfitSortScore(entry) {
+    const w = entry.weight ?? 20;
+    const c = entry.cpr ?? 0;
+    return c * w;
+}
+
 function ocfitAgo(ts) {
     if (!ts) return 'never';
     const diff = Date.now() - ts;
@@ -89,11 +118,17 @@ function renderOcFitTeamBuilder(openSlots) {
             }).join('')
             : '<p style="color:var(--muted);font-size:12px;margin:4px 0;">No opted-in members have fit data for this role yet.</p>';
 
+        const weightText = slot.weight != null ? `${Math.round(slot.weight)}% weight` : 'weight unknown';
+        const riskyBadge = slot.risky
+            ? `<span style="font-size:10px;padding:2px 7px;border-radius:10px;background:rgba(230,90,60,.15);color:var(--danger);white-space:nowrap;">⚠ high-impact, weak coverage</span>`
+            : '';
+
         return `
             <div style="border-top:1px solid var(--line);padding-top:12px;margin-top:12px;">
-                <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
+                <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;flex-wrap:wrap;">
                     <b>${esc(slot.role)}</b>
-                    <span style="color:var(--muted);font-size:12px;">in ${esc(slot.scenario)} · Difficulty ${esc(slot.difficulty)}</span>
+                    <span style="color:var(--muted);font-size:12px;">in ${esc(slot.scenario)} · Difficulty ${esc(slot.difficulty)} · ${esc(weightText)}</span>
+                    ${riskyBadge}
                 </div>
                 ${candidatesHtml}
             </div>`;
@@ -128,7 +163,7 @@ function renderOcFit(catalog) {
 
         const scenarioHtml = scenarioNames.map(scenario => {
             const scenId = `${tierId}-${scenario.replace(/[^a-z0-9]/gi, '')}`;
-            const roles = scenarios[scenario].sort((a, b) => (b.cpr ?? 0) - (a.cpr ?? 0));
+            const roles = scenarios[scenario].sort((a, b) => ocfitSortScore(b) - ocfitSortScore(a));
             const anyLive = roles.some(r => r.live);
 
             const rolesHtml = roles.map((r, i) => {
@@ -138,9 +173,14 @@ function renderOcFit(catalog) {
                 const badge = r.live
                     ? `<span class="ocfit-live-badge" style="background:rgba(53,217,155,.15);color:var(--reagent);">live now</span>`
                     : `<span class="ocfit-live-badge" style="background:var(--bench-2);color:var(--muted);">cached · ${esc(ocfitAgo(r.lastSeenLive))}</span>`;
+                const impact = ocfitImpact(r.cpr, r.weight);
+                const impactBadge = impact
+                    ? `<span class="ocfit-live-badge" style="background:${impact.bg};color:${impact.color};">${esc(impact.label)}</span>`
+                    : '';
                 return `
                     <div class="ocfit-role-row" data-row="${rowId}">
                         <span class="ocfit-role-name">${esc(r.role)}</span>
+                        ${impactBadge}
                         <span class="ocfit-cpr" style="color:${ocfitCprColor(r.cpr)};">${cprText}</span>
                         ${badge}
                     </div>
