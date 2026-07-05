@@ -1,10 +1,12 @@
 // api/announcement.js — WorldWideLabs faction announcements + optional poll.
+// The key is ALWAYS sent in the POST body, never a URL query string — a GET with ?key=...
+// would put the key straight into Vercel's own request-path logs in plaintext.
 // Multi-faction: every request resolves the caller's OWN faction ID from their key first
 // (server-side, never trusted from the client), then reads/writes that faction's own slot.
 // This is what lets multiple factions share one WorldWideLabs deployment safely — a leader
 // from Faction A can never see or overwrite Faction B's announcement.
 //
-// GET  ?key=...                            -> the caller's faction's announcement, tally,
+// POST { key, action:'read' }              -> the caller's faction's announcement, tally,
 //                                              per-option voters, their own vote, and whether closed
 // POST { key, text, poll }                 -> leaders only: create/replace THEIR faction's announcement.
 //                                              poll: { question, options, durationMs } | null.
@@ -55,13 +57,15 @@ module.exports = async function handler(req, res) {
             return res.status(500).json({ error: 'Database not connected. In Vercel: Storage -> Create Database -> Upstash Redis, and connect it to this project.' });
         }
 
-        if (req.method === 'GET') {
-            const key = req.query.key;
-            if (!key) return res.status(400).json({ error: 'Missing key' });
+        if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
-            const factionId = await getFactionId(key);
-            if (!factionId) return res.status(403).json({ error: 'Could not determine your faction from this key' });
+        const { key, action } = req.body || {};
+        if (!key) return res.status(400).json({ error: 'Missing key' });
 
+        const factionId = await getFactionId(key);
+        if (!factionId) return res.status(403).json({ error: 'Could not determine your faction from this key' });
+
+        if (action === 'read') {
             const raw = await redis(['GET', announcementKey(factionId)]);
             const announcement = raw ? JSON.parse(raw) : null;
 
@@ -96,66 +100,56 @@ module.exports = async function handler(req, res) {
             return res.status(200).json({ announcement, tally, voters, totalVotes, myVote, closed });
         }
 
-        if (req.method === 'POST') {
-            const { key, action } = req.body || {};
-            if (!key) return res.status(400).json({ error: 'Missing key' });
+        if (action === 'vote') {
+            const { optionIndex } = req.body;
+            if (optionIndex === undefined) return res.status(400).json({ error: 'Missing optionIndex' });
 
-            const factionId = await getFactionId(key);
-            if (!factionId) return res.status(403).json({ error: 'Could not determine your faction from this key' });
-
-            if (action === 'vote') {
-                const { optionIndex } = req.body;
-                if (optionIndex === undefined) return res.status(400).json({ error: 'Missing optionIndex' });
-
-                const raw = await redis(['GET', announcementKey(factionId)]);
-                const announcement = raw ? JSON.parse(raw) : null;
-                if (!announcement?.poll) return res.status(400).json({ error: 'There is no active poll right now.' });
-                if (announcement.poll.expiresAt && Date.now() > announcement.poll.expiresAt) {
-                    return res.status(400).json({ error: 'This poll has closed.' });
-                }
-
-                const profile = await tornProfile(key);
-                if (profile.error) return res.status(403).json({ error: 'Torn rejected the key' });
-
-                const voteKey = `wwl:poll:votes:${factionId}:${announcement.poll.pollId}`;
-                await redis(['HSET', voteKey, String(profile.player_id), JSON.stringify({ optionIndex, name: profile.name })]);
-                return res.status(200).json({ ok: true });
+            const raw = await redis(['GET', announcementKey(factionId)]);
+            const announcement = raw ? JSON.parse(raw) : null;
+            if (!announcement?.poll) return res.status(400).json({ error: 'There is no active poll right now.' });
+            if (announcement.poll.expiresAt && Date.now() > announcement.poll.expiresAt) {
+                return res.status(400).json({ error: 'This poll has closed.' });
             }
 
-            // Anything else = create/replace this faction's announcement — leaders only.
-            if (!(await isLeader(key))) return res.status(403).json({ error: 'Leaders only' });
+            const profile = await tornProfile(key);
+            if (profile.error) return res.status(403).json({ error: 'Torn rejected the key' });
 
-            const { text, poll } = req.body; // poll: { question, options, durationMs } | null
-            const existingRaw = await redis(['GET', announcementKey(factionId)]);
-            const existing = existingRaw ? JSON.parse(existingRaw) : null;
-
-            let newPoll = null;
-            if (poll && poll.question && poll.options?.length >= 2) {
-                // Reuse the same pollId (keeping votes) only if this is literally the same question
-                // as before. Any other change — new question, or no previous poll — starts fresh.
-                const samePoll = existing?.poll?.question === poll.question;
-                let expiresAt;
-                if (poll.durationMs) {
-                    expiresAt = Date.now() + poll.durationMs; // a new duration was explicitly chosen
-                } else if (samePoll) {
-                    expiresAt = existing.poll.expiresAt ?? null; // no duration picked — don't wipe an existing time limit
-                } else {
-                    expiresAt = null; // brand new poll, no duration picked = no time limit
-                }
-                newPoll = {
-                    question: poll.question,
-                    options: poll.options,
-                    pollId: samePoll ? existing.poll.pollId : Date.now(),
-                    expiresAt,
-                };
-            }
-
-            const announcement = { text: text || '', poll: newPoll, updatedAt: Date.now() };
-            await redis(['SET', announcementKey(factionId), JSON.stringify(announcement)]);
-            return res.status(200).json({ ok: true, announcement });
+            const voteKey = `wwl:poll:votes:${factionId}:${announcement.poll.pollId}`;
+            await redis(['HSET', voteKey, String(profile.player_id), JSON.stringify({ optionIndex, name: profile.name })]);
+            return res.status(200).json({ ok: true });
         }
 
-        return res.status(405).json({ error: 'Method not allowed' });
+        // Anything else = create/replace this faction's announcement — leaders only.
+        if (!(await isLeader(key))) return res.status(403).json({ error: 'Leaders only' });
+
+        const { text, poll } = req.body; // poll: { question, options, durationMs } | null
+        const existingRaw = await redis(['GET', announcementKey(factionId)]);
+        const existing = existingRaw ? JSON.parse(existingRaw) : null;
+
+        let newPoll = null;
+        if (poll && poll.question && poll.options?.length >= 2) {
+            // Reuse the same pollId (keeping votes) only if this is literally the same question
+            // as before. Any other change — new question, or no previous poll — starts fresh.
+            const samePoll = existing?.poll?.question === poll.question;
+            let expiresAt;
+            if (poll.durationMs) {
+                expiresAt = Date.now() + poll.durationMs; // a new duration was explicitly chosen
+            } else if (samePoll) {
+                expiresAt = existing.poll.expiresAt ?? null; // no duration picked — don't wipe an existing time limit
+            } else {
+                expiresAt = null; // brand new poll, no duration picked = no time limit
+            }
+            newPoll = {
+                question: poll.question,
+                options: poll.options,
+                pollId: samePoll ? existing.poll.pollId : Date.now(),
+                expiresAt,
+            };
+        }
+
+        const announcement = { text: text || '', poll: newPoll, updatedAt: Date.now() };
+        await redis(['SET', announcementKey(factionId), JSON.stringify(announcement)]);
+        return res.status(200).json({ ok: true, announcement });
     } catch (e) {
         return res.status(500).json({ error: String(e.message || e) });
     }
