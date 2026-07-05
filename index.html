@@ -365,6 +365,15 @@
                 <div id="announcement-body"></div>
             </div>
 
+            <div class="panel" id="poll-panel" style="display:none;">
+                <h3>🗳️ Poll</h3>
+                <div id="poll-active-body"></div>
+                <details id="poll-past-wrap" style="margin-top:14px;display:none;">
+                    <summary style="cursor:pointer;color:var(--muted);font-size:12px;">Past polls</summary>
+                    <div id="poll-past-body" style="margin-top:10px;"></div>
+                </details>
+            </div>
+
             <div class="grid2">
                 <div class="panel">
                     <h3>Your bars</h3>
@@ -502,25 +511,29 @@
         <!-- ========== ANNOUNCEMENTS EDITOR (leaders only) ========== -->
         <section class="page" id="page-announce-edit">
             <div class="lab-label">WWL·03b / leadership tools</div>
-            <h2>Announcements</h2>
-            <p class="pagedesc">What you post here appears at the top of everyone's Dashboard — a Discord-free way to reach the whole faction, since not everyone can access Discord.</p>
+            <h2>Announcements &amp; polls</h2>
+            <p class="pagedesc">Two independent things — editing the text never touches the poll, and vice versa. Every poll you create stays visible in the history below, even after it closes.</p>
 
             <div class="panel" id="announce-locked" style="display:none;">
                 <h3>🔒 Leaders only</h3>
                 <p style="color:var(--muted);line-height:1.6;margin:0;">
-                    Posting announcements needs the same <b>API Access</b> faction permission as Chain payout.
+                    Posting announcements and polls needs the same <b>API Access</b> faction permission as Chain payout.
                 </p>
             </div>
 
-            <div class="panel" id="announce-editor" style="display:none;">
-                <h3>Announcement text</h3>
-                <textarea id="an-text" rows="4" style="width:100%;font-family:var(--disp);background:var(--bench-2);color:var(--text);border:1px solid var(--line);border-radius:var(--radius);padding:10px;" placeholder="What's going on this week…"></textarea>
+            <div id="announce-editor" style="display:none;">
+                <div class="panel">
+                    <h3>Announcement text</h3>
+                    <textarea id="an-text" rows="4" style="width:100%;font-family:var(--disp);background:var(--bench-2);color:var(--text);border:1px solid var(--line);border-radius:var(--radius);padding:10px;" placeholder="What's going on this week…"></textarea>
+                    <div class="row" style="margin-top:14px;display:flex;gap:10px;">
+                        <button id="an-save">Save announcement</button>
+                        <button class="ghost" id="an-clear">Clear announcement</button>
+                    </div>
+                    <div class="status" id="an-status"></div>
+                </div>
 
-                <h3 style="margin-top:20px;">Poll (optional)</h3>
-                <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin-bottom:12px;">
-                    <input type="checkbox" id="an-poll-enable" style="width:auto;"> Include a poll
-                </label>
-                <div id="an-poll-fields" style="display:none;">
+                <div class="panel">
+                    <h3>New poll</h3>
                     <div class="field">
                         <label for="an-poll-question">Question</label>
                         <input id="an-poll-question" placeholder="e.g. Which night should we war?">
@@ -539,14 +552,16 @@
                     <label style="font-size:12px;color:var(--muted);">Options (min 2)</label>
                     <div id="an-poll-options"></div>
                     <button class="ghost small" id="an-poll-add-option" style="margin-top:8px;">+ Add option</button>
-                    <p style="color:var(--muted);font-size:11px;margin-top:10px;">Editing the announcement text keeps current votes. Changing the poll question always starts a fresh vote count.</p>
+                    <p style="color:var(--muted);font-size:11px;margin-top:10px;">Creating a new poll always starts a fresh vote count and becomes the active one — the previous poll moves into the history below.</p>
+                    <button id="an-poll-create" style="margin-top:10px;">Create poll</button>
+                    <div class="status" id="an-poll-status"></div>
                 </div>
 
-                <div class="row" style="margin-top:20px;display:flex;gap:10px;">
-                    <button id="an-save">Save announcement</button>
-                    <button class="ghost" id="an-clear">Clear announcement</button>
+                <div class="panel">
+                    <h3>Poll history</h3>
+                    <p style="color:var(--muted);font-size:12px;margin:0 0 10px;">The top one is currently active. Delete any poll you no longer want visible.</p>
+                    <div id="an-poll-list"><p style="color:var(--muted);font-size:13px;">No polls yet.</p></div>
                 </div>
-                <div class="status" id="an-status"></div>
             </div>
         </section>
 
@@ -907,6 +922,7 @@
         if (parentGroup) parentGroup.classList.remove('collapsed'); // reveal it even if its group was left collapsed
         goToPage(lastPage);
         loadAnnouncement();
+        loadPolls();
     }
 
     // Tell the server this member logged in. Silently does nothing when the app is
@@ -960,7 +976,7 @@
         if (document.querySelector('.nav-item[data-page="announce-edit"]').classList.contains('active')) {
             $('announce-locked').style.display = isLeaderCached ? 'none' : 'block';
             $('announce-editor').style.display = isLeaderCached ? 'block' : 'none';
-            if (isLeaderCached) loadAnnouncementEditor();
+            if (isLeaderCached) { loadAnnouncementEditor(); loadPollEditor(); }
         }
         if (document.querySelector('.nav-item[data-page="feedback-edit"]').classList.contains('active')) {
             $('feedback-locked').style.display = isLeaderCached ? 'none' : 'block';
@@ -1212,11 +1228,11 @@
             $('feedback-editor').style.display = isLeaderCached ? 'block' : 'none';
             if (isLeaderCached) loadFeedbackEditor();
         }
-        if (page === 'dashboard') { startCooldownTicker(); loadAnnouncement(); } else { stopCooldownTicker(); }
+        if (page === 'dashboard') { startCooldownTicker(); loadAnnouncement(); loadPolls(); } else { stopCooldownTicker(); }
         if (page === 'announce-edit') {
             $('announce-locked').style.display = isLeaderCached ? 'none' : 'block';
             $('announce-editor').style.display = isLeaderCached ? 'block' : 'none';
-            if (isLeaderCached) loadAnnouncementEditor();
+            if (isLeaderCached) { loadAnnouncementEditor(); loadPollEditor(); }
         }
     }
 
@@ -1320,7 +1336,7 @@
         } catch (e) { toast('Refresh failed'); }
     });
 
-    // ================= ANNOUNCEMENTS =================
+    // ================= ANNOUNCEMENTS (text only — polls are fully separate, see below) =================
     async function fetchAnnouncement() {
         const res = await fetch('/api/announcement', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -1332,115 +1348,20 @@
     async function loadAnnouncement() {
         try {
             const data = await fetchAnnouncement();
-            renderAnnouncement(data);
+            const ann = data?.announcement;
+            const panel = $('announcement-panel');
+            if (!ann?.text) { panel.style.display = 'none'; return; }
+            panel.style.display = 'block';
+            $('announcement-body').innerHTML = `<p style="white-space:pre-wrap;line-height:1.6;margin:0;">${esc(ann.text)}</p>`;
         } catch (e) {
             $('announcement-panel').style.display = 'none'; // no server (local file) or a network hiccup — fail quietly here
         }
     }
 
-    function renderAnnouncement(data) {
-        const panel = $('announcement-panel');
-        const ann = data?.announcement;
-        if (!ann || (!ann.text && !ann.poll)) { panel.style.display = 'none'; return; }
-        panel.style.display = 'block';
-
-        let html = ann.text ? `<p style="white-space:pre-wrap;line-height:1.6;margin:0 0 ${ann.poll ? '16' : '0'}px;">${esc(ann.text)}</p>` : '';
-
-        if (ann.poll) {
-            const total = data.totalVotes || 0;
-            const myVote = data.myVote;
-            const closed = !!data.closed;
-            html += `<div class="lab-label" style="margin-bottom:8px;">${esc(ann.poll.question)}</div>`;
-            html += ann.poll.options.map((opt, i) => {
-                const count = data.tally?.[i] || 0;
-                const pct = total ? Math.round((count / total) * 100) : 0;
-                const mine = myVote !== null && Number(myVote) === i;
-                const names = (data.voters?.[i] || []).map(v => esc(v.name)).join(', ');
-                return `
-                    <div class="poll-option" style="margin-bottom:10px;">
-                        <label style="display:flex;align-items:center;gap:8px;${closed ? '' : 'cursor:pointer;'}font-size:13px;margin-bottom:4px;">
-                            <input type="checkbox" class="an-vote-check" data-idx="${i}" style="width:auto;" ${mine ? 'checked' : ''} ${closed ? 'disabled' : ''}>
-                            <span style="flex:1;">${esc(opt)}</span>
-                            <span style="color:var(--muted);">${count} (${pct}%)</span>
-                        </label>
-                        <div class="bar-track"><div class="bar-fill" style="width:${pct}%;background:${mine ? 'var(--reagent)' : 'var(--line)'};"></div></div>
-                        ${names ? `<div style="font-size:11px;color:var(--muted);margin-top:3px;">Voted: ${names}</div>` : ''}
-                    </div>`;
-            }).join('');
-
-            if (closed) {
-                html += `<p style="color:var(--danger);font-size:12px;margin-top:8px;">Poll closed · ${total} vote${total === 1 ? '' : 's'} total</p>`;
-            } else {
-                html += `<button class="ghost small" id="an-vote-submit" style="margin-top:6px;">${myVote !== null ? 'Change vote' : 'Cast vote'}</button>`;
-                const expiryNote = ann.poll.expiresAt ? ` · closes in ${formatDuration(ann.poll.expiresAt - Date.now())}` : '';
-                html += `<p style="color:var(--muted);font-size:11px;margin-top:8px;">${total} vote${total === 1 ? '' : 's'} so far${expiryNote}</p>`;
-            }
-        }
-        $('announcement-body').innerHTML = html;
-
-        if (ann.poll && !data.closed) {
-            const checks = $('announcement-body').querySelectorAll('.an-vote-check');
-            checks.forEach(cb => {
-                cb.addEventListener('change', () => {
-                    if (cb.checked) checks.forEach(other => { if (other !== cb) other.checked = false; }); // single choice
-                });
-            });
-            $('an-vote-submit').addEventListener('click', async () => {
-                const chosen = [...checks].find(cb => cb.checked);
-                if (!chosen) { toast('Check an option first'); return; }
-                const btn = $('an-vote-submit');
-                btn.disabled = true; btn.textContent = 'Voting…';
-                try {
-                    const res = await fetch('/api/announcement', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ key: apiKey, action: 'vote', optionIndex: parseInt(chosen.dataset.idx, 10) }),
-                    });
-                    const result = await res.json();
-                    if (result.error) throw new Error(result.error);
-                    loadAnnouncement();
-                } catch (e) {
-                    toast(e.message || 'Vote failed — try again');
-                    btn.disabled = false; btn.textContent = 'Cast vote';
-                }
-            });
-        }
-    }
-
-    // ---- Editor (leaders only) ----
-    function addPollOptionField(value = '') {
-        const wrap = document.createElement('div');
-        wrap.style.cssText = 'display:flex;gap:8px;margin-bottom:8px;';
-        wrap.innerHTML = `<input class="an-poll-option" value="${esc(value)}" placeholder="Option" style="flex:1;">
-            <button class="ghost small an-remove-option" type="button">✕</button>`;
-        wrap.querySelector('.an-remove-option').addEventListener('click', () => wrap.remove());
-        $('an-poll-options').appendChild(wrap);
-    }
-
-    $('an-poll-add-option').addEventListener('click', () => addPollOptionField());
-    $('an-poll-enable').addEventListener('change', () => {
-        $('an-poll-fields').style.display = $('an-poll-enable').checked ? 'block' : 'none';
-    });
-
     async function loadAnnouncementEditor() {
         try {
             const data = await fetchAnnouncement();
-            const ann = data?.announcement;
-            $('an-text').value = ann?.text || '';
-            $('an-poll-options').innerHTML = '';
-            if (ann?.poll) {
-                $('an-poll-enable').checked = true;
-                $('an-poll-fields').style.display = 'block';
-                $('an-poll-question').value = ann.poll.question;
-                $('an-poll-duration').value = ''; // a saved poll's original duration isn't re-shown — set a fresh one if you want to change it
-                ann.poll.options.forEach(o => addPollOptionField(o));
-            } else {
-                $('an-poll-enable').checked = false;
-                $('an-poll-fields').style.display = 'none';
-                $('an-poll-question').value = '';
-                $('an-poll-duration').value = '';
-                addPollOptionField(); addPollOptionField();
-            }
+            $('an-text').value = data?.announcement?.text || '';
         } catch (e) { /* start from a blank form if loading the current one fails */ }
     }
 
@@ -1449,22 +1370,10 @@
         btn.disabled = true; btn.textContent = 'Saving…';
         const st = $('an-status');
         try {
-            const text = $('an-text').value.trim();
-            let poll = null;
-            if ($('an-poll-enable').checked) {
-                const question = $('an-poll-question').value.trim();
-                const options = [...document.querySelectorAll('.an-poll-option')].map(i => i.value.trim()).filter(Boolean);
-                if (!question || options.length < 2) {
-                    st.className = 'status err'; st.textContent = 'A poll needs a question and at least 2 filled-in options.';
-                    return;
-                }
-                const durationMs = parseInt($('an-poll-duration').value, 10) || null;
-                poll = { question, options, durationMs };
-            }
             const res = await fetch('/api/announcement', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ key: apiKey, text, poll }),
+                body: JSON.stringify({ key: apiKey, text: $('an-text').value.trim() }),
             });
             const data = await res.json();
             if (data.error) throw new Error(data.error);
@@ -1477,16 +1386,198 @@
     });
 
     $('an-clear').addEventListener('click', async () => {
-        if (!confirm('Clear the announcement for everyone?')) return;
+        if (!confirm('Clear the announcement text for everyone?')) return;
         try {
             await fetch('/api/announcement', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ key: apiKey, text: '', poll: null }),
+                body: JSON.stringify({ key: apiKey, text: '' }),
             });
             loadAnnouncementEditor();
             toast('Announcement cleared');
         } catch (e) { toast('Could not clear announcement'); }
+    });
+
+    // ================= POLLS (independent of the announcement text) =================
+    // A faction keeps a running history of polls, newest first. Only the newest one accepts
+    // votes ("active"); everything older stays visible with its final results, and leaders
+    // can delete any of them outright.
+    async function fetchPolls() {
+        const res = await fetch('/api/polls', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ key: apiKey, action: 'read' }),
+        });
+        return res.json();
+    }
+
+    function pollResultsHtml(poll, { votable }) {
+        const total = poll.totalVotes || 0;
+        const myVote = poll.myVote;
+        let html = `<div class="lab-label" style="margin-bottom:8px;">${esc(poll.question)}</div>`;
+        html += poll.options.map((opt, i) => {
+            const count = poll.tally?.[i] || 0;
+            const pct = total ? Math.round((count / total) * 100) : 0;
+            const mine = myVote !== null && Number(myVote) === i;
+            const names = (poll.voters?.[i] || []).map(v => esc(v.name)).join(', ');
+            const canVote = votable && !poll.closed;
+            return `
+                <div class="poll-option" style="margin-bottom:10px;">
+                    <label style="display:flex;align-items:center;gap:8px;${canVote ? 'cursor:pointer;' : ''}font-size:13px;margin-bottom:4px;">
+                        <input type="checkbox" class="poll-vote-check" data-idx="${i}" data-pollid="${esc(poll.pollId)}" style="width:auto;" ${mine ? 'checked' : ''} ${canVote ? '' : 'disabled'}>
+                        <span style="flex:1;">${esc(opt)}</span>
+                        <span style="color:var(--muted);">${count} (${pct}%)</span>
+                    </label>
+                    <div class="bar-track"><div class="bar-fill" style="width:${pct}%;background:${mine ? 'var(--reagent)' : 'var(--line)'};"></div></div>
+                    ${names ? `<div style="font-size:11px;color:var(--muted);margin-top:3px;">Voted: ${names}</div>` : ''}
+                </div>`;
+        }).join('');
+
+        if (poll.closed) {
+            html += `<p style="color:var(--danger);font-size:12px;margin-top:8px;">Poll closed · ${total} vote${total === 1 ? '' : 's'} total</p>`;
+        } else if (votable) {
+            html += `<button class="ghost small poll-vote-submit" data-pollid="${esc(poll.pollId)}" style="margin-top:6px;">${myVote !== null ? 'Change vote' : 'Cast vote'}</button>`;
+            const expiryNote = poll.expiresAt ? ` · closes in ${formatDuration(poll.expiresAt - Date.now())}` : '';
+            html += `<p style="color:var(--muted);font-size:11px;margin-top:8px;">${total} vote${total === 1 ? '' : 's'} so far${expiryNote}</p>`;
+        } else {
+            html += `<p style="color:var(--muted);font-size:11px;margin-top:8px;">${total} vote${total === 1 ? '' : 's'} total</p>`;
+        }
+        return html;
+    }
+
+    function wirePollVoting(container) {
+        const checks = container.querySelectorAll('.poll-vote-check');
+        checks.forEach(cb => {
+            cb.addEventListener('change', () => {
+                if (cb.checked) checks.forEach(other => { if (other !== cb) other.checked = false; }); // single choice
+            });
+        });
+        const submitBtn = container.querySelector('.poll-vote-submit');
+        if (submitBtn) {
+            submitBtn.addEventListener('click', async () => {
+                const chosen = [...checks].find(cb => cb.checked);
+                if (!chosen) { toast('Check an option first'); return; }
+                submitBtn.disabled = true; submitBtn.textContent = 'Voting…';
+                try {
+                    const res = await fetch('/api/polls', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ key: apiKey, action: 'vote', pollId: chosen.dataset.pollid, optionIndex: parseInt(chosen.dataset.idx, 10) }),
+                    });
+                    const result = await res.json();
+                    if (result.error) throw new Error(result.error);
+                    loadPolls();
+                } catch (e) {
+                    toast(e.message || 'Vote failed — try again');
+                    submitBtn.disabled = false; submitBtn.textContent = 'Cast vote';
+                }
+            });
+        }
+    }
+
+    async function loadPolls() {
+        try {
+            const data = await fetchPolls();
+            const panel = $('poll-panel');
+            if (!data?.active) { panel.style.display = 'none'; return; }
+            panel.style.display = 'block';
+
+            $('poll-active-body').innerHTML = pollResultsHtml(data.active, { votable: true });
+            wirePollVoting($('poll-active-body'));
+
+            if (data.past?.length) {
+                $('poll-past-wrap').style.display = 'block';
+                $('poll-past-body').innerHTML = data.past.map(p => `
+                    <div style="border-top:1px solid var(--line);padding-top:10px;margin-top:10px;">
+                        ${pollResultsHtml(p, { votable: false })}
+                    </div>`).join('');
+            } else {
+                $('poll-past-wrap').style.display = 'none';
+            }
+        } catch (e) {
+            $('poll-panel').style.display = 'none';
+        }
+    }
+
+    // ---- Poll editor (leaders only) ----
+    function addPollOptionField(value = '') {
+        const wrap = document.createElement('div');
+        wrap.style.cssText = 'display:flex;gap:8px;margin-bottom:8px;';
+        wrap.innerHTML = `<input class="an-poll-option" value="${esc(value)}" placeholder="Option" style="flex:1;">
+            <button class="ghost small an-remove-option" type="button">✕</button>`;
+        wrap.querySelector('.an-remove-option').addEventListener('click', () => wrap.remove());
+        $('an-poll-options').appendChild(wrap);
+    }
+    $('an-poll-add-option').addEventListener('click', () => addPollOptionField());
+
+    function resetPollForm() {
+        $('an-poll-question').value = '';
+        $('an-poll-duration').value = '';
+        $('an-poll-options').innerHTML = '';
+        addPollOptionField(); addPollOptionField();
+    }
+
+    async function loadPollEditor() {
+        resetPollForm();
+        try {
+            const data = await fetchPolls();
+            const all = [data.active, ...(data.past || [])].filter(Boolean);
+            if (!all.length) { $('an-poll-list').innerHTML = '<p style="color:var(--muted);font-size:13px;">No polls yet.</p>'; return; }
+
+            $('an-poll-list').innerHTML = all.map((p, i) => `
+                <div style="border-top:1px solid var(--line);padding-top:10px;margin-top:10px;">
+                    <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;">
+                        <div>
+                            <b style="font-size:13px;">${esc(p.question)}</b>
+                            ${i === 0 ? '<span class="badge" style="position:static;margin-left:8px;">Active</span>' : ''}
+                            <div style="color:var(--muted);font-size:11px;margin-top:2px;">${p.totalVotes || 0} vote${p.totalVotes === 1 ? '' : 's'} · created ${new Date(p.createdAt).toLocaleDateString()}</div>
+                        </div>
+                        <button class="ghost small poll-delete" data-pollid="${esc(p.pollId)}">Delete</button>
+                    </div>
+                </div>`).join('');
+
+            $('an-poll-list').querySelectorAll('.poll-delete').forEach(btn => {
+                btn.addEventListener('click', async () => {
+                    if (!confirm('Delete this poll and its votes for everyone? This can\'t be undone.')) return;
+                    try {
+                        await fetch('/api/polls', {
+                            method: 'POST', headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ key: apiKey, action: 'delete', pollId: btn.dataset.pollid }),
+                        });
+                        loadPollEditor();
+                        toast('Poll deleted');
+                    } catch (e) { toast('Could not delete poll'); }
+                });
+            });
+        } catch (e) {
+            $('an-poll-list').innerHTML = '<p style="color:var(--muted);font-size:13px;">Could not load poll history.</p>';
+        }
+    }
+
+    $('an-poll-create').addEventListener('click', async () => {
+        const btn = $('an-poll-create');
+        const st = $('an-poll-status');
+        const question = $('an-poll-question').value.trim();
+        const options = [...document.querySelectorAll('.an-poll-option')].map(i => i.value.trim()).filter(Boolean);
+        if (!question || options.length < 2) {
+            st.className = 'status err'; st.textContent = 'A poll needs a question and at least 2 filled-in options.';
+            return;
+        }
+        const durationMs = parseInt($('an-poll-duration').value, 10) || null;
+        btn.disabled = true; btn.textContent = 'Creating…';
+        try {
+            const res = await fetch('/api/polls', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ key: apiKey, action: 'create', question, options, durationMs }),
+            });
+            const data = await res.json();
+            if (data.error) throw new Error(data.error);
+            st.className = 'status ok'; st.textContent = 'Poll created — live on everyone\'s dashboard now.';
+            loadPollEditor();
+        } catch (e) {
+            st.className = 'status err'; st.textContent = e.message;
+        } finally {
+            btn.disabled = false; btn.textContent = 'Create poll';
+        }
     });
 
     // ================= FEEDBACK FORM =================
