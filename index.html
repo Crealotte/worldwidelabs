@@ -250,6 +250,7 @@
         <div class="nav-item" data-page="payout"><span class="idx">03</span> Chain payout</div>
         <div class="nav-item" data-page="targets"><span class="idx">04</span> Level targets</div>
         <div class="nav-item" data-page="links"><span class="idx">05</span> Tools &amp; links</div>
+        <div class="nav-item" data-page="targetfinder"><span class="idx">06</span> Target finder</div>
         <div class="spacer"></div>
         <div class="whoami" id="whoami"></div>
         <button class="ghost small" id="logout-btn" style="margin:10px 12px 0;">Log out</button>
@@ -435,6 +436,85 @@
                     <div class="field"><label for="nl-desc">Description</label><input id="nl-desc" placeholder="What it's for"></div>
                 </div>
                 <button class="ghost" id="nl-add">Add link</button>
+            </div>
+        </section>
+
+        <!-- ========== TARGET FINDER (FFScouter) ========== -->
+        <section class="page" id="page-targetfinder">
+            <div class="lab-label">WWL·06 / ffscouter target finder</div>
+            <h2>Target finder</h2>
+            <p class="pagedesc">Pulls Fair Fight and estimated stats from FFScouter, a free third-party service — not something we run ourselves. It uses the same Torn key you're already logged in with.</p>
+
+            <div class="panel" id="tf-loading">
+                <p style="color:var(--muted);margin:0;">Checking your key with FFScouter…</p>
+            </div>
+
+            <div class="panel" id="tf-register-panel" style="display:none;">
+                <h3>One-time step: register with FFScouter</h3>
+                <p style="color:var(--muted);line-height:1.6;">
+                    Target Finder is powered by <a href="https://ffscouter.com" target="_blank" rel="noopener">FFScouter</a>,
+                    a free, independent tool that estimates opponents' battle stats from crowd-sourced Fair Fight data.
+                    It isn't part of WorldWideLabs or Anthropic — it's a separate community service.
+                    Before we can use it, please open their homepage, read their Data Policy and Terms, then confirm below.
+                    This uses the same Torn API key you're already logged in with — nothing new to type.
+                </p>
+                <label style="display:flex;align-items:flex-start;gap:8px;cursor:pointer;margin:14px 0;color:var(--text);">
+                    <input type="checkbox" id="tf-agree" style="width:auto;margin-top:3px;">
+                    I have read the <a href="https://ffscouter.com" target="_blank" rel="noopener">FFScouter Data Policy and Terms</a> and agree to register my key with FFScouter.
+                </label>
+                <button id="tf-register-btn" disabled>Register with FFScouter</button>
+                <div class="status" id="tf-register-status"></div>
+            </div>
+
+            <div id="tf-tool" style="display:none;">
+                <div class="panel">
+                    <div class="row" style="display:flex;gap:12px;">
+                        <button id="tf-mode-custom" class="ghost" style="flex:1;">Custom search</button>
+                        <button id="tf-mode-manual" class="ghost" style="flex:1;">Manual list</button>
+                    </div>
+                </div>
+
+                <div class="panel" id="tf-custom-panel" style="display:none;">
+                    <h3>Custom search</h3>
+                    <div class="grid3">
+                        <div class="field"><label for="tf-minlevel">Min level</label><input type="number" id="tf-minlevel" value="1" min="1" max="100"></div>
+                        <div class="field"><label for="tf-maxlevel">Max level</label><input type="number" id="tf-maxlevel" value="100" min="1" max="100"></div>
+                        <div class="field"><label for="tf-limit">Results (max 50)</label><input type="number" id="tf-limit" value="20" min="1" max="50"></div>
+                        <div class="field"><label for="tf-minff">Min Fair Fight</label><input type="number" id="tf-minff" value="1.00" min="1" max="3" step="0.01"></div>
+                        <div class="field"><label for="tf-maxff">Max Fair Fight</label><input type="number" id="tf-maxff" value="3.00" min="1" max="3" step="0.01"></div>
+                    </div>
+                    <div class="row" style="display:flex;gap:18px;margin:6px 0 14px;">
+                        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin:0;">
+                            <input type="checkbox" id="tf-inactive" style="width:auto;"> Inactive only (14+ days)
+                        </label>
+                        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin:0;">
+                            <input type="checkbox" id="tf-factionless" style="width:auto;"> Factionless only
+                        </label>
+                    </div>
+                    <button id="tf-search-btn">Search</button>
+                    <div class="status" id="tf-custom-status"></div>
+                </div>
+
+                <div class="panel" id="tf-manual-panel" style="display:none;">
+                    <h3>Manual list</h3>
+                    <p style="color:var(--muted);font-size:12px;margin:0 0 10px;">Paste target IDs from missions or anywhere else — comma, space, or newline separated.</p>
+                    <textarea id="tf-manual-ids" rows="4" style="width:100%;font-family:var(--mono);background:var(--bench-2);color:var(--text);border:1px solid var(--line);border-radius:var(--radius);padding:10px;" placeholder="1234567, 2345678, 3456789…"></textarea>
+                    <button id="tf-lookup-btn" style="margin-top:10px;">Look up</button>
+                    <div class="status" id="tf-manual-status"></div>
+                </div>
+
+                <div class="panel" id="tf-results-panel" style="display:none;">
+                    <h3>Results</h3>
+                    <div class="table-scroll">
+                        <table>
+                            <thead><tr>
+                                <th>Player</th><th class="num">Level</th><th class="num">Fair Fight</th>
+                                <th class="num">Est. stats</th><th>Status / last seen</th><th></th>
+                            </tr></thead>
+                            <tbody id="tf-results-body"></tbody>
+                        </table>
+                    </div>
+                </div>
             </div>
         </section>
     </main>
@@ -645,6 +725,7 @@
             item.classList.add('active');
             $('page-' + item.dataset.page).classList.add('visible');
             if (item.dataset.page === 'targets') loadBaldrLists();
+            if (item.dataset.page === 'targetfinder') initTargetFinder();
         });
     });
 
@@ -1232,6 +1313,208 @@
         $('nl-title').value = ''; $('nl-url').value = ''; $('nl-desc').value = '';
         renderLinks();
         toast('Link added');
+    });
+
+    // ================= TARGET FINDER (FFScouter) =================
+    // FFScouter (ffscouter.com) is a separate, independent service — not run by us.
+    // It estimates opponents' battle stats from crowd-sourced Fair Fight data.
+    // We only ever call its public API; the actual estimation model lives on their servers.
+    const FF_API = 'https://ffscouter.com/api/v1';
+    let ffChecked = false;   // have we run check-key this session?
+    let ffRegistered = false;
+    let tfMode = 'custom';
+
+    async function ffCheckKey() {
+        const res = await fetch(`${FF_API}/check-key?key=${encodeURIComponent(apiKey)}`);
+        const data = await res.json();
+        if (data.error) throw new Error(data.error);
+        return data; // { is_registered, is_premium, ... }
+    }
+
+    async function ffRegisterKey() {
+        const res = await fetch(`${FF_API}/register`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ key: apiKey, agree_to_data_policy: true, signup_source: 'WorldWideLabs' }),
+        });
+        const data = await res.json();
+        if (!data.success) throw new Error(data.error || 'Registration failed');
+        return data;
+    }
+
+    async function initTargetFinder() {
+        if (ffChecked) return; // only check once per session — check-key is rate-limited (10/min/IP)
+        ffChecked = true;
+        try {
+            const info = await ffCheckKey();
+            ffRegistered = !!info.is_registered;
+        } catch (e) {
+            $('tf-loading').innerHTML = `<p style="color:var(--danger);margin:0;">Could not reach FFScouter: ${esc(e.message)}. Try again shortly.</p>`;
+            ffChecked = false; // allow retry on next visit to the tab
+            return;
+        }
+        $('tf-loading').style.display = 'none';
+        if (ffRegistered) {
+            $('tf-tool').style.display = 'block';
+            selectTfMode('custom');
+        } else {
+            $('tf-register-panel').style.display = 'block';
+        }
+    }
+
+    $('tf-agree').addEventListener('change', () => {
+        $('tf-register-btn').disabled = !$('tf-agree').checked;
+    });
+
+    $('tf-register-btn').addEventListener('click', async () => {
+        const btn = $('tf-register-btn');
+        btn.disabled = true;
+        btn.textContent = 'Registering…';
+        try {
+            await ffRegisterKey();
+            ffRegistered = true;
+            $('tf-register-panel').style.display = 'none';
+            $('tf-tool').style.display = 'block';
+            selectTfMode('custom');
+        } catch (e) {
+            const st = $('tf-register-status');
+            st.className = 'status err';
+            st.textContent = esc(e.message);
+            btn.disabled = false;
+            btn.textContent = 'Register with FFScouter';
+        }
+    });
+
+    function selectTfMode(mode) {
+        tfMode = mode;
+        $('tf-mode-custom').style.borderColor = mode === 'custom' ? 'var(--reagent)' : 'var(--line)';
+        $('tf-mode-custom').style.color = mode === 'custom' ? 'var(--reagent)' : 'var(--text)';
+        $('tf-mode-manual').style.borderColor = mode === 'manual' ? 'var(--reagent)' : 'var(--line)';
+        $('tf-mode-manual').style.color = mode === 'manual' ? 'var(--reagent)' : 'var(--text)';
+        $('tf-custom-panel').style.display = mode === 'custom' ? 'block' : 'none';
+        $('tf-manual-panel').style.display = mode === 'manual' ? 'block' : 'none';
+        $('tf-results-panel').style.display = 'none';
+    }
+    $('tf-mode-custom').addEventListener('click', () => selectTfMode('custom'));
+    $('tf-mode-manual').addEventListener('click', () => selectTfMode('manual'));
+
+    function tfStatus(elId, msg, isErr) {
+        const el = $(elId);
+        el.className = 'status ' + (msg ? (isErr ? 'err' : 'ok') : '');
+        el.textContent = msg || '';
+    }
+
+    function relativeTime(epochSeconds) {
+        if (!epochSeconds) return '—';
+        const diff = Math.max(0, Date.now() / 1000 - epochSeconds);
+        if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
+        if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
+        return `${Math.floor(diff / 86400)}d ago`;
+    }
+
+    function renderTfResults(rows) {
+        // rows: [{ id, name, level, ff, estHuman, statusText, statusColor }]
+        $('tf-results-body').innerHTML = rows.length ? rows.map(r => `
+            <tr>
+                <td><a href="https://www.torn.com/profiles.php?XID=${r.id}" target="_blank" rel="noopener">${esc(r.name)} [${r.id}]</a></td>
+                <td class="num">${r.level ?? '—'}</td>
+                <td class="num" style="font-family:var(--mono);">${r.ff != null ? r.ff.toFixed(2) : '—'}</td>
+                <td class="num" style="font-family:var(--mono);">${esc(r.estHuman || '—')}</td>
+                <td style="color:${r.statusColor || 'var(--muted)'};font-size:12px;">${esc(r.statusText || '—')}</td>
+                <td><a href="https://www.torn.com/loader.php?sid=attack&user2ID=${r.id}" target="_blank" rel="noopener"
+                       style="background:var(--reagent);color:#06130d;padding:4px 10px;border-radius:4px;text-decoration:none;font-weight:600;font-size:12px;">Attack</a></td>
+            </tr>`).join('') : `<tr><td colspan="6" style="color:var(--muted)">No results.</td></tr>`;
+        $('tf-results-panel').style.display = 'block';
+        $('tf-results-panel').scrollIntoView({ behavior: 'smooth' });
+    }
+
+    // ---- Custom search: GET /get-targets ----
+    $('tf-search-btn').addEventListener('click', async () => {
+        const btn = $('tf-search-btn');
+        btn.disabled = true; btn.textContent = 'Searching…';
+        tfStatus('tf-custom-status', '');
+        try {
+            const params = new URLSearchParams({
+                key: apiKey,
+                minlevel: $('tf-minlevel').value || 1,
+                maxlevel: $('tf-maxlevel').value || 100,
+                minff: parseFloat($('tf-minff').value || 1).toFixed(2),
+                maxff: parseFloat($('tf-maxff').value || 3).toFixed(2),
+                limit: Math.min(50, Math.max(1, parseInt($('tf-limit').value, 10) || 20)),
+                inactiveonly: $('tf-inactive').checked ? 1 : 0,
+                factionless: $('tf-factionless').checked ? 1 : 0,
+            });
+            const res = await fetch(`${FF_API}/get-targets?${params.toString()}`);
+            const data = await res.json();
+            if (data.error) throw new Error(data.error);
+            const rows = (data.targets || []).map(t => ({
+                id: t.player_id, name: t.name || `User #${t.player_id}`, level: t.level,
+                ff: t.fair_fight, estHuman: t.bs_estimate_human,
+                statusText: relativeTime(t.last_action), statusColor: 'var(--muted)',
+            }));
+            renderTfResults(rows);
+            tfStatus('tf-custom-status', `${rows.length} target(s) found.`, false);
+        } catch (e) {
+            tfStatus('tf-custom-status', e.message, true);
+        } finally {
+            btn.disabled = false; btn.textContent = 'Search';
+        }
+    });
+
+    // ---- Manual list: GET /get-stats, enriched with live Torn name/level/status ----
+    $('tf-lookup-btn').addEventListener('click', async () => {
+        const btn = $('tf-lookup-btn');
+        const raw = $('tf-manual-ids').value;
+        const ids = [...new Set(raw.split(/[\s,]+/).map(s => s.trim()).filter(s => /^\d+$/.test(s)))];
+        if (!ids.length) { tfStatus('tf-manual-status', 'Paste at least one numeric player ID.', true); return; }
+
+        btn.disabled = true; btn.textContent = 'Looking up…';
+        tfStatus('tf-manual-status', `Fetching Fair Fight estimates for ${ids.length} target(s)…`);
+        try {
+            // FFScouter accepts many IDs per call — batch generously to stay well under its rate limit.
+            const ffMap = new Map();
+            for (let i = 0; i < ids.length; i += 200) {
+                const batch = ids.slice(i, i + 200);
+                const res = await fetch(`${FF_API}/get-stats?key=${encodeURIComponent(apiKey)}&targets=${batch.join(',')}`);
+                const data = await res.json();
+                if (data.error) throw new Error(data.error);
+                (Array.isArray(data) ? data : []).forEach(d => ffMap.set(String(d.player_id), d));
+            }
+
+            // Enrich with live name/level/status directly from Torn — one call per target, paced.
+            const rows = [];
+            for (let i = 0; i < ids.length; i++) {
+                const id = ids[i];
+                tfStatus('tf-manual-status', `Fetching player info… ${i + 1} / ${ids.length}`);
+                let name = `User #${id}`, level = null, statusText = '—', statusColor = 'var(--muted)';
+                try {
+                    const res = await fetch(`https://api.torn.com/user/${id}?selections=profile&key=${encodeURIComponent(apiKey)}`);
+                    const data = await res.json();
+                    if (!data.error) {
+                        name = data.name || name;
+                        level = data.level;
+                        statusText = data.status?.state || 'Unknown';
+                        statusColor = baldrStateColor(statusText);
+                    }
+                } catch (e) { /* keep the placeholder — FF/estimate below still shows */ }
+                const ff = ffMap.get(id);
+                rows.push({
+                    id, name, level,
+                    ff: ff?.fair_fight ?? null,
+                    estHuman: ff?.bs_estimate_human ?? null,
+                    statusText, statusColor,
+                });
+                await new Promise(r => setTimeout(r, 1100));
+            }
+
+            rows.sort((a, b) => (a.ff ?? 999) - (b.ff ?? 999)); // easiest fights first
+            renderTfResults(rows);
+            tfStatus('tf-manual-status', `Done — ${rows.length} target(s).`, false);
+        } catch (e) {
+            tfStatus('tf-manual-status', e.message, true);
+        } finally {
+            btn.disabled = false; btn.textContent = 'Look up';
+        }
     });
 })();
 </script>
