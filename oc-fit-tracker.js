@@ -298,8 +298,8 @@ function renderOcFit(catalog) {
     const body = $('ocfit-body');
     if (!catalog.length) {
         body.innerHTML = `<div class="panel"><p style="color:var(--muted);margin:0;">
-            Nothing observed yet — this fills itself in automatically once your faction has an active or
-            recruiting OC with a role open (or you're in one yourself). Check back after your next OC spawns.
+            Nothing observed yet — this fills itself in automatically whenever your faction has a
+            recruiting crime with at least one role still open. Check back after your next crime spawns.
         </p></div>`;
         return;
     }
