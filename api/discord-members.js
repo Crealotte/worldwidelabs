@@ -1,6 +1,7 @@
 // api/discord-members.js — reads your Discord server's member list via a bot token,
 // and matches each member to a Torn ID by parsing the "Name [ID] TAG" nickname format
-// that the YATA verification bot sets.
+// that the YATA verification bot sets. The key is ALWAYS sent in the POST body, never a
+// URL query string — a GET with ?key=... would put the key into Vercel's request-path logs.
 //
 // Multi-faction: one shared Discord server, but each faction has its own "verified" role.
 // DISCORD_ROLE_MAP is a JSON object mapping Torn faction ID -> Discord role ID, e.g.
@@ -39,6 +40,8 @@ async function getFactionId(key) {
 
 module.exports = async function handler(req, res) {
     try {
+        if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+
         const BOT_TOKEN = process.env.DISCORD_BOT_TOKEN;
         const GUILD_ID = process.env.DISCORD_GUILD_ID;
         let ROLE_MAP = {};
@@ -48,7 +51,7 @@ module.exports = async function handler(req, res) {
             return res.status(500).json({ error: 'Discord bot not configured yet. Set DISCORD_BOT_TOKEN and DISCORD_GUILD_ID in Vercel environment variables.' });
         }
 
-        const key = req.query.key;
+        const { key } = req.body || {};
         if (!key) return res.status(400).json({ error: 'Missing key' });
 
         const factionId = await getFactionId(key);
