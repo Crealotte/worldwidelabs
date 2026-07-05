@@ -141,8 +141,3 @@
             cb.disabled = false;
         }
     });
-    const NAV_GROUP_KEY = 'wwl_nav_collapsed'; // stores an array of collapsed group names
-
-    function getCollapsedGroups() {
-        try { return JSON.parse(localStorage.getItem(NAV_GROUP_KEY)) || []; } catch { return []; }
-    }
