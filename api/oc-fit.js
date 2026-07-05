@@ -177,21 +177,10 @@ const WEIGHT_HIGH = 25;
 const WEIGHT_LOW = 15;
 const CPR_WARN = 70;
 
-// Some scenarios have multiple slots that share the exact same role label — e.g. Mob Mentality
-// has four separate "Looter" slots, each with a genuinely different importance weight per the
-// community's data. Keying purely by role name within a scenario would collapse those into one
-// slot and silently drop the rest. This disambiguates repeats within a single OC's slot list —
-// the first "Looter" keeps its name, the next becomes "Looter #2", and so on.
-function dedupeSlotRoles(slots) {
-    const seen = new Map();
-    return slots.map(slot => {
-        const rawRole = slot.position_info?.label || slot.position || 'Unknown role';
-        const key = normRole(rawRole);
-        const count = (seen.get(key) || 0) + 1;
-        seen.set(key, count);
-        return { ...slot, _role: count === 1 ? rawRole : `${rawRole} #${count}` };
-    });
-}
+// How long a cached entry can go without being seen live again before we quietly drop it,
+// so old one-off observations (a role that was open once, months ago) don't accumulate
+// forever and clutter the tracker with stale debris.
+const CATALOG_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
 
 module.exports = async function handler(req, res) {
     try {
@@ -252,11 +241,12 @@ module.exports = async function handler(req, res) {
                 const sKey = `${difficulty}::${normScenario(scenario)}`;
                 const slots = Array.isArray(oc.slots) ? oc.slots : Object.values(oc.slots || []);
                 if (!liveByKey[sKey]) liveByKey[sKey] = { scenario, difficulty, roles: {} };
-                for (const slot of dedupeSlotRoles(slots)) {
-                    const rKey = normRole(slot._role);
+                for (const slot of slots) {
+                    const role = slot.position_info?.label || slot.position || 'Unknown role';
+                    const rKey = normRole(role);
                     const isOpen = !slot.user?.id;
                     const already = liveByKey[sKey].roles[rKey];
-                    liveByKey[sKey].roles[rKey] = { role: slot._role, open: isOpen || (already?.open ?? false) };
+                    liveByKey[sKey].roles[rKey] = { role, open: isOpen || (already?.open ?? false) };
                 }
             }
 
@@ -377,12 +367,12 @@ module.exports = async function handler(req, res) {
             const difficulty = oc.difficulty ?? '?';
             const scenario = oc.name || 'Unknown';
             const slots = Array.isArray(oc.slots) ? oc.slots : Object.values(oc.slots || []);
-            for (const slot of dedupeSlotRoles(slots)) {
+            for (const slot of slots) {
                 // Only slots that represent THIS caller's own fit: open slots (Torn predicts their
                 // own CPR there) or a slot they're actually occupying right now.
                 const occupantId = slot.user?.id ? String(slot.user.id) : null;
                 if (occupantId && occupantId !== myId) continue;
-                const role = slot._role;
+                const role = slot.position_info?.label || slot.position || 'Unknown role';
                 const cpr = slot.checkpoint_pass_rate ?? null;
                 if (cpr === null) continue;
 
@@ -404,9 +394,14 @@ module.exports = async function handler(req, res) {
             }
         }
 
-        // Anything not observed just now is stale (still shown, just marked as cached).
+        // Anything not observed just now is stale (still shown, just marked as cached) —
+        // unless it's been stale for a long time, in which case it's dropped entirely rather
+        // than accumulating forever as dead weight (e.g. a role that was open once, months ago).
         for (const [k, entry] of Object.entries(catalog)) {
-            if (!seenNow.has(k)) entry.live = false;
+            if (!seenNow.has(k)) {
+                entry.live = false;
+                if (now - entry.lastSeenLive > CATALOG_MAX_AGE_MS) delete catalog[k];
+            }
         }
 
         await redis(['SET', fitKey(myId), JSON.stringify(catalog)]);
