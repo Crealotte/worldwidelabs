@@ -52,6 +52,54 @@ async function loadOcFit() {
 
 $('ocfit-refresh').addEventListener('click', () => { ocfitLoaded = false; loadOcFit(); });
 
+async function loadOcFitTeamBuilder() {
+    if (!isLeaderCached) { $('ocfit-team-panel').style.display = 'none'; return; }
+    $('ocfit-team-panel').style.display = 'block';
+    $('ocfit-team-body').innerHTML = '<p style="color:var(--muted);">Loading…</p>';
+    try {
+        const res = await fetch('/api/oc-fit', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ key: apiKey, action: 'team-builder' }),
+        });
+        const data = await res.json();
+        if (data.error) throw new Error(data.error);
+        renderOcFitTeamBuilder(data.openSlots || []);
+    } catch (e) {
+        $('ocfit-team-body').innerHTML = `<p style="color:var(--muted);">${esc(e.message)}</p>`;
+    }
+}
+
+function renderOcFitTeamBuilder(openSlots) {
+    const body = $('ocfit-team-body');
+    if (!openSlots.length) {
+        body.innerHTML = '<p style="color:var(--muted);">No open slots right now.</p>';
+        return;
+    }
+    body.innerHTML = openSlots.map(slot => {
+        const candidatesHtml = slot.candidates.length
+            ? slot.candidates.map(c => {
+                const badge = c.live
+                    ? `<span class="ocfit-live-badge" style="background:rgba(53,217,155,.15);color:var(--reagent);">live</span>`
+                    : `<span class="ocfit-live-badge" style="background:var(--bench-2);color:var(--muted);">cached · ${esc(ocfitAgo(c.lastSeenLive))}</span>`;
+                return `<div style="display:flex;align-items:center;gap:10px;padding:5px 0;">
+                    <span style="flex:1;">${esc(c.name)}</span>
+                    <span class="ocfit-cpr" style="color:${ocfitCprColor(c.cpr)};font-family:var(--mono);font-weight:700;">${Math.round(c.cpr)}%</span>
+                    ${badge}
+                </div>`;
+            }).join('')
+            : '<p style="color:var(--muted);font-size:12px;margin:4px 0;">No opted-in members have fit data for this role yet.</p>';
+
+        return `
+            <div style="border-top:1px solid var(--line);padding-top:12px;margin-top:12px;">
+                <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
+                    <b>${esc(slot.role)}</b>
+                    <span style="color:var(--muted);font-size:12px;">in ${esc(slot.scenario)} · Difficulty ${esc(slot.difficulty)}</span>
+                </div>
+                ${candidatesHtml}
+            </div>`;
+    }).join('');
+}
+
 function renderOcFit(catalog) {
     const body = $('ocfit-body');
     if (!catalog.length) {
