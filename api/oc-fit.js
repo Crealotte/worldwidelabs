@@ -15,11 +15,18 @@
 // on Torn's own wiki description of how CPR works, not a precise formula — presented as general
 // guidance, not gospel.
 //
-// POST { key, action: 'read' }        -> the caller's full cached+refreshed OC fit catalog
-//                                         (also feeds the leadership team-builder view below —
-//                                         disclosed to every member on the login screen)
-// POST { key, action: 'team-builder' } -> leader-only: every open slot faction-wide, ranked by
-//                                          members' predicted fit for that exact role
+// POST { key, action: 'read' }               -> the caller's full cached+refreshed OC fit catalog
+//                                                (personal tracker — also feeds everything below)
+// POST { key, action: 'team-catalog' }        -> leader-only: every scenario+role the faction has
+//                                                ever seen (live or cached), aggregated across all
+//                                                members' own trackers, plus any saved team plan
+// POST { key, action: 'team-plan-save' }      -> leader-only: save a role->member assignment plan
+//                                                for one scenario (a planning board, not an auto-joiner —
+//                                                Torn's API is read-only, members still join manually)
+// POST { key, action: 'team-plan-clear' }     -> leader-only: remove a scenario's saved plan
+//
+// Completed-crime rewards are also captured (self-building, minimal first step toward a future
+// full reporting feature) whenever a leader loads the team catalog, to power rough payout estimates.
 
 const REDIS_URL = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL;
 const REDIS_TOKEN = process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN;
@@ -170,6 +177,12 @@ const WEIGHT_HIGH = 25;
 const WEIGHT_LOW = 15;
 const CPR_WARN = 70;
 
+// Fallback display name for a role nobody's personal tracker has seen yet (we only know its
+// normalized form from a currently-open live slot) — just tidies up capitalization.
+function titleCase(s) {
+    return (s || '').replace(/\b\w/g, c => c.toUpperCase());
+}
+
 module.exports = async function handler(req, res) {
     try {
         if (!REDIS_URL || !REDIS_TOKEN) {
@@ -180,72 +193,141 @@ module.exports = async function handler(req, res) {
         const { key, action } = req.body || {};
         if (!key) return res.status(400).json({ error: 'Missing key' });
 
-        if (action === 'team-builder') {
+        if (action === 'team-catalog') {
             if (!(await isLeader(key))) return res.status(403).json({ error: 'Leaders only' });
             const factionId = await getFactionId(key);
             if (!factionId) return res.status(403).json({ error: 'Could not determine your faction from this key' });
 
-            // Every open slot, faction-wide, right now.
+            // One faction-crimes pull, reused for open-slot detection AND completed-crime capture.
             const crimesRes = await fetch(`https://api.torn.com/v2/faction?selections=crimes&key=${encodeURIComponent(key)}`,
                 { headers: { accept: 'application/json' } });
             const crimesData = await crimesRes.json();
             if (crimesData.error) return res.status(403).json({ error: crimesData.error.error || 'Could not load faction crimes' });
+            const crimesList = Object.values(crimesData.crimes || {});
 
+            // ---- Capture completed-crime rewards (minimal first step, self-building over time) ----
+            const seenKey = `wwl:oc-rewards-seen:${factionId}`;
+            const rewardsKey = `wwl:oc-rewards:${factionId}`;
+            const rewardsRaw = await redis(['GET', rewardsKey]);
+            const rewards = rewardsRaw ? JSON.parse(rewardsRaw) : {};
+            let rewardsChanged = false;
+            for (const oc of crimesList) {
+                if (!oc || !oc.executed_at) continue;
+                const status = (oc.status || '').toLowerCase();
+                if (!['successful', 'failed', 'expired'].includes(status)) continue;
+                const added = await redis(['SADD', seenKey, String(oc.id)]);
+                if (added !== 1) continue; // already counted on a previous visit
+                const sKey = normScenario(oc.name);
+                if (!rewards[sKey]) rewards[sKey] = { scenario: oc.name || sKey, difficulty: oc.difficulty ?? '?', totalMoney: 0, totalRespect: 0, successCount: 0, totalRuns: 0 };
+                rewards[sKey].totalRuns++;
+                if (status === 'successful') {
+                    rewards[sKey].successCount++;
+                    rewards[sKey].totalMoney += Number(oc.rewards?.money ?? 0);
+                    rewards[sKey].totalRespect += Number(oc.rewards?.respect ?? 0);
+                }
+                rewardsChanged = true;
+            }
+            if (rewardsChanged) await redis(['SET', rewardsKey, JSON.stringify(rewards)]);
+
+            // ---- Which scenarios/roles are live right now, and which roles are still open ----
             const ACTIVE = new Set(['recruiting', 'planning', 'ready', 'blocked', 'awaiting', 'initiated']);
-            const openSlots = []; // { ocId, scenario, difficulty, role }
-            for (const oc of Object.values(crimesData.crimes || {})) {
+            const liveByKey = {}; // `${difficulty}::${normScenario}` -> { scenario, difficulty, openRoles:Set }
+            for (const oc of crimesList) {
                 if (!oc || !ACTIVE.has((oc.status || '').toLowerCase())) continue;
+                const difficulty = oc.difficulty ?? '?';
+                const scenario = oc.name || 'Unknown';
+                const sKey = `${difficulty}::${normScenario(scenario)}`;
                 const slots = Array.isArray(oc.slots) ? oc.slots : Object.values(oc.slots || []);
+                if (!liveByKey[sKey]) liveByKey[sKey] = { scenario, difficulty, openRoles: new Set() };
                 for (const slot of slots) {
-                    if (slot.user?.id) continue; // only open slots need a candidate
-                    openSlots.push({
-                        ocId: oc.id, scenario: oc.name || 'Unknown', difficulty: oc.difficulty ?? '?',
-                        role: slot.position_info?.label || slot.position || 'Unknown role',
-                    });
+                    if (slot.user?.id) continue;
+                    const role = slot.position_info?.label || slot.position || 'Unknown role';
+                    liveByKey[sKey].openRoles.add(normRole(role));
                 }
             }
-            if (openSlots.length === 0) return res.status(200).json({ openSlots: [] });
 
-            const { weights, source: weightsSource } = await getRoleWeights();
-            for (const slot of openSlots) slot.weight = findWeight(weights, slot.scenario, slot.role);
-
-            // Faction roster, so we know who to check and can show names.
+            // ---- Aggregate every member's own cached fit catalog into one faction-wide view ----
             const membersRes = await fetch(`https://api.torn.com/v2/faction/members?key=${encodeURIComponent(key)}`,
                 { headers: { accept: 'application/json' } });
             const membersData = await membersRes.json();
             const members = membersData.members || [];
 
-            // Pull each member's cached fit catalog once, reuse across all open slots.
-            const memberCatalogs = {}; // id -> {entryKey: entry}
+            const merged = {}; // sKey -> { scenario, difficulty, roles: { normRole: { role, candidates:[] } } }
             for (const m of members) {
                 const id = String(m.id);
                 const raw = await redis(['GET', fitKey(id)]);
-                if (raw) memberCatalogs[id] = { name: m.name, catalog: JSON.parse(raw) };
+                if (!raw) continue;
+                const catalog = JSON.parse(raw);
+                for (const entry of Object.values(catalog)) {
+                    const sKey = `${entry.difficulty}::${normScenario(entry.scenario)}`;
+                    if (!merged[sKey]) merged[sKey] = { scenario: entry.scenario, difficulty: entry.difficulty, roles: {} };
+                    const rKey = normRole(entry.role);
+                    if (!merged[sKey].roles[rKey]) merged[sKey].roles[rKey] = { role: entry.role, candidates: [] };
+                    merged[sKey].roles[rKey].candidates.push({ id, name: m.name, cpr: entry.cpr, live: entry.live, lastSeenLive: entry.lastSeenLive });
+                }
+            }
+            // A scenario that's live right now but nobody's personal tracker has ever seen still
+            // needs to show up — self-building, faction-wide, exactly like the personal one.
+            for (const [sKey, live] of Object.entries(liveByKey)) {
+                if (!merged[sKey]) merged[sKey] = { scenario: live.scenario, difficulty: live.difficulty, roles: {} };
+                for (const rKeyNorm of live.openRoles) {
+                    if (!merged[sKey].roles[rKeyNorm]) merged[sKey].roles[rKeyNorm] = { role: titleCase(rKeyNorm), candidates: [] };
+                }
             }
 
-            const results = openSlots.map(slot => {
-                const wantKey = normRole(slot.role);
-                const wantScenario = normScenario(slot.scenario);
-                const candidates = [];
-                for (const [id, { name, catalog }] of Object.entries(memberCatalogs)) {
-                    const match = Object.values(catalog).find(e =>
-                        normScenario(e.scenario) === wantScenario && normRole(e.role) === wantKey);
-                    if (match) candidates.push({ id, name, cpr: match.cpr, live: match.live, lastSeenLive: match.lastSeenLive });
-                }
-                candidates.sort((a, b) => b.cpr - a.cpr);
-                // A slot is "risky" when it matters a lot to the crime's success (high weight) but
-                // the best available candidate still falls short of a comfortable CPR — exactly the
-                // combination the original OC Manager script flagged as its biggest red flag.
-                const bestCpr = candidates[0]?.cpr ?? null;
-                const risky = slot.weight != null && slot.weight >= WEIGHT_HIGH && (bestCpr == null || bestCpr < CPR_WARN);
-                return { ...slot, candidates, risky };
-            });
+            const { weights } = await getRoleWeights();
+            const plansRaw = await redis(['GET', `wwl:ocplan:${factionId}`]);
+            const plans = plansRaw ? JSON.parse(plansRaw) : {};
 
-            // Highest-weight (most consequential) open slots first, since those are the ones
-            // worth a leader's attention before low-weight slots that barely move the needle.
-            results.sort((a, b) => (b.weight ?? -1) - (a.weight ?? -1));
+            const scenarios = Object.entries(merged).map(([sKey, data]) => {
+                const live = liveByKey[sKey] || null;
+                const rewardInfo = rewards[normScenario(data.scenario)] || null;
+                const plan = plans[sKey] || null;
+                const roles = Object.entries(data.roles).map(([rKeyNorm, r]) => {
+                    const sortedCandidates = [...r.candidates].sort((a, b) => b.cpr - a.cpr);
+                    const weight = findWeight(weights, data.scenario, r.role);
+                    const isOpen = live ? live.openRoles.has(rKeyNorm) : false;
+                    const assigned = plan?.roles?.[rKeyNorm] || null;
+                    return { roleKey: rKeyNorm, role: r.role, candidates: sortedCandidates, weight, open: isOpen, assigned };
+                }).sort((a, b) => (b.weight ?? -1) - (a.weight ?? -1));
 
-            return res.status(200).json({ openSlots: results, weightsSource });
+                return {
+                    scenarioKey: sKey, scenario: data.scenario, difficulty: data.difficulty,
+                    live: !!live, openSlotCount: live ? live.openRoles.size : 0,
+                    roles,
+                    estimatedPayout: rewardInfo && rewardInfo.successCount > 0
+                        ? { money: Math.round(rewardInfo.totalMoney / rewardInfo.successCount), respect: Math.round(rewardInfo.totalRespect / rewardInfo.successCount), sample: rewardInfo.successCount }
+                        : null,
+                };
+            }).sort((a, b) => (Number(a.difficulty) || 0) - (Number(b.difficulty) || 0));
+
+            return res.status(200).json({ scenarios });
+        }
+
+        if (action === 'team-plan-save') {
+            if (!(await isLeader(key))) return res.status(403).json({ error: 'Leaders only' });
+            const factionId = await getFactionId(key);
+            if (!factionId) return res.status(403).json({ error: 'Could not determine your faction from this key' });
+            const { scenarioKey, scenario, difficulty, roles } = req.body; // roles: { normRole: {memberId, memberName} | null }
+            if (!scenarioKey) return res.status(400).json({ error: 'Missing scenarioKey' });
+            const plansRaw = await redis(['GET', `wwl:ocplan:${factionId}`]);
+            const plans = plansRaw ? JSON.parse(plansRaw) : {};
+            plans[scenarioKey] = { scenario, difficulty, roles: roles || {}, savedAt: Date.now() };
+            await redis(['SET', `wwl:ocplan:${factionId}`, JSON.stringify(plans)]);
+            return res.status(200).json({ ok: true });
+        }
+
+        if (action === 'team-plan-clear') {
+            if (!(await isLeader(key))) return res.status(403).json({ error: 'Leaders only' });
+            const factionId = await getFactionId(key);
+            if (!factionId) return res.status(403).json({ error: 'Could not determine your faction from this key' });
+            const { scenarioKey } = req.body;
+            if (!scenarioKey) return res.status(400).json({ error: 'Missing scenarioKey' });
+            const plansRaw = await redis(['GET', `wwl:ocplan:${factionId}`]);
+            const plans = plansRaw ? JSON.parse(plansRaw) : {};
+            delete plans[scenarioKey];
+            await redis(['SET', `wwl:ocplan:${factionId}`, JSON.stringify(plans)]);
+            return res.status(200).json({ ok: true });
         }
 
         if (action !== 'read') return res.status(400).json({ error: 'Unknown action' });
@@ -259,6 +341,15 @@ module.exports = async function handler(req, res) {
         const myId = String(liveData.profile?.id || '');
         const crimes = liveData.organizedcrimes || liveData.organized_crimes || {};
         const { weights, source: weightsSource } = await getRoleWeights();
+
+        // Payout estimates are captured per-faction (see team-catalog above) — attach them here
+        // too so every member sees "here's roughly what this crime pays" on their own tracker.
+        const factionId = await getFactionId(key);
+        let rewards = {};
+        if (factionId) {
+            const rewardsRaw = await redis(['GET', `wwl:oc-rewards:${factionId}`]);
+            rewards = rewardsRaw ? JSON.parse(rewardsRaw) : {};
+        }
 
         // Load this player's existing cached catalog.
         const existingRaw = await redis(['GET', fitKey(myId)]);
@@ -284,6 +375,7 @@ module.exports = async function handler(req, res) {
                 const entryKey = `${difficulty}::${normScenario(scenario)}::${normRole(role)}`;
                 seenNow.add(entryKey);
                 const cat = categorize(role);
+                const rewardInfo = rewards[normScenario(scenario)] || null;
                 catalog[entryKey] = {
                     difficulty, scenario, role, cpr,
                     weight: findWeight(weights, scenario, role),
@@ -291,6 +383,9 @@ module.exports = async function handler(req, res) {
                     categoryHint: cat.hint,
                     lastSeenLive: now,
                     live: true,
+                    estimatedPayout: rewardInfo && rewardInfo.successCount > 0
+                        ? { money: Math.round(rewardInfo.totalMoney / rewardInfo.successCount), respect: Math.round(rewardInfo.totalRespect / rewardInfo.successCount), sample: rewardInfo.successCount }
+                        : null,
                 };
             }
         }
