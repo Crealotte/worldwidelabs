@@ -1017,9 +1017,15 @@
         const panel = $('adoption');
         try {
             const [trackData, membersData, discordData] = await Promise.all([
-                fetch(`/api/presence?key=${encodeURIComponent(apiKey)}`).then(r => r.json()),
+                fetch('/api/presence', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ key: apiKey, action: 'list' }),
+                }).then(r => r.json()),
                 tornV2('/faction/members?striptags=true'),
-                fetch(`/api/discord-members?key=${encodeURIComponent(apiKey)}`).then(r => r.json()).catch(() => null),
+                fetch('/api/discord-members', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ key: apiKey }),
+                }).then(r => r.json()).catch(() => null),
             ]);
             if (trackData.error) throw new Error(trackData.error);
             const logins = trackData.logins || {};
@@ -1100,7 +1106,10 @@
 
     async function loadFactionSharing() {
         try {
-            const res = await fetch(`/api/faction-share?key=${encodeURIComponent(apiKey)}`);
+            const res = await fetch('/api/faction-share', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ key: apiKey, action: 'read' }),
+            });
             const data = await res.json();
             if (data.error) { $('shared-factions-panel').style.display = 'none'; return; }
 
@@ -1129,7 +1138,7 @@
             const res = await fetch('/api/faction-share', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ key: apiKey, enabled: enabling }),
+                body: JSON.stringify({ key: apiKey, action: 'toggle', enabled: enabling }),
             });
             const result = await res.json();
             if (result.error) throw new Error(result.error);
@@ -1302,7 +1311,10 @@
 
     // ================= ANNOUNCEMENTS =================
     async function fetchAnnouncement() {
-        const res = await fetch(`/api/announcement?key=${encodeURIComponent(apiKey)}`);
+        const res = await fetch('/api/announcement', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ key: apiKey, action: 'read' }),
+        });
         return res.json();
     }
 
@@ -1480,7 +1492,10 @@
 
     async function loadFeedback() {
         try {
-            const res = await fetch(`/api/feedback-form?key=${encodeURIComponent(apiKey)}`);
+            const res = await fetch('/api/feedback-form', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ key: apiKey, action: 'read' }),
+            });
             const data = await res.json();
             const form = data?.form;
             if (!form) { $('fb-empty').style.display = 'block'; $('fb-content').style.display = 'none'; return; }
@@ -1502,7 +1517,10 @@
 
     async function loadFeedbackEditor() {
         try {
-            const res = await fetch(`/api/feedback-form?key=${encodeURIComponent(apiKey)}`);
+            const res = await fetch('/api/feedback-form', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ key: apiKey, action: 'read' }),
+            });
             const data = await res.json();
             const form = data?.form;
             $('fb-title-input').value = form?.title || '';
@@ -2075,7 +2093,10 @@
 
     async function checkDiscordStatus() {
         try {
-            const res = await fetch(`/api/discord-members?key=${encodeURIComponent(apiKey)}`);
+            const res = await fetch('/api/discord-members', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ key: apiKey }),
+            });
             const data = await res.json();
             requiredStatus.discord = data.error
                 ? null // couldn't check (bot not set up, etc.) — falls back to the plain "Required" look
