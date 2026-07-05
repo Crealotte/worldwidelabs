@@ -182,6 +182,32 @@ const CPR_WARN = 70;
 // forever and clutter the tracker with stale debris.
 const CATALOG_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
 
+const ACTIVE_STATUSES = new Set(['recruiting', 'planning', 'ready', 'blocked', 'awaiting', 'initiated']);
+
+// Builds a map of every role that exists in every currently-live OC instance — filled or open,
+// not just open ones. A role occupied by someone who's never opened their own OC Fit Tracker
+// would otherwise be completely invisible, which was the bigger of two bugs found here. Shared
+// between the leader's Team Builder and each member's own personal tracker, so both benefit.
+function buildLiveRoleSkeleton(crimesList) {
+    const liveByKey = {}; // `${difficulty}::${normScenario}` -> { scenario, difficulty, roles: { normRole: {role, open} } }
+    for (const oc of crimesList) {
+        if (!oc || !ACTIVE_STATUSES.has((oc.status || '').toLowerCase())) continue;
+        const difficulty = oc.difficulty ?? '?';
+        const scenario = oc.name || 'Unknown';
+        const sKey = `${difficulty}::${normScenario(scenario)}`;
+        const slots = Array.isArray(oc.slots) ? oc.slots : Object.values(oc.slots || []);
+        if (!liveByKey[sKey]) liveByKey[sKey] = { scenario, difficulty, roles: {} };
+        for (const slot of slots) {
+            const role = slot.position_info?.label || slot.position || 'Unknown role';
+            const rKey = normRole(role);
+            const isOpen = !slot.user?.id;
+            const already = liveByKey[sKey].roles[rKey];
+            liveByKey[sKey].roles[rKey] = { role, open: isOpen || (already?.open ?? false) };
+        }
+    }
+    return liveByKey;
+}
+
 module.exports = async function handler(req, res) {
     try {
         if (!REDIS_URL || !REDIS_TOKEN) {
@@ -229,26 +255,7 @@ module.exports = async function handler(req, res) {
             if (rewardsChanged) await redis(['SET', rewardsKey, JSON.stringify(rewards)]);
 
             // ---- Which scenarios/roles are live right now, and which of those are still open ----
-            // Tracks EVERY role in a live instance — filled or open — not just open ones. A role
-            // that's currently occupied by someone who's never opened their own OC Fit Tracker
-            // would otherwise be completely invisible here, which was the bigger of the two bugs.
-            const ACTIVE = new Set(['recruiting', 'planning', 'ready', 'blocked', 'awaiting', 'initiated']);
-            const liveByKey = {}; // `${difficulty}::${normScenario}` -> { scenario, difficulty, roles: { normRole: {role, open} } }
-            for (const oc of crimesList) {
-                if (!oc || !ACTIVE.has((oc.status || '').toLowerCase())) continue;
-                const difficulty = oc.difficulty ?? '?';
-                const scenario = oc.name || 'Unknown';
-                const sKey = `${difficulty}::${normScenario(scenario)}`;
-                const slots = Array.isArray(oc.slots) ? oc.slots : Object.values(oc.slots || []);
-                if (!liveByKey[sKey]) liveByKey[sKey] = { scenario, difficulty, roles: {} };
-                for (const slot of slots) {
-                    const role = slot.position_info?.label || slot.position || 'Unknown role';
-                    const rKey = normRole(role);
-                    const isOpen = !slot.user?.id;
-                    const already = liveByKey[sKey].roles[rKey];
-                    liveByKey[sKey].roles[rKey] = { role, open: isOpen || (already?.open ?? false) };
-                }
-            }
+            const liveByKey = buildLiveRoleSkeleton(crimesList);
 
             // ---- Aggregate every member's own cached fit catalog into one faction-wide view ----
             const membersRes = await fetch(`https://api.torn.com/v2/faction/members?key=${encodeURIComponent(key)}`,
@@ -355,6 +362,20 @@ module.exports = async function handler(req, res) {
             rewards = rewardsRaw ? JSON.parse(rewardsRaw) : {};
         }
 
+        // Best-effort: if this member's key happens to have faction API access, use it to see
+        // EVERY role in every live crime — filled or open — same as the leader's Team Builder.
+        // Torn will never reveal a personal CPR prediction for a role someone else occupies, so
+        // those show up as "no data yet" rather than a number, but at least the role itself won't
+        // be invisible just because it happened to be filled when this member checked. If the key
+        // doesn't have that access, this silently does nothing — no error shown to the member.
+        let liveRoleSkeleton = {};
+        try {
+            const crimesRes = await fetch(`https://api.torn.com/v2/faction?selections=crimes&key=${encodeURIComponent(key)}`,
+                { headers: { accept: 'application/json' } });
+            const crimesData = await crimesRes.json();
+            if (!crimesData.error) liveRoleSkeleton = buildLiveRoleSkeleton(Object.values(crimesData.crimes || {}));
+        } catch (e) { /* no faction API access on this key — fine, just skip the supplement */ }
+
         // Load this player's existing cached catalog.
         const existingRaw = await redis(['GET', fitKey(myId)]);
         const catalog = existingRaw ? JSON.parse(existingRaw) : {}; // key: `${difficulty}::${normScenario}::${normRole}`
@@ -387,6 +408,33 @@ module.exports = async function handler(req, res) {
                     categoryHint: cat.hint,
                     lastSeenLive: now,
                     live: true,
+                    estimatedPayout: rewardInfo && rewardInfo.successCount > 0
+                        ? { money: Math.round(rewardInfo.totalMoney / rewardInfo.successCount), respect: Math.round(rewardInfo.totalRespect / rewardInfo.successCount), sample: rewardInfo.successCount }
+                        : null,
+                };
+            }
+        }
+
+        // Fill in any role this member has never personally had open, but that genuinely exists
+        // right now (learned from the supplemental faction-wide call above, same as Team Builder).
+        // These get no CPR — Torn never reveals that for a role someone else occupies — but at
+        // least the role itself is visible instead of silently missing.
+        for (const [sKey, live] of Object.entries(liveRoleSkeleton)) {
+            const [difficulty] = sKey.split('::');
+            for (const info of Object.values(live.roles)) {
+                const entryKey = `${difficulty}::${normScenario(live.scenario)}::${normRole(info.role)}`;
+                seenNow.add(entryKey);
+                if (catalog[entryKey]) continue; // real personal data already captured above — don't overwrite it
+                const cat = categorize(info.role);
+                const rewardInfo = rewards[normScenario(live.scenario)] || null;
+                catalog[entryKey] = {
+                    difficulty, scenario: live.scenario, role: info.role, cpr: null,
+                    weight: findWeight(weights, live.scenario, info.role),
+                    category: cat.label,
+                    categoryHint: cat.hint,
+                    lastSeenLive: now,
+                    live: true,
+                    noPersonalData: true,
                     estimatedPayout: rewardInfo && rewardInfo.successCount > 0
                         ? { money: Math.round(rewardInfo.totalMoney / rewardInfo.successCount), respect: Math.round(rewardInfo.totalRespect / rewardInfo.successCount), sample: rewardInfo.successCount }
                         : null,
