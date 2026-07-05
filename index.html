@@ -521,20 +521,19 @@
         renderDashboard();
         renderLinks();
         $('cp-rate').value = localStorage.getItem(RATE_STORAGE) || '100,000';
+        await pingTracker();
         checkFactionAccess();
-        pingTracker();
     }
 
-    // Fire-and-forget: tell the server this member logged in. Silently does nothing
-    // when the app is opened as a local file (no server there).
+    // Tell the server this member logged in. Silently does nothing when the app is
+    // opened as a local file (no server there). Logs (but doesn't alert) other failures,
+    // e.g. an ad-blocker or privacy extension blocking the request.
     function pingTracker() {
-        try {
-            fetch('/api/track', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ key: apiKey }),
-            }).catch(() => {});
-        } catch (e) { /* ignore */ }
+        return fetch('/api/presence', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ key: apiKey }),
+        }).catch(e => console.warn('WWLabs presence ping failed (ad-blocker or offline?):', e));
     }
 
     // Leaders with the "API Access" faction permission can read faction data; others get the payout tab locked.
@@ -598,7 +597,7 @@
         const panel = $('adoption');
         try {
             const [trackData, membersData] = await Promise.all([
-                fetch(`/api/track?key=${encodeURIComponent(apiKey)}`).then(r => r.json()),
+                fetch(`/api/presence?key=${encodeURIComponent(apiKey)}`).then(r => r.json()),
                 tornV2('/faction/members?striptags=true'),
             ]);
             if (trackData.error) throw new Error(trackData.error);
@@ -699,22 +698,30 @@
             target: 4400,
             blocks: [
                 { title: 'Training day 1', items: [
-                    { key: 'd1nat', label: 'Natural energy — spent 3× as it fills (450 E)', value: 450 },
+                    { key: 'd1nat1', label: 'Natural energy fill #1 (150 E)', value: 150 },
+                    { key: 'd1nat2', label: 'Natural energy fill #2 (150 E)', value: 150 },
+                    { key: 'd1nat3', label: 'Natural energy fill #3 (150 E)', value: 150 },
                     { key: 'd1xan', label: 'Xanax ×2 (500 E)', value: 500 },
                     { key: 'd1ref', label: 'Energy refill ×1 (150 E)', value: 150 },
                 ]},
                 { title: 'Training day 2', items: [
-                    { key: 'd2nat', label: 'Natural energy — spent 3× as it fills (450 E)', value: 450 },
+                    { key: 'd2nat1', label: 'Natural energy fill #1 (150 E)', value: 150 },
+                    { key: 'd2nat2', label: 'Natural energy fill #2 (150 E)', value: 150 },
+                    { key: 'd2nat3', label: 'Natural energy fill #3 (150 E)', value: 150 },
                     { key: 'd2xan', label: 'Xanax ×2 (500 E)', value: 500 },
                     { key: 'd2ref', label: 'Energy refill ×1 (150 E)', value: 150 },
                 ]},
                 { title: 'Training day 3', items: [
-                    { key: 'd3nat', label: 'Natural energy — spent 3× as it fills (450 E)', value: 450 },
+                    { key: 'd3nat1', label: 'Natural energy fill #1 (150 E)', value: 150 },
+                    { key: 'd3nat2', label: 'Natural energy fill #2 (150 E)', value: 150 },
+                    { key: 'd3nat3', label: 'Natural energy fill #3 (150 E)', value: 150 },
                     { key: 'd3xan', label: 'Xanax ×2 (500 E)', value: 500 },
                     { key: 'd3ref', label: 'Energy refill ×1 (150 E)', value: 150 },
                 ]},
                 { title: 'Training day 4', items: [
-                    { key: 'd4nat', label: 'Natural energy — spent 3× as it fills (450 E)', value: 450 },
+                    { key: 'd4nat1', label: 'Natural energy fill #1 (150 E)', value: 150 },
+                    { key: 'd4nat2', label: 'Natural energy fill #2 (150 E)', value: 150 },
+                    { key: 'd4nat3', label: 'Natural energy fill #3 (150 E)', value: 150 },
                     { key: 'd4xan', label: 'Xanax ×2 (500 E)', value: 500 },
                     { key: 'd4ref', label: 'Energy refill ×1 (150 E)', value: 150 },
                 ]},
