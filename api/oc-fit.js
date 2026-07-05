@@ -183,6 +183,22 @@ function titleCase(s) {
     return (s || '').replace(/\b\w/g, c => c.toUpperCase());
 }
 
+// Some scenarios have multiple slots that share the exact same role label — e.g. Mob Mentality
+// has four separate "Looter" slots, each with a genuinely different importance weight per the
+// community's data. Keying purely by role name within a scenario would collapse those into one
+// slot and silently drop the rest. This disambiguates repeats within a single OC's slot list —
+// the first "Looter" keeps its name, the next becomes "Looter #2", and so on.
+function dedupeSlotRoles(slots) {
+    const seen = new Map();
+    return slots.map(slot => {
+        const rawRole = slot.position_info?.label || slot.position || 'Unknown role';
+        const key = normRole(rawRole);
+        const count = (seen.get(key) || 0) + 1;
+        seen.set(key, count);
+        return { ...slot, _role: count === 1 ? rawRole : `${rawRole} #${count}` };
+    });
+}
+
 module.exports = async function handler(req, res) {
     try {
         if (!REDIS_URL || !REDIS_TOKEN) {
@@ -239,10 +255,9 @@ module.exports = async function handler(req, res) {
                 const sKey = `${difficulty}::${normScenario(scenario)}`;
                 const slots = Array.isArray(oc.slots) ? oc.slots : Object.values(oc.slots || []);
                 if (!liveByKey[sKey]) liveByKey[sKey] = { scenario, difficulty, openRoles: new Set() };
-                for (const slot of slots) {
+                for (const slot of dedupeSlotRoles(slots)) {
                     if (slot.user?.id) continue;
-                    const role = slot.position_info?.label || slot.position || 'Unknown role';
-                    liveByKey[sKey].openRoles.add(normRole(role));
+                    liveByKey[sKey].openRoles.add(normRole(slot._role));
                 }
             }
 
@@ -363,12 +378,12 @@ module.exports = async function handler(req, res) {
             const difficulty = oc.difficulty ?? '?';
             const scenario = oc.name || 'Unknown';
             const slots = Array.isArray(oc.slots) ? oc.slots : Object.values(oc.slots || []);
-            for (const slot of slots) {
+            for (const slot of dedupeSlotRoles(slots)) {
                 // Only slots that represent THIS caller's own fit: open slots (Torn predicts their
                 // own CPR there) or a slot they're actually occupying right now.
                 const occupantId = slot.user?.id ? String(slot.user.id) : null;
                 if (occupantId && occupantId !== myId) continue;
-                const role = slot.position_info?.label || slot.position || 'Unknown role';
+                const role = slot._role;
                 const cpr = slot.checkpoint_pass_rate ?? null;
                 if (cpr === null) continue;
 
