@@ -301,6 +301,7 @@
             </div>
             <div class="nav-group-items" data-group-items="leadership">
                 <div class="nav-item" data-page="payout">Chain payout</div>
+                <div class="nav-item" data-page="announce-edit">Announcements</div>
             </div>
         </div>
 
@@ -317,6 +318,11 @@
             <div class="lab-label">WWL·01 / status report</div>
             <h2 id="dash-greeting">Welcome</h2>
             <p class="pagedesc" id="dash-sub"></p>
+
+            <div class="panel" id="announcement-panel" style="display:none;">
+                <h3>📣 Announcement</h3>
+                <div id="announcement-body"></div>
+            </div>
 
             <div class="grid2">
                 <div class="panel">
@@ -439,6 +445,46 @@
             </div><!-- /cp-tools -->
         </section>
 
+        <!-- ========== ANNOUNCEMENTS EDITOR (leaders only) ========== -->
+        <section class="page" id="page-announce-edit">
+            <div class="lab-label">WWL·03b / leadership tools</div>
+            <h2>Announcements</h2>
+            <p class="pagedesc">What you post here appears at the top of everyone's Dashboard — a Discord-free way to reach the whole faction, since not everyone can access Discord.</p>
+
+            <div class="panel" id="announce-locked" style="display:none;">
+                <h3>🔒 Leaders only</h3>
+                <p style="color:var(--muted);line-height:1.6;margin:0;">
+                    Posting announcements needs the same <b>API Access</b> faction permission as Chain payout.
+                </p>
+            </div>
+
+            <div class="panel" id="announce-editor" style="display:none;">
+                <h3>Announcement text</h3>
+                <textarea id="an-text" rows="4" style="width:100%;font-family:var(--disp);background:var(--bench-2);color:var(--text);border:1px solid var(--line);border-radius:var(--radius);padding:10px;" placeholder="What's going on this week…"></textarea>
+
+                <h3 style="margin-top:20px;">Poll (optional)</h3>
+                <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin-bottom:12px;">
+                    <input type="checkbox" id="an-poll-enable" style="width:auto;"> Include a poll
+                </label>
+                <div id="an-poll-fields" style="display:none;">
+                    <div class="field">
+                        <label for="an-poll-question">Question</label>
+                        <input id="an-poll-question" placeholder="e.g. Which night should we war?">
+                    </div>
+                    <label style="font-size:12px;color:var(--muted);">Options (min 2)</label>
+                    <div id="an-poll-options"></div>
+                    <button class="ghost small" id="an-poll-add-option" style="margin-top:8px;">+ Add option</button>
+                    <p style="color:var(--muted);font-size:11px;margin-top:10px;">Saving a poll with a new question always starts vote counts fresh at zero.</p>
+                </div>
+
+                <div class="row" style="margin-top:20px;display:flex;gap:10px;">
+                    <button id="an-save">Save announcement</button>
+                    <button class="ghost" id="an-clear">Clear announcement</button>
+                </div>
+                <div class="status" id="an-status"></div>
+            </div>
+        </section>
+
         <!-- ========== LEVELLING TARGETS ========== -->
         <section class="page" id="page-targets">
             <div class="lab-label">WWL·04 / levelling range</div>
@@ -507,14 +553,6 @@
                 <div class="panel">
                     <h3>Weapon experience</h3>
                     <div id="pf-weaponexp"><p style="color:var(--muted)">Not loaded yet.</p></div>
-                </div>
-                <div class="panel">
-                    <h3>Display case worth</h3>
-                    <div id="pf-display"><p style="color:var(--muted)">Not loaded yet.</p></div>
-                </div>
-                <div class="panel">
-                    <h3>Skills</h3>
-                    <div id="pf-skills"><p style="color:var(--muted)">Not loaded yet.</p></div>
                 </div>
             </div>
         </section>
@@ -732,11 +770,12 @@
         await pingTracker();
         checkFactionAccess();
 
-        const lastPage = localStorage.getItem(CURRENT_PAGE_KEY) || 'dashboard';
+        const lastPage = sessionStorage.getItem(CURRENT_PAGE_KEY) || 'dashboard';
         const navItem = document.querySelector(`.nav-item[data-page="${lastPage}"]`);
         const parentGroup = navItem?.closest('.nav-group');
         if (parentGroup) parentGroup.classList.remove('collapsed'); // reveal it even if its group was left collapsed
         goToPage(lastPage);
+        loadAnnouncement();
     }
 
     // Tell the server this member logged in. Silently does nothing when the app is
@@ -751,23 +790,43 @@
     }
 
     // Leaders with the "API Access" faction permission can read faction data; others get the payout tab locked.
-    async function checkFactionAccess() {
-        const navItem = document.querySelector('.nav-item[data-page="payout"]');
-        try {
-            await tornV2('/faction/balance');
-            navItem.querySelector('.lock')?.remove();
-            $('cp-locked').style.display = 'none';
-            $('cp-tools').style.display = 'block';
-            loadAdoption();
-        } catch (e) {
+    let isLeaderCached = false;
+
+    function setNavLock(page, locked) {
+        const navItem = document.querySelector(`.nav-item[data-page="${page}"]`);
+        if (!navItem) return;
+        if (locked) {
             if (!navItem.querySelector('.lock')) {
                 const lock = document.createElement('span');
                 lock.className = 'lock';
                 lock.textContent = ' 🔒';
                 navItem.appendChild(lock);
             }
+        } else {
+            navItem.querySelector('.lock')?.remove();
+        }
+    }
+
+    async function checkFactionAccess() {
+        try {
+            await tornV2('/faction/balance');
+            isLeaderCached = true;
+            setNavLock('payout', false);
+            setNavLock('announce-edit', false);
+            $('cp-locked').style.display = 'none';
+            $('cp-tools').style.display = 'block';
+            loadAdoption();
+        } catch (e) {
+            isLeaderCached = false;
+            setNavLock('payout', true);
+            setNavLock('announce-edit', true);
             $('cp-locked').style.display = 'block';
             $('cp-tools').style.display = 'none';
+        }
+        if (document.querySelector('.nav-item[data-page="announce-edit"]').classList.contains('active')) {
+            $('announce-locked').style.display = isLeaderCached ? 'none' : 'block';
+            $('announce-editor').style.display = isLeaderCached ? 'block' : 'none';
+            if (isLeaderCached) loadAnnouncementEditor();
         }
     }
 
@@ -792,6 +851,7 @@
 
     $('logout-btn').addEventListener('click', () => {
         localStorage.removeItem(KEY_STORAGE);
+        sessionStorage.removeItem(CURRENT_PAGE_KEY);
         apiKey = ''; profile = null;
         $('app-view').style.display = 'none';
         $('login-view').style.display = 'flex';
@@ -901,12 +961,17 @@
         document.querySelectorAll('.nav-item').forEach(i => i.classList.toggle('active', i.dataset.page === page));
         document.querySelectorAll('section.page').forEach(p => p.classList.remove('visible'));
         target.classList.add('visible');
-        localStorage.setItem(CURRENT_PAGE_KEY, page);
+        sessionStorage.setItem(CURRENT_PAGE_KEY, page);
         if (page === 'targets') loadBaldrLists();
         if (page === 'targetfinder') initTargetFinder();
         else if (typeof stopTfLive === 'function') stopTfLive();
         if (page === 'profile') loadPlayerProfile();
-        if (page === 'dashboard') startCooldownTicker(); else stopCooldownTicker();
+        if (page === 'dashboard') { startCooldownTicker(); loadAnnouncement(); } else { stopCooldownTicker(); }
+        if (page === 'announce-edit') {
+            $('announce-locked').style.display = isLeaderCached ? 'none' : 'block';
+            $('announce-editor').style.display = isLeaderCached ? 'block' : 'none';
+            if (isLeaderCached) loadAnnouncementEditor();
+        }
     }
 
     // ================= DASHBOARD =================
@@ -1007,6 +1072,144 @@
             renderDashboard();
             toast('Bars refreshed');
         } catch (e) { toast('Refresh failed'); }
+    });
+
+    // ================= ANNOUNCEMENTS =================
+    async function fetchAnnouncement() {
+        const res = await fetch(`/api/announcement?key=${encodeURIComponent(apiKey)}`);
+        return res.json();
+    }
+
+    async function loadAnnouncement() {
+        try {
+            const data = await fetchAnnouncement();
+            renderAnnouncement(data);
+        } catch (e) {
+            $('announcement-panel').style.display = 'none'; // no server (local file) or a network hiccup — fail quietly here
+        }
+    }
+
+    function renderAnnouncement(data) {
+        const panel = $('announcement-panel');
+        const ann = data?.announcement;
+        if (!ann || (!ann.text && !ann.poll)) { panel.style.display = 'none'; return; }
+        panel.style.display = 'block';
+
+        let html = ann.text ? `<p style="white-space:pre-wrap;line-height:1.6;margin:0 0 ${ann.poll ? '16' : '0'}px;">${esc(ann.text)}</p>` : '';
+
+        if (ann.poll) {
+            const total = data.totalVotes || 0;
+            const myVote = data.myVote;
+            html += `<div class="lab-label" style="margin-bottom:8px;">${esc(ann.poll.question)}</div>`;
+            html += ann.poll.options.map((opt, i) => {
+                const count = data.tally?.[i] || 0;
+                const pct = total ? Math.round((count / total) * 100) : 0;
+                const mine = myVote !== null && Number(myVote) === i;
+                return `
+                    <div class="poll-option" data-idx="${i}" style="cursor:pointer;margin-bottom:8px;">
+                        <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:4px;">
+                            <span>${mine ? '✓ ' : ''}${esc(opt)}</span><span style="color:var(--muted);">${count} (${pct}%)</span>
+                        </div>
+                        <div class="bar-track"><div class="bar-fill" style="width:${pct}%;background:${mine ? 'var(--reagent)' : 'var(--line)'};"></div></div>
+                    </div>`;
+            }).join('');
+            html += `<p style="color:var(--muted);font-size:11px;margin-top:6px;">${total} vote${total === 1 ? '' : 's'} so far · click an option to ${myVote !== null ? 'change your' : 'cast your'} vote</p>`;
+        }
+        $('announcement-body').innerHTML = html;
+
+        if (ann.poll) {
+            $('announcement-body').querySelectorAll('.poll-option').forEach(el => {
+                el.addEventListener('click', async () => {
+                    try {
+                        await fetch('/api/announcement', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ key: apiKey, action: 'vote', optionIndex: parseInt(el.dataset.idx, 10) }),
+                        });
+                        loadAnnouncement();
+                    } catch (e) { toast('Vote failed — try again'); }
+                });
+            });
+        }
+    }
+
+    // ---- Editor (leaders only) ----
+    function addPollOptionField(value = '') {
+        const wrap = document.createElement('div');
+        wrap.style.cssText = 'display:flex;gap:8px;margin-bottom:8px;';
+        wrap.innerHTML = `<input class="an-poll-option" value="${esc(value)}" placeholder="Option" style="flex:1;">
+            <button class="ghost small an-remove-option" type="button">✕</button>`;
+        wrap.querySelector('.an-remove-option').addEventListener('click', () => wrap.remove());
+        $('an-poll-options').appendChild(wrap);
+    }
+
+    $('an-poll-add-option').addEventListener('click', () => addPollOptionField());
+    $('an-poll-enable').addEventListener('change', () => {
+        $('an-poll-fields').style.display = $('an-poll-enable').checked ? 'block' : 'none';
+    });
+
+    async function loadAnnouncementEditor() {
+        try {
+            const data = await fetchAnnouncement();
+            const ann = data?.announcement;
+            $('an-text').value = ann?.text || '';
+            $('an-poll-options').innerHTML = '';
+            if (ann?.poll) {
+                $('an-poll-enable').checked = true;
+                $('an-poll-fields').style.display = 'block';
+                $('an-poll-question').value = ann.poll.question;
+                ann.poll.options.forEach(o => addPollOptionField(o));
+            } else {
+                $('an-poll-enable').checked = false;
+                $('an-poll-fields').style.display = 'none';
+                $('an-poll-question').value = '';
+                addPollOptionField(); addPollOptionField();
+            }
+        } catch (e) { /* start from a blank form if loading the current one fails */ }
+    }
+
+    $('an-save').addEventListener('click', async () => {
+        const btn = $('an-save');
+        btn.disabled = true; btn.textContent = 'Saving…';
+        const st = $('an-status');
+        try {
+            const text = $('an-text').value.trim();
+            let poll = null;
+            if ($('an-poll-enable').checked) {
+                const question = $('an-poll-question').value.trim();
+                const options = [...document.querySelectorAll('.an-poll-option')].map(i => i.value.trim()).filter(Boolean);
+                if (!question || options.length < 2) {
+                    st.className = 'status err'; st.textContent = 'A poll needs a question and at least 2 filled-in options.';
+                    return;
+                }
+                poll = { question, options };
+            }
+            const res = await fetch('/api/announcement', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ key: apiKey, text, poll }),
+            });
+            const data = await res.json();
+            if (data.error) throw new Error(data.error);
+            st.className = 'status ok'; st.textContent = 'Saved — live on everyone\'s dashboard now.';
+        } catch (e) {
+            st.className = 'status err'; st.textContent = e.message;
+        } finally {
+            btn.disabled = false; btn.textContent = 'Save announcement';
+        }
+    });
+
+    $('an-clear').addEventListener('click', async () => {
+        if (!confirm('Clear the announcement for everyone?')) return;
+        try {
+            await fetch('/api/announcement', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ key: apiKey, text: '', poll: null }),
+            });
+            loadAnnouncementEditor();
+            toast('Announcement cleared');
+        } catch (e) { toast('Could not clear announcement'); }
     });
 
     // ================= WEEKLY ENERGY GOALS =================
@@ -1643,38 +1846,6 @@
         $(id).textContent = JSON.stringify(data, null, 2) ?? 'null / undefined — Torn returned nothing for this selection.';
     }
 
-    async function renderItemWorth(container, items, priceMap, emptyMsg) {
-        if (!items) { container.innerHTML = `<p style="color:var(--muted)">${esc(emptyMsg)}</p>`; return; }
-        const list = Array.isArray(items) ? items : Object.values(items);
-        if (!list.length) { container.innerHTML = `<p style="color:var(--muted)">${esc(emptyMsg)}</p>`; return; }
-
-        let total = 0;
-        let pricedCount = 0;
-        const rows = list.map(it => {
-            const id = it.ID ?? it.id ?? it.itemID ?? it.item_id;
-            const qty = it.quantity ?? it.qty ?? 1;
-            const price = priceMap.get(String(id));
-            const marketValue = price ? (price.market_value ?? price.value) : null;
-            const name = it.name || price?.name || `Item #${id}`;
-            const worth = marketValue != null ? marketValue * qty : null;
-            if (worth != null) { total += worth; pricedCount++; }
-            return { name, qty, worth };
-        }).sort((a, b) => (b.worth ?? -1) - (a.worth ?? -1));
-
-        const rowsHtml = rows.slice(0, 25).map(r => `
-            <tr><td>${esc(r.name)}</td><td class="num">${fmtN(r.qty)}</td><td class="num">${r.worth != null ? fmt$(r.worth) : '—'}</td></tr>`).join('');
-        container.innerHTML = `
-            <div class="table-scroll"><table><thead><tr><th>Item</th><th class="num">Qty</th><th class="num">Worth</th></tr></thead>
-            <tbody>${rowsHtml}</tbody></table></div>
-            ${rows.length > 25 ? `<p style="color:var(--muted);font-size:12px;margin-top:6px;">+${rows.length - 25} more item(s) not shown.</p>` : ''}
-            <div class="result-line" style="margin-top:8px;"><span class="rk"><b>Total worth</b></span><span class="rv good"><b>${fmt$(total)}</b></span></div>
-            <p style="color:var(--muted);font-size:11px;margin-top:6px;">
-                ${pricedCount < rows.length ? `Priced ${pricedCount} of ${rows.length} items — the rest have no listed market value. ` : ''}
-                Prices are Torn's official item value, which can differ from real bazaar/market prices.
-            </p>`;
-        appendRawDataToggle(container, items);
-    }
-
     $('profile-refresh').addEventListener('click', () => { profileLoaded = false; loadPlayerProfile(); });
 
     async function loadPlayerProfile() {
@@ -1683,27 +1854,13 @@
         const st = $('profile-status');
         st.className = 'status ok'; st.textContent = 'Loading…';
         try {
-            const [profileData, itemPrices] = await Promise.all([
-                tornV1('networth,criminalrecord,jobpoints,weaponexp,display,skills'),
-                tornSection('torn', 'items').catch(() => null), // pricing is a nice-to-have, not required
-            ]);
+            const profileData = await tornV1('networth,criminalrecord,jobpoints,weaponexp');
 
             renderDynamicObject($('pf-networth'), profileData.networth, { currency: true, exclude: ['timestamp'] });
             renderDynamicObject($('pf-criminal'), profileData.criminalrecord);
             renderDynamicObject($('pf-jobpoints'), profileData.jobpoints);
             renderDynamicObject($('pf-weaponexp'), Array.isArray(profileData.weaponexp)
                 ? { weapons: profileData.weaponexp } : profileData.weaponexp);
-            renderDynamicObject($('pf-skills'), profileData.skills);
-            appendRawDataToggle($('pf-skills'), profileData.skills);
-
-            const priceMap = new Map();
-            if (itemPrices?.items) {
-                Object.entries(itemPrices.items).forEach(([id, info]) => priceMap.set(String(id), info));
-            }
-            await renderItemWorth($('pf-display'), profileData.display, priceMap, 'No display case data returned.');
-            if (!itemPrices) {
-                $('pf-display').insertAdjacentHTML('beforeend', '<p style="color:var(--muted);font-size:11px;margin-top:6px;">Item prices unavailable right now — showing quantities only where possible.</p>');
-            }
 
             st.textContent = ''; st.className = 'status';
         } catch (e) {
