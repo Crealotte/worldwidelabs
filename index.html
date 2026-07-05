@@ -330,6 +330,2043 @@
                 </div>
             </div>
 
+            <div class="panel" id="cooldowns-panel">
+                <h3>Cooldowns</h3>
+                <div class="grid3" id="cooldowns"></div>
+            </div>
+
+            <div class="panel" id="adoption" style="display:none;">
+                <h3>Who's on board <span style="font-weight:400;color:var(--muted);font-size:12px;">(leaders only)</span></h3>
+                <p style="color:var(--muted);font-size:12px;margin:0 0 12px;" id="adoption-summary"></p>
+                <div class="table-scroll" style="max-height:340px;overflow-y:auto;">
+                    <table>
+                        <thead><tr><th>Member</th><th>WWLabs</th><th class="num">Last login</th></tr></thead>
+                        <tbody id="adoption-body"></tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <!-- ========== ENERGY PLANNER ========== -->
+        <section class="page" id="page-energy">
+            <div class="lab-label">WWL·02 / weekly energy goals</div>
+            <h2>Weekly energy goals</h2>
+            <p class="pagedesc">Our week is 4 training days + 2 war prep days + 1 war day. Tick things off as you do them — the bar fills itself.</p>
+
+            <div class="panel">
+                <h3>Which group are you in?</h3>
+                <div class="row" style="display:flex;gap:12px;">
+                    <button id="eg-group-a" class="ghost" style="flex:1;">1,500,000+ total battle stats</button>
+                    <button id="eg-group-b" class="ghost" style="flex:1;">Under 1,500,000 total battle stats</button>
+                </div>
+            </div>
+
+            <div class="panel" id="eg-panel" style="display:none;">
+                <h3 id="eg-title"></h3>
+                <p class="pagedesc" id="eg-sub" style="margin-bottom:16px;"></p>
+
+                <div class="field" id="eg-donator-wrap" style="display:none;background:var(--bench-2);border:1px solid var(--line);border-radius:var(--radius);padding:12px;">
+                    <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin:0;color:var(--text);">
+                        <input type="checkbox" id="eg-donator" style="width:auto;">
+                        I have donator status (150 E natural energy bar instead of 100 E)
+                    </label>
+                </div>
+
+                <div class="bar-block">
+                    <div class="bar-head"><span>This week</span><span id="eg-progress-text"></span></div>
+                    <div class="bar-track"><div class="bar-fill" id="eg-progress-fill" style="background:var(--reagent);width:0%;"></div></div>
+                </div>
+
+                <div id="eg-days" style="margin-top:18px;"></div>
+                <div id="eg-extra" style="margin-top:10px;"></div>
+
+                <button class="ghost small" id="eg-reset" style="margin-top:16px;">Reset this week's checklist</button>
+            </div>
+        </section>
+
+        <!-- ========== CHAIN PAYOUT ========== -->
+        <section class="page" id="page-payout">
+            <div class="lab-label">WWL·03 / leadership tools</div>
+            <h2>Chain payout — non-war hits</h2>
+            <p class="pagedesc">Add chain IDs, combine them, and pay members per non-war hit (total hits &minus; war hits). Needs a leader key with faction chain-report access.</p>
+
+            <div class="panel" id="cp-locked" style="display:none;">
+                <h3>🔒 Leaders only</h3>
+                <p style="color:var(--muted);line-height:1.6;margin:0;">
+                    This tool reads faction chain reports, which the Torn API only allows for members with the
+                    <b>API Access</b> faction permission. Your key doesn't have it — if you think you should,
+                    ask your leadership to enable it for your position in the faction's permission settings.
+                    Everything else in WorldWideLabs works for you as normal.
+                </p>
+            </div>
+
+            <div id="cp-tools">
+            <div class="panel">
+                <div class="grid2">
+                    <div class="field" style="margin:0;">
+                        <label for="chain-input">Chain ID or full report URL</label>
+                        <input type="text" id="chain-input" placeholder="e.g. 65656724 or https://www.torn.com/war.php?step=chainreport&chainID=65656724">
+                    </div>
+                    <div style="display:flex;gap:10px;align-items:flex-end;">
+                        <div class="field" style="margin:0;flex:1;">
+                            <label for="cp-rate">$ per non-war hit</label>
+                            <input type="text" id="cp-rate" value="100,000">
+                        </div>
+                        <button class="ghost" id="add-chain">Add chain</button>
+                        <button id="cp-calc">Calculate</button>
+                    </div>
+                </div>
+                <div id="chain-list"></div>
+                <div class="status" id="cp-status"></div>
+            </div>
+
+            <div class="panel" id="cp-results-panel" style="display:none;">
+                <h3>Payouts</h3>
+                <div class="table-scroll">
+                    <table>
+                        <thead id="cp-head"></thead>
+                        <tbody id="cp-body"></tbody>
+                        <tfoot id="cp-foot"></tfoot>
+                    </table>
+                </div>
+                <div style="display:flex;gap:10px;margin-top:12px;flex-wrap:wrap;align-items:center;">
+                    <button class="ghost" id="cp-copy">Copy payout list</button>
+                    <label style="display:flex;align-items:center;gap:6px;margin:0;cursor:pointer;">
+                        <input type="checkbox" id="cp-hidezero" checked style="width:auto;"> Hide members with 0 non-war hits
+                    </label>
+                </div>
+            </div>
+            </div><!-- /cp-tools -->
+        </section>
+
+        <!-- ========== LEVELLING TARGETS ========== -->
+        <section class="page" id="page-targets">
+            <div class="lab-label">WWL·04 / levelling range</div>
+            <h2>Baldr's levelling targets</h2>
+            <p class="pagedesc">
+                Inactive, low-stat players ideal for levelling — beat them and leave them in the street for maximum experience.
+                List maintained by <a href="https://www.torn.com/profiles.php?XID=1847600" target="_blank" rel="noopener">Baldr [1847600]</a>,
+                original tool by <a href="https://www.torn.com/profiles.php?XID=1778676" target="_blank" rel="noopener">Oran [1778676]</a> (open source).
+            </p>
+
+            <div class="panel">
+                <div class="grid2">
+                    <div class="field" style="margin:0;">
+                        <label for="bt-list">List</label>
+                        <select id="bt-list"><option>Loading lists…</option></select>
+                    </div>
+                    <div style="display:flex;gap:10px;align-items:flex-end;">
+                        <button id="bt-check">Check who's Okay</button>
+                        <button class="ghost" id="bt-stop" style="display:none;">Stop</button>
+                    </div>
+                </div>
+                <div class="status" id="bt-status"></div>
+            </div>
+
+            <div class="panel" id="bt-table-panel" style="display:none;">
+                <label style="display:flex;align-items:center;gap:6px;cursor:pointer;margin-bottom:10px;color:var(--muted);">
+                    <input type="checkbox" id="bt-okonly" style="width:auto;"> Show only targets that are Okay
+                </label>
+                <div class="table-scroll" style="max-height:520px;overflow-y:auto;">
+                    <table>
+                        <thead><tr>
+                            <th>Player</th><th class="num">Lvl</th><th class="num">Total</th>
+                            <th class="num">Str</th><th class="num">Def</th><th class="num">Spd</th><th class="num">Dex</th>
+                            <th>Status</th><th></th>
+                        </tr></thead>
+                        <tbody id="bt-body"></tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <!-- ========== LINKS ========== -->
+        <section class="page" id="page-profile">
+            <div class="lab-label">WWL·00 / personal readout</div>
+            <h2>Player profile</h2>
+            <p class="pagedesc">
+                Pulled straight from your own Torn API data. Sections auto-adapt to whatever Torn returns —
+                if a field's name or shape changes on Torn's side, it still shows up rather than breaking.
+            </p>
+            <button class="ghost small" id="profile-refresh">Refresh</button>
+            <div class="status" id="profile-status"></div>
+
+            <div class="grid2" style="margin-top:16px;">
+                <div class="panel">
+                    <h3>Net worth</h3>
+                    <div id="pf-networth"><p style="color:var(--muted)">Not loaded yet.</p></div>
+                </div>
+                <div class="panel">
+                    <h3>Criminal record</h3>
+                    <div id="pf-criminal"><p style="color:var(--muted)">Not loaded yet.</p></div>
+                </div>
+                <div class="panel">
+                    <h3>Job points</h3>
+                    <div id="pf-jobpoints"><p style="color:var(--muted)">Not loaded yet.</p></div>
+                </div>
+                <div class="panel">
+                    <h3>Weapon experience</h3>
+                    <div id="pf-weaponexp"><p style="color:var(--muted)">Not loaded yet.</p></div>
+                </div>
+                <div class="panel">
+                    <h3>Inventory worth</h3>
+                    <div id="pf-inventory"><p style="color:var(--muted)">Not loaded yet.</p></div>
+                </div>
+                <div class="panel">
+                    <h3>Display case worth</h3>
+                    <div id="pf-display"><p style="color:var(--muted)">Not loaded yet.</p></div>
+                </div>
+                <div class="panel">
+                    <h3>Books read</h3>
+                    <div id="pf-books"><p style="color:var(--muted)">Not loaded yet.</p></div>
+                </div>
+                <div class="panel">
+                    <h3>Racing</h3>
+                    <div id="pf-racing"><p style="color:var(--muted)">Not loaded yet.</p></div>
+                </div>
+            </div>
+        </section>
+
+        <section class="page" id="page-links">
+            <div class="lab-label">WWL·05 / field equipment</div>
+            <h2>Tools &amp; links</h2>
+            <p class="pagedesc">The faction toolbox — external tools every member should have bookmarked. Add your own below.</p>
+
+            <div class="link-grid" id="link-grid"></div>
+
+            <div class="panel" style="margin-top:20px;">
+                <h3>Add a link</h3>
+                <div class="grid3">
+                    <div class="field"><label for="nl-title">Title</label><input id="nl-title" placeholder="Tool name"></div>
+                    <div class="field"><label for="nl-url">URL</label><input id="nl-url" placeholder="https://…"></div>
+                    <div class="field"><label for="nl-desc">Description</label><input id="nl-desc" placeholder="What it's for"></div>
+                </div>
+                <button class="ghost" id="nl-add">Add link</button>
+            </div>
+        </section>
+
+        <!-- ========== TARGET FINDER (FFScouter) ========== -->
+        <section class="page" id="page-targetfinder">
+            <div class="lab-label">WWL·06 / ffscouter target finder</div>
+            <h2>Target finder</h2>
+            <p class="pagedesc">Pulls Fair Fight and estimated stats from FFScouter, a free third-party service — not something we run ourselves. It uses the same Torn key you're already logged in with.</p>
+
+            <div class="panel" id="tf-loading">
+                <p style="color:var(--muted);margin:0;">Checking your key with FFScouter…</p>
+            </div>
+
+            <div class="panel" id="tf-register-panel" style="display:none;">
+                <h3>One-time step: register with FFScouter</h3>
+                <p style="color:var(--muted);line-height:1.6;">
+                    Target Finder is powered by <a href="https://ffscouter.com" target="_blank" rel="noopener">FFScouter</a>,
+                    a free, independent tool that estimates opponents' battle stats from crowd-sourced Fair Fight data.
+                    It isn't part of WorldWideLabs or Anthropic — it's a separate community service.
+                    Before we can use it, please open their homepage, read their Data Policy and Terms, then confirm below.
+                    This uses the same Torn API key you're already logged in with — nothing new to type.
+                </p>
+                <label style="display:flex;align-items:flex-start;gap:8px;cursor:pointer;margin:14px 0;color:var(--text);">
+                    <input type="checkbox" id="tf-agree" style="width:auto;margin-top:3px;">
+                    I have read the <a href="https://ffscouter.com" target="_blank" rel="noopener">FFScouter Data Policy and Terms</a> and agree to register my key with FFScouter.
+                </label>
+                <button id="tf-register-btn" disabled>Register with FFScouter</button>
+                <div class="status" id="tf-register-status"></div>
+            </div>
+
+            <div id="tf-tool" style="display:none;">
+                <div class="panel">
+                    <div class="row" style="display:flex;gap:12px;">
+                        <button id="tf-mode-custom" class="ghost" style="flex:1;">Custom search</button>
+                        <button id="tf-mode-manual" class="ghost" style="flex:1;">Manual list</button>
+                    </div>
+                </div>
+
+                <div class="panel" id="tf-custom-panel" style="display:none;">
+                    <h3>Custom search</h3>
+                    <div class="grid3">
+                        <div class="field"><label for="tf-minlevel">Min level</label><input type="number" id="tf-minlevel" value="1" min="1" max="100"></div>
+                        <div class="field"><label for="tf-maxlevel">Max level</label><input type="number" id="tf-maxlevel" value="100" min="1" max="100"></div>
+                        <div class="field"><label for="tf-limit">Results (max 50)</label><input type="number" id="tf-limit" value="20" min="1" max="50"></div>
+                        <div class="field"><label for="tf-minff">Min Fair Fight</label><input type="number" id="tf-minff" value="1.00" min="1" max="3" step="0.01"></div>
+                        <div class="field"><label for="tf-maxff">Max Fair Fight</label><input type="number" id="tf-maxff" value="3.00" min="1" max="3" step="0.01"></div>
+                    </div>
+                    <div class="row" style="display:flex;gap:18px;margin:6px 0 14px;">
+                        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin:0;">
+                            <input type="checkbox" id="tf-inactive" style="width:auto;"> Inactive only (14+ days)
+                        </label>
+                        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin:0;">
+                            <input type="checkbox" id="tf-factionless" style="width:auto;"> Factionless only
+                        </label>
+                    </div>
+                    <button id="tf-search-btn">Search</button>
+                    <div class="status" id="tf-custom-status"></div>
+                </div>
+
+                <div class="panel" id="tf-manual-panel" style="display:none;">
+                    <h3>Manual list</h3>
+                    <p style="color:var(--muted);font-size:12px;margin:0 0 10px;">Paste target IDs from missions or anywhere else — comma, space, or newline separated.</p>
+                    <textarea id="tf-manual-ids" rows="4" style="width:100%;font-family:var(--mono);background:var(--bench-2);color:var(--text);border:1px solid var(--line);border-radius:var(--radius);padding:10px;" placeholder="1234567, 2345678, 3456789…"></textarea>
+                    <button id="tf-lookup-btn" style="margin-top:10px;">Look up</button>
+                    <div class="status" id="tf-manual-status"></div>
+                </div>
+
+                <div class="panel" id="tf-results-panel" style="display:none;">
+                    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:6px;">
+                        <h3 style="margin:0;">Results</h3>
+                        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin:0;color:var(--muted);font-size:13px;">
+                            <input type="checkbox" id="tf-live" style="width:auto;">
+                            Live updates
+                            <span id="tf-live-status" style="font-family:var(--mono);font-size:11px;"></span>
+                        </label>
+                    </div>
+                    <div class="table-scroll">
+                        <table>
+                            <thead><tr>
+                                <th>Player</th><th class="num">Level</th><th class="num">Fair Fight</th>
+                                <th class="num">Est. stats</th><th>Status / last seen</th><th></th>
+                            </tr></thead>
+                            <tbody id="tf-results-body"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+</div>
+</div>
+<div id="toast"></div>
+
+<script>
+(function () {
+    'use strict';
+
+    // ================= CONFIG =================
+    const KEY_STORAGE = 'wwl_api_key';
+    const LINKS_STORAGE = 'wwl_custom_links';
+    const RATE_STORAGE = 'wwl_payout_rate';
+    const NATURAL_REGEN_PER_DAY = 480;   // +5 energy every 15 min
+    const XANAX_ENERGY = 250;
+
+    const DEFAULT_LINKS = [
+        { title: 'YATA', url: 'https://yata.yt', desc: 'Faction stats, chain reports, targets, loot timers.', builtin: true },
+        { title: 'TornStats', url: 'https://tornstats.com', desc: 'Battle stat spies, faction tracking, chain watching.', builtin: true },
+        { title: 'Torn Wiki', url: 'https://wiki.torn.com', desc: 'The official wiki — mechanics, gyms, drugs, crimes.', builtin: true },
+        { title: 'Item Market', url: 'https://www.torn.com/page.php?sid=ItemMarket', desc: 'Buy Xanax, energy cans and gear.', builtin: true },
+        { title: 'Your Faction', url: 'https://www.torn.com/factions.php?step=your', desc: 'Faction page — armoury, wars, announcements.', builtin: true },
+        { title: 'Gym', url: 'https://www.torn.com/gym.php', desc: 'Spend that energy.', builtin: true },
+    ];
+
+    // ================= HELPERS =================
+    const $ = id => document.getElementById(id);
+    const fmt$ = n => '$' + Math.round(n).toLocaleString('en-US');
+    const fmtN = n => Math.round(n).toLocaleString('en-US');
+    const toNumber = s => parseFloat(String(s).replace(/[^0-9.]/g, '')) || 0;
+    const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+    function toast(msg) {
+        const t = $('toast');
+        t.textContent = msg;
+        t.style.display = 'block';
+        setTimeout(() => (t.style.display = 'none'), 1600);
+    }
+
+    let apiKey = localStorage.getItem(KEY_STORAGE) || '';
+    let profile = null;
+
+    function friendlyApiError(err) {
+        const map = {
+            1: 'The key is empty — paste your API key.',
+            2: 'Incorrect key — check for typos or extra spaces, and that the key wasn\'t deleted in Torn.',
+            5: 'Too many requests — wait a minute and try again.',
+            8: 'Your IP was temporarily banned by the Torn API for too many requests — wait a bit.',
+            10: 'The key owner is in federal jail — this key can\'t be used right now.',
+            13: 'The key owner has been inactive for 7+ days, so the key is paused. Log into Torn once and try again.',
+            16: 'This key\'s access level is too low. Create a key with at least Limited Access (Torn → Settings → API Keys).',
+            18: 'This key is paused. Re-enable it in Torn → Settings → API Keys.',
+        };
+        return map[err.code] || `${err.error} (code ${err.code})`;
+    }
+
+    async function tornV1(selections) {
+        let res;
+        try {
+            res = await fetch(`https://api.torn.com/user/?selections=${selections}&key=${encodeURIComponent(apiKey)}`);
+        } catch (e) {
+            throw new Error('Could not reach api.torn.com at all. If you are viewing this page inside a preview or sandbox, download the file and open it directly in your browser (or host it) — previews block outside connections. Otherwise check your internet connection or ad-blocker.');
+        }
+        const data = await res.json();
+        if (data.error) {
+            const err = new Error(friendlyApiError(data.error));
+            err.tornCode = data.error.code;
+            throw err;
+        }
+        return data;
+    }
+    async function tornV2(path) {
+        let res;
+        try {
+            res = await fetch(`https://api.torn.com/v2${path}${path.includes('?') ? '&' : '?'}key=${encodeURIComponent(apiKey)}`,
+                { headers: { accept: 'application/json' } });
+        } catch (e) {
+            throw new Error('Could not reach api.torn.com — if you are in a preview/sandbox, download the file and open it directly in your browser.');
+        }
+        const data = await res.json();
+        if (data.error) throw new Error(friendlyApiError(data.error));
+        return data;
+    }
+
+    async function tornSection(section, selections) {
+        let res;
+        try {
+            res = await fetch(`https://api.torn.com/${section}/?selections=${selections}&key=${encodeURIComponent(apiKey)}`);
+        } catch (e) {
+            throw new Error('Could not reach api.torn.com — if you are in a preview/sandbox, download the file and open it directly in your browser.');
+        }
+        const data = await res.json();
+        if (data.error) throw new Error(friendlyApiError(data.error));
+        return data;
+    }
+
+    // ================= LOGIN =================
+    async function login(key) {
+        apiKey = key;
+        const data = await tornV1('profile,bars,cooldowns,notifications');
+        profile = data;
+        localStorage.setItem(KEY_STORAGE, key);
+        $('login-view').style.display = 'none';
+        $('app-view').style.display = 'block';
+        renderDashboard();
+        renderLinks();
+        $('cp-rate').value = localStorage.getItem(RATE_STORAGE) || '100,000';
+        await pingTracker();
+        checkFactionAccess();
+
+        const lastPage = localStorage.getItem(CURRENT_PAGE_KEY) || 'dashboard';
+        const navItem = document.querySelector(`.nav-item[data-page="${lastPage}"]`);
+        const parentGroup = navItem?.closest('.nav-group');
+        if (parentGroup) parentGroup.classList.remove('collapsed'); // reveal it even if its group was left collapsed
+        goToPage(lastPage);
+    }
+
+    // Tell the server this member logged in. Silently does nothing when the app is
+    // opened as a local file (no server there). Logs (but doesn't alert) other failures,
+    // e.g. an ad-blocker or privacy extension blocking the request.
+    function pingTracker() {
+        return fetch('/api/presence', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ key: apiKey }),
+        }).catch(e => console.warn('WWLabs presence ping failed (ad-blocker or offline?):', e));
+    }
+
+    // Leaders with the "API Access" faction permission can read faction data; others get the payout tab locked.
+    async function checkFactionAccess() {
+        const navItem = document.querySelector('.nav-item[data-page="payout"]');
+        try {
+            await tornV2('/faction/balance');
+            navItem.querySelector('.lock')?.remove();
+            $('cp-locked').style.display = 'none';
+            $('cp-tools').style.display = 'block';
+            loadAdoption();
+        } catch (e) {
+            if (!navItem.querySelector('.lock')) {
+                const lock = document.createElement('span');
+                lock.className = 'lock';
+                lock.textContent = ' 🔒';
+                navItem.appendChild(lock);
+            }
+            $('cp-locked').style.display = 'block';
+            $('cp-tools').style.display = 'none';
+        }
+    }
+
+    $('login-btn').addEventListener('click', async () => {
+        const key = $('login-key').value.trim();
+        const err = $('login-error');
+        err.style.display = 'none';
+        if (!key) { err.textContent = 'Paste your API key first.'; err.style.display = 'block'; return; }
+        $('login-btn').disabled = true;
+        $('login-btn').textContent = 'Checking key…';
+        try {
+            await login(key);
+        } catch (e) {
+            err.textContent = e.message;
+            err.style.display = 'block';
+        } finally {
+            $('login-btn').disabled = false;
+            $('login-btn').textContent = 'Enter the lab';
+        }
+    });
+    $('login-key').addEventListener('keydown', e => { if (e.key === 'Enter') $('login-btn').click(); });
+
+    $('logout-btn').addEventListener('click', () => {
+        localStorage.removeItem(KEY_STORAGE);
+        apiKey = ''; profile = null;
+        $('app-view').style.display = 'none';
+        $('login-view').style.display = 'flex';
+        $('login-key').value = '';
+    });
+
+    // Auto-login with a stored key.
+    // Only a genuinely bad key (Torn error code 2 — incorrect key) should force a full re-login.
+    // Anything else (rate limiting, a fed-jail/inactivity/paused key, or a plain network hiccup on
+    // refresh) is temporary and the same stored key will work again shortly — so keep it and let
+    // the person retry with one click instead of silently wiping their login.
+    if (apiKey) {
+        login(apiKey).catch(async e => {
+            if (e.tornCode === 2) {
+                localStorage.removeItem(KEY_STORAGE);
+                apiKey = '';
+                $('login-error').textContent = e.message;
+                $('login-error').style.display = 'block';
+                return;
+            }
+            // Likely just a network hiccup right at page load — silently try once more before bothering anyone.
+            await new Promise(r => setTimeout(r, 1500));
+            try {
+                await login(apiKey);
+            } catch (e2) {
+                $('login-key').value = apiKey; // key is still saved — just prefill so one click retries
+                $('login-error').textContent = `${e2.message} — your saved key is still here, just try again.`;
+                $('login-error').style.display = 'block';
+            }
+        });
+    }
+
+    // Leaders only: who in the faction has logged into WWLabs, and who hasn't yet.
+    async function loadAdoption() {
+        const panel = $('adoption');
+        try {
+            const [trackData, membersData] = await Promise.all([
+                fetch(`/api/presence?key=${encodeURIComponent(apiKey)}`).then(r => r.json()),
+                tornV2('/faction/members?striptags=true'),
+            ]);
+            if (trackData.error) throw new Error(trackData.error);
+            const logins = trackData.logins || {};
+            const members = (membersData.members || []).slice();
+
+            members.sort((a, b) =>
+                (logins[b.id]?.last || 0) - (logins[a.id]?.last || 0) || a.name.localeCompare(b.name));
+
+            const onboard = members.filter(m => logins[m.id]).length;
+            $('adoption-summary').textContent =
+                `${onboard} of ${members.length} members have logged in.`;
+
+            $('adoption-body').innerHTML = members.map(m => {
+                const l = logins[m.id];
+                const when = l
+                    ? new Date(l.last).toLocaleDateString() + ' ' +
+                      new Date(l.last).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                    : '';
+                return `<tr${l ? '' : ' style="opacity:.5"'}>
+                    <td>${esc(m.name)} [${m.id}]</td>
+                    <td>${l ? '<span style="color:var(--reagent)">● on board</span>' : '<span style="color:var(--muted)">○ not yet</span>'}</td>
+                    <td class="num" style="font-family:var(--mono);font-size:12px;">${when}</td>
+                </tr>`;
+            }).join('');
+            panel.style.display = 'block';
+        } catch (e) {
+            // No server (local file), no database yet, or not a leader — just keep the panel hidden.
+            panel.style.display = 'none';
+        }
+    }
+
+    // ================= NAV =================
+    const NAV_GROUP_KEY = 'wwl_nav_collapsed'; // stores an array of collapsed group names
+
+    function getCollapsedGroups() {
+        try { return JSON.parse(localStorage.getItem(NAV_GROUP_KEY)) || []; } catch { return []; }
+    }
+
+    document.querySelectorAll('.nav-group').forEach(group => {
+        const name = group.querySelector('.nav-group-header').dataset.group;
+        if (getCollapsedGroups().includes(name)) group.classList.add('collapsed');
+    });
+
+    document.querySelectorAll('.nav-group-header').forEach(header => {
+        header.addEventListener('click', () => {
+            const group = header.closest('.nav-group');
+            const name = header.dataset.group;
+            group.classList.toggle('collapsed');
+            let collapsed = getCollapsedGroups();
+            if (group.classList.contains('collapsed')) {
+                if (!collapsed.includes(name)) collapsed.push(name);
+            } else {
+                collapsed = collapsed.filter(g => g !== name);
+            }
+            localStorage.setItem(NAV_GROUP_KEY, JSON.stringify(collapsed));
+        });
+    });
+
+    document.querySelectorAll('.nav-item').forEach(item => {
+        item.addEventListener('click', () => goToPage(item.dataset.page));
+    });
+
+    const CURRENT_PAGE_KEY = 'wwl_current_page';
+
+    function goToPage(page) {
+        const target = $('page-' + page);
+        if (!target) return; // unknown/removed page — ignore rather than break navigation
+        document.querySelectorAll('.nav-item').forEach(i => i.classList.toggle('active', i.dataset.page === page));
+        document.querySelectorAll('section.page').forEach(p => p.classList.remove('visible'));
+        target.classList.add('visible');
+        localStorage.setItem(CURRENT_PAGE_KEY, page);
+        if (page === 'targets') loadBaldrLists();
+        if (page === 'targetfinder') initTargetFinder();
+        else if (typeof stopTfLive === 'function') stopTfLive();
+        if (page === 'profile') loadPlayerProfile();
+        if (page === 'dashboard') startCooldownTicker(); else stopCooldownTicker();
+    }
+
+    // ================= DASHBOARD =================
+    function barBlock(name, bar, color, fullLabel) {
+        if (!bar) return '';
+        const pct = Math.min(100, (bar.current / bar.maximum) * 100);
+        const full = bar.fulltime > 0
+            ? `full in ${Math.floor(bar.fulltime / 3600)}h ${Math.floor((bar.fulltime % 3600) / 60)}m`
+            : (fullLabel || 'full');
+        return `
+            <div class="bar-block">
+                <div class="bar-head"><span>${name}</span><span>${bar.current} / ${bar.maximum}</span></div>
+                <div class="bar-track"><div class="bar-fill" style="width:${pct}%;background:${color};"></div></div>
+                <div class="bar-sub">+${bar.increment} every ${Math.round(bar.interval / 60)} min · ${full}</div>
+            </div>`;
+    }
+
+    // ---- Cooldowns (live countdown, ticks locally between refreshes) ----
+    let dashCooldownEnds = {};   // { drug: epochMs|null, medical: epochMs|null, booster: epochMs|null }
+    let dashCooldownTick = null;
+
+    const COOLDOWN_LABELS = { drug: 'Drug', medical: 'Medical', booster: 'Booster' };
+
+    function formatDuration(ms) {
+        const total = Math.max(0, Math.round(ms / 1000));
+        const h = Math.floor(total / 3600);
+        const m = Math.floor((total % 3600) / 60);
+        const s = total % 60;
+        if (h > 0) return `${h}h ${m}m`;
+        if (m > 0) return `${m}m ${s}s`;
+        return `${s}s`;
+    }
+
+    function drawCooldowns() {
+        const el = $('cooldowns');
+        if (!el) return;
+        el.innerHTML = Object.entries(COOLDOWN_LABELS).map(([key, label]) => {
+            const end = dashCooldownEnds[key];
+            const remaining = end ? end - Date.now() : 0;
+            const ready = !end || remaining <= 0;
+            return `
+                <div class="stat">
+                    <div class="k">${label}</div>
+                    <div class="v ${ready ? 'good' : ''}">${ready ? 'Ready' : formatDuration(remaining)}</div>
+                </div>`;
+        }).join('');
+    }
+
+    function startCooldownTicker() {
+        if (dashCooldownTick) return;
+        dashCooldownTick = setInterval(drawCooldowns, 1000);
+    }
+    function stopCooldownTicker() {
+        if (dashCooldownTick) { clearInterval(dashCooldownTick); dashCooldownTick = null; }
+    }
+
+    function renderDashboard() {
+        if (!profile) return;
+        $('dash-greeting').textContent = `Welcome back, ${profile.name} [${profile.player_id}]`;
+        $('dash-sub').textContent = profile.faction?.faction_name
+            ? `${profile.faction.position} of ${profile.faction.faction_name}`
+            : 'No faction on record';
+        $('whoami').innerHTML = `<b>${esc(profile.name)}</b> [${profile.player_id}]`;
+
+        $('bars').innerHTML =
+            barBlock('Energy', profile.energy, 'var(--energy)') +
+            barBlock('Nerve', profile.nerve, 'var(--nerve)', 'full — ready for a crime!') +
+            barBlock('Happy', profile.happy, 'var(--happy)') +
+            barBlock('Life', profile.life, 'var(--life)');
+
+        const e = profile.energy;
+        const trainsNow = e ? Math.floor(e.current / 10) : 0;
+        const notif = profile.notifications || {};
+        const unread = (notif.messages || 0) + (notif.events || 0) + (notif.awards || 0);
+        $('glance').innerHTML = `
+            <div class="stat"><div class="k">Level</div><div class="v">${profile.level ?? '—'}</div></div>
+            <div class="stat"><div class="k">Energy now</div><div class="v good">${e ? e.current : '—'}</div>
+                <div class="s">≈ ${trainsNow} trains @10E</div></div>
+            <div class="stat"><div class="k">Natural E / day</div><div class="v">${NATURAL_REGEN_PER_DAY}</div>
+                <div class="s">+5 every 15 min</div></div>
+            <div class="stat"><div class="k">Notifications</div><div class="v ${unread ? '' : 'good'}">${unread || '0'}</div>
+                <div class="s">${notif.messages || 0} msg · ${notif.events || 0} events · ${notif.awards || 0} awards</div></div>`;
+
+        const cd = profile.cooldowns || {};
+        const now = Date.now();
+        dashCooldownEnds = {
+            drug: cd.drug > 0 ? now + cd.drug * 1000 : null,
+            medical: cd.medical > 0 ? now + cd.medical * 1000 : null,
+            booster: cd.booster > 0 ? now + cd.booster * 1000 : null,
+        };
+        drawCooldowns();
+        startCooldownTicker();
+    }
+
+    $('refresh-bars').addEventListener('click', async () => {
+        try {
+            profile = await tornV1('profile,bars,cooldowns,notifications');
+            renderDashboard();
+            toast('Bars refreshed');
+        } catch (e) { toast('Refresh failed'); }
+    });
+
+    // ================= WEEKLY ENERGY GOALS =================
+    const EG_STORAGE = 'wwl_energy_group'; // remembers which group this browser picked
+
+    const EG_PLANS = {
+        a: {
+            title: '1,500,000+ total battle stats — 4,400 E this week',
+            sub: 'Each of your 4 training days: 3 full natural energy bars, 2 Xanax, and 1 energy refill.',
+            target: 4400,
+            blocks: [
+                { title: 'Training day 1', items: [
+                    { key: 'd1nat1', label: 'Natural energy fill #1 (150 E)', value: 150 },
+                    { key: 'd1nat2', label: 'Natural energy fill #2 (150 E)', value: 150 },
+                    { key: 'd1nat3', label: 'Natural energy fill #3 (150 E)', value: 150 },
+                    { key: 'd1xan1', label: 'Xanax #1 (250 E)', value: 250 },
+                    { key: 'd1xan2', label: 'Xanax #2 (250 E)', value: 250 },
+                    { key: 'd1ref', label: 'Energy refill ×1 (150 E)', value: 150 },
+                ]},
+                { title: 'Training day 2', items: [
+                    { key: 'd2nat1', label: 'Natural energy fill #1 (150 E)', value: 150 },
+                    { key: 'd2nat2', label: 'Natural energy fill #2 (150 E)', value: 150 },
+                    { key: 'd2nat3', label: 'Natural energy fill #3 (150 E)', value: 150 },
+                    { key: 'd2xan1', label: 'Xanax #1 (250 E)', value: 250 },
+                    { key: 'd2xan2', label: 'Xanax #2 (250 E)', value: 250 },
+                    { key: 'd2ref', label: 'Energy refill ×1 (150 E)', value: 150 },
+                ]},
+                { title: 'Training day 3', items: [
+                    { key: 'd3nat1', label: 'Natural energy fill #1 (150 E)', value: 150 },
+                    { key: 'd3nat2', label: 'Natural energy fill #2 (150 E)', value: 150 },
+                    { key: 'd3nat3', label: 'Natural energy fill #3 (150 E)', value: 150 },
+                    { key: 'd3xan1', label: 'Xanax #1 (250 E)', value: 250 },
+                    { key: 'd3xan2', label: 'Xanax #2 (250 E)', value: 250 },
+                    { key: 'd3ref', label: 'Energy refill ×1 (150 E)', value: 150 },
+                ]},
+                { title: 'Training day 4', items: [
+                    { key: 'd4nat1', label: 'Natural energy fill #1 (150 E)', value: 150 },
+                    { key: 'd4nat2', label: 'Natural energy fill #2 (150 E)', value: 150 },
+                    { key: 'd4nat3', label: 'Natural energy fill #3 (150 E)', value: 150 },
+                    { key: 'd4xan1', label: 'Xanax #1 (250 E)', value: 250 },
+                    { key: 'd4xan2', label: 'Xanax #2 (250 E)', value: 250 },
+                    { key: 'd4ref', label: 'Energy refill ×1 (150 E)', value: 150 },
+                ]},
+            ],
+        },
+    };
+
+    const EG_DONATOR_KEY = 'wwl_energy_donator';
+
+    function planForGroupB(isDonator) {
+        const fillSize = isDonator ? 150 : 100;
+        const dayTotal = fillSize * 3 + 250; // 3 natural fills + 1 Xanax
+        const weeklyTotal = 1000 + dayTotal * 2; // stacking phase + days 3 & 4
+        return {
+            title: `Under 1,500,000 total battle stats — ${fmtN(weeklyTotal)} E this week`,
+            sub: `First bank up energy with Xanax, then spend it all in one big jump. Days 3 & 4 are lighter, since you're newer. Natural energy bar: ${fillSize} E ${isDonator ? '(donator)' : '(no donator status yet)'}.`,
+            target: weeklyTotal,
+            blocks: [
+                { title: 'Stacking phase — days 1 & 2', note: 'Take a Xanax roughly every 8 hours without spending the energy, until you\'re holding around 1,000 E — then spend it all in one big training session.', items: [
+                    { key: 'stack1', label: 'Xanax #1 (250 E)', value: 250 },
+                    { key: 'stack2', label: 'Xanax #2, ~8h later (250 E)', value: 250 },
+                    { key: 'stack3', label: 'Xanax #3, ~8h later (250 E)', value: 250 },
+                    { key: 'stack4', label: 'Xanax #4, ~8h later (250 E) — then do the big jump', value: 250 },
+                ]},
+                { title: 'Training day 3', items: [
+                    { key: 'd3nat1', label: `Natural energy fill #1 (${fillSize} E)`, value: fillSize },
+                    { key: 'd3nat2', label: `Natural energy fill #2 (${fillSize} E)`, value: fillSize },
+                    { key: 'd3nat3', label: `Natural energy fill #3 (${fillSize} E)`, value: fillSize },
+                    { key: 'd3xan', label: 'Xanax ×1 (250 E)', value: 250 },
+                ]},
+                { title: 'Training day 4', items: [
+                    { key: 'd4nat1', label: `Natural energy fill #1 (${fillSize} E)`, value: fillSize },
+                    { key: 'd4nat2', label: `Natural energy fill #2 (${fillSize} E)`, value: fillSize },
+                    { key: 'd4nat3', label: `Natural energy fill #3 (${fillSize} E)`, value: fillSize },
+                    { key: 'd4xan', label: 'Xanax ×1 (250 E)', value: 250 },
+                ]},
+            ],
+        };
+    }
+
+    function getEgPlan(group) {
+        if (group === 'b') {
+            const isDonator = localStorage.getItem(EG_DONATOR_KEY) === '1';
+            return planForGroupB(isDonator);
+        }
+        return EG_PLANS[group];
+    }
+
+    function isoWeekKey(d = new Date()) {
+        const date = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+        const dayNum = date.getUTCDay() || 7;
+        date.setUTCDate(date.getUTCDate() + 4 - dayNum);
+        const yearStart = new Date(Date.UTC(date.getUTCFullYear(), 0, 1));
+        const week = Math.ceil((((date - yearStart) / 86400000) + 1) / 7);
+        return `${date.getUTCFullYear()}-W${week}`;
+    }
+
+    function egStorageKey(group) { return `wwl_energy_check_${group}_${isoWeekKey()}`; }
+
+    function egLoadChecks(group) {
+        try { return JSON.parse(localStorage.getItem(egStorageKey(group))) || {}; } catch { return {}; }
+    }
+    function egSaveChecks(group, checks) {
+        localStorage.setItem(egStorageKey(group), JSON.stringify(checks));
+    }
+
+    let egGroup = localStorage.getItem(EG_STORAGE) || null;
+
+    function selectEgGroup(group) {
+        egGroup = group;
+        localStorage.setItem(EG_STORAGE, group);
+        $('eg-group-a').style.borderColor = group === 'a' ? 'var(--reagent)' : 'var(--line)';
+        $('eg-group-a').style.color = group === 'a' ? 'var(--reagent)' : 'var(--text)';
+        $('eg-group-b').style.borderColor = group === 'b' ? 'var(--reagent)' : 'var(--line)';
+        $('eg-group-b').style.color = group === 'b' ? 'var(--reagent)' : 'var(--text)';
+        renderEgPlan();
+    }
+
+    function renderEgPlan() {
+        const plan = getEgPlan(egGroup);
+        if (!plan) return;
+        $('eg-panel').style.display = 'block';
+        $('eg-title').textContent = plan.title;
+        $('eg-sub').textContent = plan.sub;
+
+        const checks = egLoadChecks(egGroup);
+        const isDonator = localStorage.getItem(EG_DONATOR_KEY) === '1';
+
+        // Donator toggle only matters (and only shows) for the under-1.5M group,
+        // since their natural energy bar size depends on it (100 E vs 150 E).
+        if (egGroup === 'b') {
+            $('eg-donator-wrap').style.display = 'block';
+            $('eg-donator').checked = isDonator;
+        } else {
+            $('eg-donator-wrap').style.display = 'none';
+        }
+
+        let blocksHtml = '';
+        plan.blocks.forEach(block => {
+            const itemsHtml = block.items.map(it => {
+                const checked = checks[it.key] ? 'checked' : '';
+                return `<label style="display:flex;align-items:center;gap:8px;padding:6px 0;cursor:pointer;">
+                    <input type="checkbox" class="eg-check" id="${it.key}" data-value="${it.value}" style="width:auto;" ${checked}>
+                    ${esc(it.label)}
+                </label>`;
+            }).join('');
+            blocksHtml += `
+                <div class="stat" style="margin-bottom:10px;">
+                    <div class="k">${esc(block.title)}</div>
+                    ${block.note ? `<div class="s" style="margin:4px 0 8px;line-height:1.5;">${esc(block.note)}</div>` : ''}
+                    ${itemsHtml}
+                </div>`;
+        });
+        $('eg-days').innerHTML = blocksHtml;
+        $('eg-extra').innerHTML = '';
+
+        document.querySelectorAll('.eg-check').forEach(cb => {
+            cb.addEventListener('change', () => {
+                const c = egLoadChecks(egGroup);
+                c[cb.id] = cb.checked;
+                egSaveChecks(egGroup, c);
+                updateEgProgress();
+            });
+        });
+
+        updateEgProgress();
+    }
+
+    function updateEgProgress() {
+        const plan = getEgPlan(egGroup);
+        let done = 0;
+        document.querySelectorAll('.eg-check').forEach(cb => { if (cb.checked) done += parseInt(cb.dataset.value, 10); });
+        const pct = Math.min(100, (done / plan.target) * 100);
+        $('eg-progress-fill').style.width = pct + '%';
+        $('eg-progress-text').textContent = `${fmtN(done)} / ${fmtN(plan.target)} E`;
+    }
+
+    $('eg-group-a').addEventListener('click', () => selectEgGroup('a'));
+    $('eg-group-b').addEventListener('click', () => selectEgGroup('b'));
+    $('eg-donator').addEventListener('change', () => {
+        localStorage.setItem(EG_DONATOR_KEY, $('eg-donator').checked ? '1' : '0');
+        renderEgPlan(); // natural fill size (and the weekly target) changes with donator status
+    });
+    $('eg-reset').addEventListener('click', () => {
+        if (!confirm("Reset this week's checklist?")) return;
+        egSaveChecks(egGroup, {});
+        renderEgPlan();
+    });
+
+    if (egGroup) selectEgGroup(egGroup);
+
+    // ================= CHAIN PAYOUT =================
+    const chains = [];
+    let cpResult = null;
+
+    function parseChainID(input) {
+        input = input.trim();
+        const m = input.match(/chainID=(\d+)/i);
+        if (m) return m[1];
+        if (/^\d+$/.test(input)) return input;
+        return null;
+    }
+    function cpStatus(msg, isErr) {
+        const el = $('cp-status');
+        el.className = 'status ' + (msg ? (isErr ? 'err' : 'ok') : '');
+        el.innerHTML = msg || '';
+    }
+    function renderChainList() {
+        const list = $('chain-list');
+        list.innerHTML = '';
+        chains.forEach((c, i) => {
+            const chip = document.createElement('div');
+            chip.className = 'chip';
+            const meta = c.report ? `${c.report.details?.chain ?? '?'} hits` : 'not loaded';
+            chip.innerHTML = `<span class="cid">#${esc(c.id)}</span><span class="meta">${esc(meta)}</span>`;
+            const del = document.createElement('button');
+            del.textContent = '✕';
+            del.addEventListener('click', () => { chains.splice(i, 1); renderChainList(); });
+            chip.appendChild(del);
+            list.appendChild(chip);
+        });
+    }
+    function addChain() {
+        const id = parseChainID($('chain-input').value);
+        if (!id) { cpStatus('Enter a chain ID or paste the full chain report URL.', true); return; }
+        if (chains.some(c => c.id === id)) { cpStatus(`Chain #${id} is already added.`, true); return; }
+        chains.push({ id, report: null });
+        $('chain-input').value = '';
+        cpStatus('');
+        renderChainList();
+    }
+    $('add-chain').addEventListener('click', addChain);
+    $('chain-input').addEventListener('keydown', e => { if (e.key === 'Enter') addChain(); });
+
+    $('cp-calc').addEventListener('click', async () => {
+        if (!chains.length) { cpStatus('Add at least one chain ID first.', true); return; }
+        const rate = toNumber($('cp-rate').value);
+        if (rate <= 0) { cpStatus('Enter a valid $ per hit.', true); return; }
+        localStorage.setItem(RATE_STORAGE, $('cp-rate').value);
+
+        const btn = $('cp-calc');
+        btn.disabled = true; btn.textContent = 'Fetching…';
+        try {
+            const nameMap = new Map();
+            const namesPromise = tornV2('/faction/members?striptags=true')
+                .then(d => (d.members || []).forEach(m => nameMap.set(m.id, m.name)))
+                .catch(() => {});
+
+            for (const c of chains) {
+                if (!c.report) {
+                    const data = await tornV2(`/faction/${c.id}/chainreport`);
+                    c.report = data.chainreport;
+                }
+            }
+            await namesPromise;
+            renderChainList();
+
+            const players = new Map();
+            for (const c of chains) {
+                for (const att of (c.report.attackers || [])) {
+                    const total = att.attacks?.total ?? 0;
+                    const war = att.attacks?.war ?? 0;
+                    const nonWar = Math.max(0, total - war);
+                    if (!players.has(att.id)) players.set(att.id, { id: att.id, total: 0, war: 0, nonWar: 0, perChain: {} });
+                    const p = players.get(att.id);
+                    p.total += total; p.war += war; p.nonWar += nonWar;
+                    p.perChain[c.id] = (p.perChain[c.id] || 0) + nonWar;
+                }
+            }
+
+            const list = [...players.values()]
+                .map(p => ({ ...p, name: nameMap.get(p.id) || `User #${p.id}`, payout: p.nonWar * rate }))
+                .sort((a, b) => b.payout - a.payout);
+            const totals = list.reduce((t, p) => ({
+                total: t.total + p.total, war: t.war + p.war, nonWar: t.nonWar + p.nonWar, payout: t.payout + p.payout
+            }), { total: 0, war: 0, nonWar: 0, payout: 0 });
+
+            cpResult = { list, totals, rate, chainIDs: chains.map(c => c.id) };
+            renderPayout();
+            cpStatus(`Loaded ${chains.length} chain report(s), ${list.length} members.`, false);
+        } catch (e) {
+            cpStatus(esc(e.message) + '<br>Your key needs faction chain-report access, and the chains must belong to your faction.', true);
+        } finally {
+            btn.disabled = false; btn.textContent = 'Calculate';
+        }
+    });
+
+    function renderPayout() {
+        const { list, totals, rate, chainIDs } = cpResult;
+        const hideZero = $('cp-hidezero').checked;
+        const visible = hideZero ? list.filter(p => p.nonWar > 0) : list;
+        const multi = chainIDs.length > 1;
+
+        $('cp-head').innerHTML = `<tr><th>Member</th>
+            ${multi ? chainIDs.map(id => `<th class="num">#${esc(id)}</th>`).join('') : ''}
+            <th class="num">Total hits</th><th class="num">War hits</th><th class="num">Non-war hits</th>
+            <th class="num">Payout @ ${fmt$(rate)}</th></tr>`;
+
+        $('cp-body').innerHTML = visible.map(p => `
+            <tr${p.nonWar === 0 ? ' style="opacity:.45"' : ''}>
+                <td>${esc(p.name)} [${p.id}]</td>
+                ${multi ? chainIDs.map(id => `<td class="num">${p.perChain[id] ?? '—'}</td>`).join('') : ''}
+                <td class="num">${p.total}</td><td class="num">${p.war}</td><td class="num">${p.nonWar}</td>
+                <td class="num pay">${fmt$(p.payout)}</td>
+            </tr>`).join('');
+
+        $('cp-foot').innerHTML = `<tr>
+            <td>TOTAL — add to war costs</td>
+            ${multi ? chainIDs.map(() => '<td></td>').join('') : ''}
+            <td class="num">${totals.total}</td><td class="num">${totals.war}</td>
+            <td class="num">${totals.nonWar}</td><td class="num pay">${fmt$(totals.payout)}</td></tr>`;
+
+        $('cp-results-panel').style.display = 'block';
+    }
+    $('cp-hidezero').addEventListener('change', () => { if (cpResult) renderPayout(); });
+
+    $('cp-copy').addEventListener('click', () => {
+        if (!cpResult) return;
+        const { list, totals, rate, chainIDs } = cpResult;
+        const text = `Chain payout (${chainIDs.map(i => '#' + i).join(' + ')}) — ${fmt$(rate)} per non-war hit\n\n`
+            + list.filter(p => p.nonWar > 0).map(p => `${p.name} [${p.id}] — ${p.nonWar} non-war hits — ${fmt$(p.payout)}`).join('\n')
+            + `\n\nTOTAL: ${totals.nonWar} non-war hits — ${fmt$(totals.payout)}`;
+        navigator.clipboard.writeText(text).then(() => toast('Payout list copied'));
+    });
+
+    // ================= LEVELLING TARGETS (Baldr's list) =================
+    // Data: the openly licensed list maintained at github.com/OranWeb/tc-baldrs-levelling-list
+    const BALDR_URL = 'https://raw.githubusercontent.com/OranWeb/tc-baldrs-levelling-list/master/data.json';
+    let baldrData = null;
+    let btTargets = [];
+    let btChecking = false;
+    let btStopFlag = false;
+    let btTickHandle = null;
+
+    function btStatus(msg, isErr) {
+        const el = $('bt-status');
+        el.className = 'status ' + (msg ? (isErr ? 'err' : 'ok') : '');
+        el.textContent = msg || '';
+    }
+
+    async function loadBaldrLists() {
+        if (baldrData) return;
+        try {
+            btStatus('Fetching the latest list from GitHub…');
+            const res = await fetch(BALDR_URL);
+            baldrData = await res.json();
+            const sel = $('bt-list');
+            sel.innerHTML = Object.keys(baldrData)
+                .map(k => `<option value="${esc(k)}">${esc(k)} (${baldrData[k].length} targets)</option>`).join('');
+            btStatus('');
+            renderBaldrTable();
+        } catch (e) {
+            btStatus('Could not load the target list from GitHub right now — this can happen if GitHub is rate-limiting raw file access. Try again shortly, or use the original tool directly at oran.pw/baldrstargets.', true);
+        }
+    }
+
+    function normalizeTarget(t) {
+        const pick = (...keys) => { for (const k of keys) if (t[k] !== undefined) return t[k]; return undefined; };
+        return {
+            id: pick('id', 'ID', 'playerId', 'player_id', 'XID', 'xid'),
+            name: pick('name', 'Name', 'username') || 'Unknown',
+            lvl: pick('lvl', 'level', 'Level') ?? '—',
+            total: pick('total', 'Total', 'total_stats') ?? '—',
+            str: pick('str', 'strength', 'Strength') ?? '—',
+            def: pick('def', 'defense', 'Defense', 'defence') ?? '—',
+            spd: pick('spd', 'speed', 'Speed') ?? '—',
+            dex: pick('dex', 'dexterity', 'Dexterity') ?? '—',
+        };
+    }
+
+    function renderBaldrTable() {
+        const listName = $('bt-list').value;
+        const raw = baldrData?.[listName];
+        const items = Array.isArray(raw) ? raw : (raw && typeof raw === 'object' ? Object.values(raw) : []);
+        btTargets = items.map(t => ({ ...normalizeTarget(t), state: null, until: null })).filter(t => t.id);
+        if (btTickHandle) { clearInterval(btTickHandle); btTickHandle = null; }
+        drawBaldrRows();
+        $('bt-table-panel').style.display = btTargets.length ? 'block' : 'none';
+        if (!btTargets.length) btStatus('This list loaded but looks empty or in an unexpected format — tell WWLabs support so the parser can be adjusted.', true);
+    }
+
+    function formatCountdown(ms) {
+        const total = Math.max(0, Math.round(ms / 1000));
+        const m = Math.floor(total / 60);
+        const s = total % 60;
+        return `${m}:${String(s).padStart(2, '0')}`;
+    }
+
+    function btStatusLabel(t) {
+        if (t.state === 'Hospital' && t.until) {
+            const remaining = t.until * 1000 - Date.now();
+            if (remaining <= 0) { t.state = 'Okay'; t.until = null; return 'Okay'; }
+            return `Hospital · ${formatCountdown(remaining)}`;
+        }
+        if (t.state === 'Okay') return 'Okay';
+        if (!t.state) return '—';
+        return t.state; // Traveling / Jail / Federal / Unknown — shown as-is, no countdown data for these
+    }
+
+    function startBtTicker() {
+        if (btTickHandle) return;
+        btTickHandle = setInterval(() => {
+            let changed = false;
+            for (const t of btTargets) {
+                if (t.state !== 'Hospital') continue;
+                const cell = $(`bt-st-${t.id}`);
+                const label = btStatusLabel(t);
+                if (cell) {
+                    cell.textContent = label;
+                    cell.style.color = baldrStateColor(t.state);
+                }
+                if (t.state === 'Okay') changed = true; // just flipped — pounce!
+            }
+            if (changed && $('bt-okonly').checked) drawBaldrRows();
+        }, 1000);
+    }
+    function baldrStateColor(state) {
+        if (state === 'Okay') return 'var(--reagent)';
+        if (state === 'Hospital') return 'var(--nerve)';
+        if (state === 'Traveling' || state === 'Abroad') return 'var(--life)';
+        if (state === 'Jail') return 'var(--happy)';
+        return 'var(--muted)';
+    }
+
+    function drawBaldrRows() {
+        const okOnly = $('bt-okonly').checked;
+        const rows = btTargets
+            .filter(t => !okOnly || t.state === 'Okay')
+            .map(t => `
+            <tr>
+                <td><a href="https://www.torn.com/profiles.php?XID=${t.id}" target="_blank" rel="noopener">${esc(t.name)} [${t.id}]</a></td>
+                <td class="num">${t.lvl}</td>
+                <td class="num">${t.total}</td>
+                <td class="num">${t.str}</td><td class="num">${t.def}</td>
+                <td class="num">${t.spd}</td><td class="num">${t.dex}</td>
+                <td id="bt-st-${t.id}" style="color:${baldrStateColor(t.state)};font-family:var(--mono);font-size:12px;font-weight:${t.state === 'Okay' ? '700' : '400'};">${btStatusLabel(t)}</td>
+                <td><a href="https://www.torn.com/loader.php?sid=attack&user2ID=${t.id}" target="_blank" rel="noopener"
+                       style="background:var(--reagent);color:#06130d;padding:4px 10px;border-radius:4px;text-decoration:none;font-weight:600;font-size:12px;">Attack</a></td>
+            </tr>`).join('');
+        $('bt-body').innerHTML = rows || `<tr><td colspan="9" style="color:var(--muted)">No targets to show${okOnly ? ' — none are Okay (yet). Run a check or untick the filter.' : '.'}</td></tr>`;
+    }
+
+    $('bt-list').addEventListener('change', renderBaldrTable);
+    $('bt-okonly').addEventListener('change', drawBaldrRows);
+    $('bt-stop').addEventListener('click', () => { btStopFlag = true; });
+
+    $('bt-check').addEventListener('click', async () => {
+        if (btChecking || !btTargets.length) return;
+        btChecking = true;
+        btStopFlag = false;
+        $('bt-check').disabled = true;
+        $('bt-stop').style.display = 'inline-block';
+        startBtTicker(); // tick already-known hospital times live while the rest of the list is still being checked
+
+        let backoffMs = 15000;
+        // One API call per target, spaced out to stay well inside Torn's request limit.
+        for (let i = 0; i < btTargets.length; i++) {
+            if (btStopFlag) break;
+            const t = btTargets[i];
+            btStatus(`Checking targets… ${i + 1} / ${btTargets.length}`);
+            try {
+                const res = await fetch(`https://api.torn.com/user/${t.id}?selections=profile&key=${encodeURIComponent(apiKey)}`);
+                const data = await res.json();
+                if (data.error) {
+                    if (data.error.code === 5) { // rate limited — back off, a little longer each time it recurs
+                        btStatus(`Torn API asked us to slow down — pausing ${Math.round(backoffMs / 1000)}s…`);
+                        await new Promise(r => setTimeout(r, backoffMs));
+                        backoffMs = Math.min(backoffMs * 1.5, 60000);
+                        i--; continue;
+                    }
+                    t.state = 'Unknown';
+                } else {
+                    backoffMs = 15000; // reset after a clean response
+                    t.state = data.status?.state || 'Unknown';
+                    t.until = data.status?.until || null;
+                }
+            } catch (e) {
+                t.state = 'Unknown';
+            }
+            const cell = $(`bt-st-${t.id}`);
+            if (cell) {
+                cell.textContent = btStatusLabel(t);
+                cell.style.color = baldrStateColor(t.state);
+                cell.style.fontWeight = t.state === 'Okay' ? '700' : '400';
+            }
+            await new Promise(r => setTimeout(r, 1100));
+        }
+
+        const okCount = btTargets.filter(t => t.state === 'Okay').length;
+        btStatus(btStopFlag ? `Stopped. ${okCount} targets Okay so far.` : `Done — ${okCount} of ${btTargets.length} targets are Okay.`);
+        if ($('bt-okonly').checked) drawBaldrRows();
+        btChecking = false;
+        $('bt-check').disabled = false;
+        $('bt-stop').style.display = 'none';
+    });
+
+    // ================= LINKS =================
+    function getCustomLinks() {
+        try { return JSON.parse(localStorage.getItem(LINKS_STORAGE)) || []; } catch { return []; }
+    }
+    function renderLinks() {
+        const custom = getCustomLinks();
+        const all = [...DEFAULT_LINKS, ...custom];
+        $('link-grid').innerHTML = '';
+        all.forEach((l, i) => {
+            const a = document.createElement('a');
+            a.className = 'link-card';
+            a.href = l.url;
+            a.target = '_blank';
+            a.rel = 'noopener';
+            a.innerHTML = `<div class="lt">${esc(l.title)}</div><div class="ld">${esc(l.desc || '')}</div><div class="lu">${esc(l.url)}</div>`;
+            if (!l.builtin) {
+                const rm = document.createElement('button');
+                rm.className = 'rm'; rm.textContent = '✕'; rm.title = 'Remove link';
+                rm.addEventListener('click', e => {
+                    e.preventDefault(); e.stopPropagation();
+                    const customIdx = i - DEFAULT_LINKS.length;
+                    const links = getCustomLinks();
+                    links.splice(customIdx, 1);
+                    localStorage.setItem(LINKS_STORAGE, JSON.stringify(links));
+                    renderLinks();
+                });
+                a.appendChild(rm);
+            }
+            $('link-grid').appendChild(a);
+        });
+    }
+    $('nl-add').addEventListener('click', () => {
+        const title = $('nl-title').value.trim();
+        let url = $('nl-url').value.trim();
+        const desc = $('nl-desc').value.trim();
+        if (!title || !url) { toast('Title and URL are required'); return; }
+        if (!/^https?:\/\//i.test(url)) url = 'https://' + url;
+        const links = getCustomLinks();
+        links.push({ title, url, desc });
+        localStorage.setItem(LINKS_STORAGE, JSON.stringify(links));
+        $('nl-title').value = ''; $('nl-url').value = ''; $('nl-desc').value = '';
+        renderLinks();
+        toast('Link added');
+    });
+
+    // ================= PLAYER PROFILE =================
+    // Renders whatever Torn actually returns for each selection, rather than assuming an exact
+    // shape — field names/structure can shift slightly, and this way the page adapts instead of breaking.
+    let profileLoaded = false;
+
+    function humanizeKey(key) {
+        return String(key)
+            .replace(/_/g, ' ')
+            .replace(/([a-z])([A-Z])/g, '$1 $2')
+            .replace(/\b\w/g, c => c.toUpperCase());
+    }
+
+    function formatTimestamp(val) {
+        if (!val) return '—';
+        const d = new Date(val * 1000);
+        return `${d.toLocaleDateString()} ${d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+    }
+
+    function formatCell(key, val, currency) {
+        if (val === null || val === undefined) return '—';
+        if (key === 'timestamp') return formatTimestamp(val);
+        if (typeof val === 'number') return currency ? fmt$(val) : fmtN(val);
+        if (typeof val === 'boolean') return val ? 'Yes' : 'No';
+        if (typeof val === 'object') return '';
+        return esc(String(val));
+    }
+
+    // Renders a flat or nested object as key/value rows. Only pass currency:true for genuinely
+    // money-denominated sections (net worth, item worth) — most sections are plain counts.
+    function renderDynamicObject(container, obj, opts = {}) {
+        const currency = !!opts.currency;
+        const exclude = new Set(['parsetime', ...(opts.exclude || [])]); // implementation-detail fields, never useful to show
+
+        if (!obj || typeof obj !== 'object') { container.innerHTML = '<p style="color:var(--muted)">No data returned.</p>'; return; }
+        let entries = Object.entries(obj).filter(([k]) => !exclude.has(k));
+        if (!entries.length) { container.innerHTML = '<p style="color:var(--muted)">No data returned.</p>'; return; }
+
+        // Pull "total" out to a highlighted summary at the top rather than burying it in the list.
+        const totalEntry = entries.find(([k]) => k.toLowerCase() === 'total');
+        entries = entries.filter(([k]) => k.toLowerCase() !== 'total');
+
+        const simple = entries.filter(([, v]) => typeof v !== 'object' || v === null);
+        const nested = entries.filter(([, v]) => typeof v === 'object' && v !== null);
+
+        let html = '';
+        if (totalEntry) {
+            html += `<div class="stat" style="margin-bottom:12px;"><div class="k">Total</div><div class="v good">${formatCell('total', totalEntry[1], currency)}</div></div>`;
+        }
+        if (simple.length) {
+            html += simple.map(([k, v]) => `
+                <div class="result-line"><span class="rk">${esc(humanizeKey(k))}</span><span class="rv">${formatCell(k, v, currency)}</span></div>`).join('');
+        }
+        nested.forEach(([k, v]) => {
+            html += `<div class="lab-label" style="margin-top:14px;">${esc(humanizeKey(k))}</div>`;
+            if (Array.isArray(v)) {
+                if (!v.length) { html += `<p style="color:var(--muted);font-size:13px;">None.</p>`; return; }
+                const cols = [...new Set(v.flatMap(item => (item && typeof item === 'object') ? Object.keys(item) : ['value']))];
+                html += `<div class="table-scroll"><table><thead><tr>${cols.map(c => `<th>${esc(humanizeKey(c))}</th>`).join('')}</tr></thead><tbody>`;
+                v.forEach(item => {
+                    html += '<tr>' + cols.map(c => `<td>${formatCell(c, (item && typeof item === 'object') ? item[c] : item, currency)}</td>`).join('') + '</tr>';
+                });
+                html += '</tbody></table></div>';
+            } else {
+                const subVals = Object.values(v);
+                const isDictOfDicts = subVals.length > 0 && subVals.every(x => x && typeof x === 'object');
+                if (isDictOfDicts) {
+                    // e.g. jobpoints.companies — a dict keyed by company ID, each value its own object.
+                    const cols = [...new Set(subVals.flatMap(o => Object.keys(o)))].filter(c => c !== 'name');
+                    html += `<div class="table-scroll"><table><thead><tr><th>Name</th>${cols.map(c => `<th>${esc(humanizeKey(c))}</th>`).join('')}</tr></thead><tbody>`;
+                    Object.entries(v).forEach(([subKey, subVal]) => {
+                        const label = subVal.name || humanizeKey(subKey);
+                        html += `<tr><td>${esc(label)}</td>${cols.map(c => `<td>${formatCell(c, subVal[c], currency)}</td>`).join('')}</tr>`;
+                    });
+                    html += '</tbody></table></div>';
+                } else {
+                    html += Object.entries(v).map(([k2, v2]) => `
+                        <div class="result-line"><span class="rk">${esc(humanizeKey(k2))}</span><span class="rv">${formatCell(k2, v2, currency)}</span></div>`).join('');
+                }
+            }
+        });
+        container.innerHTML = html || '<p style="color:var(--muted)">No data returned.</p>';
+    }
+
+    // Debug helper — appends a collapsible "show raw data" toggle so we can see exactly what
+    // Torn actually returned when a section looks wrong, instead of guessing at field names again.
+    function appendRawDataToggle(container, data) {
+        const id = 'raw-' + Math.random().toString(36).slice(2);
+        container.insertAdjacentHTML('beforeend', `
+            <details style="margin-top:10px;">
+                <summary style="cursor:pointer;color:var(--muted);font-size:11px;">Show raw data (for debugging)</summary>
+                <pre id="${id}" style="background:var(--bench-2);border:1px solid var(--line);border-radius:6px;padding:10px;margin-top:6px;font-size:11px;overflow:auto;max-height:260px;white-space:pre-wrap;"></pre>
+            </details>`);
+        $(id).textContent = JSON.stringify(data, null, 2) ?? 'null / undefined — Torn returned nothing for this selection.';
+    }
+
+    async function renderItemWorth(container, items, priceMap, emptyMsg) {
+        if (!items) { container.innerHTML = `<p style="color:var(--muted)">${esc(emptyMsg)}</p>`; return; }
+        const list = Array.isArray(items) ? items : Object.values(items);
+        if (!list.length) { container.innerHTML = `<p style="color:var(--muted)">${esc(emptyMsg)}</p>`; return; }
+
+        let total = 0;
+        let pricedCount = 0;
+        const rows = list.map(it => {
+            const id = it.ID ?? it.id ?? it.itemID ?? it.item_id;
+            const qty = it.quantity ?? it.qty ?? 1;
+            const price = priceMap.get(String(id));
+            const marketValue = price ? (price.market_value ?? price.value) : null;
+            const name = it.name || price?.name || `Item #${id}`;
+            const worth = marketValue != null ? marketValue * qty : null;
+            if (worth != null) { total += worth; pricedCount++; }
+            return { name, qty, worth };
+        }).sort((a, b) => (b.worth ?? -1) - (a.worth ?? -1));
+
+        const rowsHtml = rows.slice(0, 25).map(r => `
+            <tr><td>${esc(r.name)}</td><td class="num">${fmtN(r.qty)}</td><td class="num">${r.worth != null ? fmt$(r.worth) : '—'}</td></tr>`).join('');
+        container.innerHTML = `
+            <div class="table-scroll"><table><thead><tr><th>Item</th><th class="num">Qty</th><th class="num">Worth</th></tr></thead>
+            <tbody>${rowsHtml}</tbody></table></div>
+            ${rows.length > 25 ? `<p style="color:var(--muted);font-size:12px;margin-top:6px;">+${rows.length - 25} more item(s) not shown.</p>` : ''}
+            <div class="result-line" style="margin-top:8px;"><span class="rk"><b>Total worth</b></span><span class="rv good"><b>${fmt$(total)}</b></span></div>
+            <p style="color:var(--muted);font-size:11px;margin-top:6px;">
+                ${pricedCount < rows.length ? `Priced ${pricedCount} of ${rows.length} items — the rest have no listed market value. ` : ''}
+                Prices are Torn's official item value, which can differ from real bazaar/market prices.
+            </p>`;
+        appendRawDataToggle(container, items);
+    }
+
+    $('profile-refresh').addEventListener('click', () => { profileLoaded = false; loadPlayerProfile(); });
+
+    async function loadPlayerProfile() {
+        if (profileLoaded) return;
+        profileLoaded = true;
+        const st = $('profile-status');
+        st.className = 'status ok'; st.textContent = 'Loading…';
+        try {
+            const [profileData, itemPrices] = await Promise.all([
+                tornV1('networth,criminalrecord,jobpoints,weaponexp,inventory,display,personalstats'),
+                tornSection('torn', 'items').catch(() => null), // pricing is a nice-to-have, not required
+            ]);
+
+            renderDynamicObject($('pf-networth'), profileData.networth, { currency: true, exclude: ['timestamp'] });
+            renderDynamicObject($('pf-criminal'), profileData.criminalrecord);
+            renderDynamicObject($('pf-jobpoints'), profileData.jobpoints);
+            renderDynamicObject($('pf-weaponexp'), Array.isArray(profileData.weaponexp)
+                ? { weapons: profileData.weaponexp } : profileData.weaponexp);
+
+            const priceMap = new Map();
+            if (itemPrices?.items) {
+                Object.entries(itemPrices.items).forEach(([id, info]) => priceMap.set(String(id), info));
+            }
+            await renderItemWorth($('pf-inventory'), profileData.inventory, priceMap, 'No inventory data returned.');
+            await renderItemWorth($('pf-display'), profileData.display, priceMap, 'No display case data returned.');
+            if (!itemPrices) {
+                [$('pf-inventory'), $('pf-display')].forEach(el => {
+                    el.insertAdjacentHTML('beforeend', '<p style="color:var(--muted);font-size:11px;margin-top:6px;">Item prices unavailable right now — showing quantities only where possible.</p>');
+                });
+            }
+
+            // Books & racing get their own panels rather than one merged list.
+            const stats = profileData.personalstats || {};
+            const books = Object.entries(stats).filter(([k]) => /book/i.test(k));
+            const racing = Object.entries(stats).filter(([k]) => /racing|race/i.test(k));
+            renderDynamicObject($('pf-books'), books.length ? Object.fromEntries(books) : null);
+            renderDynamicObject($('pf-racing'), racing.length ? Object.fromEntries(racing) : null);
+            // Show the matched slice when something matched (to verify it's the right data);
+            // show the full personalstats dump when nothing matched (to help find the real key names).
+            appendRawDataToggle($('pf-books'), books.length ? Object.fromEntries(books) : stats);
+            appendRawDataToggle($('pf-racing'), racing.length ? Object.fromEntries(racing) : stats);
+
+            st.textContent = ''; st.className = 'status';
+        } catch (e) {
+            profileLoaded = false; // allow retry
+            st.className = 'status err';
+            st.textContent = e.message;
+        }
+    }
+
+    // ================= TARGET FINDER (FFScouter) =================
+    // FFScouter (ffscouter.com) is a separate, independent service — not run by us.
+    // It estimates opponents' battle stats from crowd-sourced Fair Fight data.
+    // We only ever call its public API; the actual estimation model lives on their servers.
+    const FF_API = 'https://ffscouter.com/api/v1';
+    let ffChecked = false;   // have we run check-key this session?
+    let ffRegistered = false;
+    let tfMode = 'custom';
+
+    async function ffCheckKey() {
+        const res = await fetch(`${FF_API}/check-key?key=${encodeURIComponent(apiKey)}`);
+        const data = await res.json();
+        if (data.error) throw new Error(data.error);
+        return data; // { is_registered, is_premium, ... }
+    }
+
+    async function ffRegisterKey() {
+        const res = await fetch(`${FF_API}/register`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ key: apiKey, agree_to_data_policy: true, signup_source: 'WorldWideLabs' }),
+        });
+        const data = await res.json();
+        if (!data.success) throw new Error(data.error || 'Registration failed');
+        return data;
+    }
+
+    async function initTargetFinder() {
+        if (ffChecked) return; // only check once per session — check-key is rate-limited (10/min/IP)
+        ffChecked = true;
+        try {
+            const info = await ffCheckKey();
+            ffRegistered = !!info.is_registered;
+        } catch (e) {
+            $('tf-loading').innerHTML = `<p style="color:var(--danger);margin:0;">Could not reach FFScouter: ${esc(e.message)}. Try again shortly.</p>`;
+            ffChecked = false; // allow retry on next visit to the tab
+            return;
+        }
+        $('tf-loading').style.display = 'none';
+        if (ffRegistered) {
+            $('tf-tool').style.display = 'block';
+            selectTfMode('custom');
+        } else {
+            $('tf-register-panel').style.display = 'block';
+        }
+    }
+
+    $('tf-agree').addEventListener('change', () => {
+        $('tf-register-btn').disabled = !$('tf-agree').checked;
+    });
+
+    $('tf-register-btn').addEventListener('click', async () => {
+        const btn = $('tf-register-btn');
+        btn.disabled = true;
+        btn.textContent = 'Registering…';
+        try {
+            await ffRegisterKey();
+            ffRegistered = true;
+            $('tf-register-panel').style.display = 'none';
+            $('tf-tool').style.display = 'block';
+            selectTfMode('custom');
+        } catch (e) {
+            const st = $('tf-register-status');
+            st.className = 'status err';
+            st.textContent = esc(e.message);
+            btn.disabled = false;
+            btn.textContent = 'Register with FFScouter';
+        }
+    });
+
+    function selectTfMode(mode) {
+        tfMode = mode;
+        $('tf-mode-custom').style.borderColor = mode === 'custom' ? 'var(--reagent)' : 'var(--line)';
+        $('tf-mode-custom').style.color = mode === 'custom' ? 'var(--reagent)' : 'var(--text)';
+        $('tf-mode-manual').style.borderColor = mode === 'manual' ? 'var(--reagent)' : 'var(--line)';
+        $('tf-mode-manual').style.color = mode === 'manual' ? 'var(--reagent)' : 'var(--text)';
+        $('tf-custom-panel').style.display = mode === 'custom' ? 'block' : 'none';
+        $('tf-manual-panel').style.display = mode === 'manual' ? 'block' : 'none';
+        $('tf-results-panel').style.display = 'none';
+        stopTfLive();
+    }
+    $('tf-mode-custom').addEventListener('click', () => selectTfMode('custom'));
+    $('tf-mode-manual').addEventListener('click', () => selectTfMode('manual'));
+
+    function tfStatus(elId, msg, isErr) {
+        const el = $(elId);
+        el.className = 'status ' + (msg ? (isErr ? 'err' : 'ok') : '');
+        el.textContent = msg || '';
+    }
+
+    function relativeTime(epochSeconds) {
+        if (!epochSeconds) return '—';
+        const diff = Math.max(0, Date.now() / 1000 - epochSeconds);
+        if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
+        if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
+        return `${Math.floor(diff / 86400)}d ago`;
+    }
+
+    let tfResults = [];       // current result rows, shared by rendering, live refresh, and the ticker
+    let tfLiveOn = false;
+    let tfLiveRunning = false;
+    let tfTickHandle = null;
+
+    function renderTfResults(rows) {
+        // rows: [{ id, name, level, ff, estHuman, state, until, lastAction }]
+        tfResults = rows;
+        stopTfLive();
+        drawTfRows();
+        $('tf-results-panel').style.display = 'block';
+        $('tf-results-panel').scrollIntoView({ behavior: 'smooth' });
+    }
+
+    function tfStatusCell(r) {
+        // Reuses the same state/until model (and countdown formatting) as Level Targets.
+        if (r.state) return btStatusLabel(r);
+        return relativeTime(r.lastAction); // no live status fetched yet — fall back to "last seen"
+    }
+
+    function drawTfRows() {
+        $('tf-results-body').innerHTML = tfResults.length ? tfResults.map(r => `
+            <tr>
+                <td><a href="https://www.torn.com/profiles.php?XID=${r.id}" target="_blank" rel="noopener">${esc(r.name)} [${r.id}]</a></td>
+                <td class="num">${r.level ?? '—'}</td>
+                <td class="num" style="font-family:var(--mono);">${r.ff != null ? r.ff.toFixed(2) : '—'}</td>
+                <td class="num" style="font-family:var(--mono);">${esc(r.estHuman || '—')}</td>
+                <td id="tf-st-${r.id}" style="color:${baldrStateColor(r.state)};font-size:12px;font-weight:${r.state === 'Okay' ? '700' : '400'};">${esc(tfStatusCell(r))}</td>
+                <td><a href="https://www.torn.com/loader.php?sid=attack&user2ID=${r.id}" target="_blank" rel="noopener"
+                       style="background:var(--reagent);color:#06130d;padding:4px 10px;border-radius:4px;text-decoration:none;font-weight:600;font-size:12px;">Attack</a></td>
+            </tr>`).join('') : `<tr><td colspan="6" style="color:var(--muted)">No results.</td></tr>`;
+    }
+
+    // ---- Live updates: continuously re-checks every listed target's live status ----
+    $('tf-live').addEventListener('change', () => {
+        tfLiveOn = $('tf-live').checked;
+        if (tfLiveOn) startTfLive(); else $('tf-live-status').textContent = 'paused';
+    });
+
+    function stopTfLive() {
+        tfLiveOn = false;
+        $('tf-live').checked = false;
+        $('tf-live-status').textContent = '';
+        if (tfTickHandle) { clearInterval(tfTickHandle); tfTickHandle = null; }
+    }
+
+    function startTfTicker() {
+        if (tfTickHandle) return;
+        tfTickHandle = setInterval(() => {
+            let flipped = false;
+            for (const r of tfResults) {
+                if (r.state !== 'Hospital') continue;
+                const before = r.state;
+                const label = btStatusLabel(r); // mutates r.state to 'Okay' once the timer hits zero
+                const cell = $(`tf-st-${r.id}`);
+                if (cell) {
+                    cell.textContent = label;
+                    cell.style.color = baldrStateColor(r.state);
+                    cell.style.fontWeight = r.state === 'Okay' ? '700' : '400';
+                }
+                if (before !== r.state) flipped = true;
+            }
+            if (flipped) tfResults.sort((a, b) => (a.state === 'Okay' ? -1 : 0) - (b.state === 'Okay' ? -1 : 0));
+        }, 1000);
+    }
+
+    async function startTfLive() {
+        startTfTicker();
+        if (tfLiveRunning) return; // a pass is already in flight — it'll pick up the new tfLiveOn state itself
+        tfLiveRunning = true;
+        let backoffMs = 15000;
+        try {
+            while (tfLiveOn) {
+                for (let i = 0; i < tfResults.length && tfLiveOn; i++) {
+                    const r = tfResults[i];
+                    $('tf-live-status').textContent = `refreshing ${i + 1}/${tfResults.length}`;
+                    try {
+                        const res = await fetch(`https://api.torn.com/user/${r.id}?selections=profile&key=${encodeURIComponent(apiKey)}`);
+                        const data = await res.json();
+                        if (data.error) {
+                            if (data.error.code === 5) {
+                                $('tf-live-status').textContent = `rate limited — pausing ${Math.round(backoffMs / 1000)}s`;
+                                await new Promise(res => setTimeout(res, backoffMs));
+                                backoffMs = Math.min(backoffMs * 1.5, 60000);
+                                i--; continue;
+                            }
+                        } else {
+                            backoffMs = 15000;
+                            r.state = data.status?.state || 'Unknown';
+                            r.until = data.status?.until || null;
+                            const cell = $(`tf-st-${r.id}`);
+                            if (cell) {
+                                cell.textContent = btStatusLabel(r);
+                                cell.style.color = baldrStateColor(r.state);
+                                cell.style.fontWeight = r.state === 'Okay' ? '700' : '400';
+                            }
+                        }
+                    } catch (e) { /* skip this target this pass, try again next pass */ }
+                    await new Promise(res => setTimeout(res, 1100));
+                }
+                tfResults.sort((a, b) => (a.state === 'Okay' ? -1 : 0) - (b.state === 'Okay' ? -1 : 0));
+                if (tfLiveOn) drawTfRows();
+                if (!tfLiveOn) break;
+                $('tf-live-status').textContent = 'pass complete — refreshing again';
+                await new Promise(res => setTimeout(res, 3000));
+            }
+        } finally {
+            tfLiveRunning = false;
+            $('tf-live-status').textContent = tfLiveOn ? '' : 'paused';
+        }
+    }
+
+    // ---- Custom search: GET /get-targets ----
+    $('tf-search-btn').addEventListener('click', async () => {
+        const btn = $('tf-search-btn');
+        btn.disabled = true; btn.textContent = 'Searching…';
+        tfStatus('tf-custom-status', '');
+        try {
+            const params = new URLSearchParams({
+                key: apiKey,
+                minlevel: $('tf-minlevel').value || 1,
+                maxlevel: $('tf-maxlevel').value || 100,
+                minff: parseFloat($('tf-minff').value || 1).toFixed(2),
+                maxff: parseFloat($('tf-maxff').value || 3).toFixed(2),
+                limit: Math.min(50, Math.max(1, parseInt($('tf-limit').value, 10) || 20)),
+                inactiveonly: $('tf-inactive').checked ? 1 : 0,
+                factionless: $('tf-factionless').checked ? 1 : 0,
+            });
+            const res = await fetch(`${FF_API}/get-targets?${params.toString()}`);
+            const data = await res.json();
+            if (data.error) throw new Error(data.error);
+            const rows = (data.targets || []).map(t => ({
+                id: t.player_id, name: t.name || `User #${t.player_id}`, level: t.level,
+                ff: t.fair_fight, estHuman: t.bs_estimate_human,
+                state: null, until: null, lastAction: t.last_action,
+            }));
+            renderTfResults(rows);
+            tfStatus('tf-custom-status', `${rows.length} target(s) found.`, false);
+        } catch (e) {
+            tfStatus('tf-custom-status', e.message, true);
+        } finally {
+            btn.disabled = false; btn.textContent = 'Search';
+        }
+    });
+
+    // ---- Manual list: GET /get-stats, enriched with live Torn name/level/status ----
+    $('tf-lookup-btn').addEventListener('click', async () => {
+        const btn = $('tf-lookup-btn');
+        const raw = $('tf-manual-ids').value;
+        const ids = [...new Set(raw.split(/[\s,]+/).map(s => s.trim()).filter(s => /^\d+$/.test(s)))];
+        if (!ids.length) { tfStatus('tf-manual-status', 'Paste at least one numeric player ID.', true); return; }
+
+        btn.disabled = true; btn.textContent = 'Looking up…';
+        tfStatus('tf-manual-status', `Fetching Fair Fight estimates for ${ids.length} target(s)…`);
+        try {
+            // FFScouter accepts many IDs per call — batch generously to stay well under its rate limit.
+            const ffMap = new Map();
+            for (let i = 0; i < ids.length; i += 200) {
+                const batch = ids.slice(i, i + 200);
+                const res = await fetch(`${FF_API}/get-stats?key=${encodeURIComponent(apiKey)}&targets=${batch.join(',')}`);
+                const data = await res.json();
+                if (data.error) throw new Error(data.error);
+                (Array.isArray(data) ? data : []).forEach(d => ffMap.set(String(d.player_id), d));
+            }
+
+            // Enrich with live name/level/status directly from Torn — one call per target, paced.
+            const rows = [];
+            for (let i = 0; i < ids.length; i++) {
+                const id = ids[i];
+                tfStatus('tf-manual-status', `Fetching player info… ${i + 1} / ${ids.length}`);
+                let name = `User #${id}`, level = null, state = null, until = null;
+                try {
+                    const res = await fetch(`https://api.torn.com/user/${id}?selections=profile&key=${encodeURIComponent(apiKey)}`);
+                    const data = await res.json();
+                    if (!data.error) {
+                        name = data.name || name;
+                        level = data.level;
+                        state = data.status?.state || 'Unknown';
+                        until = data.status?.until || null;
+                    }
+                } catch (e) { /* keep the placeholder — FF/estimate below still shows */ }
+                const ff = ffMap.get(id);
+                rows.push({
+                    id, name, level,
+                    ff: ff?.fair_fight ?? null,
+                    estHuman: ff?.bs_estimate_human ?? null,
+                    state, until,
+                });
+                await new Promise(r => setTimeout(r, 1100));
+            }
+
+            rows.sort((a, b) => (a.ff ?? 999) - (b.ff ?? 999)); // easiest fights first
+            renderTfResults(rows);
+            tfStatus('tf-manual-status', `Done — ${rows.length} target(s).`, false);
+        } catch (e) {
+            tfStatus('tf-manual-status', e.message, true);
+        } finally {
+            btn.disabled = false; btn.textContent = 'Look up';
+        }
+    });
+})();
+</script>
+</body>
+</html>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WorldWideLabs — Faction Hub</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2034%2034%22%3E%0A%3Crect%20width%3D%2234%22%20height%3D%2234%22%20rx%3D%228%22%20fill%3D%22%2312161c%22/%3E%0A%3Cpath%20d%3D%22M13%204h8M15%204v8.5L7.5%2026a3%203%200%200%200%202.6%204.5h13.8a3%203%200%200%200%202.6-4.5L19%2012.5V4%22%20stroke%3D%22%2335d99b%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%20fill%3D%22none%22/%3E%0A%3Cpath%20d%3D%22M11%2021h12%22%20stroke%3D%22%2335d99b%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22/%3E%0A%3Ccircle%20cx%3D%2215%22%20cy%3D%2225%22%20r%3D%221.4%22%20fill%3D%22%2335d99b%22/%3E%0A%3Ccircle%20cx%3D%2219.5%22%20cy%3D%2227%22%20r%3D%221%22%20fill%3D%22%2335d99b%22/%3E%0A%3C/svg%3E">
+<link rel="icon" type="image/png" sizes="32x32" href="data:image/png;base64,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">
+<link rel="icon" type="image/png" sizes="192x192" href="data:image/png;base64,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">
+<link rel="apple-touch-icon" sizes="180x180" href="data:image/png;base64,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">
+<link rel="manifest" href="manifest.json">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+    :root {
+        --ink: #0e1116;          /* page background */
+        --bench: #151a21;        /* panels */
+        --bench-2: #1c232d;      /* inputs, table stripes */
+        --line: #2a3340;         /* borders */
+        --text: #e6ebf0;
+        --muted: #8b98a8;
+        --reagent: #35d99b;      /* primary accent — lab green */
+        --reagent-dim: #1f8a63;
+        --energy: #5dd75d;
+        --nerve: #e5535a;
+        --happy: #f2c14e;
+        --life: #58a6ff;
+        --danger: #ff6b6b;
+        --radius: 8px;
+        --mono: 'IBM Plex Mono', ui-monospace, monospace;
+        --disp: 'Space Grotesk', system-ui, sans-serif;
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; }
+    body {
+        background: var(--ink);
+        background-image: linear-gradient(rgba(53,217,155,0.025) 1px, transparent 1px),
+                          linear-gradient(90deg, rgba(53,217,155,0.025) 1px, transparent 1px);
+        background-size: 28px 28px;
+        color: var(--text);
+        font-family: var(--disp);
+        font-size: 14px;
+        min-height: 100vh;
+    }
+    h1, h2, h3 { font-family: var(--disp); }
+    .mono { font-family: var(--mono); }
+    a { color: var(--reagent); }
+    button {
+        font-family: var(--disp); font-size: 14px; font-weight: 500;
+        background: var(--reagent); color: #06130d; border: none;
+        border-radius: var(--radius); padding: 10px 18px; cursor: pointer;
+    }
+    button:hover { filter: brightness(1.12); }
+    button:disabled { background: #3a4450; color: #7b8794; cursor: not-allowed; filter: none; }
+    button.ghost { background: transparent; color: var(--text); border: 1px solid var(--line); }
+    button.ghost:hover { border-color: var(--reagent); color: var(--reagent); filter: none; }
+    button.small { padding: 5px 10px; font-size: 12px; }
+    input, select {
+        background: var(--bench-2); color: var(--text); border: 1px solid var(--line);
+        border-radius: var(--radius); padding: 9px 12px; font-size: 14px; font-family: var(--disp);
+        width: 100%;
+    }
+    input:focus, select:focus { outline: 1px solid var(--reagent); border-color: var(--reagent); }
+    label { font-size: 12px; color: var(--muted); display: block; margin-bottom: 5px; }
+    .field { margin-bottom: 14px; }
+
+    /* ---------- eyebrow / lab-label signature ---------- */
+    .lab-label {
+        font-family: var(--mono); font-size: 11px; letter-spacing: .14em;
+        color: var(--reagent); text-transform: uppercase; margin-bottom: 6px;
+    }
+    .lab-label::before { content: '▸ '; }
+
+    /* ---------- login ---------- */
+    #login-view {
+        min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 20px;
+    }
+    .login-card {
+        background: var(--bench); border: 1px solid var(--line); border-radius: 12px;
+        padding: 34px; width: 100%; max-width: 420px;
+    }
+    .logo { display: flex; align-items: center; gap: 12px; margin-bottom: 6px; }
+    .logo svg { flex: none; }
+    .logo h1 { font-size: 24px; margin: 0; letter-spacing: -0.01em; }
+    .logo h1 span { color: var(--reagent); }
+    .login-card .tag { font-family: var(--mono); font-size: 12px; color: var(--muted); margin: 0 0 24px 46px; }
+    .login-note { font-size: 12px; color: var(--muted); line-height: 1.6; margin-top: 14px; }
+    #login-error { color: var(--danger); font-size: 13px; margin-top: 12px; display: none; }
+
+    /* ---------- app shell ---------- */
+    #app-view { display: none; min-height: 100vh; }
+    .shell { display: flex; min-height: 100vh; }
+    nav.side {
+        width: 220px; flex: none; background: var(--bench); border-right: 1px solid var(--line);
+        padding: 22px 14px; display: flex; flex-direction: column; gap: 4px;
+    }
+    nav.side .logo { margin-bottom: 20px; padding: 0 8px; }
+    nav.side .logo h1 { font-size: 17px; }
+    .nav-item {
+        display: flex; align-items: center; gap: 10px;
+        padding: 10px 12px; border-radius: var(--radius); cursor: pointer;
+        color: var(--muted); font-weight: 500; border: 1px solid transparent;
+    }
+    .nav-item:hover { color: var(--text); background: var(--bench-2); }
+    .nav-item.active { color: var(--reagent); background: rgba(53,217,155,.08); border-color: rgba(53,217,155,.25); }
+    .nav-item .idx { font-family: var(--mono); font-size: 10px; opacity: .7; }
+    nav.side .spacer { flex: 1; }
+    .whoami { padding: 10px 12px; border-top: 1px solid var(--line); font-size: 12px; color: var(--muted); }
+    .whoami b { color: var(--text); display: block; }
+
+    .nav-group { margin: 2px 0; }
+    .nav-group-header {
+        display: flex; align-items: center; justify-content: space-between;
+        padding: 9px 12px; cursor: pointer; user-select: none;
+        font-family: var(--mono); font-size: 11px; text-transform: uppercase; letter-spacing: .09em;
+        color: var(--muted);
+    }
+    .nav-group-header:hover { color: var(--text); }
+    .nav-chevron { transition: transform .18s ease; flex: none; }
+    .nav-group.collapsed .nav-chevron { transform: rotate(-90deg); }
+    .nav-group-items {
+        display: flex; flex-direction: column; gap: 2px;
+        padding-left: 10px; border-left: 1px solid var(--line); margin: 0 0 4px 14px;
+        overflow: hidden;
+    }
+    .nav-group.collapsed .nav-group-items { display: none; }
+
+    main { flex: 1; padding: 28px; max-width: 1000px; }
+    section.page { display: none; }
+    section.page.visible { display: block; }
+    .page > h2 { margin: 0 0 4px; font-size: 22px; }
+    .page > .pagedesc { color: var(--muted); margin: 0 0 22px; }
+
+    .panel {
+        background: var(--bench); border: 1px solid var(--line);
+        border-radius: 12px; padding: 20px; margin-bottom: 18px;
+    }
+    .panel h3 { margin: 0 0 14px; font-size: 15px; }
+    .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+    .grid3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+
+    /* ---------- bars ---------- */
+    .bar-block { margin-bottom: 14px; }
+    .bar-head { display: flex; justify-content: space-between; font-family: var(--mono); font-size: 12px; margin-bottom: 5px; }
+    .bar-track { background: var(--bench-2); border-radius: 20px; height: 10px; overflow: hidden; border: 1px solid var(--line); }
+    .bar-fill { height: 100%; border-radius: 20px; transition: width .4s ease; }
+    .bar-sub { font-size: 11px; color: var(--muted); margin-top: 4px; font-family: var(--mono); }
+
+    /* ---------- stat chips ---------- */
+    .stat { background: var(--bench-2); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px; }
+    .stat .k { font-family: var(--mono); font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .1em; }
+    .stat .v { font-size: 22px; font-weight: 700; margin-top: 4px; }
+    .stat .v.good { color: var(--reagent); }
+    .stat .v.bad { color: var(--danger); }
+    .stat .s { font-size: 11px; color: var(--muted); margin-top: 3px; }
+
+    /* ---------- tables ---------- */
+    .table-scroll { overflow-x: auto; border: 1px solid var(--line); border-radius: var(--radius); }
+    table { border-collapse: collapse; width: 100%; font-size: 13px; }
+    th { background: var(--bench-2); color: var(--muted); text-align: left; padding: 9px 12px;
+         font-family: var(--mono); font-size: 11px; text-transform: uppercase; letter-spacing: .08em; white-space: nowrap; }
+    th.num, td.num { text-align: right; }
+    td { padding: 8px 12px; border-top: 1px solid var(--line); white-space: nowrap; }
+    tbody tr:hover { background: rgba(53,217,155,.04); }
+    td.pay { color: var(--reagent); font-weight: 600; font-family: var(--mono); }
+    tfoot td { background: rgba(53,217,155,.1); font-weight: 700; border-top: 2px solid var(--reagent-dim); }
+
+    /* ---------- links ---------- */
+    .link-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 12px; }
+    .link-card {
+        display: block; background: var(--bench-2); border: 1px solid var(--line); border-radius: var(--radius);
+        padding: 14px; text-decoration: none; color: var(--text); position: relative;
+    }
+    .link-card:hover { border-color: var(--reagent); }
+    .link-card .lt { font-weight: 600; }
+    .link-card .ld { font-size: 12px; color: var(--muted); margin-top: 4px; line-height: 1.4; }
+    .link-card .lu { font-family: var(--mono); font-size: 10px; color: var(--reagent-dim); margin-top: 8px; word-break: break-all; }
+    .link-card .rm {
+        position: absolute; top: 8px; right: 8px; background: none; border: none; color: var(--muted);
+        cursor: pointer; padding: 2px 6px; font-size: 12px;
+    }
+    .link-card .rm:hover { color: var(--danger); }
+
+    /* ---------- chips ---------- */
+    #chain-list { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+    .chip {
+        background: var(--bench-2); border: 1px solid var(--line); border-radius: 16px;
+        padding: 5px 8px 5px 13px; display: flex; align-items: center; gap: 8px; font-size: 13px;
+    }
+    .chip .cid { font-family: var(--mono); color: var(--reagent); }
+    .chip .meta { color: var(--muted); font-size: 11px; }
+    .chip button { background: none; color: var(--muted); padding: 0 4px; }
+    .chip button:hover { color: var(--danger); filter: none; }
+
+    .status { font-size: 13px; margin-top: 12px; display: none; }
+    .status.err { color: var(--danger); display: block; }
+    .status.ok { color: var(--muted); display: block; }
+
+    .result-line { display: flex; justify-content: space-between; padding: 9px 0; border-bottom: 1px dashed var(--line); }
+    .result-line:last-child { border-bottom: none; }
+    .result-line .rk { color: var(--muted); }
+    .result-line .rv { font-family: var(--mono); font-weight: 600; }
+    .result-line .rv.good { color: var(--reagent); }
+    .result-line .rv.bad { color: var(--danger); }
+
+    #toast {
+        position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+        background: var(--reagent); color: #06130d; padding: 10px 22px; border-radius: 20px;
+        font-weight: 600; display: none; z-index: 50;
+    }
+
+    @media (max-width: 760px) {
+        .shell { flex-direction: column; }
+        nav.side { width: 100%; flex-direction: row; flex-wrap: wrap; align-items: center; padding: 12px; border-right: none; border-bottom: 1px solid var(--line); }
+        nav.side .logo { margin: 0 12px 0 0; }
+        nav.side .spacer, .whoami { display: none; }
+        .nav-item { padding: 8px 10px; font-size: 13px; }
+        .nav-item .idx { display: none; }
+        .nav-group { display: contents; }
+        .nav-group-header { display: none; }
+        .nav-group-items { display: flex !important; flex-direction: row; flex-wrap: wrap; border-left: none; padding-left: 0; margin: 0; gap: 4px; }
+        main { padding: 18px; }
+        .grid2, .grid3 { grid-template-columns: 1fr; }
+    }
+    @media (prefers-reduced-motion: reduce) { .bar-fill { transition: none; } }
+</style>
+</head>
+<body>
+
+<!-- ==================== LOGIN ==================== -->
+<div id="login-view">
+    <div class="login-card">
+        <div class="logo">
+            <svg width="34" height="34" viewBox="0 0 34 34" fill="none" aria-hidden="true">
+                <path d="M13 4h8M15 4v8.5L7.5 26a3 3 0 0 0 2.6 4.5h13.8a3 3 0 0 0 2.6-4.5L19 12.5V4"
+                      stroke="#35d99b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                <path d="M11 21h12" stroke="#35d99b" stroke-width="2" stroke-linecap="round"/>
+                <circle cx="15" cy="25" r="1.4" fill="#35d99b"/>
+                <circle cx="19.5" cy="27" r="1" fill="#35d99b"/>
+            </svg>
+            <h1>WorldWide<span>Labs</span></h1>
+        </div>
+        <p class="tag">faction operations · torn city</p>
+
+        <div class="field">
+            <label for="login-key">Torn API key</label>
+            <input type="password" id="login-key" placeholder="Paste your API key" autocomplete="off">
+        </div>
+        <button id="login-btn" style="width:100%;">Enter the lab</button>
+        <div id="login-error"></div>
+        <p class="login-note">
+            Create a key at Torn → Settings → API Keys. A <b>Limited Access</b> key is recommended
+            (needed for your energy bars; leaders also get the chain payout tool).
+            Your key stays in this browser and is only used to talk to the Torn API.
+            Logging in records your name and login time so faction leadership can see who's using the tool —
+            your key itself is never stored anywhere except your own browser.
+        </p>
+    </div>
+</div>
+
+<!-- ==================== APP ==================== -->
+<div id="app-view">
+<div class="shell">
+    <nav class="side">
+        <div class="logo">
+            <svg width="26" height="26" viewBox="0 0 34 34" fill="none" aria-hidden="true">
+                <path d="M13 4h8M15 4v8.5L7.5 26a3 3 0 0 0 2.6 4.5h13.8a3 3 0 0 0 2.6-4.5L19 12.5V4"
+                      stroke="#35d99b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                <path d="M11 21h12" stroke="#35d99b" stroke-width="2" stroke-linecap="round"/>
+            </svg>
+            <h1>WW<span style="color:var(--reagent)">Labs</span></h1>
+        </div>
+        <div class="nav-item active" data-page="dashboard">Dashboard</div>
+        <div class="nav-item" data-page="profile">Player profile</div>
+
+        <div class="nav-group">
+            <div class="nav-group-header" data-group="training">
+                <span>Training</span>
+                <svg class="nav-chevron" width="10" height="10" viewBox="0 0 10 10"><path d="M2 3.5L5 6.5L8 3.5" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </div>
+            <div class="nav-group-items" data-group-items="training">
+                <div class="nav-item" data-page="energy">Energy planner</div>
+            </div>
+        </div>
+
+        <div class="nav-group">
+            <div class="nav-group-header" data-group="targets">
+                <span>Targets</span>
+                <svg class="nav-chevron" width="10" height="10" viewBox="0 0 10 10"><path d="M2 3.5L5 6.5L8 3.5" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </div>
+            <div class="nav-group-items" data-group-items="targets">
+                <div class="nav-item" data-page="targets">Level targets</div>
+                <div class="nav-item" data-page="targetfinder">Target finder</div>
+            </div>
+        </div>
+
+        <div class="nav-group">
+            <div class="nav-group-header" data-group="leadership">
+                <span>Leadership</span>
+                <svg class="nav-chevron" width="10" height="10" viewBox="0 0 10 10"><path d="M2 3.5L5 6.5L8 3.5" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </div>
+            <div class="nav-group-items" data-group-items="leadership">
+                <div class="nav-item" data-page="payout">Chain payout</div>
+            </div>
+        </div>
+
+        <div class="nav-item" data-page="links">Tools &amp; links</div>
+
+        <div class="spacer"></div>
+        <div class="whoami" id="whoami"></div>
+        <button class="ghost small" id="logout-btn" style="margin:10px 12px 0;">Log out</button>
+    </nav>
+
+    <main>
+        <!-- ========== DASHBOARD ========== -->
+        <section class="page visible" id="page-dashboard">
+            <div class="lab-label">WWL·01 / status report</div>
+            <h2 id="dash-greeting">Welcome</h2>
+            <p class="pagedesc" id="dash-sub"></p>
+
+            <div class="grid2">
+                <div class="panel">
+                    <h3>Your bars</h3>
+                    <div id="bars"></div>
+                    <button class="ghost small" id="refresh-bars">Refresh</button>
+                </div>
+                <div class="panel">
+                    <h3>At a glance</h3>
+                    <div class="grid3" id="glance"></div>
+                </div>
+            </div>
+
             <div class="panel" id="adoption" style="display:none;">
                 <h3>Who's on board <span style="font-weight:400;color:var(--muted);font-size:12px;">(leaders only)</span></h3>
                 <p style="color:var(--muted);font-size:12px;margin:0 0 12px;" id="adoption-summary"></p>
