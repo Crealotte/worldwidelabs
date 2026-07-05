@@ -105,32 +105,65 @@ async function getRoleWeights() {
     try {
         const raw = await redis(['GET', ROLE_WEIGHTS_KEY]);
         const cached = raw ? JSON.parse(raw) : null;
-        if (cached && Date.now() - cached.fetchedAt < ROLE_WEIGHTS_TTL_MS) return cached.weights;
+        if (cached && Date.now() - cached.fetchedAt < ROLE_WEIGHTS_TTL_MS) return { weights: cached.weights, source: 'cache' };
 
         const res = await fetch('https://tornprobability.com:3000/api/GetRoleWeights');
+        if (!res.ok) {
+            console.error(`[oc-fit] tornprobability returned HTTP ${res.status}`);
+            throw new Error(`HTTP ${res.status}`);
+        }
         const weights = await res.json();
+        if (!weights || typeof weights !== 'object' || !Object.keys(weights).length) {
+            console.error('[oc-fit] tornprobability returned an empty/unexpected response:', JSON.stringify(weights).slice(0, 300));
+            throw new Error('Empty or unexpected response shape');
+        }
         await redis(['SET', ROLE_WEIGHTS_KEY, JSON.stringify({ weights, fetchedAt: Date.now() })]);
-        return weights;
+        return { weights, source: 'live' };
     } catch (e) {
-        // If tornprobability is unreachable, fall back to whatever we last cached (even if stale)
-        // rather than showing nothing — weight is a nice-to-have, not required for CPR itself.
+        console.error('[oc-fit] getRoleWeights failed:', e.message);
+        // Fall back to whatever we last cached (even if stale) rather than showing nothing —
+        // weight is a nice-to-have, not required for CPR itself.
         try {
             const raw = await redis(['GET', ROLE_WEIGHTS_KEY]);
-            return raw ? JSON.parse(raw).weights : {};
-        } catch (e2) { return {}; }
+            return { weights: raw ? JSON.parse(raw).weights : {}, source: raw ? 'stale-cache' : 'unavailable' };
+        } catch (e2) {
+            return { weights: {}, source: 'unavailable' };
+        }
     }
+}
+
+// Torn occasionally renames OC roles, and tornprobability's dataset doesn't always catch up
+// immediately — "Imitator" was renamed from "Impersonator" is one confirmed case from the
+// community. This lets a role match under either name rather than silently missing.
+const ROLE_ALIASES = {
+    imitator: ['impersonator'],
+    impersonator: ['imitator'],
+};
+
+// Strips anything that isn't a letter or number so minor punctuation/spacing differences
+// between Torn's own role names and tornprobability's keys don't cause a missed match.
+function looseKey(name) {
+    return (name || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+        .replace(/[^a-z0-9]/g, '');
 }
 
 function findWeight(weights, scenarioName, roleName) {
-    const key = normScenario(scenarioName);
-    const roles = weights?.[key] || weights?.[scenarioName] || null;
+    const scenarioCandidates = [normScenario(scenarioName), scenarioName, looseKey(scenarioName)];
+    let roles = null;
+    for (const key of scenarioCandidates) {
+        const found = Object.keys(weights || {}).find(k => looseKey(k) === looseKey(key));
+        if (found) { roles = weights[found]; break; }
+    }
     if (!roles) return null;
-    const roleKey = normRole(roleName);
+
+    const roleName2 = normRole(roleName);
+    const namesToTry = [roleName2, ...(ROLE_ALIASES[roleName2] || [])];
     for (const [r, w] of Object.entries(roles)) {
-        if (normRole(r) === roleKey) return w;
+        if (namesToTry.some(n => looseKey(r) === looseKey(n))) return w;
     }
     return null;
 }
+
 
 // Same thresholds the original OC Manager script used as sensible defaults.
 const WEIGHT_HIGH = 25;
@@ -173,7 +206,7 @@ module.exports = async function handler(req, res) {
             }
             if (openSlots.length === 0) return res.status(200).json({ openSlots: [] });
 
-            const weights = await getRoleWeights();
+            const { weights, source: weightsSource } = await getRoleWeights();
             for (const slot of openSlots) slot.weight = findWeight(weights, slot.scenario, slot.role);
 
             // Faction roster, so we know who to check and can show names.
@@ -212,7 +245,7 @@ module.exports = async function handler(req, res) {
             // worth a leader's attention before low-weight slots that barely move the needle.
             results.sort((a, b) => (b.weight ?? -1) - (a.weight ?? -1));
 
-            return res.status(200).json({ openSlots: results });
+            return res.status(200).json({ openSlots: results, weightsSource });
         }
 
         if (action !== 'read') return res.status(400).json({ error: 'Unknown action' });
@@ -225,7 +258,7 @@ module.exports = async function handler(req, res) {
 
         const myId = String(liveData.profile?.id || '');
         const crimes = liveData.organizedcrimes || liveData.organized_crimes || {};
-        const weights = await getRoleWeights();
+        const { weights, source: weightsSource } = await getRoleWeights();
 
         // Load this player's existing cached catalog.
         const existingRaw = await redis(['GET', fitKey(myId)]);
@@ -269,7 +302,7 @@ module.exports = async function handler(req, res) {
 
         await redis(['SET', fitKey(myId), JSON.stringify(catalog)]);
 
-        return res.status(200).json({ catalog: Object.values(catalog) });
+        return res.status(200).json({ catalog: Object.values(catalog), weightsSource });
     } catch (e) {
         return res.status(500).json({ error: String(e.message || e) });
     }
