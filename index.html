@@ -372,6 +372,7 @@
                 <div class="nav-item" data-page="payout">Chain payout</div>
                 <div class="nav-item" data-page="announce-edit">Announcements</div>
                 <div class="nav-item" data-page="feedback-edit">Feedback form</div>
+                <div class="nav-item" data-page="ocfit-team">OC Team Builder</div>
             </div>
         </div>
 
@@ -675,12 +676,26 @@
             <button class="ghost small" id="ocfit-refresh">Refresh</button>
             <div class="status" id="ocfit-status"></div>
             <div id="ocfit-body" style="margin-top:16px;"></div>
+        </section>
 
-            <div class="panel" id="ocfit-team-panel" style="display:none;margin-top:20px;">
-                <h3>🧩 Team Builder <span style="font-weight:400;color:var(--muted);font-size:12px;">(leaders only)</span></h3>
-                <p style="color:var(--muted);font-size:12px;margin:0 0 12px;">
-                    Sorted by how much each open slot actually matters to its crime's success — most-critical-to-fill-well first. Members who haven't opened their own tracker yet won't have data here.
+        <!-- ========== OC TEAM BUILDER (leadership) ========== -->
+        <section class="page" id="page-ocfit-team">
+            <div class="lab-label">WWL·06b / leadership tools</div>
+            <h2>🧩 OC Team Builder</h2>
+            <p class="pagedesc">
+                Every open slot across your faction right now, ranked by members' predicted fit — sorted by how much
+                each slot actually matters to its crime's success. Members who haven't opened their own OC Fit Tracker
+                yet won't have data here.
+            </p>
+
+            <div class="panel" id="ocfit-team-locked" style="display:none;">
+                <h3>🔒 Leaders only</h3>
+                <p style="color:var(--muted);line-height:1.6;margin:0;">
+                    The Team Builder needs the same <b>API Access</b> faction permission as Chain payout.
                 </p>
+            </div>
+
+            <div id="ocfit-team-panel" style="display:none;">
                 <div id="ocfit-team-body"></div>
             </div>
         </section>
