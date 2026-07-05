@@ -511,9 +511,13 @@
                     <h3>Display case worth</h3>
                     <div id="pf-display"><p style="color:var(--muted)">Not loaded yet.</p></div>
                 </div>
-                <div class="panel" style="grid-column:1 / -1;">
-                    <h3>Books &amp; racing</h3>
-                    <div id="pf-records"><p style="color:var(--muted)">Not loaded yet.</p></div>
+                <div class="panel">
+                    <h3>Books read</h3>
+                    <div id="pf-books"><p style="color:var(--muted)">Not loaded yet.</p></div>
+                </div>
+                <div class="panel">
+                    <h3>Racing</h3>
+                    <div id="pf-racing"><p style="color:var(--muted)">Not loaded yet.</p></div>
                 </div>
             </div>
         </section>
@@ -1505,31 +1509,45 @@
             .replace(/\b\w/g, c => c.toUpperCase());
     }
 
-    function looksLikeMoney(key) {
-        return /money|cash|worth|value|price|total|networth|bank|vault|piggy/i.test(key);
+    function formatTimestamp(val) {
+        if (!val) return '—';
+        const d = new Date(val * 1000);
+        return `${d.toLocaleDateString()} ${d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
     }
 
-    function formatCell(key, val) {
+    function formatCell(key, val, currency) {
         if (val === null || val === undefined) return '—';
-        if (typeof val === 'number') return looksLikeMoney(key) ? fmt$(val) : fmtN(val);
+        if (key === 'timestamp') return formatTimestamp(val);
+        if (typeof val === 'number') return currency ? fmt$(val) : fmtN(val);
         if (typeof val === 'boolean') return val ? 'Yes' : 'No';
-        if (typeof val === 'object') return ''; // handled separately as a nested table
+        if (typeof val === 'object') return '';
         return esc(String(val));
     }
 
-    // Renders a flat or one-level-nested object as key/value rows; nested objects/arrays get their own mini-table.
-    function renderDynamicObject(container, obj) {
+    // Renders a flat or nested object as key/value rows. Only pass currency:true for genuinely
+    // money-denominated sections (net worth, item worth) — most sections are plain counts.
+    function renderDynamicObject(container, obj, opts = {}) {
+        const currency = !!opts.currency;
+        const exclude = new Set(['parsetime', ...(opts.exclude || [])]); // implementation-detail fields, never useful to show
+
         if (!obj || typeof obj !== 'object') { container.innerHTML = '<p style="color:var(--muted)">No data returned.</p>'; return; }
-        const entries = Object.entries(obj);
+        let entries = Object.entries(obj).filter(([k]) => !exclude.has(k));
         if (!entries.length) { container.innerHTML = '<p style="color:var(--muted)">No data returned.</p>'; return; }
+
+        // Pull "total" out to a highlighted summary at the top rather than burying it in the list.
+        const totalEntry = entries.find(([k]) => k.toLowerCase() === 'total');
+        entries = entries.filter(([k]) => k.toLowerCase() !== 'total');
 
         const simple = entries.filter(([, v]) => typeof v !== 'object' || v === null);
         const nested = entries.filter(([, v]) => typeof v === 'object' && v !== null);
 
         let html = '';
+        if (totalEntry) {
+            html += `<div class="stat" style="margin-bottom:12px;"><div class="k">Total</div><div class="v good">${formatCell('total', totalEntry[1], currency)}</div></div>`;
+        }
         if (simple.length) {
             html += simple.map(([k, v]) => `
-                <div class="result-line"><span class="rk">${esc(humanizeKey(k))}</span><span class="rv">${formatCell(k, v)}</span></div>`).join('');
+                <div class="result-line"><span class="rk">${esc(humanizeKey(k))}</span><span class="rv">${formatCell(k, v, currency)}</span></div>`).join('');
         }
         nested.forEach(([k, v]) => {
             html += `<div class="lab-label" style="margin-top:14px;">${esc(humanizeKey(k))}</div>`;
@@ -1538,12 +1556,25 @@
                 const cols = [...new Set(v.flatMap(item => (item && typeof item === 'object') ? Object.keys(item) : ['value']))];
                 html += `<div class="table-scroll"><table><thead><tr>${cols.map(c => `<th>${esc(humanizeKey(c))}</th>`).join('')}</tr></thead><tbody>`;
                 v.forEach(item => {
-                    html += '<tr>' + cols.map(c => `<td>${formatCell(c, (item && typeof item === 'object') ? item[c] : item)}</td>`).join('') + '</tr>';
+                    html += '<tr>' + cols.map(c => `<td>${formatCell(c, (item && typeof item === 'object') ? item[c] : item, currency)}</td>`).join('') + '</tr>';
                 });
                 html += '</tbody></table></div>';
             } else {
-                html += Object.entries(v).map(([k2, v2]) => `
-                    <div class="result-line"><span class="rk">${esc(humanizeKey(k2))}</span><span class="rv">${formatCell(k2, v2)}</span></div>`).join('');
+                const subVals = Object.values(v);
+                const isDictOfDicts = subVals.length > 0 && subVals.every(x => x && typeof x === 'object');
+                if (isDictOfDicts) {
+                    // e.g. jobpoints.companies — a dict keyed by company ID, each value its own object.
+                    const cols = [...new Set(subVals.flatMap(o => Object.keys(o)))].filter(c => c !== 'name');
+                    html += `<div class="table-scroll"><table><thead><tr><th>Name</th>${cols.map(c => `<th>${esc(humanizeKey(c))}</th>`).join('')}</tr></thead><tbody>`;
+                    Object.entries(v).forEach(([subKey, subVal]) => {
+                        const label = subVal.name || humanizeKey(subKey);
+                        html += `<tr><td>${esc(label)}</td>${cols.map(c => `<td>${formatCell(c, subVal[c], currency)}</td>`).join('')}</tr>`;
+                    });
+                    html += '</tbody></table></div>';
+                } else {
+                    html += Object.entries(v).map(([k2, v2]) => `
+                        <div class="result-line"><span class="rk">${esc(humanizeKey(k2))}</span><span class="rv">${formatCell(k2, v2, currency)}</span></div>`).join('');
+                }
             }
         });
         container.innerHTML = html || '<p style="color:var(--muted)">No data returned.</p>';
@@ -1555,15 +1586,17 @@
         if (!list.length) { container.innerHTML = `<p style="color:var(--muted)">${esc(emptyMsg)}</p>`; return; }
 
         let total = 0;
+        let pricedCount = 0;
         const rows = list.map(it => {
-            const id = it.ID ?? it.id;
+            const id = it.ID ?? it.id ?? it.itemID ?? it.item_id;
             const qty = it.quantity ?? it.qty ?? 1;
             const price = priceMap.get(String(id));
-            const name = price?.name || it.name || `Item #${id}`;
-            const worth = price ? price.market_value * qty : null;
-            if (worth) total += worth;
+            const marketValue = price ? (price.market_value ?? price.value) : null;
+            const name = it.name || price?.name || `Item #${id}`;
+            const worth = marketValue != null ? marketValue * qty : null;
+            if (worth != null) { total += worth; pricedCount++; }
             return { name, qty, worth };
-        }).sort((a, b) => (b.worth || 0) - (a.worth || 0));
+        }).sort((a, b) => (b.worth ?? -1) - (a.worth ?? -1));
 
         const rowsHtml = rows.slice(0, 25).map(r => `
             <tr><td>${esc(r.name)}</td><td class="num">${fmtN(r.qty)}</td><td class="num">${r.worth != null ? fmt$(r.worth) : '—'}</td></tr>`).join('');
@@ -1571,7 +1604,11 @@
             <div class="table-scroll"><table><thead><tr><th>Item</th><th class="num">Qty</th><th class="num">Worth</th></tr></thead>
             <tbody>${rowsHtml}</tbody></table></div>
             ${rows.length > 25 ? `<p style="color:var(--muted);font-size:12px;margin-top:6px;">+${rows.length - 25} more item(s) not shown.</p>` : ''}
-            <div class="result-line" style="margin-top:8px;"><span class="rk"><b>Total worth</b></span><span class="rv good"><b>${fmt$(total)}</b></span></div>`;
+            <div class="result-line" style="margin-top:8px;"><span class="rk"><b>Total worth</b></span><span class="rv good"><b>${fmt$(total)}</b></span></div>
+            <p style="color:var(--muted);font-size:11px;margin-top:6px;">
+                ${pricedCount < rows.length ? `Priced ${pricedCount} of ${rows.length} items — the rest have no listed market value. ` : ''}
+                Prices are Torn's official item value, which can differ from real bazaar/market prices.
+            </p>`;
     }
 
     $('profile-refresh').addEventListener('click', () => { profileLoaded = false; loadPlayerProfile(); });
@@ -1587,7 +1624,7 @@
                 tornSection('torn', 'items').catch(() => null), // pricing is a nice-to-have, not required
             ]);
 
-            renderDynamicObject($('pf-networth'), profileData.networth);
+            renderDynamicObject($('pf-networth'), profileData.networth, { currency: true, exclude: ['timestamp'] });
             renderDynamicObject($('pf-criminal'), profileData.criminalrecord);
             renderDynamicObject($('pf-jobpoints'), profileData.jobpoints);
             renderDynamicObject($('pf-weaponexp'), Array.isArray(profileData.weaponexp)
@@ -1605,10 +1642,12 @@
                 });
             }
 
-            // Books & racing: personalstats is huge, so just surface anything book/racing-related by name.
+            // Books & racing get their own panels rather than one merged list.
             const stats = profileData.personalstats || {};
-            const picked = Object.entries(stats).filter(([k]) => /book|racing|race/i.test(k));
-            renderDynamicObject($('pf-records'), picked.length ? Object.fromEntries(picked) : null);
+            const books = Object.entries(stats).filter(([k]) => /book/i.test(k));
+            const racing = Object.entries(stats).filter(([k]) => /racing|race/i.test(k));
+            renderDynamicObject($('pf-books'), books.length ? Object.fromEntries(books) : null);
+            renderDynamicObject($('pf-racing'), racing.length ? Object.fromEntries(racing) : null);
 
             st.textContent = ''; st.className = 'status';
         } catch (e) {
