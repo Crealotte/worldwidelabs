@@ -251,7 +251,10 @@
         if (page === 'profile') loadPlayerProfile();
         if (page === 'links') loadRequiredToolStatus();
         if (page === 'feedback') loadFeedback();
-        if (page === 'ocfit' && !ocfitLoaded) { ocfitLoaded = true; loadOcFit(); }
+        if (page === 'ocfit') {
+            if (!ocfitLoaded) { ocfitLoaded = true; loadOcFit(); }
+            loadOcFitTeamBuilder();
+        }
         if (page === 'feedback-edit') {
             $('feedback-locked').style.display = isLeaderCached ? 'none' : 'block';
             $('feedback-editor').style.display = isLeaderCached ? 'block' : 'none';
