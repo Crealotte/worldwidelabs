@@ -1106,29 +1106,43 @@
                 const pct = total ? Math.round((count / total) * 100) : 0;
                 const mine = myVote !== null && Number(myVote) === i;
                 return `
-                    <div class="poll-option" data-idx="${i}" style="cursor:pointer;margin-bottom:8px;">
-                        <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:4px;">
-                            <span>${mine ? '✓ ' : ''}${esc(opt)}</span><span style="color:var(--muted);">${count} (${pct}%)</span>
-                        </div>
+                    <div class="poll-option" style="margin-bottom:10px;">
+                        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;margin-bottom:4px;">
+                            <input type="checkbox" class="an-vote-check" data-idx="${i}" style="width:auto;" ${mine ? 'checked' : ''}>
+                            <span style="flex:1;">${esc(opt)}</span>
+                            <span style="color:var(--muted);">${count} (${pct}%)</span>
+                        </label>
                         <div class="bar-track"><div class="bar-fill" style="width:${pct}%;background:${mine ? 'var(--reagent)' : 'var(--line)'};"></div></div>
                     </div>`;
             }).join('');
-            html += `<p style="color:var(--muted);font-size:11px;margin-top:6px;">${total} vote${total === 1 ? '' : 's'} so far · click an option to ${myVote !== null ? 'change your' : 'cast your'} vote</p>`;
+            html += `<button class="ghost small" id="an-vote-submit" style="margin-top:6px;">${myVote !== null ? 'Change vote' : 'Cast vote'}</button>`;
+            html += `<p style="color:var(--muted);font-size:11px;margin-top:8px;">${total} vote${total === 1 ? '' : 's'} so far</p>`;
         }
         $('announcement-body').innerHTML = html;
 
         if (ann.poll) {
-            $('announcement-body').querySelectorAll('.poll-option').forEach(el => {
-                el.addEventListener('click', async () => {
-                    try {
-                        await fetch('/api/announcement', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ key: apiKey, action: 'vote', optionIndex: parseInt(el.dataset.idx, 10) }),
-                        });
-                        loadAnnouncement();
-                    } catch (e) { toast('Vote failed — try again'); }
+            const checks = $('announcement-body').querySelectorAll('.an-vote-check');
+            checks.forEach(cb => {
+                cb.addEventListener('change', () => {
+                    if (cb.checked) checks.forEach(other => { if (other !== cb) other.checked = false; }); // single choice
                 });
+            });
+            $('an-vote-submit').addEventListener('click', async () => {
+                const chosen = [...checks].find(cb => cb.checked);
+                if (!chosen) { toast('Check an option first'); return; }
+                const btn = $('an-vote-submit');
+                btn.disabled = true; btn.textContent = 'Voting…';
+                try {
+                    await fetch('/api/announcement', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ key: apiKey, action: 'vote', optionIndex: parseInt(chosen.dataset.idx, 10) }),
+                    });
+                    loadAnnouncement();
+                } catch (e) {
+                    toast('Vote failed — try again');
+                    btn.disabled = false; btn.textContent = 'Cast vote';
+                }
             });
         }
     }
