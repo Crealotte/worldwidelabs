@@ -181,6 +181,20 @@
     }
     .link-card .rm:hover { color: var(--danger); }
 
+    .link-card.required {
+        background: linear-gradient(160deg, rgba(53,217,155,.12), var(--bench-2));
+        border: 1px solid var(--reagent-dim);
+        box-shadow: 0 0 0 1px rgba(53,217,155,.08) inset;
+    }
+    .link-card.required:hover { border-color: var(--reagent); }
+    .link-card.required .lt { color: var(--reagent); }
+    .link-card.required .badge {
+        position: absolute; top: 10px; right: 10px; font-family: var(--mono); font-size: 9px;
+        letter-spacing: .08em; text-transform: uppercase; color: var(--reagent);
+        background: rgba(53,217,155,.14); border: 1px solid var(--reagent-dim);
+        border-radius: 10px; padding: 2px 7px;
+    }
+
     /* ---------- chips ---------- */
     #chain-list { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
     .chip {
@@ -346,7 +360,7 @@
                 <p style="color:var(--muted);font-size:12px;margin:0 0 12px;" id="adoption-summary"></p>
                 <div class="table-scroll" style="max-height:340px;overflow-y:auto;">
                     <table>
-                        <thead><tr><th>Member</th><th>WWLabs</th><th class="num">Last login</th></tr></thead>
+                        <thead><tr><th>Member</th><th>WWLabs</th><th>Discord</th><th class="num">Last login</th></tr></thead>
                         <tbody id="adoption-body"></tbody>
                     </table>
                 </div>
@@ -562,6 +576,10 @@
             <h2>Tools &amp; links</h2>
             <p class="pagedesc">The faction toolbox — external tools every member should have bookmarked. Add your own below.</p>
 
+            <div class="lab-label" style="margin-bottom:8px;">Required for every member</div>
+            <div class="link-grid" id="required-link-grid" style="margin-bottom:26px;"></div>
+
+            <div class="lab-label" style="margin-bottom:8px;">Everything else</div>
             <div class="link-grid" id="link-grid"></div>
 
             <div class="panel" style="margin-top:20px;">
@@ -683,6 +701,12 @@
         { title: 'Item Market', url: 'https://www.torn.com/page.php?sid=ItemMarket', desc: 'Buy Xanax, energy cans and gear.', builtin: true },
         { title: 'Your Faction', url: 'https://www.torn.com/factions.php?step=your', desc: 'Faction page — armoury, wars, announcements.', builtin: true },
         { title: 'Gym', url: 'https://www.torn.com/gym.php', desc: 'Spend that energy.', builtin: true },
+    ];
+
+    const REQUIRED_LINKS = [
+        { title: 'Discord', url: 'https://discord.gg/HFmPUd2zyh', desc: 'Faction communication and coordination.' },
+        { title: 'Torn Intel', url: 'https://torn-intel.com/', desc: 'Shared faction intelligence — activity, war analytics, enemy monitoring.' },
+        { title: 'CAT', url: 'https://cat-script.com/', desc: 'Required faction tool.' },
     ];
 
     // ================= HELPERS =================
@@ -888,20 +912,23 @@
     async function loadAdoption() {
         const panel = $('adoption');
         try {
-            const [trackData, membersData] = await Promise.all([
+            const [trackData, membersData, discordData] = await Promise.all([
                 fetch(`/api/presence?key=${encodeURIComponent(apiKey)}`).then(r => r.json()),
                 tornV2('/faction/members?striptags=true'),
+                fetch(`/api/discord-members?key=${encodeURIComponent(apiKey)}`).then(r => r.json()).catch(() => null),
             ]);
             if (trackData.error) throw new Error(trackData.error);
             const logins = trackData.logins || {};
             const members = (membersData.members || []).slice();
+            const discordMembers = (discordData && !discordData.error) ? discordData.members : null;
 
             members.sort((a, b) =>
                 (logins[b.id]?.last || 0) - (logins[a.id]?.last || 0) || a.name.localeCompare(b.name));
 
             const onboard = members.filter(m => logins[m.id]).length;
-            $('adoption-summary').textContent =
-                `${onboard} of ${members.length} members have logged in.`;
+            $('adoption-summary').textContent = discordMembers
+                ? `${onboard} of ${members.length} members have logged into WWLabs · ${members.filter(m => discordMembers[m.id]).length} of ${members.length} found in Discord.`
+                : `${onboard} of ${members.length} members have logged in. (Discord check not set up yet.)`;
 
             $('adoption-body').innerHTML = members.map(m => {
                 const l = logins[m.id];
@@ -909,9 +936,19 @@
                     ? new Date(l.last).toLocaleDateString() + ' ' +
                       new Date(l.last).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
                     : '';
+                let discordCell = '<span style="color:var(--muted);font-size:11px;">—</span>';
+                if (discordMembers) {
+                    const d = discordMembers[m.id];
+                    discordCell = d
+                        ? (d.verified
+                            ? '<span style="color:var(--reagent)">● verified</span>'
+                            : '<span style="color:var(--happy)">● in server</span>')
+                        : '<span style="color:var(--muted)">○ not found</span>';
+                }
                 return `<tr${l ? '' : ' style="opacity:.5"'}>
                     <td>${esc(m.name)} [${m.id}]</td>
                     <td>${l ? '<span style="color:var(--reagent)">● on board</span>' : '<span style="color:var(--muted)">○ not yet</span>'}</td>
+                    <td>${discordCell}</td>
                     <td class="num" style="font-family:var(--mono);font-size:12px;">${when}</td>
                 </tr>`;
             }).join('');
@@ -1724,7 +1761,19 @@
     function getCustomLinks() {
         try { return JSON.parse(localStorage.getItem(LINKS_STORAGE)) || []; } catch { return []; }
     }
+
+    function renderRequiredLinks() {
+        $('required-link-grid').innerHTML = REQUIRED_LINKS.map(l => `
+            <a class="link-card required" href="${esc(l.url)}" target="_blank" rel="noopener">
+                <span class="badge">Required</span>
+                <div class="lt">${esc(l.title)}</div>
+                <div class="ld">${esc(l.desc || '')}</div>
+                <div class="lu">${esc(l.url)}</div>
+            </a>`).join('');
+    }
+
     function renderLinks() {
+        renderRequiredLinks();
         const custom = getCustomLinks();
         const all = [...DEFAULT_LINKS, ...custom];
         $('link-grid').innerHTML = '';
