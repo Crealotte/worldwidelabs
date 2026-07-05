@@ -90,8 +90,9 @@ async function loadOcFit() {
 $('ocfit-refresh').addEventListener('click', () => { ocfitLoaded = false; loadOcFit(); });
 
 async function loadOcFitTeamBuilder() {
-    if (!isLeaderCached) { $('ocfit-team-panel').style.display = 'none'; return; }
-    $('ocfit-team-panel').style.display = 'block';
+    $('ocfit-team-locked').style.display = isLeaderCached ? 'none' : 'block';
+    $('ocfit-team-panel').style.display = isLeaderCached ? 'block' : 'none';
+    if (!isLeaderCached) return;
     $('ocfit-team-body').innerHTML = '<p style="color:var(--muted);">Loading…</p>';
     try {
         const res = await fetch('/api/oc-fit', {
