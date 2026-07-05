@@ -154,6 +154,7 @@
             setNavLock('payout', false);
             setNavLock('announce-edit', false);
             setNavLock('feedback-edit', false);
+            setNavLock('ocfit-team', false);
             $('cp-locked').style.display = 'none';
             $('cp-tools').style.display = 'block';
             loadAdoption();
@@ -163,6 +164,7 @@
             setNavLock('payout', true);
             setNavLock('announce-edit', true);
             setNavLock('feedback-edit', true);
+            setNavLock('ocfit-team', true);
             $('cp-locked').style.display = 'block';
             $('cp-tools').style.display = 'none';
         }
@@ -175,6 +177,9 @@
             $('feedback-locked').style.display = isLeaderCached ? 'none' : 'block';
             $('feedback-editor').style.display = isLeaderCached ? 'block' : 'none';
             if (isLeaderCached) loadFeedbackEditor();
+        }
+        if (document.querySelector('.nav-item[data-page="ocfit-team"]').classList.contains('active')) {
+            loadOcFitTeamBuilder();
         }
     }
 
@@ -251,10 +256,8 @@
         if (page === 'profile') loadPlayerProfile();
         if (page === 'links') loadRequiredToolStatus();
         if (page === 'feedback') loadFeedback();
-        if (page === 'ocfit') {
-            if (!ocfitLoaded) { ocfitLoaded = true; loadOcFit(); }
-            loadOcFitTeamBuilder();
-        }
+        if (page === 'ocfit' && !ocfitLoaded) { ocfitLoaded = true; loadOcFit(); }
+        if (page === 'ocfit-team') loadOcFitTeamBuilder();
         if (page === 'feedback-edit') {
             $('feedback-locked').style.display = isLeaderCached ? 'none' : 'block';
             $('feedback-editor').style.display = isLeaderCached ? 'block' : 'none';
