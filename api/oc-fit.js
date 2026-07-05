@@ -132,6 +132,11 @@ function findWeight(weights, scenarioName, roleName) {
     return null;
 }
 
+// Same thresholds the original OC Manager script used as sensible defaults.
+const WEIGHT_HIGH = 25;
+const WEIGHT_LOW = 15;
+const CPR_WARN = 70;
+
 module.exports = async function handler(req, res) {
     try {
         if (!REDIS_URL || !REDIS_TOKEN) {
@@ -168,6 +173,9 @@ module.exports = async function handler(req, res) {
             }
             if (openSlots.length === 0) return res.status(200).json({ openSlots: [] });
 
+            const weights = await getRoleWeights();
+            for (const slot of openSlots) slot.weight = findWeight(weights, slot.scenario, slot.role);
+
             // Faction roster, so we know who to check and can show names.
             const membersRes = await fetch(`https://api.torn.com/v2/faction/members?key=${encodeURIComponent(key)}`,
                 { headers: { accept: 'application/json' } });
@@ -192,8 +200,17 @@ module.exports = async function handler(req, res) {
                     if (match) candidates.push({ id, name, cpr: match.cpr, live: match.live, lastSeenLive: match.lastSeenLive });
                 }
                 candidates.sort((a, b) => b.cpr - a.cpr);
-                return { ...slot, candidates };
+                // A slot is "risky" when it matters a lot to the crime's success (high weight) but
+                // the best available candidate still falls short of a comfortable CPR — exactly the
+                // combination the original OC Manager script flagged as its biggest red flag.
+                const bestCpr = candidates[0]?.cpr ?? null;
+                const risky = slot.weight != null && slot.weight >= WEIGHT_HIGH && (bestCpr == null || bestCpr < CPR_WARN);
+                return { ...slot, candidates, risky };
             });
+
+            // Highest-weight (most consequential) open slots first, since those are the ones
+            // worth a leader's attention before low-weight slots that barely move the needle.
+            results.sort((a, b) => (b.weight ?? -1) - (a.weight ?? -1));
 
             return res.status(200).json({ openSlots: results });
         }
