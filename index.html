@@ -209,6 +209,42 @@
         color: #06130d; background: var(--reagent); border-color: var(--reagent); font-weight: 700;
     }
 
+    /* ---------- oc fit tracker ---------- */
+    .ocfit-tier { margin-bottom: 14px; }
+    .ocfit-tier-header {
+        display: flex; align-items: center; gap: 10px; cursor: pointer; user-select: none;
+        padding: 10px 14px; background: var(--bench); border: 1px solid var(--line);
+        border-radius: var(--radius); font-weight: 600;
+    }
+    .ocfit-tier-header:hover { border-color: var(--reagent); }
+    .ocfit-tier-header .chev { margin-left: auto; transition: transform .15s; color: var(--muted); }
+    .ocfit-tier.collapsed .chev { transform: rotate(-90deg); }
+    .ocfit-tier-body { padding: 10px 4px 0 4px; display: flex; flex-direction: column; gap: 8px; }
+    .ocfit-tier.collapsed .ocfit-tier-body { display: none; }
+
+    .ocfit-scenario { background: var(--bench-2); border: 1px solid var(--line); border-radius: var(--radius); }
+    .ocfit-scenario-header {
+        display: flex; align-items: center; gap: 10px; cursor: pointer; user-select: none; padding: 9px 12px;
+    }
+    .ocfit-scenario-header .chev { margin-left: auto; transition: transform .15s; color: var(--muted); font-size: 12px; }
+    .ocfit-scenario.collapsed .chev { transform: rotate(-90deg); }
+    .ocfit-scenario-body { padding: 0 12px 10px; display: flex; flex-direction: column; gap: 6px; }
+    .ocfit-scenario.collapsed .ocfit-scenario-body { display: none; }
+
+    .ocfit-role-row {
+        display: flex; align-items: center; gap: 10px; padding: 7px 10px; background: var(--ink);
+        border: 1px solid var(--line); border-radius: 6px; cursor: pointer;
+    }
+    .ocfit-role-row:hover { border-color: var(--reagent); }
+    .ocfit-role-name { flex: 1; }
+    .ocfit-cpr { font-family: var(--mono); font-weight: 700; }
+    .ocfit-live-badge { font-size: 10px; font-family: var(--mono); padding: 2px 6px; border-radius: 10px; }
+    .ocfit-role-detail {
+        display: none; margin: -2px 0 4px; padding: 10px 12px; background: var(--ink);
+        border: 1px dashed var(--line); border-radius: 6px; font-size: 13px; color: var(--muted);
+    }
+    .ocfit-role-detail.open { display: block; }
+
     /* ---------- chips ---------- */
     #chain-list { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
     .chip {
@@ -336,6 +372,7 @@
 
         <div class="nav-item" data-page="links">Tools &amp; links</div>
         <div class="nav-item" data-page="feedback">Feedback</div>
+        <div class="nav-item" data-page="ocfit">OC Fit Tracker</div>
 
         <div class="spacer"></div>
         <div class="whoami" id="whoami"></div>
@@ -621,6 +658,19 @@
             </div>
         </section>
 
+        <!-- ========== OC FIT TRACKER ========== -->
+        <section class="page" id="page-ocfit">
+            <div class="lab-label">WWL·06 / organized crime fit</div>
+            <h2>OC Fit Tracker</h2>
+            <p class="pagedesc">
+                Your own predicted Checkpoint Pass Rate per role, straight from Torn's API. Builds itself over time —
+                once a crime's spawned for your faction once, it stays here (marked as cached) until it spawns again.
+            </p>
+            <button class="ghost small" id="ocfit-refresh">Refresh</button>
+            <div class="status" id="ocfit-status"></div>
+            <div id="ocfit-body" style="margin-top:16px;"></div>
+        </section>
+
         <!-- ========== LEVELLING TARGETS ========== -->
         <section class="page" id="page-targets">
             <div class="lab-label">WWL·04 / levelling range</div>
@@ -817,6 +867,7 @@
 <script src="tools-links.js"></script>
 <script src="player-profile.js"></script>
 <script src="target-finder.js"></script>
+<script src="oc-fit-tracker.js"></script>
 <script src="app-init.js"></script>
 </body>
 </html>
