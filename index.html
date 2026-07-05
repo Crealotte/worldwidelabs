@@ -509,20 +509,12 @@
                     <div id="pf-weaponexp"><p style="color:var(--muted)">Not loaded yet.</p></div>
                 </div>
                 <div class="panel">
-                    <h3>Inventory worth</h3>
-                    <div id="pf-inventory"><p style="color:var(--muted)">Not loaded yet.</p></div>
-                </div>
-                <div class="panel">
                     <h3>Display case worth</h3>
                     <div id="pf-display"><p style="color:var(--muted)">Not loaded yet.</p></div>
                 </div>
                 <div class="panel">
-                    <h3>Books read</h3>
-                    <div id="pf-books"><p style="color:var(--muted)">Not loaded yet.</p></div>
-                </div>
-                <div class="panel">
-                    <h3>Racing</h3>
-                    <div id="pf-racing"><p style="color:var(--muted)">Not loaded yet.</p></div>
+                    <h3>Skills</h3>
+                    <div id="pf-skills"><p style="color:var(--muted)">Not loaded yet.</p></div>
                 </div>
             </div>
         </section>
@@ -1692,7 +1684,7 @@
         st.className = 'status ok'; st.textContent = 'Loading…';
         try {
             const [profileData, itemPrices] = await Promise.all([
-                tornV1('networth,criminalrecord,jobpoints,weaponexp,inventory,display,personalstats'),
+                tornV1('networth,criminalrecord,jobpoints,weaponexp,display,skills'),
                 tornSection('torn', 'items').catch(() => null), // pricing is a nice-to-have, not required
             ]);
 
@@ -1701,29 +1693,17 @@
             renderDynamicObject($('pf-jobpoints'), profileData.jobpoints);
             renderDynamicObject($('pf-weaponexp'), Array.isArray(profileData.weaponexp)
                 ? { weapons: profileData.weaponexp } : profileData.weaponexp);
+            renderDynamicObject($('pf-skills'), profileData.skills);
+            appendRawDataToggle($('pf-skills'), profileData.skills);
 
             const priceMap = new Map();
             if (itemPrices?.items) {
                 Object.entries(itemPrices.items).forEach(([id, info]) => priceMap.set(String(id), info));
             }
-            await renderItemWorth($('pf-inventory'), profileData.inventory, priceMap, 'No inventory data returned.');
             await renderItemWorth($('pf-display'), profileData.display, priceMap, 'No display case data returned.');
             if (!itemPrices) {
-                [$('pf-inventory'), $('pf-display')].forEach(el => {
-                    el.insertAdjacentHTML('beforeend', '<p style="color:var(--muted);font-size:11px;margin-top:6px;">Item prices unavailable right now — showing quantities only where possible.</p>');
-                });
+                $('pf-display').insertAdjacentHTML('beforeend', '<p style="color:var(--muted);font-size:11px;margin-top:6px;">Item prices unavailable right now — showing quantities only where possible.</p>');
             }
-
-            // Books & racing get their own panels rather than one merged list.
-            const stats = profileData.personalstats || {};
-            const books = Object.entries(stats).filter(([k]) => /book/i.test(k));
-            const racing = Object.entries(stats).filter(([k]) => /racing|race/i.test(k));
-            renderDynamicObject($('pf-books'), books.length ? Object.fromEntries(books) : null);
-            renderDynamicObject($('pf-racing'), racing.length ? Object.fromEntries(racing) : null);
-            // Show the matched slice when something matched (to verify it's the right data);
-            // show the full personalstats dump when nothing matched (to help find the real key names).
-            appendRawDataToggle($('pf-books'), books.length ? Object.fromEntries(books) : stats);
-            appendRawDataToggle($('pf-racing'), racing.length ? Object.fromEntries(racing) : stats);
 
             st.textContent = ''; st.className = 'status';
         } catch (e) {
