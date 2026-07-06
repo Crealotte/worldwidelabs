@@ -3,50 +3,38 @@
 
     // ================= WEEKLY ENERGY GOALS =================
     const EG_STORAGE = 'wwl_energy_group'; // remembers which group this browser picked
+    const EG_DONATOR_KEY = 'wwl_energy_donator'; // shared with the Dashboard's auto-detection
 
-    const EG_PLANS = {
-        a: {
-            title: '1,500,000+ total battle stats — 4,400 E this week',
-            sub: 'Each of your 4 training days: 3 full natural energy bars, 2 Xanax, and 1 energy refill.',
-            target: 4400,
-            blocks: [
-                { title: 'Training day 1', items: [
-                    { key: 'd1nat1', label: 'Natural energy fill #1 (150 E)', value: 150 },
-                    { key: 'd1nat2', label: 'Natural energy fill #2 (150 E)', value: 150 },
-                    { key: 'd1nat3', label: 'Natural energy fill #3 (150 E)', value: 150 },
-                    { key: 'd1xan1', label: 'Xanax #1 (250 E)', value: 250 },
-                    { key: 'd1xan2', label: 'Xanax #2 (250 E)', value: 250 },
-                    { key: 'd1ref', label: 'Energy refill ×1 (150 E)', value: 150 },
-                ]},
-                { title: 'Training day 2', items: [
-                    { key: 'd2nat1', label: 'Natural energy fill #1 (150 E)', value: 150 },
-                    { key: 'd2nat2', label: 'Natural energy fill #2 (150 E)', value: 150 },
-                    { key: 'd2nat3', label: 'Natural energy fill #3 (150 E)', value: 150 },
-                    { key: 'd2xan1', label: 'Xanax #1 (250 E)', value: 250 },
-                    { key: 'd2xan2', label: 'Xanax #2 (250 E)', value: 250 },
-                    { key: 'd2ref', label: 'Energy refill ×1 (150 E)', value: 150 },
-                ]},
-                { title: 'Training day 3', items: [
-                    { key: 'd3nat1', label: 'Natural energy fill #1 (150 E)', value: 150 },
-                    { key: 'd3nat2', label: 'Natural energy fill #2 (150 E)', value: 150 },
-                    { key: 'd3nat3', label: 'Natural energy fill #3 (150 E)', value: 150 },
-                    { key: 'd3xan1', label: 'Xanax #1 (250 E)', value: 250 },
-                    { key: 'd3xan2', label: 'Xanax #2 (250 E)', value: 250 },
-                    { key: 'd3ref', label: 'Energy refill ×1 (150 E)', value: 150 },
-                ]},
-                { title: 'Training day 4', items: [
-                    { key: 'd4nat1', label: 'Natural energy fill #1 (150 E)', value: 150 },
-                    { key: 'd4nat2', label: 'Natural energy fill #2 (150 E)', value: 150 },
-                    { key: 'd4nat3', label: 'Natural energy fill #3 (150 E)', value: 150 },
-                    { key: 'd4xan1', label: 'Xanax #1 (250 E)', value: 250 },
-                    { key: 'd4xan2', label: 'Xanax #2 (250 E)', value: 250 },
-                    { key: 'd4ref', label: 'Energy refill ×1 (150 E)', value: 150 },
-                ]},
+    // Donator status is auto-detected straight from the API (same field the Dashboard reads) —
+    // no more manual toggling. profile.donator is checked first since it's always fresh; the
+    // stored value is just a fallback for the rare case a key's access level doesn't return it.
+    function isDonatorStatus() {
+        if (typeof profile !== 'undefined' && profile?.donator != null) return !!profile.donator;
+        return localStorage.getItem(EG_DONATOR_KEY) === '1';
+    }
+
+    function planForGroupA(isDonator) {
+        const fillSize = isDonator ? 150 : 100;
+        const dayTotal = fillSize * 3 + 250 * 2 + fillSize; // 3 natural fills + 2 Xanax + 1 refill
+        const weeklyTotal = dayTotal * 4;
+        const days = [1, 2, 3, 4].map(n => ({
+            title: `Training day ${n}`,
+            items: [
+                { key: `d${n}nat1`, label: `Natural energy fill #1 (${fillSize} E)`, value: fillSize },
+                { key: `d${n}nat2`, label: `Natural energy fill #2 (${fillSize} E)`, value: fillSize },
+                { key: `d${n}nat3`, label: `Natural energy fill #3 (${fillSize} E)`, value: fillSize },
+                { key: `d${n}xan1`, label: 'Xanax #1 (250 E)', value: 250 },
+                { key: `d${n}xan2`, label: 'Xanax #2 (250 E)', value: 250 },
+                { key: `d${n}ref`, label: `Energy refill ×1 (${fillSize} E)`, value: fillSize },
             ],
-        },
-    };
-
-    const EG_DONATOR_KEY = 'wwl_energy_donator';
+        }));
+        return {
+            title: `1,500,000+ total battle stats — ${fmtN(weeklyTotal)} E this week`,
+            sub: `Each of your 4 training days: 3 full natural energy bars, 2 Xanax, and 1 energy refill. Natural energy bar: ${fillSize} E ${isDonator ? '(donator)' : '(no donator status)'}.`,
+            target: weeklyTotal,
+            blocks: days,
+        };
+    }
 
     function planForGroupB(isDonator) {
         const fillSize = isDonator ? 150 : 100;
@@ -54,7 +42,7 @@
         const weeklyTotal = 1000 + dayTotal * 2; // stacking phase + days 3 & 4
         return {
             title: `Under 1,500,000 total battle stats — ${fmtN(weeklyTotal)} E this week`,
-            sub: `First bank up energy with Xanax, then spend it all in one big jump. Days 3 & 4 are lighter, since you're newer. Natural energy bar: ${fillSize} E ${isDonator ? '(donator)' : '(no donator status yet)'}.`,
+            sub: `First bank up energy with Xanax, then spend it all in one big jump. Days 3 & 4 are lighter, since you're newer. Natural energy bar: ${fillSize} E ${isDonator ? '(donator)' : '(no donator status)'}.`,
             target: weeklyTotal,
             blocks: [
                 { title: 'Stacking phase — days 1 & 2', note: 'Take a Xanax roughly every 8 hours without spending the energy, until you\'re holding around 1,000 E — then spend it all in one big training session.', items: [
@@ -80,11 +68,10 @@
     }
 
     function getEgPlan(group) {
-        if (group === 'b') {
-            const isDonator = localStorage.getItem(EG_DONATOR_KEY) === '1';
-            return planForGroupB(isDonator);
-        }
-        return EG_PLANS[group];
+        const isDonator = isDonatorStatus();
+        if (group === 'a') return planForGroupA(isDonator);
+        if (group === 'b') return planForGroupB(isDonator);
+        return null;
     }
 
     function isoWeekKey(d = new Date()) {
@@ -125,16 +112,6 @@
         $('eg-sub').textContent = plan.sub;
 
         const checks = egLoadChecks(egGroup);
-        const isDonator = localStorage.getItem(EG_DONATOR_KEY) === '1';
-
-        // Donator toggle only matters (and only shows) for the under-1.5M group,
-        // since their natural energy bar size depends on it (100 E vs 150 E).
-        if (egGroup === 'b') {
-            $('eg-donator-wrap').style.display = 'block';
-            $('eg-donator').checked = isDonator;
-        } else {
-            $('eg-donator-wrap').style.display = 'none';
-        }
 
         let blocksHtml = '';
         plan.blocks.forEach(block => {
@@ -178,10 +155,6 @@
 
     $('eg-group-a').addEventListener('click', () => selectEgGroup('a'));
     $('eg-group-b').addEventListener('click', () => selectEgGroup('b'));
-    $('eg-donator').addEventListener('change', () => {
-        localStorage.setItem(EG_DONATOR_KEY, $('eg-donator').checked ? '1' : '0');
-        renderEgPlan(); // natural fill size (and the weekly target) changes with donator status
-    });
     $('eg-reset').addEventListener('click', () => {
         if (!confirm("Reset this week's checklist?")) return;
         egSaveChecks(egGroup, {});
