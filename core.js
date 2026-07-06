@@ -6,7 +6,6 @@
     const KEY_STORAGE = 'wwl_api_key';
     const LINKS_STORAGE = 'wwl_custom_links';
     const RATE_STORAGE = 'wwl_payout_rate';
-    const NATURAL_REGEN_PER_DAY = 480;   // +5 energy every 15 min
     const XANAX_ENERGY = 250;
 
     const DEFAULT_LINKS = [
