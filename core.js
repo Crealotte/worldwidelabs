@@ -97,7 +97,7 @@
     // ================= LOGIN =================
     async function login(key) {
         apiKey = key;
-        const data = await tornV1('profile,bars,cooldowns,notifications');
+        const data = await tornV1('profile,bars,cooldowns,notifications,gym,personalstats');
         profile = data;
         localStorage.setItem(KEY_STORAGE, key);
         $('login-view').style.display = 'none';
