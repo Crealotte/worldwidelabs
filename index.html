@@ -283,14 +283,13 @@
 
     @media (max-width: 760px) {
         .shell { flex-direction: column; }
-        nav.side { width: 100%; flex-direction: row; flex-wrap: wrap; align-items: center; padding: 12px; border-right: none; border-bottom: 1px solid var(--line); }
-        nav.side .logo { margin: 0 12px 0 0; }
+        nav.side {
+            width: 100%; flex-direction: column; padding: 12px; gap: 2px;
+            border-right: none; border-bottom: 1px solid var(--line);
+            max-height: 60vh; overflow-y: auto;
+        }
         nav.side .spacer, .whoami { display: none; }
-        .nav-item { padding: 8px 10px; font-size: 13px; }
-        .nav-item .idx { display: none; }
-        .nav-group { display: contents; }
-        .nav-group-header { display: none; }
-        .nav-group-items { display: flex !important; flex-direction: row; flex-wrap: wrap; border-left: none; padding-left: 0; margin: 0; gap: 4px; }
+        .nav-item { padding: 10px 12px; font-size: 14px; }
         main { padding: 18px; }
         .grid2, .grid3 { grid-template-columns: 1fr; }
     }
