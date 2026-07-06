@@ -55,6 +55,14 @@
         if (dashCooldownTick) { clearInterval(dashCooldownTick); dashCooldownTick = null; }
     }
 
+    // Torn's API doesn't expose either of these, so both need a manual, remembered choice.
+    // The donator key is shared with the Energy Planner's own toggle — set it in either place
+    // and both stay in sync.
+    const GYM_COST_KEY = 'wwl_gym_energy_cost';
+    const DONATOR_KEY = 'wwl_energy_donator';
+    function getGymCost() { return Number(localStorage.getItem(GYM_COST_KEY)) || 10; }
+    function isDonatorStatus() { return localStorage.getItem(DONATOR_KEY) === '1'; }
+
     function renderDashboard() {
         if (!profile) return;
         $('dash-greeting').textContent = `Welcome back, ${profile.name} [${profile.player_id}]`;
@@ -70,17 +78,42 @@
             barBlock('Life', profile.life, 'var(--life)');
 
         const e = profile.energy;
-        const trainsNow = e ? Math.floor(e.current / 10) : 0;
+        const gymCost = getGymCost();
+        const donator = isDonatorStatus();
+        const naturalPerDay = donator ? 720 : 480; // 5E every 10min (donator) vs every 15min (non-donator)
+        const trainsNow = e ? Math.floor(e.current / gymCost) : 0;
         const notif = profile.notifications || {};
         const unread = (notif.messages || 0) + (notif.events || 0) + (notif.awards || 0);
         $('glance').innerHTML = `
             <div class="stat"><div class="k">Level</div><div class="v">${profile.level ?? '—'}</div></div>
             <div class="stat"><div class="k">Energy now</div><div class="v good">${e ? e.current : '—'}</div>
-                <div class="s">≈ ${trainsNow} trains @10E</div></div>
-            <div class="stat"><div class="k">Natural E / day</div><div class="v">${NATURAL_REGEN_PER_DAY}</div>
-                <div class="s">+5 every 15 min</div></div>
+                <div class="s">≈ ${trainsNow} trains @
+                    <select id="dash-gym-cost" style="font-size:11px;background:transparent;color:inherit;border:1px solid var(--line);border-radius:4px;">
+                        <option value="5">5E</option>
+                        <option value="10">10E</option>
+                        <option value="25">25E</option>
+                        <option value="50">50E</option>
+                    </select> gym
+                </div></div>
+            <div class="stat"><div class="k">Natural E / day</div><div class="v">${naturalPerDay}</div>
+                <div class="s">+5 every ${donator ? '10' : '15'} min ·
+                    <label style="cursor:pointer;"><input type="checkbox" id="dash-donator-toggle" style="width:auto;vertical-align:middle;"> donator</label>
+                </div></div>
             <div class="stat"><div class="k">Notifications</div><div class="v ${unread ? '' : 'good'}">${unread || '0'}</div>
                 <div class="s">${notif.messages || 0} msg · ${notif.events || 0} events · ${notif.awards || 0} awards</div></div>`;
+
+        const gymSel = $('dash-gym-cost');
+        gymSel.value = String(gymCost);
+        gymSel.addEventListener('change', () => {
+            localStorage.setItem(GYM_COST_KEY, gymSel.value);
+            renderDashboard();
+        });
+        const donatorCb = $('dash-donator-toggle');
+        donatorCb.checked = donator;
+        donatorCb.addEventListener('change', () => {
+            localStorage.setItem(DONATOR_KEY, donatorCb.checked ? '1' : '0');
+            renderDashboard();
+        });
 
         const cd = profile.cooldowns || {};
         const now = Date.now();
