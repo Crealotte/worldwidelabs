@@ -55,13 +55,37 @@
         if (dashCooldownTick) { clearInterval(dashCooldownTick); dashCooldownTick = null; }
     }
 
-    // Torn's API doesn't expose either of these, so both need a manual, remembered choice.
-    // The donator key is shared with the Energy Planner's own toggle — set it in either place
-    // and both stay in sync.
+    // Torn's API does expose both of these — donator status is a straightforward field, and the
+    // active_gym field (from the 'gym' selection) tells us which gym the player is in right now.
+    // Manual overrides are kept as a fallback in case a key's access level doesn't return one of
+    // these, or a lookup fails.
     const GYM_COST_KEY = 'wwl_gym_energy_cost';
     const DONATOR_KEY = 'wwl_energy_donator';
+    const GYM_DIRECTORY_CACHE_KEY = 'wwl_gym_directory_cache';
+    let dashGymAutoChecked = false;  // only attempt the gym-directory lookup once per session
+    let dashGymAutoDetected = false; // becomes true once auto-detection actually succeeds
     function getGymCost() { return Number(localStorage.getItem(GYM_COST_KEY)) || 10; }
     function isDonatorStatus() { return localStorage.getItem(DONATOR_KEY) === '1'; }
+
+    // Torn's own official gym directory — maps each gym's ID to its per-train energy cost, so we
+    // don't have to maintain that list ourselves. Cached in localStorage for the session since it
+    // never changes; refetched if missing.
+    async function getGymEnergyCost(activeGymId) {
+        if (activeGymId == null) return null;
+        try {
+            let directory = JSON.parse(sessionStorage.getItem(GYM_DIRECTORY_CACHE_KEY) || 'null');
+            if (!directory) {
+                const res = await fetch(`https://api.torn.com/torn/?selections=gyms&key=${encodeURIComponent(apiKey)}`);
+                const data = await res.json();
+                if (data.error) return null;
+                directory = data.gyms || null;
+                if (directory) sessionStorage.setItem(GYM_DIRECTORY_CACHE_KEY, JSON.stringify(directory));
+            }
+            const entry = directory?.[activeGymId];
+            const cost = entry?.energy ?? entry?.energy_per_train ?? entry?.cost ?? null;
+            return cost != null ? Number(cost) : null;
+        } catch (e) { return null; }
+    }
 
     function renderDashboard() {
         if (!profile) return;
@@ -78,9 +102,14 @@
             barBlock('Life', profile.life, 'var(--life)');
 
         const e = profile.energy;
-        const gymCost = getGymCost();
-        const donator = isDonatorStatus();
+        // Auto-detect donator status straight from the API — falls back to the manual toggle's
+        // last value only if the field genuinely isn't present on this key.
+        const donatorDetected = profile.donator != null ? !!profile.donator : null;
+        const donator = donatorDetected != null ? donatorDetected : isDonatorStatus();
+        if (donatorDetected != null) localStorage.setItem(DONATOR_KEY, donator ? '1' : '0');
         const naturalPerDay = donator ? 720 : 480; // 5E every 10min (donator) vs every 15min (non-donator)
+
+        let gymCost = getGymCost();
         const trainsNow = e ? Math.floor(e.current / gymCost) : 0;
         const notif = profile.notifications || {};
         const unread = (notif.messages || 0) + (notif.events || 0) + (notif.awards || 0);
@@ -93,11 +122,12 @@
                         <option value="10">10E</option>
                         <option value="25">25E</option>
                         <option value="50">50E</option>
-                    </select> gym
+                    </select> gym ${dashGymAutoDetected ? '<span style="color:var(--muted);">(auto-detected)</span>' : ''}
                 </div></div>
             <div class="stat"><div class="k">Natural E / day</div><div class="v">${naturalPerDay}</div>
                 <div class="s">+5 every ${donator ? '10' : '15'} min ·
-                    <label style="cursor:pointer;"><input type="checkbox" id="dash-donator-toggle" style="width:auto;vertical-align:middle;"> donator</label>
+                    <label style="cursor:pointer;"><input type="checkbox" id="dash-donator-toggle" style="width:auto;vertical-align:middle;" ${donatorDetected != null ? 'disabled' : ''}> donator</label>
+                    ${donatorDetected != null ? '<span style="color:var(--muted);">(auto-detected)</span>' : ''}
                 </div></div>
             <div class="stat"><div class="k">Notifications</div><div class="v ${unread ? '' : 'good'}">${unread || '0'}</div>
                 <div class="s">${notif.messages || 0} msg · ${notif.events || 0} events · ${notif.awards || 0} awards</div></div>`;
@@ -115,6 +145,21 @@
             renderDashboard();
         });
 
+        // Try to auto-detect the current gym's energy cost. This part is less certain than
+        // donator detection (Torn's official gym-directory field names weren't something I could
+        // fully verify), so it only overrides the dropdown if it gets back a sane number —
+        // otherwise your manual selection above just keeps working as before.
+        if (profile.active_gym != null && !dashGymAutoChecked) {
+            dashGymAutoChecked = true;
+            getGymEnergyCost(profile.active_gym).then(cost => {
+                if (cost && [5, 10, 25, 50].includes(cost) && cost !== gymCost) {
+                    localStorage.setItem(GYM_COST_KEY, String(cost));
+                    dashGymAutoDetected = true;
+                    renderDashboard();
+                }
+            });
+        }
+
         const cd = profile.cooldowns || {};
         const now = Date.now();
         dashCooldownEnds = {
@@ -128,7 +173,7 @@
 
     $('refresh-bars').addEventListener('click', async () => {
         try {
-            profile = await tornV1('profile,bars,cooldowns,notifications');
+            profile = await tornV1('profile,bars,cooldowns,notifications,gym,personalstats');
             renderDashboard();
             toast('Bars refreshed');
         } catch (e) { toast('Refresh failed'); }
