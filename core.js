@@ -257,6 +257,7 @@
         if (page === 'feedback') loadFeedback();
         if (page === 'ocfit' && !ocfitLoaded) { ocfitLoaded = true; loadOcFit(); }
         if (page === 'ocfit-team') loadOcFitTeamBuilder();
+        if (page === 'foreign-stock' && !foreignStockLoaded) { foreignStockLoaded = true; loadForeignStock(); }
         if (page === 'feedback-edit') {
             $('feedback-locked').style.display = isLeaderCached ? 'none' : 'block';
             $('feedback-editor').style.display = isLeaderCached ? 'block' : 'none';
