@@ -774,8 +774,13 @@
                         Tracked automatically going forward — shared with the OC Fit Tracker, so nothing
                         gets counted twice between the two. If this is your first time here, run this
                         once to pull in whatever's currently in your faction's completed-crimes history.
+                        For real history beyond that window, Torn's own API supports paging further back —
+                        use the second button for that (checks up to 15 pages, may take a few seconds).
                     </p>
-                    <button class="ghost small" id="rg-sync-oc">Backfill OC history now</button>
+                    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                        <button class="ghost small" id="rg-sync-oc">Backfill OC history now</button>
+                        <button class="ghost small" id="rg-deep-sync-oc">Dig further back in history</button>
+                    </div>
                     <div class="status" id="rg-oc-status"></div>
                 </div>
 
