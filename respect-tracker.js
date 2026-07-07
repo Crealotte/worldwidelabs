@@ -345,6 +345,25 @@ $('rg-deep-sync-hits').addEventListener('click', async () => {
     }
 });
 
+$('rg-reset-hits').addEventListener('click', async () => {
+    if (!confirm('Reset Hits tracking? This clears everything counted before the chain-overlap fix (which may have been double-counted with Chains) and rebuilds from scratch. Already-saved OC, Chains, and War numbers are untouched.')) return;
+    const btn = $('rg-reset-hits');
+    const st = $('rg-sync-status');
+    btn.disabled = true; btn.textContent = 'Resetting…';
+    try {
+        await respectFetch({ action: 'reset-hits-tracking' });
+        const result = await respectFetch({ action: 'sync-hits' });
+        if (result.error) throw new Error(result.error);
+        st.className = 'status ok';
+        st.textContent = `Hits reset and rebuilt: +${result.synced} of ${result.totalAvailable ?? 0} attacks currently visible. Use "Dig deeper — Hits" to pull in more history.`;
+        loadRespectEditor();
+    } catch (e) {
+        st.className = 'status err'; st.textContent = e.message;
+    } finally {
+        btn.disabled = false; btn.textContent = 'Reset hits tracking';
+    }
+});
+
 $('rg-reset-war-bonus').addEventListener('click', async () => {
     if (!confirm('Reset war bonus tracking? This lets it re-check every past war from scratch (needed once, since an earlier version of this feature could get wars stuck as "already checked" without actually finding their bonus). Already-saved daily totals are kept.')) return;
     const btn = $('rg-reset-war-bonus');
