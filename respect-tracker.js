@@ -49,10 +49,15 @@ function respectComputeDaily(snapshots, ocDaily, chainDaily, hitsDaily, warBonus
         const chains = chainDaily[date] || 0;
         const hits = hitsDaily[date] || 0;
         const war = warByDate[date] || 0;
+        const knownSum = oc + chains + hits + war;
         const hasGain = Object.prototype.hasOwnProperty.call(gainByDate, date);
-        const totalGain = hasGain ? gainByDate[date] : null;
-        const other = hasGain ? totalGain - oc - chains - hits - war : null;
-        rows.push({ date, totalGain, oc, chains, hits, war, other });
+        // Without a real snapshot pair, the true total is unknowable — but showing the sum of
+        // whatever categories ARE known is still more useful than a bare dash, as long as it's
+        // clearly marked as an estimate rather than passed off as the verified total.
+        const totalGain = hasGain ? gainByDate[date] : knownSum;
+        const totalIsExact = hasGain;
+        const other = hasGain ? totalGain - knownSum : null;
+        rows.push({ date, totalGain, totalIsExact, oc, chains, hits, war, other });
     }
     return rows.sort((a, b) => b.date.localeCompare(a.date)); // newest first
 }
@@ -153,35 +158,63 @@ async function loadRespectEditor() {
             });
         }
 
-        const daily = respectComputeDaily(data.snapshots, data.ocDaily, data.chainDaily, data.hitsDaily, data.warBonusDaily, data.warEntries).slice(0, 30);
-        const tableEl = $('rg-daily-table');
-        if (!daily.length) {
-            tableEl.innerHTML = '<p style="color:var(--muted);font-size:13px;">Not enough consecutive daily snapshots yet.</p>';
-        } else {
-            tableEl.innerHTML = `
-                <table style="width:100%;font-size:13px;border-collapse:collapse;">
-                    <thead><tr style="color:var(--muted);text-align:left;">
-                        <th style="padding:4px 8px;">Date</th><th style="padding:4px 8px;">Total gain</th>
-                        <th style="padding:4px 8px;">OC</th><th style="padding:4px 8px;">Chains</th>
-                        <th style="padding:4px 8px;">Hits</th><th style="padding:4px 8px;">War</th>
-                        <th style="padding:4px 8px;">Other</th>
-                    </tr></thead>
-                    <tbody>${daily.map(d => `
-                        <tr style="border-top:1px solid var(--line);">
-                            <td style="padding:4px 8px;">${esc(d.date)}</td>
-                            <td style="padding:4px 8px;font-family:var(--mono);">${d.totalGain != null ? d.totalGain.toLocaleString() : '—'}</td>
-                            <td style="padding:4px 8px;font-family:var(--mono);color:var(--muted);">${d.oc.toLocaleString()}</td>
-                            <td style="padding:4px 8px;font-family:var(--mono);color:var(--muted);">${d.chains.toLocaleString()}</td>
-                            <td style="padding:4px 8px;font-family:var(--mono);color:var(--muted);">${d.hits.toLocaleString()}</td>
-                            <td style="padding:4px 8px;font-family:var(--mono);color:var(--muted);">${d.war.toLocaleString()}</td>
-                            <td style="padding:4px 8px;font-family:var(--mono);">${d.other != null ? d.other.toLocaleString() : '—'}</td>
-                        </tr>`).join('')}
-                    </tbody>
-                </table>`;
-        }
+        rgLastData = data; // stashed for the date-range filter below, no need to refetch
+        const daily = respectComputeDaily(data.snapshots, data.ocDaily, data.chainDaily, data.hitsDaily, data.warBonusDaily, data.warEntries);
+        rgLastDaily = daily;
+        renderRgDailyTable(daily);
     } catch (e) {
         $('rg-status').className = 'status err'; $('rg-status').textContent = e.message;
     }
+}
+
+function renderRgDailyTable(daily) {
+    const tableEl = $('rg-daily-table');
+    if (!daily.length) {
+        tableEl.innerHTML = '<p style="color:var(--muted);font-size:13px;">No data for this period yet.</p>';
+        return;
+    }
+    tableEl.innerHTML = `
+        <table style="width:100%;font-size:13px;border-collapse:collapse;">
+            <thead><tr style="color:var(--muted);text-align:left;">
+                <th style="padding:4px 8px;">Date</th><th style="padding:4px 8px;">Total gain</th>
+                <th style="padding:4px 8px;">OC</th><th style="padding:4px 8px;">Chains</th>
+                <th style="padding:4px 8px;">Hits</th><th style="padding:4px 8px;">War</th>
+                <th style="padding:4px 8px;">Other</th>
+            </tr></thead>
+            <tbody>${daily.map(d => `
+                <tr style="border-top:1px solid var(--line);">
+                    <td style="padding:4px 8px;">${esc(d.date)}</td>
+                    <td style="padding:4px 8px;font-family:var(--mono);${d.totalIsExact ? '' : 'color:var(--muted);font-style:italic;'}" title="${d.totalIsExact ? 'Confirmed from daily snapshots' : 'Estimated — sum of known categories only, no snapshot pair for this date to confirm the real total'}">${d.totalGain.toLocaleString()}${d.totalIsExact ? '' : ' ≈'}</td>
+                    <td style="padding:4px 8px;font-family:var(--mono);color:var(--muted);">${d.oc.toLocaleString()}</td>
+                    <td style="padding:4px 8px;font-family:var(--mono);color:var(--muted);">${d.chains.toLocaleString()}</td>
+                    <td style="padding:4px 8px;font-family:var(--mono);color:var(--muted);">${d.hits.toLocaleString()}</td>
+                    <td style="padding:4px 8px;font-family:var(--mono);color:var(--muted);">${d.war.toLocaleString()}</td>
+                    <td style="padding:4px 8px;font-family:var(--mono);">${d.other != null ? d.other.toLocaleString() : '—'}</td>
+                </tr>`).join('')}
+            </tbody>
+        </table>`;
+}
+
+let rgLastData = null;
+let rgLastDaily = [];
+
+// Computing the true total for a range needs a real snapshot at both ends — otherwise it falls
+// back to summing whatever's known per day, same "≈" honesty as the daily table.
+function respectRangeSummary(data, daily, fromDate, toDate) {
+    const inRange = daily.filter(d => d.date >= fromDate && d.date <= toDate);
+    const oc = inRange.reduce((s, d) => s + d.oc, 0);
+    const chains = inRange.reduce((s, d) => s + d.chains, 0);
+    const hits = inRange.reduce((s, d) => s + d.hits, 0);
+    const war = inRange.reduce((s, d) => s + d.war, 0);
+    const knownSum = oc + chains + hits + war;
+
+    const dayBeforeFrom = new Date(fromDate); dayBeforeFrom.setDate(dayBeforeFrom.getDate() - 1);
+    const startKey = dayBeforeFrom.toISOString().slice(0, 10);
+    const hasExactRange = data.snapshots[startKey] != null && data.snapshots[toDate] != null;
+    const totalGain = hasExactRange ? data.snapshots[toDate] - data.snapshots[startKey] : knownSum;
+    const other = hasExactRange ? totalGain - knownSum : null;
+
+    return { totalGain, totalIsExact: hasExactRange, oc, chains, hits, war, other, days: inRange.length };
 }
 
 $('rg-save').addEventListener('click', async () => {
@@ -210,23 +243,6 @@ $('rg-clear').addEventListener('click', async () => {
     toast('Goal cleared');
 });
 
-$('rg-sync-war-bonus').addEventListener('click', async () => {
-    const btn = $('rg-sync-war-bonus');
-    const st = $('rg-war-bonus-status');
-    btn.disabled = true; btn.textContent = 'Syncing…';
-    try {
-        const result = await respectFetch({ action: 'sync-war-bonus' });
-        if (result.error) throw new Error(result.error);
-        st.className = 'status ok';
-        st.textContent = result.synced > 0 ? `Pulled in ${result.synced} war bonus${result.synced === 1 ? '' : 'es'}.` : `Already up to date (${result.totalAvailable ?? 0} war${result.totalAvailable === 1 ? '' : 's'} on record, all already tracked).`;
-        loadRespectEditor();
-    } catch (e) {
-        st.className = 'status err'; st.textContent = e.message;
-    } finally {
-        btn.disabled = false; btn.textContent = 'Sync war bonus history now';
-    }
-});
-
 $('rg-war-add').addEventListener('click', async () => {
     const btn = $('rg-war-add');
     const st = $('rg-war-status');
@@ -248,70 +264,103 @@ $('rg-war-add').addEventListener('click', async () => {
     }
 });
 
-$('rg-sync-oc').addEventListener('click', async () => {
-    const btn = $('rg-sync-oc');
-    const st = $('rg-oc-status');
-    btn.disabled = true; btn.textContent = 'Syncing…';
+$('rg-range-show').addEventListener('click', () => {
+    const from = $('rg-range-from').value;
+    const to = $('rg-range-to').value;
+    const resultEl = $('rg-range-result');
+    if (!from || !to) { resultEl.innerHTML = '<p style="color:var(--danger);font-size:13px;">Pick both a start and end date.</p>'; return; }
+    if (!rgLastData) { resultEl.innerHTML = '<p style="color:var(--muted);font-size:13px;">Data still loading — try again in a moment.</p>'; return; }
+
+    const s = respectRangeSummary(rgLastData, rgLastDaily, from, to);
+    resultEl.innerHTML = `
+        <div style="display:flex;gap:16px;flex-wrap:wrap;margin-top:10px;padding:10px 12px;background:var(--bench-2);border-radius:var(--radius);">
+            <div><div style="font-size:11px;color:var(--muted);">Total gain${s.totalIsExact ? '' : ' (≈ estimate)'}</div><div style="font-family:var(--mono);font-size:16px;font-weight:700;">${s.totalGain.toLocaleString()}</div></div>
+            <div><div style="font-size:11px;color:var(--muted);">OC</div><div style="font-family:var(--mono);">${s.oc.toLocaleString()}</div></div>
+            <div><div style="font-size:11px;color:var(--muted);">Chains</div><div style="font-family:var(--mono);">${s.chains.toLocaleString()}</div></div>
+            <div><div style="font-size:11px;color:var(--muted);">Hits</div><div style="font-family:var(--mono);">${s.hits.toLocaleString()}</div></div>
+            <div><div style="font-size:11px;color:var(--muted);">War</div><div style="font-family:var(--mono);">${s.war.toLocaleString()}</div></div>
+            <div><div style="font-size:11px;color:var(--muted);">Other</div><div style="font-family:var(--mono);">${s.other != null ? s.other.toLocaleString() : '—'}</div></div>
+        </div>
+        <p style="font-size:11px;color:var(--muted);margin-top:6px;">${esc(from)} to ${esc(to)} · ${s.days} day${s.days === 1 ? '' : 's'} with data${s.totalIsExact ? '' : ' · no snapshot at both ends of this range, so Total gain is an estimate from known categories only'}</p>`;
+});
+
+// One button runs every tracked source's regular sync (single page each) in one go.
+$('rg-sync-all').addEventListener('click', async () => {
+    const btn = $('rg-sync-all');
+    const st = $('rg-sync-status');
+    btn.disabled = true; btn.textContent = 'Refreshing…';
     try {
-        const result = await respectFetch({ action: 'sync-oc' });
-        if (result.error) throw new Error(result.error);
+        const [oc, chains, hits, warBonus] = await Promise.all([
+            respectFetch({ action: 'sync-oc' }),
+            respectFetch({ action: 'sync-chains' }),
+            respectFetch({ action: 'sync-hits' }),
+            respectFetch({ action: 'sync-war-bonus' }),
+        ]);
+        const parts = [];
+        if (oc.error) parts.push(`OC: ${oc.error}`); else parts.push(`OC +${oc.synced}`);
+        if (chains.error) parts.push(`Chains: ${chains.error}`); else parts.push(`Chains +${chains.synced}`);
+        if (hits.error) parts.push(`Hits: ${hits.error}`); else parts.push(`Hits +${hits.synced}`);
+        if (warBonus.error) parts.push(`War: ${warBonus.error}`); else parts.push(`War +${warBonus.synced}`);
         st.className = 'status ok';
-        st.textContent = result.synced > 0 ? `Pulled in ${result.synced} completed crime${result.synced === 1 ? '' : 's'}.` : `Already up to date (${result.totalAvailable ?? 0} crime${result.totalAvailable === 1 ? '' : 's'} currently visible to Torn, all already tracked).`;
+        st.textContent = parts.join(' · ');
         loadRespectEditor();
     } catch (e) {
         st.className = 'status err'; st.textContent = e.message;
     } finally {
-        btn.disabled = false; btn.textContent = 'Backfill OC history now';
+        btn.disabled = false; btn.textContent = 'Refresh tracking now';
     }
 });
 
 $('rg-deep-sync-oc').addEventListener('click', async () => {
     const btn = $('rg-deep-sync-oc');
-    const st = $('rg-oc-status');
+    const st = $('rg-sync-status');
     btn.disabled = true; btn.textContent = 'Digging further back… (may take a moment)';
     try {
         const result = await respectFetch({ action: 'deep-sync-oc' });
         if (result.error) throw new Error(result.error);
         st.className = 'status ok';
-        st.textContent = `Checked ${result.pagesFetched} page${result.pagesFetched === 1 ? '' : 's'} of history, pulled in ${result.synced} completed crime${result.synced === 1 ? '' : 's'}.`;
+        st.textContent = `OC: checked ${result.pagesFetched} page${result.pagesFetched === 1 ? '' : 's'} of history, pulled in ${result.synced} completed crime${result.synced === 1 ? '' : 's'}.`;
         loadRespectEditor();
     } catch (e) {
         st.className = 'status err'; st.textContent = e.message;
     } finally {
-        btn.disabled = false; btn.textContent = 'Dig further back in history';
+        btn.disabled = false; btn.textContent = 'Dig deeper — OC';
     }
 });
 
-$('rg-sync-chains').addEventListener('click', async () => {
-    const btn = $('rg-sync-chains');
-    const st = $('rg-chains-status');
-    btn.disabled = true; btn.textContent = 'Syncing…';
+$('rg-deep-sync-hits').addEventListener('click', async () => {
+    const btn = $('rg-deep-sync-hits');
+    const st = $('rg-sync-status');
+    btn.disabled = true; btn.textContent = 'Digging further back… (may take a moment)';
     try {
-        const result = await respectFetch({ action: 'sync-chains' });
+        const result = await respectFetch({ action: 'deep-sync-hits' });
         if (result.error) throw new Error(result.error);
         st.className = 'status ok';
-        st.textContent = result.synced > 0 ? `Pulled in ${result.synced} chain${result.synced === 1 ? '' : 's'} of history.` : `Already up to date (${result.totalAvailable ?? 0} chain${result.totalAvailable === 1 ? '' : 's'} currently visible to Torn, all already tracked).`;
+        st.textContent = `Hits: checked ${result.pagesFetched} page${result.pagesFetched === 1 ? '' : 's'} of history, pulled in ${result.synced} attack${result.synced === 1 ? '' : 's'}.`;
         loadRespectEditor();
     } catch (e) {
         st.className = 'status err'; st.textContent = e.message;
     } finally {
-        btn.disabled = false; btn.textContent = 'Backfill chain history now';
+        btn.disabled = false; btn.textContent = 'Dig deeper — Hits';
     }
 });
 
-$('rg-sync-hits').addEventListener('click', async () => {
-    const btn = $('rg-sync-hits');
-    const st = $('rg-hits-status');
-    btn.disabled = true; btn.textContent = 'Syncing…';
+$('rg-reset-war-bonus').addEventListener('click', async () => {
+    if (!confirm('Reset war bonus tracking? This lets it re-check every past war from scratch (needed once, since an earlier version of this feature could get wars stuck as "already checked" without actually finding their bonus). Already-saved daily totals are kept.')) return;
+    const btn = $('rg-reset-war-bonus');
+    const st = $('rg-sync-status');
+    btn.disabled = true; btn.textContent = 'Resetting…';
     try {
-        const result = await respectFetch({ action: 'sync-hits' });
+        await respectFetch({ action: 'reset-war-bonus-tracking' });
+        const result = await respectFetch({ action: 'sync-war-bonus' });
         if (result.error) throw new Error(result.error);
         st.className = 'status ok';
-        st.textContent = result.synced > 0 ? `Pulled in ${result.synced} attack${result.synced === 1 ? '' : 's'} of history.` : `Already up to date (${result.totalAvailable ?? 0} attack${result.totalAvailable === 1 ? '' : 's'} currently visible to Torn, all already tracked).`;
+        st.textContent = `War bonus reset and re-checked: +${result.synced} of ${result.totalAvailable ?? 0} wars${result.skippedUnresolved ? ` (${result.skippedUnresolved} still couldn't be resolved — let me know if this keeps happening)` : ''}.`;
         loadRespectEditor();
     } catch (e) {
         st.className = 'status err'; st.textContent = e.message;
     } finally {
-        btn.disabled = false; btn.textContent = 'Backfill hit history now';
+        btn.disabled = false; btn.textContent = 'Reset war bonus tracking';
     }
 });
+
