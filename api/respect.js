@@ -70,6 +70,7 @@ const hitsSeenKey = (factionId) => `wwl:hits-respect-seen:${factionId}`;
 const warEntriesKey = (factionId) => `wwl:war-respect:${factionId}`; // manual entries
 const warBonusDailyKey = (factionId) => `wwl:war-bonus-daily:${factionId}`; // auto-tracked
 const warBonusSeenKey = (factionId) => `wwl:war-bonus-seen:${factionId}`;
+const chainWindowsKey = (factionId) => `wwl:chain-windows:${factionId}`; // for cross-referencing against attacks
 const goalKey = (factionId) => `wwl:respect-goal:${factionId}`;
 
 function todayKey() { return new Date().toISOString().slice(0, 10); }
@@ -187,6 +188,8 @@ async function syncChains(key, factionId) {
     const chains = data.chains || {};
     const dailyRaw = await redis(['GET', chainDailyKey(factionId)]);
     const daily = dailyRaw ? JSON.parse(dailyRaw) : {};
+    const windowsRaw = await redis(['GET', chainWindowsKey(factionId)]);
+    const windows = windowsRaw ? JSON.parse(windowsRaw) : [];
     let synced = 0;
     for (const [chainId, chain] of Object.entries(chains)) {
         if (!chain.end || !chain.respect) continue;
@@ -194,9 +197,13 @@ async function syncChains(key, factionId) {
         if (added !== 1) continue; // already counted
         const dayKey = new Date(chain.end * 1000).toISOString().slice(0, 10);
         daily[dayKey] = (daily[dayKey] || 0) + Number(chain.respect);
+        if (chain.start) windows.push({ start: chain.start, end: chain.end });
         synced++;
     }
-    if (synced > 0) await redis(['SET', chainDailyKey(factionId), JSON.stringify(daily)]);
+    if (synced > 0) {
+        await redis(['SET', chainDailyKey(factionId), JSON.stringify(daily)]);
+        await redis(['SET', chainWindowsKey(factionId), JSON.stringify(windows)]);
+    }
     return { synced, totalAvailable: Object.keys(chains).length };
 }
 
@@ -252,22 +259,18 @@ async function syncWarBonus(key, factionId) {
     return { synced, totalAvailable: wars.length, skippedUnresolved };
 }
 
-// PAUSED — 2026-07: suspected double-counting with Chains, since Torn's docs say attacksfull
-// has "less detail" than the plain "attacks" selection, which likely means the "chain" field
-// this filter depends on doesn't reliably exist here. Rather than keep adding numbers that
-// might be wrong, this stops growing Hits until verified against a real sample. Historical
-// data already stored stays visible — nothing is deleted, just frozen.
-const HITS_TRACKING_PAUSED = true;
-
 // Processes one page of attacks. Shared between the regular single-page sync and the deep
-// multi-page backfill below.
-async function processAttacksPageAsync(attacks, factionId, daily) {
-    if (HITS_TRACKING_PAUSED) return { synced: 0, dailyChanged: false, oldestSeen: null, paused: true };
+// multi-page backfill below. attacksfull has no field marking chain membership (confirmed
+// against a real sample — the "chain" field simply doesn't exist there), so instead this
+// cross-references each attack's timestamp against known chain start/end windows to exclude
+// anything already counted under Chains.
+async function processAttacksPageAsync(attacks, factionId, daily, chainWindows) {
     let synced = 0, dailyChanged = false, oldestSeen = null;
     for (const [attackId, attack] of Object.entries(attacks)) {
         const ts = attack.timestamp_ended || attack.timestamp_started;
         if (ts && (oldestSeen === null || ts < oldestSeen)) oldestSeen = ts;
-        if (attack.chain) continue; // already counted under Chains
+        const duringChain = chainWindows.some(w => ts >= w.start && ts <= w.end);
+        if (duringChain) continue; // already counted under Chains
         const added = await redis(['SADD', hitsSeenKey(factionId), attackId]);
         if (added !== 1) continue; // already counted
         const respect = Number(attack.respect ?? attack.respect_gain ?? 0);
@@ -292,7 +295,9 @@ async function syncHits(key, factionId) {
     const attacks = data.attacks || {};
     const dailyRaw = await redis(['GET', hitsDailyKey(factionId)]);
     const daily = dailyRaw ? JSON.parse(dailyRaw) : {};
-    const result = await processAttacksPageAsync(attacks, factionId, daily);
+    const windowsRaw = await redis(['GET', chainWindowsKey(factionId)]);
+    const chainWindows = windowsRaw ? JSON.parse(windowsRaw) : [];
+    const result = await processAttacksPageAsync(attacks, factionId, daily, chainWindows);
     if (result.dailyChanged) await redis(['SET', hitsDailyKey(factionId), JSON.stringify(daily)]);
     return { synced: result.synced, totalAvailable: Object.keys(attacks).length };
 }
@@ -304,6 +309,8 @@ async function syncHits(key, factionId) {
 async function deepSyncHits(key, factionId, maxPages = 15) {
     const dailyRaw = await redis(['GET', hitsDailyKey(factionId)]);
     const daily = dailyRaw ? JSON.parse(dailyRaw) : {};
+    const windowsRaw = await redis(['GET', chainWindowsKey(factionId)]);
+    const chainWindows = windowsRaw ? JSON.parse(windowsRaw) : [];
 
     let to = Math.floor(Date.now() / 1000);
     let totalSynced = 0, pagesFetched = 0, emptyPagesInARow = 0;
@@ -316,7 +323,7 @@ async function deepSyncHits(key, factionId, maxPages = 15) {
         if (!Object.keys(attacks).length) break;
         pagesFetched++;
 
-        const result = await processAttacksPageAsync(attacks, factionId, daily);
+        const result = await processAttacksPageAsync(attacks, factionId, daily, chainWindows);
         totalSynced += result.synced;
         if (result.dailyChanged) await redis(['SET', hitsDailyKey(factionId), JSON.stringify(daily)]);
 
@@ -379,16 +386,23 @@ module.exports = async function handler(req, res) {
         }
 
         if (action === 'sync-hits') {
-            if (HITS_TRACKING_PAUSED) return res.status(200).json({ ok: true, synced: 0, paused: true });
             const result = await syncHits(key, factionId);
             if (result.error) return res.status(403).json({ error: result.error });
             return res.status(200).json({ ok: true, synced: result.synced, totalAvailable: result.totalAvailable });
         }
 
         if (action === 'deep-sync-hits') {
-            if (HITS_TRACKING_PAUSED) return res.status(200).json({ ok: true, synced: 0, pagesFetched: 0, paused: true });
             const result = await deepSyncHits(key, factionId);
             return res.status(200).json({ ok: true, synced: result.synced, pagesFetched: result.pagesFetched });
+        }
+
+        if (action === 'reset-hits-tracking') {
+            // Anything synced before the chain-window fix could be double-counted with Chains
+            // (attacksfull has no chain field, so the old filter silently did nothing). This
+            // wipes both the daily totals and the dedup set so it rebuilds cleanly.
+            await redis(['DEL', hitsDailyKey(factionId)]);
+            await redis(['DEL', hitsSeenKey(factionId)]);
+            return res.status(200).json({ ok: true });
         }
 
         if (action === 'sync-oc') {
