@@ -750,24 +750,10 @@
                 </div>
 
                 <div class="panel">
-                    <h3>War Bonus</h3>
-                    <p style="color:var(--muted);font-size:12px;margin:0 0 10px;">
-                        Now tracked automatically — pulled from Torn's own ranked war reports, which
-                        include the end-of-war bonus respect specifically (separate from all the
-                        individual hit respect during the war, already covered by Chains and Hits
-                        above). Best-effort: I couldn't fully verify the exact report format without
-                        live data, so if a war's bonus doesn't show up here, the manual log below still
-                        works as a fallback.
-                    </p>
-                    <button class="ghost small" id="rg-sync-war-bonus">Sync war bonus history now</button>
-                    <div class="status" id="rg-war-bonus-status"></div>
-                </div>
-
-                <div class="panel">
                     <h3>Log war respect manually</h3>
                     <p style="color:var(--muted);font-size:12px;margin:0 0 10px;">
-                        Use this only if the auto-sync above misses a war, or for anything else you
-                        want to attribute to a specific war.
+                        War bonus is now auto-tracked below — use this only if it misses a war, or for
+                        anything else you want to attribute to a specific date.
                     </p>
                     <div class="field">
                         <label for="rg-war-label">War name</label>
@@ -787,48 +773,41 @@
                 </div>
 
                 <div class="panel">
-                    <h3>Organized Crimes</h3>
+                    <h3>Check a specific period</h3>
                     <p style="color:var(--muted);font-size:12px;margin:0 0 10px;">
-                        Tracked automatically going forward — shared with the OC Fit Tracker, so nothing
-                        gets counted twice between the two. If this is your first time here, run this
-                        once to pull in whatever's currently in your faction's completed-crimes history.
-                        For real history beyond that window, Torn's own API supports paging further back —
-                        use the second button for that (checks up to 15 pages, may take a few seconds).
+                        Pick any date range — e.g. since you took over the faction — to see the total
+                        gained and the breakdown by category for exactly that period.
                     </p>
-                    <div style="display:flex;gap:8px;flex-wrap:wrap;">
-                        <button class="ghost small" id="rg-sync-oc">Backfill OC history now</button>
-                        <button class="ghost small" id="rg-deep-sync-oc">Dig further back in history</button>
+                    <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:end;">
+                        <div class="field" style="margin:0;">
+                            <label for="rg-range-from">From</label>
+                            <input id="rg-range-from" type="date">
+                        </div>
+                        <div class="field" style="margin:0;">
+                            <label for="rg-range-to">To</label>
+                            <input id="rg-range-to" type="date">
+                        </div>
+                        <button id="rg-range-show">Show</button>
                     </div>
-                    <div class="status" id="rg-oc-status"></div>
-                </div>
-
-                <div class="panel">
-                    <h3>Chains</h3>
-                    <p style="color:var(--muted);font-size:12px;margin:0 0 10px;">
-                        Tracked automatically going forward, and genuinely backfillable — Torn keeps a
-                        record of past chains with their own respect totals. Run this once to pull in
-                        your faction's chain history; after that it stays current on its own.
-                    </p>
-                    <button class="ghost small" id="rg-sync-chains">Backfill chain history now</button>
-                    <div class="status" id="rg-chains-status"></div>
-                </div>
-
-                <div class="panel">
-                    <h3>Hits</h3>
-                    <p style="color:var(--muted);font-size:12px;margin:0 0 10px;">
-                        Real per-attack respect (excluding chain-tagged attacks, already covered above),
-                        pulled directly from Torn's attack log — not a guess. Limited to Torn's current
-                        rolling window of recent attacks; run this to backfill what's currently available,
-                        then it stays current automatically. One known Torn quirk: respect lost from being
-                        attacked doesn't always populate reliably — gains are solid, losses are spottier.
-                    </p>
-                    <button class="ghost small" id="rg-sync-hits">Backfill hit history now</button>
-                    <div class="status" id="rg-hits-status"></div>
+                    <div id="rg-range-result"></div>
                 </div>
 
                 <div class="panel">
                     <h3>Daily breakdown</h3>
-                    <p style="color:var(--muted);font-size:12px;margin:0 0 10px;">Last 30 days with any known data. A day shows "—" for Total gain/Other if it predates snapshotting (backfilled OC/Chain/Hit history can reach further back than that) — the category columns are still real for those days. "Other" is whatever's left after OC, Chains, Hits, and War — territory, raids, dirty bombs, or gaps, kept visible rather than hidden.</p>
+                    <p style="color:var(--muted);font-size:12px;margin:0 0 10px;">
+                        OC, Chains, Hits, and War Bonus are all tracked automatically every time a leader
+                        opens the Dashboard — the buttons below just let you force it right now, or dig
+                        further back into history for OC and Hits specifically (Chains and War Bonus
+                        already pull their full available history every time).
+                    </p>
+                    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;">
+                        <button class="ghost small" id="rg-sync-all">Refresh tracking now</button>
+                        <button class="ghost small" id="rg-deep-sync-oc">Dig deeper — OC</button>
+                        <button class="ghost small" id="rg-deep-sync-hits">Dig deeper — Hits</button>
+                        <button class="ghost small" id="rg-reset-war-bonus">Reset war bonus tracking</button>
+                    </div>
+                    <div class="status" id="rg-sync-status"></div>
+                    <p style="color:var(--muted);font-size:12px;margin:10px 0;">Every day with any known data. Total gain shows "≈" and a muted style when it's estimated from known categories only (no snapshot pair to confirm the real total that far back) — otherwise it's confirmed. "Other" is whatever's left after OC, Chains, Hits, and War — territory, raids, dirty bombs, or gaps, kept visible rather than hidden.</p>
                     <div id="rg-daily-table"></div>
                 </div>
             </div>
