@@ -154,16 +154,19 @@
             setNavLock('announce-edit', false);
             setNavLock('feedback-edit', false);
             setNavLock('ocfit-team', false);
+            setNavLock('respect-edit', false);
             $('cp-locked').style.display = 'none';
             $('cp-tools').style.display = 'block';
             loadAdoption();
             loadFactionSharing();
+            loadRespectGoalPanel();
         } catch (e) {
             isLeaderCached = false;
             setNavLock('payout', true);
             setNavLock('announce-edit', true);
             setNavLock('feedback-edit', true);
             setNavLock('ocfit-team', true);
+            setNavLock('respect-edit', true);
             $('cp-locked').style.display = 'block';
             $('cp-tools').style.display = 'none';
         }
@@ -179,6 +182,9 @@
         }
         if (document.querySelector('.nav-item[data-page="ocfit-team"]').classList.contains('active')) {
             loadOcFitTeamBuilder();
+        }
+        if (document.querySelector('.nav-item[data-page="respect-edit"]').classList.contains('active')) {
+            loadRespectEditor();
         }
     }
 
@@ -257,6 +263,7 @@
         if (page === 'feedback') loadFeedback();
         if (page === 'ocfit' && !ocfitLoaded) { ocfitLoaded = true; loadOcFit(); }
         if (page === 'ocfit-team') loadOcFitTeamBuilder();
+        if (page === 'respect-edit') loadRespectEditor();
         if (page === 'foreign-stock' && !foreignStockLoaded) { foreignStockLoaded = true; loadForeignStock(); }
         if (page === 'feedback-edit') {
             $('feedback-locked').style.display = isLeaderCached ? 'none' : 'block';
