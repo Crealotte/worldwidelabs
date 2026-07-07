@@ -47,9 +47,16 @@ function respectComputeDaily(snapshots, ocDaily, chainDaily, hitsDaily, warBonus
     for (const date of allDates) {
         const oc = ocDaily[date] || 0;
         const chains = chainDaily[date] || 0;
-        const hits = hitsDaily[date] || 0;
+        const hitsRaw = hitsDaily[date] || 0;
+        // Chain-attributed hits are already individually present in the raw Hits total (every
+        // outgoing attack counts, chain or not) — so Chains is a breakdown WITHIN Hits, not a
+        // separate amount on top. Adding both was double-counting the same respect twice, which
+        // is very likely the real source of the persistent overcount. Split for display only:
+        // "Hits" shown = non-chain portion, "Chains" shown = chain portion, but the sum of the
+        // two (and therefore the total) still equals the raw amount exactly once.
+        const hits = hitsRaw - chains;
         const war = warByDate[date] || 0;
-        const knownSum = oc + chains + hits + war;
+        const knownSum = oc + hitsRaw + war; // chains NOT added again — already inside hitsRaw
         const hasGain = Object.prototype.hasOwnProperty.call(gainByDate, date);
         // Without a real snapshot pair, the true total is unknowable — but showing the sum of
         // whatever categories ARE known is still more useful than a bare dash, as long as it's
