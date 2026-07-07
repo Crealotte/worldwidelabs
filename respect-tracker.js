@@ -300,12 +300,15 @@ $('rg-sync-all').addEventListener('click', async () => {
         await rgSleep(700);
         const hits = await respectFetch({ action: 'sync-hits' });
         await rgSleep(700);
+        const losses = await respectFetch({ action: 'sync-losses' });
+        await rgSleep(700);
         const warBonus = await respectFetch({ action: 'sync-war-bonus' });
 
         const parts = [];
         if (oc.error) parts.push(`OC: ${oc.error}`); else parts.push(`OC +${oc.synced}`);
         if (chains.error) parts.push(`Chains: ${chains.error}`); else parts.push(`Chains +${chains.synced}`);
         if (hits.error) parts.push(`Hits: ${hits.error}`); else parts.push(`Hits +${hits.synced}`);
+        if (losses.error) parts.push(`Losses: ${losses.error}`); else parts.push(`Losses +${losses.synced}`);
         if (warBonus.error) parts.push(`War: ${warBonus.error}`); else parts.push(`War +${warBonus.synced}`);
         st.className = 'status ok';
         st.textContent = parts.join(' · ');
@@ -352,6 +355,25 @@ $('rg-deep-sync-hits').addEventListener('click', async () => {
         st.className = 'status err'; st.textContent = e.message;
     } finally {
         btn.disabled = false; btn.textContent = 'Dig deeper — Hits';
+    }
+});
+
+$('rg-deep-sync-losses').addEventListener('click', async () => {
+    const btn = $('rg-deep-sync-losses');
+    const st = $('rg-sync-status');
+    btn.disabled = true; btn.textContent = 'Digging further back… (may take a moment)';
+    try {
+        const result = await respectFetch({ action: 'deep-sync-losses' });
+        if (result.error) throw new Error(result.error);
+        st.className = result.rateLimited ? 'status err' : 'status ok';
+        st.textContent = result.rateLimited
+            ? `Losses: got rate-limited by Torn after ${result.pagesFetched} chunk${result.pagesFetched === 1 ? '' : 's'} (pulled in ${result.synced} so far) — wait a minute or two, then click this again to continue further back.`
+            : `Losses: checked ${result.pagesFetched} chunk${result.pagesFetched === 1 ? '' : 's'} of history, pulled in ${result.synced} loss${result.synced === 1 ? '' : 'es'}.`;
+        loadRespectEditor();
+    } catch (e) {
+        st.className = 'status err'; st.textContent = e.message;
+    } finally {
+        btn.disabled = false; btn.textContent = 'Dig deeper — Losses';
     }
 });
 
