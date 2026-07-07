@@ -205,6 +205,11 @@ async function syncChains(key, factionId) {
 // hit respect gained during the war (that part's already covered by Chains and Hits above).
 // Bucketed by the day the war ended. This is genuinely automatic — no more manually looking up
 // and typing in a number after every war.
+// Pulls the faction's past ranked wars, then each war's detailed report for its own
+// rewards.respect field — the end-of-war bonus specifically, separate from all the individual
+// hit respect gained during the war (that part's already covered by Chains and Hits above).
+// Bucketed by the day the war ended. Confirmed against a real sample: `factions` is an object
+// keyed by faction ID (e.g. {"51197": {...}}), and the bonus lives under factions[id].rewards.respect.
 async function syncWarBonus(key, factionId) {
     const r = await fetch(`https://api.torn.com/v2/faction?selections=rankedwars&key=${encodeURIComponent(key)}`,
         { headers: { accept: 'application/json' } });
@@ -229,22 +234,10 @@ async function syncWarBonus(key, factionId) {
             const reportRes = await fetch(`https://api.torn.com/torn/${warId}?selections=rankedwarreport&key=${encodeURIComponent(key)}`);
             const report = await reportRes.json();
             if (report.error) { skippedUnresolved++; continue; }
-            // Torn's exact shape here isn't something I could verify against live data, so this
-            // tries every plausible path rather than assuming one.
-            const rw = report.rankedwarreport || report.rankedWarReport || report.war || report;
-            const factions = rw?.factions || rw?.rankedwar?.factions;
-            let bonus = null;
-            if (Array.isArray(factions)) {
-                const mine = factions.find(f => String(f.id ?? f.ID ?? f.faction_id) === factionId);
-                if (mine) bonus = Number(mine.reward_respect ?? mine.respect ?? mine.reward?.respect ?? 0);
-            }
-            if (bonus === null) {
-                const aId = String(rw?.faction_a_id ?? rw?.faction_a?.id ?? rw?.faction_a?.ID ?? '');
-                const bId = String(rw?.faction_b_id ?? rw?.faction_b?.id ?? rw?.faction_b?.ID ?? '');
-                if (aId === factionId) bonus = Number(rw?.faction_a_reward_respect ?? rw?.faction_a?.reward_respect ?? 0);
-                else if (bId === factionId) bonus = Number(rw?.faction_b_reward_respect ?? rw?.faction_b?.reward_respect ?? 0);
-            }
-            if (bonus === null) { skippedUnresolved++; continue; } // couldn't identify our side — don't mark as seen, retry later
+            const factions = report.rankedwarreport?.war?.factions || {};
+            const mine = factions[factionId];
+            const bonus = mine?.rewards?.respect != null ? Number(mine.rewards.respect) : null;
+            if (bonus === null) { skippedUnresolved++; continue; } // couldn't find our side — don't mark as seen, retry later
 
             // Only mark as seen once we've genuinely resolved a value (even 0 counts as resolved).
             await redis(['SADD', warBonusSeenKey(factionId), String(warId)]);
@@ -259,9 +252,17 @@ async function syncWarBonus(key, factionId) {
     return { synced, totalAvailable: wars.length, skippedUnresolved };
 }
 
+// PAUSED — 2026-07: suspected double-counting with Chains, since Torn's docs say attacksfull
+// has "less detail" than the plain "attacks" selection, which likely means the "chain" field
+// this filter depends on doesn't reliably exist here. Rather than keep adding numbers that
+// might be wrong, this stops growing Hits until verified against a real sample. Historical
+// data already stored stays visible — nothing is deleted, just frozen.
+const HITS_TRACKING_PAUSED = true;
+
 // Processes one page of attacks. Shared between the regular single-page sync and the deep
 // multi-page backfill below.
 async function processAttacksPageAsync(attacks, factionId, daily) {
+    if (HITS_TRACKING_PAUSED) return { synced: 0, dailyChanged: false, oldestSeen: null, paused: true };
     let synced = 0, dailyChanged = false, oldestSeen = null;
     for (const [attackId, attack] of Object.entries(attacks)) {
         const ts = attack.timestamp_ended || attack.timestamp_started;
@@ -378,12 +379,14 @@ module.exports = async function handler(req, res) {
         }
 
         if (action === 'sync-hits') {
+            if (HITS_TRACKING_PAUSED) return res.status(200).json({ ok: true, synced: 0, paused: true });
             const result = await syncHits(key, factionId);
             if (result.error) return res.status(403).json({ error: result.error });
             return res.status(200).json({ ok: true, synced: result.synced, totalAvailable: result.totalAvailable });
         }
 
         if (action === 'deep-sync-hits') {
+            if (HITS_TRACKING_PAUSED) return res.status(200).json({ ok: true, synced: 0, pagesFetched: 0, paused: true });
             const result = await deepSyncHits(key, factionId);
             return res.status(200).json({ ok: true, synced: result.synced, pagesFetched: result.pagesFetched });
         }
