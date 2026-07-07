@@ -162,7 +162,7 @@ async function deepSyncOc(key, factionId, maxPages = 15) {
     const daily = dailyRaw ? JSON.parse(dailyRaw) : {};
 
     let to = Math.floor(Date.now() / 1000);
-    let totalSynced = 0, pagesFetched = 0, emptyPagesInARow = 0, rateLimited = false;
+    let totalSynced = 0, pagesFetched = 0, emptyPagesInARow = 0, rateLimited = false, stopReason = 'max-pages';
 
     for (let page = 0; page < maxPages; page++) {
         if (page > 0) await sleep(1100); // stay well clear of Torn's rate limit across a multi-page loop
@@ -171,10 +171,11 @@ async function deepSyncOc(key, factionId, maxPages = 15) {
         const data = await r.json();
         if (data.error) {
             if (isRateLimited(data)) rateLimited = true;
+            stopReason = `torn-error: ${data.error.error || data.error.code}`;
             break;
         }
         const crimesList = Object.values(data.crimes || {});
-        if (!crimesList.length) break;
+        if (!crimesList.length) { stopReason = 'empty-page (Torn returned no crimes at this point in time)'; break; }
         pagesFetched++;
 
         const result = await processCrimesPage(crimesList, factionId, rewards, daily);
@@ -182,12 +183,12 @@ async function deepSyncOc(key, factionId, maxPages = 15) {
         if (result.rewardsChanged) await redis(['SET', ocRewardsKey(factionId), JSON.stringify(rewards)]);
         if (result.dailyChanged) await redis(['SET', ocDailyKey(factionId), JSON.stringify(daily)]);
 
-        if (result.oldestSeen === null || result.oldestSeen >= to) break; // no older data available, stop
+        if (result.oldestSeen === null || result.oldestSeen >= to) { stopReason = 'no-progress (oldest crime on this page wasn\'t older than the last page)'; break; }
         to = result.oldestSeen - 1;
         emptyPagesInARow = result.synced === 0 ? emptyPagesInARow + 1 : 0;
-        if (emptyPagesInARow >= 3) break; // several pages of already-seen data — likely hit the edge
+        if (emptyPagesInARow >= 3) { stopReason = '3-empty-pages-in-a-row (everything on these pages was already tracked)'; break; }
     }
-    return { synced: totalSynced, pagesFetched, rateLimited };
+    return { synced: totalSynced, pagesFetched, rateLimited, stopReason };
 }
 
 // Pulls the faction's past chains (Torn keeps these with their own respect totals and end
@@ -527,7 +528,7 @@ module.exports = async function handler(req, res) {
 
         if (action === 'deep-sync-oc') {
             const result = await deepSyncOc(key, factionId);
-            return res.status(200).json({ ok: true, synced: result.synced, pagesFetched: result.pagesFetched, rateLimited: result.rateLimited });
+            return res.status(200).json({ ok: true, synced: result.synced, pagesFetched: result.pagesFetched, rateLimited: result.rateLimited, stopReason: result.stopReason });
         }
 
         if (action === 'snapshot') {
