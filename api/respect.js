@@ -33,6 +33,15 @@
 const REDIS_URL = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL;
 const REDIS_TOKEN = process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN;
 
+function sleep(ms) { return new Promise(resolve => setTimeout(resolve, ms)); }
+
+// Torn's rate limit error is error code 5. Distinguishing this from other failures matters:
+// a multi-page backfill that gets rate-limited partway through should say so honestly, not
+// silently report whatever partial data it gathered as if it were the complete picture.
+function isRateLimited(data) {
+    return data?.error?.code === 5 || /too many requests/i.test(data?.error?.error || '');
+}
+
 async function redis(command) {
     const res = await fetch(REDIS_URL, {
         method: 'POST',
@@ -153,13 +162,17 @@ async function deepSyncOc(key, factionId, maxPages = 15) {
     const daily = dailyRaw ? JSON.parse(dailyRaw) : {};
 
     let to = Math.floor(Date.now() / 1000);
-    let totalSynced = 0, pagesFetched = 0, emptyPagesInARow = 0;
+    let totalSynced = 0, pagesFetched = 0, emptyPagesInARow = 0, rateLimited = false;
 
     for (let page = 0; page < maxPages; page++) {
+        if (page > 0) await sleep(1100); // stay well clear of Torn's rate limit across a multi-page loop
         const r = await fetch(`https://api.torn.com/v2/faction?selections=crimes&to=${to}&key=${encodeURIComponent(key)}`,
             { headers: { accept: 'application/json' } });
         const data = await r.json();
-        if (data.error) break;
+        if (data.error) {
+            if (isRateLimited(data)) rateLimited = true;
+            break;
+        }
         const crimesList = Object.values(data.crimes || {});
         if (!crimesList.length) break;
         pagesFetched++;
@@ -174,7 +187,7 @@ async function deepSyncOc(key, factionId, maxPages = 15) {
         emptyPagesInARow = result.synced === 0 ? emptyPagesInARow + 1 : 0;
         if (emptyPagesInARow >= 3) break; // several pages of already-seen data — likely hit the edge
     }
-    return { synced: totalSynced, pagesFetched };
+    return { synced: totalSynced, pagesFetched, rateLimited };
 }
 
 // Pulls the faction's past chains (Torn keeps these with their own respect totals and end
@@ -226,7 +239,7 @@ async function syncWarBonus(key, factionId) {
     const wars = Object.values(data.rankedwars || data.ranked_wars || {});
     const dailyRaw = await redis(['GET', warBonusDailyKey(factionId)]);
     const daily = dailyRaw ? JSON.parse(dailyRaw) : {};
-    let synced = 0, skippedUnresolved = 0;
+    let synced = 0, skippedUnresolved = 0, rateLimited = false, fetchedCount = 0;
     for (const war of wars) {
         const warId = war.id || war.war_id;
         const endTs = war.war?.end || war.end;
@@ -237,10 +250,15 @@ async function syncWarBonus(key, factionId) {
         const alreadySeen = await redis(['SISMEMBER', warBonusSeenKey(factionId), String(warId)]);
         if (alreadySeen === 1) continue;
 
+        if (fetchedCount > 0) await sleep(1100); // one Torn call per war here — stay well clear of rate limits
+        fetchedCount++;
         try {
             const reportRes = await fetch(`https://api.torn.com/torn/${warId}?selections=rankedwarreport&key=${encodeURIComponent(key)}`);
             const report = await reportRes.json();
-            if (report.error) { skippedUnresolved++; continue; }
+            if (report.error) {
+                if (isRateLimited(report)) { rateLimited = true; break; } // stop rather than burn through the rest
+                skippedUnresolved++; continue;
+            }
             const factions = report.rankedwarreport?.war?.factions || {};
             const mine = factions[factionId];
             const bonus = mine?.rewards?.respect != null ? Number(mine.rewards.respect) : null;
@@ -256,7 +274,7 @@ async function syncWarBonus(key, factionId) {
         } catch (e) { skippedUnresolved++; /* network hiccup — don't mark as seen, retry later */ }
     }
     if (synced > 0) await redis(['SET', warBonusDailyKey(factionId), JSON.stringify(daily)]);
-    return { synced, totalAvailable: wars.length, skippedUnresolved };
+    return { synced, totalAvailable: wars.length, skippedUnresolved, rateLimited };
 }
 
 // Processes one page of attacks. Shared between the regular single-page sync and the deep
@@ -264,6 +282,13 @@ async function syncWarBonus(key, factionId) {
 // against a real sample — the "chain" field simply doesn't exist there), so instead this
 // cross-references each attack's timestamp against known chain start/end windows to exclude
 // anything already counted under Chains.
+//
+// Direction matters: the "respect" field on an attack record is always the ATTACKER's own gain.
+// When our faction is the attacker, that's a straight addition to our total. When our faction is
+// the defender (someone else attacked one of our members), that same number is THEIR gain, not
+// ours — per Torn's own mechanic, our faction loses 25% of what they gained, which is a
+// subtraction, not an addition. Treating every entry as a gain regardless of side was silently
+// inflating the total every time the faction got attacked.
 async function processAttacksPageAsync(attacks, factionId, daily, chainWindows) {
     let synced = 0, dailyChanged = false, oldestSeen = null;
     for (const [attackId, attack] of Object.entries(attacks)) {
@@ -273,10 +298,18 @@ async function processAttacksPageAsync(attacks, factionId, daily, chainWindows) 
         if (duringChain) continue; // already counted under Chains
         const added = await redis(['SADD', hitsSeenKey(factionId), attackId]);
         if (added !== 1) continue; // already counted
-        const respect = Number(attack.respect ?? attack.respect_gain ?? 0);
-        if (!respect) continue; // known Torn quirk: losses don't always populate this — nothing to add either way
+        const rawRespect = Number(attack.respect ?? attack.respect_gain ?? 0);
+        if (!rawRespect) continue; // known Torn quirk: losses don't always populate this — nothing to add either way
+
+        const weAreAttacker = String(attack.attacker_faction) === factionId;
+        const weAreDefender = String(attack.defender_faction) === factionId;
+        let respectDelta;
+        if (weAreAttacker) respectDelta = rawRespect; // our own gain
+        else if (weAreDefender) respectDelta = -(rawRespect * 0.25); // we lose 25% of what they gained
+        else continue; // shouldn't happen on our own faction's attacksfull, but skip defensively if so
+
         const dayKey = new Date(ts * 1000).toISOString().slice(0, 10);
-        daily[dayKey] = (daily[dayKey] || 0) + respect;
+        daily[dayKey] = (daily[dayKey] || 0) + respectDelta;
         dailyChanged = true;
         synced++;
     }
@@ -313,12 +346,16 @@ async function deepSyncHits(key, factionId, maxPages = 15) {
     const chainWindows = windowsRaw ? JSON.parse(windowsRaw) : [];
 
     let to = Math.floor(Date.now() / 1000);
-    let totalSynced = 0, pagesFetched = 0, emptyPagesInARow = 0;
+    let totalSynced = 0, pagesFetched = 0, emptyPagesInARow = 0, rateLimited = false;
 
     for (let page = 0; page < maxPages; page++) {
+        if (page > 0) await sleep(1100); // stay well clear of Torn's rate limit across a multi-page loop
         const r = await fetch(`https://api.torn.com/faction/?selections=attacksfull&to=${to}&key=${encodeURIComponent(key)}`);
         const data = await r.json();
-        if (data.error) break;
+        if (data.error) {
+            if (isRateLimited(data)) rateLimited = true;
+            break;
+        }
         const attacks = data.attacks || {};
         if (!Object.keys(attacks).length) break;
         pagesFetched++;
@@ -332,7 +369,7 @@ async function deepSyncHits(key, factionId, maxPages = 15) {
         emptyPagesInARow = result.synced === 0 ? emptyPagesInARow + 1 : 0;
         if (emptyPagesInARow >= 3) break; // several pages of already-seen data — likely hit the edge
     }
-    return { synced: totalSynced, pagesFetched };
+    return { synced: totalSynced, pagesFetched, rateLimited };
 }
 
 module.exports = async function handler(req, res) {
@@ -382,7 +419,7 @@ module.exports = async function handler(req, res) {
         if (action === 'sync-war-bonus') {
             const result = await syncWarBonus(key, factionId);
             if (result.error) return res.status(403).json({ error: result.error });
-            return res.status(200).json({ ok: true, synced: result.synced, totalAvailable: result.totalAvailable, skippedUnresolved: result.skippedUnresolved });
+            return res.status(200).json({ ok: true, synced: result.synced, totalAvailable: result.totalAvailable, skippedUnresolved: result.skippedUnresolved, rateLimited: result.rateLimited });
         }
 
         if (action === 'sync-hits') {
@@ -393,7 +430,7 @@ module.exports = async function handler(req, res) {
 
         if (action === 'deep-sync-hits') {
             const result = await deepSyncHits(key, factionId);
-            return res.status(200).json({ ok: true, synced: result.synced, pagesFetched: result.pagesFetched });
+            return res.status(200).json({ ok: true, synced: result.synced, pagesFetched: result.pagesFetched, rateLimited: result.rateLimited });
         }
 
         if (action === 'reset-hits-tracking') {
@@ -413,7 +450,7 @@ module.exports = async function handler(req, res) {
 
         if (action === 'deep-sync-oc') {
             const result = await deepSyncOc(key, factionId);
-            return res.status(200).json({ ok: true, synced: result.synced, pagesFetched: result.pagesFetched });
+            return res.status(200).json({ ok: true, synced: result.synced, pagesFetched: result.pagesFetched, rateLimited: result.rateLimited });
         }
 
         if (action === 'snapshot') {
