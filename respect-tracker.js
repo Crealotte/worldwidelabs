@@ -285,17 +285,23 @@ $('rg-range-show').addEventListener('click', () => {
 });
 
 // One button runs every tracked source's regular sync (single page each) in one go.
+function rgSleep(ms) { return new Promise(resolve => setTimeout(resolve, ms)); }
+
 $('rg-sync-all').addEventListener('click', async () => {
     const btn = $('rg-sync-all');
     const st = $('rg-sync-status');
     btn.disabled = true; btn.textContent = 'Refreshing…';
     try {
-        const [oc, chains, hits, warBonus] = await Promise.all([
-            respectFetch({ action: 'sync-oc' }),
-            respectFetch({ action: 'sync-chains' }),
-            respectFetch({ action: 'sync-hits' }),
-            respectFetch({ action: 'sync-war-bonus' }),
-        ]);
+        // Run one at a time with small gaps rather than all at once — four simultaneous
+        // requests is exactly the kind of burst that trips Torn's rate limit.
+        const oc = await respectFetch({ action: 'sync-oc' });
+        await rgSleep(700);
+        const chains = await respectFetch({ action: 'sync-chains' });
+        await rgSleep(700);
+        const hits = await respectFetch({ action: 'sync-hits' });
+        await rgSleep(700);
+        const warBonus = await respectFetch({ action: 'sync-war-bonus' });
+
         const parts = [];
         if (oc.error) parts.push(`OC: ${oc.error}`); else parts.push(`OC +${oc.synced}`);
         if (chains.error) parts.push(`Chains: ${chains.error}`); else parts.push(`Chains +${chains.synced}`);
@@ -318,8 +324,10 @@ $('rg-deep-sync-oc').addEventListener('click', async () => {
     try {
         const result = await respectFetch({ action: 'deep-sync-oc' });
         if (result.error) throw new Error(result.error);
-        st.className = 'status ok';
-        st.textContent = `OC: checked ${result.pagesFetched} page${result.pagesFetched === 1 ? '' : 's'} of history, pulled in ${result.synced} completed crime${result.synced === 1 ? '' : 's'}.`;
+        st.className = result.rateLimited ? 'status err' : 'status ok';
+        st.textContent = result.rateLimited
+            ? `OC: got rate-limited by Torn after ${result.pagesFetched} page${result.pagesFetched === 1 ? '' : 's'} (pulled in ${result.synced} so far) — wait a minute or two, then click this again to continue further back.`
+            : `OC: checked ${result.pagesFetched} page${result.pagesFetched === 1 ? '' : 's'} of history, pulled in ${result.synced} completed crime${result.synced === 1 ? '' : 's'}.`;
         loadRespectEditor();
     } catch (e) {
         st.className = 'status err'; st.textContent = e.message;
@@ -335,8 +343,10 @@ $('rg-deep-sync-hits').addEventListener('click', async () => {
     try {
         const result = await respectFetch({ action: 'deep-sync-hits' });
         if (result.error) throw new Error(result.error);
-        st.className = 'status ok';
-        st.textContent = `Hits: checked ${result.pagesFetched} page${result.pagesFetched === 1 ? '' : 's'} of history, pulled in ${result.synced} attack${result.synced === 1 ? '' : 's'}.`;
+        st.className = result.rateLimited ? 'status err' : 'status ok';
+        st.textContent = result.rateLimited
+            ? `Hits: got rate-limited by Torn after ${result.pagesFetched} page${result.pagesFetched === 1 ? '' : 's'} (pulled in ${result.synced} so far) — wait a minute or two, then click this again to continue further back.`
+            : `Hits: checked ${result.pagesFetched} page${result.pagesFetched === 1 ? '' : 's'} of history, pulled in ${result.synced} attack${result.synced === 1 ? '' : 's'}.`;
         loadRespectEditor();
     } catch (e) {
         st.className = 'status err'; st.textContent = e.message;
@@ -373,8 +383,10 @@ $('rg-reset-war-bonus').addEventListener('click', async () => {
         await respectFetch({ action: 'reset-war-bonus-tracking' });
         const result = await respectFetch({ action: 'sync-war-bonus' });
         if (result.error) throw new Error(result.error);
-        st.className = 'status ok';
-        st.textContent = `War bonus reset and re-checked: +${result.synced} of ${result.totalAvailable ?? 0} wars${result.skippedUnresolved ? ` (${result.skippedUnresolved} still couldn't be resolved — let me know if this keeps happening)` : ''}.`;
+        st.className = result.rateLimited ? 'status err' : 'status ok';
+        st.textContent = result.rateLimited
+            ? `War bonus: got rate-limited by Torn partway through (pulled in ${result.synced} so far) — wait a minute or two, then click "Refresh tracking now" to continue checking the rest.`
+            : `War bonus reset and re-checked: +${result.synced} of ${result.totalAvailable ?? 0} wars${result.skippedUnresolved ? ` (${result.skippedUnresolved} still couldn't be resolved — let me know if this keeps happening)` : ''}.`;
         loadRespectEditor();
     } catch (e) {
         st.className = 'status err'; st.textContent = e.message;
