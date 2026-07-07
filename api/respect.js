@@ -47,8 +47,9 @@ async function redis(command) {
 async function getFactionId(key) {
     const r = await fetch(`https://api.torn.com/user/?selections=profile&key=${encodeURIComponent(key)}`);
     const profile = await r.json();
-    if (profile.error || !profile.faction?.faction_id) return null;
-    return String(profile.faction.faction_id);
+    if (profile.error) return { error: profile.error.error || `Torn error code ${profile.error.code}` };
+    if (!profile.faction?.faction_id) return { error: 'This key\'s account isn\'t in a faction right now' };
+    return { factionId: String(profile.faction.faction_id) };
 }
 async function isLeader(key) {
     const r = await fetch(`https://api.torn.com/v2/faction/balance?key=${encodeURIComponent(key)}`,
@@ -336,8 +337,9 @@ module.exports = async function handler(req, res) {
         const { key, action } = req.body || {};
         if (!key) return res.status(400).json({ error: 'Missing key' });
 
-        const factionId = await getFactionId(key);
-        if (!factionId) return res.status(403).json({ error: 'Could not determine your faction from this key' });
+        const factionResult = await getFactionId(key);
+        if (factionResult.error) return res.status(403).json({ error: `Could not check your faction right now: ${factionResult.error}` });
+        const factionId = factionResult.factionId;
 
         if (action === 'read') {
             const [snapRaw, ocDailyRaw, chainDailyRaw, hitsDailyRaw, warBonusDailyRaw, warRaw, goalRaw] = await Promise.all([
