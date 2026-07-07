@@ -220,12 +220,29 @@ $('rg-sync-oc').addEventListener('click', async () => {
         const result = await respectFetch({ action: 'sync-oc' });
         if (result.error) throw new Error(result.error);
         st.className = 'status ok';
-        st.textContent = result.synced > 0 ? `Pulled in ${result.synced} completed crime${result.synced === 1 ? '' : 's'}.` : 'Already up to date — nothing new to pull in.';
+        st.textContent = result.synced > 0 ? `Pulled in ${result.synced} completed crime${result.synced === 1 ? '' : 's'}.` : `Already up to date (${result.totalAvailable ?? 0} crime${result.totalAvailable === 1 ? '' : 's'} currently visible to Torn, all already tracked).`;
         loadRespectEditor();
     } catch (e) {
         st.className = 'status err'; st.textContent = e.message;
     } finally {
         btn.disabled = false; btn.textContent = 'Backfill OC history now';
+    }
+});
+
+$('rg-deep-sync-oc').addEventListener('click', async () => {
+    const btn = $('rg-deep-sync-oc');
+    const st = $('rg-oc-status');
+    btn.disabled = true; btn.textContent = 'Digging further back… (may take a moment)';
+    try {
+        const result = await respectFetch({ action: 'deep-sync-oc' });
+        if (result.error) throw new Error(result.error);
+        st.className = 'status ok';
+        st.textContent = `Checked ${result.pagesFetched} page${result.pagesFetched === 1 ? '' : 's'} of history, pulled in ${result.synced} completed crime${result.synced === 1 ? '' : 's'}.`;
+        loadRespectEditor();
+    } catch (e) {
+        st.className = 'status err'; st.textContent = e.message;
+    } finally {
+        btn.disabled = false; btn.textContent = 'Dig further back in history';
     }
 });
 
@@ -237,7 +254,7 @@ $('rg-sync-chains').addEventListener('click', async () => {
         const result = await respectFetch({ action: 'sync-chains' });
         if (result.error) throw new Error(result.error);
         st.className = 'status ok';
-        st.textContent = result.synced > 0 ? `Pulled in ${result.synced} chain${result.synced === 1 ? '' : 's'} of history.` : 'Already up to date — nothing new to pull in.';
+        st.textContent = result.synced > 0 ? `Pulled in ${result.synced} chain${result.synced === 1 ? '' : 's'} of history.` : `Already up to date (${result.totalAvailable ?? 0} chain${result.totalAvailable === 1 ? '' : 's'} currently visible to Torn, all already tracked).`;
         loadRespectEditor();
     } catch (e) {
         st.className = 'status err'; st.textContent = e.message;
@@ -254,7 +271,7 @@ $('rg-sync-hits').addEventListener('click', async () => {
         const result = await respectFetch({ action: 'sync-hits' });
         if (result.error) throw new Error(result.error);
         st.className = 'status ok';
-        st.textContent = result.synced > 0 ? `Pulled in ${result.synced} attack${result.synced === 1 ? '' : 's'} of history.` : 'Already up to date — nothing new to pull in.';
+        st.textContent = result.synced > 0 ? `Pulled in ${result.synced} attack${result.synced === 1 ? '' : 's'} of history.` : `Already up to date (${result.totalAvailable ?? 0} attack${result.totalAvailable === 1 ? '' : 's'} currently visible to Torn, all already tracked).`;
         loadRespectEditor();
     } catch (e) {
         st.className = 'status err'; st.textContent = e.message;
