@@ -750,7 +750,25 @@
                 </div>
 
                 <div class="panel">
-                    <h3>Log war respect</h3>
+                    <h3>War Bonus</h3>
+                    <p style="color:var(--muted);font-size:12px;margin:0 0 10px;">
+                        Now tracked automatically — pulled from Torn's own ranked war reports, which
+                        include the end-of-war bonus respect specifically (separate from all the
+                        individual hit respect during the war, already covered by Chains and Hits
+                        above). Best-effort: I couldn't fully verify the exact report format without
+                        live data, so if a war's bonus doesn't show up here, the manual log below still
+                        works as a fallback.
+                    </p>
+                    <button class="ghost small" id="rg-sync-war-bonus">Sync war bonus history now</button>
+                    <div class="status" id="rg-war-bonus-status"></div>
+                </div>
+
+                <div class="panel">
+                    <h3>Log war respect manually</h3>
+                    <p style="color:var(--muted);font-size:12px;margin:0 0 10px;">
+                        Use this only if the auto-sync above misses a war, or for anything else you
+                        want to attribute to a specific war.
+                    </p>
                     <div class="field">
                         <label for="rg-war-label">War name</label>
                         <input id="rg-war-label" placeholder="e.g. vs Some Faction">
