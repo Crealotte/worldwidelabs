@@ -11,31 +11,44 @@ async function respectFetch(body) {
     return res.json();
 }
 
-// Builds a sorted, gap-tolerant list of { date, totalGain, oc, chains, hits, war, other } — only
-// for days that have both their own snapshot and the previous day's, since a gain needs two
-// points. "other" is whatever's left after all four real/logged categories — territory, raids,
-// dirty bombs, or data-quality gaps — kept visible rather than folded silently into "hits".
+// Builds a sorted list of { date, totalGain, oc, chains, hits, war, other } covering every day
+// that has EITHER a snapshot pair (for a real total gain) OR any known category data (OC, chains,
+// hits, war) — backfilled category history often reaches further back than snapshotting has
+// existed, and that data shouldn't be invisible just because "total gain" can't be computed for
+// those older days. Where a snapshot pair genuinely doesn't exist, totalGain/other are null
+// (shown as "—") rather than guessed at.
 function respectComputeDaily(snapshots, ocDaily, chainDaily, hitsDaily, warEntries) {
-    const dates = Object.keys(snapshots).sort();
+    const snapDates = Object.keys(snapshots).sort();
     const warByDate = {};
     for (const w of warEntries) warByDate[w.date] = (warByDate[w.date] || 0) + w.amount;
 
-    const rows = [];
-    for (let i = 1; i < dates.length; i++) {
-        const date = dates[i];
-        const prevDate = dates[i - 1];
-        // Only treat as a real day-over-day gain if the previous entry is literally the day before —
-        // otherwise it's a multi-day gap and the "gain" would be misleadingly lumped into one row.
+    // A day has a valid "gain" only if the day before it also has a snapshot.
+    const gainByDate = {};
+    for (let i = 1; i < snapDates.length; i++) {
+        const date = snapDates[i], prevDate = snapDates[i - 1];
         const prev = new Date(prevDate); prev.setDate(prev.getDate() + 1);
-        if (prev.toISOString().slice(0, 10) !== date) continue;
-        const totalGain = snapshots[date] - snapshots[prevDate];
+        if (prev.toISOString().slice(0, 10) !== date) continue; // gap — not a real consecutive pair
+        gainByDate[date] = snapshots[date] - snapshots[prevDate];
+    }
+
+    // Union of every date we know ANYTHING about, from any source.
+    const allDates = new Set([
+        ...Object.keys(gainByDate), ...Object.keys(ocDaily), ...Object.keys(chainDaily),
+        ...Object.keys(hitsDaily), ...Object.keys(warByDate),
+    ]);
+
+    const rows = [];
+    for (const date of allDates) {
         const oc = ocDaily[date] || 0;
         const chains = chainDaily[date] || 0;
         const hits = hitsDaily[date] || 0;
         const war = warByDate[date] || 0;
-        rows.push({ date, totalGain, oc, chains, hits, war, other: totalGain - oc - chains - hits - war });
+        const hasGain = Object.prototype.hasOwnProperty.call(gainByDate, date);
+        const totalGain = hasGain ? gainByDate[date] : null;
+        const other = hasGain ? totalGain - oc - chains - hits - war : null;
+        rows.push({ date, totalGain, oc, chains, hits, war, other });
     }
-    return rows.reverse(); // newest first
+    return rows.sort((a, b) => b.date.localeCompare(a.date)); // newest first
 }
 
 // Average weekly gain from the earliest to latest available snapshot (gap-tolerant) — needs at
@@ -150,12 +163,12 @@ async function loadRespectEditor() {
                     <tbody>${daily.map(d => `
                         <tr style="border-top:1px solid var(--line);">
                             <td style="padding:4px 8px;">${esc(d.date)}</td>
-                            <td style="padding:4px 8px;font-family:var(--mono);">${d.totalGain.toLocaleString()}</td>
+                            <td style="padding:4px 8px;font-family:var(--mono);">${d.totalGain != null ? d.totalGain.toLocaleString() : '—'}</td>
                             <td style="padding:4px 8px;font-family:var(--mono);color:var(--muted);">${d.oc.toLocaleString()}</td>
                             <td style="padding:4px 8px;font-family:var(--mono);color:var(--muted);">${d.chains.toLocaleString()}</td>
                             <td style="padding:4px 8px;font-family:var(--mono);color:var(--muted);">${d.hits.toLocaleString()}</td>
                             <td style="padding:4px 8px;font-family:var(--mono);color:var(--muted);">${d.war.toLocaleString()}</td>
-                            <td style="padding:4px 8px;font-family:var(--mono);">${d.other.toLocaleString()}</td>
+                            <td style="padding:4px 8px;font-family:var(--mono);">${d.other != null ? d.other.toLocaleString() : '—'}</td>
                         </tr>`).join('')}
                     </tbody>
                 </table>`;
