@@ -254,9 +254,10 @@ $('rg-war-add').addEventListener('click', async () => {
     const btn = $('rg-war-add');
     const st = $('rg-war-status');
     const date = $('rg-war-date').value;
-    const amount = $('rg-war-amount').value.trim();
+    const amount = $('rg-war-amount').value.trim().replace(/[,\s]/g, ''); // strip thousands separators like "7,027"
     const label = $('rg-war-label').value.trim();
     if (!date || !amount) { st.className = 'status err'; st.textContent = 'Date and respect amount are required.'; return; }
+    if (!/^-?\d+(\.\d+)?$/.test(amount)) { st.className = 'status err'; st.textContent = 'Respect amount must be a plain number, e.g. 25000.'; return; }
     btn.disabled = true;
     try {
         const result = await respectFetch({ action: 'add-war-entry', date, amount, label });
@@ -337,7 +338,7 @@ $('rg-deep-sync-oc').addEventListener('click', async () => {
         st.className = result.rateLimited ? 'status err' : 'status ok';
         st.textContent = result.rateLimited
             ? `OC: got rate-limited by Torn after ${result.pagesFetched} page${result.pagesFetched === 1 ? '' : 's'} (pulled in ${result.synced} so far) — wait a minute or two, then click this again to continue further back.`
-            : `OC: checked ${result.pagesFetched} page${result.pagesFetched === 1 ? '' : 's'} of history, pulled in ${result.synced} completed crime${result.synced === 1 ? '' : 's'}.`;
+            : `OC: checked ${result.pagesFetched} page${result.pagesFetched === 1 ? '' : 's'} of history, pulled in ${result.synced} completed crime${result.synced === 1 ? '' : 's'}. Stopped because: ${result.stopReason}.`;
         loadRespectEditor();
     } catch (e) {
         st.className = 'status err'; st.textContent = e.message;
