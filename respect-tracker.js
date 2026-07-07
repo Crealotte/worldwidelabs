@@ -11,9 +11,11 @@ async function respectFetch(body) {
     return res.json();
 }
 
-// Builds a sorted, gap-tolerant list of { date, totalGain, oc, war, hits } — only for days that
-// have both their own snapshot and the previous day's, since a gain needs two points.
-function respectComputeDaily(snapshots, ocDaily, warEntries) {
+// Builds a sorted, gap-tolerant list of { date, totalGain, oc, chains, hits, war, other } — only
+// for days that have both their own snapshot and the previous day's, since a gain needs two
+// points. "other" is whatever's left after all four real/logged categories — territory, raids,
+// dirty bombs, or data-quality gaps — kept visible rather than folded silently into "hits".
+function respectComputeDaily(snapshots, ocDaily, chainDaily, hitsDaily, warEntries) {
     const dates = Object.keys(snapshots).sort();
     const warByDate = {};
     for (const w of warEntries) warByDate[w.date] = (warByDate[w.date] || 0) + w.amount;
@@ -28,8 +30,10 @@ function respectComputeDaily(snapshots, ocDaily, warEntries) {
         if (prev.toISOString().slice(0, 10) !== date) continue;
         const totalGain = snapshots[date] - snapshots[prevDate];
         const oc = ocDaily[date] || 0;
+        const chains = chainDaily[date] || 0;
+        const hits = hitsDaily[date] || 0;
         const war = warByDate[date] || 0;
-        rows.push({ date, totalGain, oc, war, hits: totalGain - oc - war });
+        rows.push({ date, totalGain, oc, chains, hits, war, other: totalGain - oc - chains - hits - war });
     }
     return rows.reverse(); // newest first
 }
@@ -130,7 +134,7 @@ async function loadRespectEditor() {
             });
         }
 
-        const daily = respectComputeDaily(data.snapshots, data.ocDaily, data.warEntries).slice(0, 30);
+        const daily = respectComputeDaily(data.snapshots, data.ocDaily, data.chainDaily, data.hitsDaily, data.warEntries).slice(0, 30);
         const tableEl = $('rg-daily-table');
         if (!daily.length) {
             tableEl.innerHTML = '<p style="color:var(--muted);font-size:13px;">Not enough consecutive daily snapshots yet.</p>';
@@ -139,15 +143,19 @@ async function loadRespectEditor() {
                 <table style="width:100%;font-size:13px;border-collapse:collapse;">
                     <thead><tr style="color:var(--muted);text-align:left;">
                         <th style="padding:4px 8px;">Date</th><th style="padding:4px 8px;">Total gain</th>
-                        <th style="padding:4px 8px;">OC</th><th style="padding:4px 8px;">War</th><th style="padding:4px 8px;">Hits (derived)</th>
+                        <th style="padding:4px 8px;">OC</th><th style="padding:4px 8px;">Chains</th>
+                        <th style="padding:4px 8px;">Hits</th><th style="padding:4px 8px;">War</th>
+                        <th style="padding:4px 8px;">Other</th>
                     </tr></thead>
                     <tbody>${daily.map(d => `
                         <tr style="border-top:1px solid var(--line);">
                             <td style="padding:4px 8px;">${esc(d.date)}</td>
                             <td style="padding:4px 8px;font-family:var(--mono);">${d.totalGain.toLocaleString()}</td>
                             <td style="padding:4px 8px;font-family:var(--mono);color:var(--muted);">${d.oc.toLocaleString()}</td>
+                            <td style="padding:4px 8px;font-family:var(--mono);color:var(--muted);">${d.chains.toLocaleString()}</td>
+                            <td style="padding:4px 8px;font-family:var(--mono);color:var(--muted);">${d.hits.toLocaleString()}</td>
                             <td style="padding:4px 8px;font-family:var(--mono);color:var(--muted);">${d.war.toLocaleString()}</td>
-                            <td style="padding:4px 8px;font-family:var(--mono);">${d.hits.toLocaleString()}</td>
+                            <td style="padding:4px 8px;font-family:var(--mono);">${d.other.toLocaleString()}</td>
                         </tr>`).join('')}
                     </tbody>
                 </table>`;
@@ -201,5 +209,39 @@ $('rg-war-add').addEventListener('click', async () => {
         st.className = 'status err'; st.textContent = e.message;
     } finally {
         btn.disabled = false;
+    }
+});
+
+$('rg-sync-chains').addEventListener('click', async () => {
+    const btn = $('rg-sync-chains');
+    const st = $('rg-chains-status');
+    btn.disabled = true; btn.textContent = 'Syncing…';
+    try {
+        const result = await respectFetch({ action: 'sync-chains' });
+        if (result.error) throw new Error(result.error);
+        st.className = 'status ok';
+        st.textContent = result.synced > 0 ? `Pulled in ${result.synced} chain${result.synced === 1 ? '' : 's'} of history.` : 'Already up to date — nothing new to pull in.';
+        loadRespectEditor();
+    } catch (e) {
+        st.className = 'status err'; st.textContent = e.message;
+    } finally {
+        btn.disabled = false; btn.textContent = 'Backfill chain history now';
+    }
+});
+
+$('rg-sync-hits').addEventListener('click', async () => {
+    const btn = $('rg-sync-hits');
+    const st = $('rg-hits-status');
+    btn.disabled = true; btn.textContent = 'Syncing…';
+    try {
+        const result = await respectFetch({ action: 'sync-hits' });
+        if (result.error) throw new Error(result.error);
+        st.className = 'status ok';
+        st.textContent = result.synced > 0 ? `Pulled in ${result.synced} attack${result.synced === 1 ? '' : 's'} of history.` : 'Already up to date — nothing new to pull in.';
+        loadRespectEditor();
+    } catch (e) {
+        st.className = 'status err'; st.textContent = e.message;
+    } finally {
+        btn.disabled = false; btn.textContent = 'Backfill hit history now';
     }
 });
