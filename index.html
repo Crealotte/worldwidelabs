@@ -769,8 +769,32 @@
                 </div>
 
                 <div class="panel">
+                    <h3>Chains</h3>
+                    <p style="color:var(--muted);font-size:12px;margin:0 0 10px;">
+                        Tracked automatically going forward, and genuinely backfillable — Torn keeps a
+                        record of past chains with their own respect totals. Run this once to pull in
+                        your faction's chain history; after that it stays current on its own.
+                    </p>
+                    <button class="ghost small" id="rg-sync-chains">Backfill chain history now</button>
+                    <div class="status" id="rg-chains-status"></div>
+                </div>
+
+                <div class="panel">
+                    <h3>Hits</h3>
+                    <p style="color:var(--muted);font-size:12px;margin:0 0 10px;">
+                        Real per-attack respect (excluding chain-tagged attacks, already covered above),
+                        pulled directly from Torn's attack log — not a guess. Limited to Torn's current
+                        rolling window of recent attacks; run this to backfill what's currently available,
+                        then it stays current automatically. One known Torn quirk: respect lost from being
+                        attacked doesn't always populate reliably — gains are solid, losses are spottier.
+                    </p>
+                    <button class="ghost small" id="rg-sync-hits">Backfill hit history now</button>
+                    <div class="status" id="rg-hits-status"></div>
+                </div>
+
+                <div class="panel">
                     <h3>Daily breakdown</h3>
-                    <p style="color:var(--muted);font-size:12px;margin:0 0 10px;">Last 30 days with a recorded snapshot. "Hits" is a derived remainder (total gain − OC − war), not a separately verified figure.</p>
+                    <p style="color:var(--muted);font-size:12px;margin:0 0 10px;">Last 30 days with a recorded snapshot. "Other" is whatever's left after OC, Chains, Hits, and War — territory, raids, dirty bombs, or gaps, kept visible rather than hidden.</p>
                     <div id="rg-daily-table"></div>
                 </div>
             </div>
