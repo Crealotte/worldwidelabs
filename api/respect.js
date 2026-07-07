@@ -66,7 +66,9 @@ const chainDailyKey = (factionId) => `wwl:chain-respect-daily:${factionId}`;
 const chainSeenKey = (factionId) => `wwl:chain-respect-seen:${factionId}`;
 const hitsDailyKey = (factionId) => `wwl:hits-respect-daily:${factionId}`;
 const hitsSeenKey = (factionId) => `wwl:hits-respect-seen:${factionId}`;
-const warEntriesKey = (factionId) => `wwl:war-respect:${factionId}`;
+const warEntriesKey = (factionId) => `wwl:war-respect:${factionId}`; // manual entries
+const warBonusDailyKey = (factionId) => `wwl:war-bonus-daily:${factionId}`; // auto-tracked
+const warBonusSeenKey = (factionId) => `wwl:war-bonus-seen:${factionId}`;
 const goalKey = (factionId) => `wwl:respect-goal:${factionId}`;
 
 function todayKey() { return new Date().toISOString().slice(0, 10); }
@@ -197,6 +199,48 @@ async function syncChains(key, factionId) {
     return { synced, totalAvailable: Object.keys(chains).length };
 }
 
+// Pulls the faction's past ranked wars, then each war's detailed report for its own
+// reward_respect field — the end-of-war bonus specifically, separate from all the individual
+// hit respect gained during the war (that part's already covered by Chains and Hits above).
+// Bucketed by the day the war ended. This is genuinely automatic — no more manually looking up
+// and typing in a number after every war.
+async function syncWarBonus(key, factionId) {
+    const r = await fetch(`https://api.torn.com/v2/faction?selections=rankedwars&key=${encodeURIComponent(key)}`,
+        { headers: { accept: 'application/json' } });
+    const data = await r.json();
+    if (data.error) return { synced: 0, error: data.error.error };
+
+    const wars = Object.values(data.rankedwars || data.ranked_wars || {});
+    const dailyRaw = await redis(['GET', warBonusDailyKey(factionId)]);
+    const daily = dailyRaw ? JSON.parse(dailyRaw) : {};
+    let synced = 0;
+    for (const war of wars) {
+        const warId = war.id || war.war_id;
+        const endTs = war.war?.end || war.end;
+        if (!warId || !endTs) continue; // still ongoing, or missing data
+        const added = await redis(['SADD', warBonusSeenKey(factionId), String(warId)]);
+        if (added !== 1) continue; // already counted
+
+        try {
+            const reportRes = await fetch(`https://api.torn.com/torn/${warId}?selections=rankedwarreport&key=${encodeURIComponent(key)}`);
+            const report = await reportRes.json();
+            const rw = report.rankedwarreport || report.rankedWarReport || report;
+            const factionA = rw?.factions?.[0] || rw?.faction_a;
+            const factionB = rw?.factions?.[1] || rw?.faction_b;
+            let bonus = 0;
+            if (String(factionA?.id ?? factionA?.ID) === factionId) bonus = Number(rw?.faction_a_reward_respect ?? factionA?.reward_respect ?? 0);
+            else if (String(factionB?.id ?? factionB?.ID) === factionId) bonus = Number(rw?.faction_b_reward_respect ?? factionB?.reward_respect ?? 0);
+            if (bonus > 0) {
+                const dayKey = new Date(endTs * 1000).toISOString().slice(0, 10);
+                daily[dayKey] = (daily[dayKey] || 0) + bonus;
+                synced++;
+            }
+        } catch (e) { /* skip this war's report if it fails, keep going with the rest */ }
+    }
+    if (synced > 0) await redis(['SET', warBonusDailyKey(factionId), JSON.stringify(daily)]);
+    return { synced, totalAvailable: wars.length };
+}
+
 // Pulls real per-attack respect from faction:attacksfull — every attack any member made or
 // received, with its own respect_gain. Chain-tagged attacks are skipped here since Chains
 // already covers those; this is specifically the non-chain hit respect, measured directly
@@ -215,7 +259,7 @@ async function syncHits(key, factionId) {
         if (attack.chain) continue; // already counted under Chains
         const added = await redis(['SADD', hitsSeenKey(factionId), attackId]);
         if (added !== 1) continue; // already counted
-        const respect = Number(attack.respect_gain || 0);
+        const respect = Number(attack.respect ?? attack.respect_gain ?? 0);
         if (!respect) continue; // known Torn quirk: losses don't always populate this — nothing to add either way
         const dayKey = new Date((attack.timestamp_ended || attack.timestamp_started) * 1000).toISOString().slice(0, 10);
         daily[dayKey] = (daily[dayKey] || 0) + respect;
@@ -239,11 +283,12 @@ module.exports = async function handler(req, res) {
         if (!factionId) return res.status(403).json({ error: 'Could not determine your faction from this key' });
 
         if (action === 'read') {
-            const [snapRaw, ocDailyRaw, chainDailyRaw, hitsDailyRaw, warRaw, goalRaw] = await Promise.all([
+            const [snapRaw, ocDailyRaw, chainDailyRaw, hitsDailyRaw, warBonusDailyRaw, warRaw, goalRaw] = await Promise.all([
                 redis(['GET', snapshotsKey(factionId)]),
                 redis(['GET', ocDailyKey(factionId)]),
                 redis(['GET', chainDailyKey(factionId)]),
                 redis(['GET', hitsDailyKey(factionId)]),
+                redis(['GET', warBonusDailyKey(factionId)]),
                 redis(['GET', warEntriesKey(factionId)]),
                 redis(['GET', goalKey(factionId)]),
             ]);
@@ -252,6 +297,7 @@ module.exports = async function handler(req, res) {
                 ocDaily: ocDailyRaw ? JSON.parse(ocDailyRaw) : {},
                 chainDaily: chainDailyRaw ? JSON.parse(chainDailyRaw) : {},
                 hitsDaily: hitsDailyRaw ? JSON.parse(hitsDailyRaw) : {},
+                warBonusDaily: warBonusDailyRaw ? JSON.parse(warBonusDailyRaw) : {},
                 warEntries: warRaw ? JSON.parse(warRaw) : [],
                 goal: goalRaw ? JSON.parse(goalRaw) : null,
             });
@@ -262,6 +308,12 @@ module.exports = async function handler(req, res) {
 
         if (action === 'sync-chains') {
             const result = await syncChains(key, factionId);
+            if (result.error) return res.status(403).json({ error: result.error });
+            return res.status(200).json({ ok: true, synced: result.synced, totalAvailable: result.totalAvailable });
+        }
+
+        if (action === 'sync-war-bonus') {
+            const result = await syncWarBonus(key, factionId);
             if (result.error) return res.status(403).json({ error: result.error });
             return res.status(200).json({ ok: true, synced: result.synced, totalAvailable: result.totalAvailable });
         }
@@ -295,11 +347,12 @@ module.exports = async function handler(req, res) {
             snapshots[todayKey()] = totalRespect;
             await redis(['SET', snapshotsKey(factionId), JSON.stringify(snapshots)]);
 
-            // Piggyback OC, chain, and hit syncing onto every snapshot, so all three stay current
-            // automatically without needing a separate visit to any other page.
+            // Piggyback OC, chain, hit, and war-bonus syncing onto every snapshot, so everything
+            // stays current automatically without needing a separate visit to any other page.
             await syncOc(key, factionId).catch(() => {});
             await syncChains(key, factionId).catch(() => {});
             await syncHits(key, factionId).catch(() => {});
+            await syncWarBonus(key, factionId).catch(() => {});
 
             return res.status(200).json({ ok: true, totalRespect });
         }
