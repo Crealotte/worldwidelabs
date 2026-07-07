@@ -76,10 +76,10 @@ const chainDailyKey = (factionId) => `wwl:chain-respect-daily:${factionId}`;
 const chainSeenKey = (factionId) => `wwl:chain-respect-seen:${factionId}`;
 const hitsDailyKey = (factionId) => `wwl:hits-respect-daily:${factionId}`;
 const hitsSeenKey = (factionId) => `wwl:hits-respect-seen:${factionId}`;
+const lossesSeenKey = (factionId) => `wwl:losses-respect-seen:${factionId}`;
 const warEntriesKey = (factionId) => `wwl:war-respect:${factionId}`; // manual entries
 const warBonusDailyKey = (factionId) => `wwl:war-bonus-daily:${factionId}`; // auto-tracked
 const warBonusSeenKey = (factionId) => `wwl:war-bonus-seen:${factionId}`;
-const chainWindowsKey = (factionId) => `wwl:chain-windows:${factionId}`; // for cross-referencing against attacks
 const goalKey = (factionId) => `wwl:respect-goal:${factionId}`;
 
 function todayKey() { return new Date().toISOString().slice(0, 10); }
@@ -201,8 +201,6 @@ async function syncChains(key, factionId) {
     const chains = data.chains || {};
     const dailyRaw = await redis(['GET', chainDailyKey(factionId)]);
     const daily = dailyRaw ? JSON.parse(dailyRaw) : {};
-    const windowsRaw = await redis(['GET', chainWindowsKey(factionId)]);
-    const windows = windowsRaw ? JSON.parse(windowsRaw) : [];
     let synced = 0;
     for (const [chainId, chain] of Object.entries(chains)) {
         if (!chain.end || !chain.respect) continue;
@@ -210,13 +208,9 @@ async function syncChains(key, factionId) {
         if (added !== 1) continue; // already counted
         const dayKey = new Date(chain.end * 1000).toISOString().slice(0, 10);
         daily[dayKey] = (daily[dayKey] || 0) + Number(chain.respect);
-        if (chain.start) windows.push({ start: chain.start, end: chain.end });
         synced++;
     }
-    if (synced > 0) {
-        await redis(['SET', chainDailyKey(factionId), JSON.stringify(daily)]);
-        await redis(['SET', chainWindowsKey(factionId), JSON.stringify(windows)]);
-    }
+    if (synced > 0) await redis(['SET', chainDailyKey(factionId), JSON.stringify(daily)]);
     return { synced, totalAvailable: Object.keys(chains).length };
 }
 
@@ -278,38 +272,28 @@ async function syncWarBonus(key, factionId) {
 }
 
 // Processes one page of attacks. Shared between the regular single-page sync and the deep
-// multi-page backfill below. attacksfull has no field marking chain membership (confirmed
-// against a real sample — the "chain" field simply doesn't exist there), so instead this
-// cross-references each attack's timestamp against known chain start/end windows to exclude
-// anything already counted under Chains.
-//
-// Direction matters: the "respect" field on an attack record is always the ATTACKER's own gain.
-// When our faction is the attacker, that's a straight addition to our total. When our faction is
-// the defender (someone else attacked one of our members), that same number is THEIR gain, not
-// ours — per Torn's own mechanic, our faction loses 25% of what they gained, which is a
-// subtraction, not an addition. Treating every entry as a gain regardless of side was silently
-// inflating the total every time the faction got attacked.
-async function processAttacksPageAsync(attacks, factionId, daily, chainWindows) {
+// multi-page backfill below. Only counts OUR OWN outgoing attacks (attacker_faction === us) —
+// attacksfull's "respect" field is always the attacker's own gain, so for our outgoing attacks
+// it's directly correct across every result type (Mugged, Hospitalized, Attacked, etc.).
+// Two things this deliberately does NOT do, after reconsidering both against real data:
+//   - No chain-window exclusion. Chain completion bonuses (the "Chains" category) are a separate
+//     milestone reward on top of each hit's own respect, not an aggregate replacing it — excluding
+//     hits during a chain window would incorrectly remove real respect, not prevent double-counting.
+//   - No defender-side loss estimate. Guessing 25% of the attacker's gain was never verified and
+//     is being replaced by attacknews's own exact computed loss figure (see syncLosses below).
+async function processAttacksPageAsync(attacks, factionId, daily) {
     let synced = 0, dailyChanged = false, oldestSeen = null;
     for (const [attackId, attack] of Object.entries(attacks)) {
         const ts = attack.timestamp_ended || attack.timestamp_started;
         if (ts && (oldestSeen === null || ts < oldestSeen)) oldestSeen = ts;
-        const duringChain = chainWindows.some(w => ts >= w.start && ts <= w.end);
-        if (duringChain) continue; // already counted under Chains
+        if (String(attack.attacker_faction) !== factionId) continue; // not our own outgoing attack
         const added = await redis(['SADD', hitsSeenKey(factionId), attackId]);
         if (added !== 1) continue; // already counted
-        const rawRespect = Number(attack.respect ?? attack.respect_gain ?? 0);
-        if (!rawRespect) continue; // known Torn quirk: losses don't always populate this — nothing to add either way
-
-        const weAreAttacker = String(attack.attacker_faction) === factionId;
-        const weAreDefender = String(attack.defender_faction) === factionId;
-        let respectDelta;
-        if (weAreAttacker) respectDelta = rawRespect; // our own gain
-        else if (weAreDefender) respectDelta = -(rawRespect * 0.25); // we lose 25% of what they gained
-        else continue; // shouldn't happen on our own faction's attacksfull, but skip defensively if so
+        const respect = Number(attack.respect ?? attack.respect_gain ?? 0);
+        if (!respect) continue; // a loss gives 0 respect — nothing to add
 
         const dayKey = new Date(ts * 1000).toISOString().slice(0, 10);
-        daily[dayKey] = (daily[dayKey] || 0) + respectDelta;
+        daily[dayKey] = (daily[dayKey] || 0) + respect;
         dailyChanged = true;
         synced++;
     }
@@ -328,9 +312,7 @@ async function syncHits(key, factionId) {
     const attacks = data.attacks || {};
     const dailyRaw = await redis(['GET', hitsDailyKey(factionId)]);
     const daily = dailyRaw ? JSON.parse(dailyRaw) : {};
-    const windowsRaw = await redis(['GET', chainWindowsKey(factionId)]);
-    const chainWindows = windowsRaw ? JSON.parse(windowsRaw) : [];
-    const result = await processAttacksPageAsync(attacks, factionId, daily, chainWindows);
+    const result = await processAttacksPageAsync(attacks, factionId, daily);
     if (result.dailyChanged) await redis(['SET', hitsDailyKey(factionId), JSON.stringify(daily)]);
     return { synced: result.synced, totalAvailable: Object.keys(attacks).length };
 }
@@ -342,8 +324,6 @@ async function syncHits(key, factionId) {
 async function deepSyncHits(key, factionId, maxPages = 15) {
     const dailyRaw = await redis(['GET', hitsDailyKey(factionId)]);
     const daily = dailyRaw ? JSON.parse(dailyRaw) : {};
-    const windowsRaw = await redis(['GET', chainWindowsKey(factionId)]);
-    const chainWindows = windowsRaw ? JSON.parse(windowsRaw) : [];
 
     let to = Math.floor(Date.now() / 1000);
     let totalSynced = 0, pagesFetched = 0, emptyPagesInARow = 0, rateLimited = false;
@@ -360,7 +340,7 @@ async function deepSyncHits(key, factionId, maxPages = 15) {
         if (!Object.keys(attacks).length) break;
         pagesFetched++;
 
-        const result = await processAttacksPageAsync(attacks, factionId, daily, chainWindows);
+        const result = await processAttacksPageAsync(attacks, factionId, daily);
         totalSynced += result.synced;
         if (result.dailyChanged) await redis(['SET', hitsDailyKey(factionId), JSON.stringify(daily)]);
 
@@ -368,6 +348,90 @@ async function deepSyncHits(key, factionId, maxPages = 15) {
         to = result.oldestSeen - 1;
         emptyPagesInARow = result.synced === 0 ? emptyPagesInARow + 1 : 0;
         if (emptyPagesInARow >= 3) break; // several pages of already-seen data — likely hit the edge
+    }
+    return { synced: totalSynced, pagesFetched, rateLimited };
+}
+
+// attacksfull only ever shows the attacker's own gain — it has no field for what OUR faction
+// lost when one of our members gets attacked. attacknews instead gives Torn's own exact,
+// human-readable computed number for every event, e.g. "X attacked Y (-0.29)". A NEGATIVE
+// number in this feed is our own faction's real loss from being attacked — exact, not a
+// guessed percentage. Positive numbers here are just our own outgoing attacks restated (already
+// covered by attacksfull above), so those are skipped to avoid double-counting.
+const NEWS_RESPECT_RE = /\(([+-]\d+(?:\.\d+)?)\)/;
+
+function processNewsPage(newsEntries, factionId, daily, seenIds) {
+    let synced = 0, dailyChanged = false, oldestSeen = null;
+    for (const [newsId, entry] of Object.entries(newsEntries)) {
+        const ts = entry.timestamp;
+        if (ts && (oldestSeen === null || ts < oldestSeen)) oldestSeen = ts;
+        if (seenIds.has(newsId)) continue;
+        const match = NEWS_RESPECT_RE.exec(entry.news || '');
+        if (!match) continue; // no parseable number (e.g. "attacked X but lost" has none) — nothing to add
+        const value = Number(match[1]);
+        if (value >= 0) continue; // our own outgoing gain, already counted via attacksfull
+        seenIds.add(newsId);
+        const dayKey = new Date(ts * 1000).toISOString().slice(0, 10);
+        daily[dayKey] = (daily[dayKey] || 0) + value; // already negative — a genuine subtraction
+        dailyChanged = true;
+        synced++;
+    }
+    return { synced, dailyChanged, oldestSeen };
+}
+
+async function syncLosses(key, factionId) {
+    const r = await fetch(`https://api.torn.com/faction/?selections=attacknews&key=${encodeURIComponent(key)}`);
+    const data = await r.json();
+    if (data.error) return { synced: 0, error: data.error.error };
+
+    const newsEntries = data.attacknews || {};
+    const dailyRaw = await redis(['GET', hitsDailyKey(factionId)]);
+    const daily = dailyRaw ? JSON.parse(dailyRaw) : {};
+    const seenRaw = await redis(['GET', lossesSeenKey(factionId)]);
+    const seenIds = new Set(seenRaw ? JSON.parse(seenRaw) : []);
+    const result = processNewsPage(newsEntries, factionId, daily, seenIds);
+    if (result.dailyChanged) {
+        await redis(['SET', hitsDailyKey(factionId), JSON.stringify(daily)]);
+        await redis(['SET', lossesSeenKey(factionId), JSON.stringify([...seenIds])]);
+    }
+    return { synced: result.synced, totalAvailable: Object.keys(newsEntries).length };
+}
+
+// Deep backfill for losses — attacknews needs both "from" and "to" to page beyond the most
+// recent ~100 entries (a single timestamp alone gets ignored by Torn's API for news-type
+// selections), so this walks backward in fixed time chunks rather than relying on "oldest seen".
+async function deepSyncLosses(key, factionId, maxPages = 15) {
+    const dailyRaw = await redis(['GET', hitsDailyKey(factionId)]);
+    const daily = dailyRaw ? JSON.parse(dailyRaw) : {};
+    const seenRaw = await redis(['GET', lossesSeenKey(factionId)]);
+    const seenIds = new Set(seenRaw ? JSON.parse(seenRaw) : []);
+
+    const CHUNK_SECONDS = 6 * 60 * 60; // 6-hour windows
+    let to = Math.floor(Date.now() / 1000);
+    let totalSynced = 0, pagesFetched = 0, emptyPagesInARow = 0, rateLimited = false;
+
+    for (let page = 0; page < maxPages; page++) {
+        if (page > 0) await sleep(1100);
+        const from = to - CHUNK_SECONDS;
+        const r = await fetch(`https://api.torn.com/faction/?selections=attacknews&from=${from}&to=${to}&key=${encodeURIComponent(key)}`);
+        const data = await r.json();
+        if (data.error) {
+            if (isRateLimited(data)) rateLimited = true;
+            break;
+        }
+        const newsEntries = data.attacknews || {};
+        pagesFetched++;
+
+        const result = processNewsPage(newsEntries, factionId, daily, seenIds);
+        totalSynced += result.synced;
+        if (result.dailyChanged) {
+            await redis(['SET', hitsDailyKey(factionId), JSON.stringify(daily)]);
+            await redis(['SET', lossesSeenKey(factionId), JSON.stringify([...seenIds])]);
+        }
+
+        to = from - 1; // always move the window back, even if this chunk was empty
+        emptyPagesInARow = result.synced === 0 ? emptyPagesInARow + 1 : 0;
+        if (emptyPagesInARow >= 5) break; // several empty chunks in a row — likely reached the edge
     }
     return { synced: totalSynced, pagesFetched, rateLimited };
 }
@@ -433,12 +497,25 @@ module.exports = async function handler(req, res) {
             return res.status(200).json({ ok: true, synced: result.synced, pagesFetched: result.pagesFetched, rateLimited: result.rateLimited });
         }
 
+        if (action === 'sync-losses') {
+            const result = await syncLosses(key, factionId);
+            if (result.error) return res.status(403).json({ error: result.error });
+            return res.status(200).json({ ok: true, synced: result.synced, totalAvailable: result.totalAvailable });
+        }
+
+        if (action === 'deep-sync-losses') {
+            const result = await deepSyncLosses(key, factionId);
+            return res.status(200).json({ ok: true, synced: result.synced, pagesFetched: result.pagesFetched, rateLimited: result.rateLimited });
+        }
+
         if (action === 'reset-hits-tracking') {
-            // Anything synced before the chain-window fix could be double-counted with Chains
-            // (attacksfull has no chain field, so the old filter silently did nothing). This
-            // wipes both the daily totals and the dedup set so it rebuilds cleanly.
+            // Reworked the whole calculation (removed a flawed defender-side percentage guess
+            // and an incorrect chain-window exclusion, added exact loss tracking from
+            // attacknews) — old stored numbers used the previous logic, so this wipes
+            // everything and lets it rebuild cleanly from scratch.
             await redis(['DEL', hitsDailyKey(factionId)]);
             await redis(['DEL', hitsSeenKey(factionId)]);
+            await redis(['DEL', lossesSeenKey(factionId)]);
             return res.status(200).json({ ok: true });
         }
 
@@ -470,6 +547,7 @@ module.exports = async function handler(req, res) {
             await syncOc(key, factionId).catch(() => {});
             await syncChains(key, factionId).catch(() => {});
             await syncHits(key, factionId).catch(() => {});
+            await syncLosses(key, factionId).catch(() => {});
             await syncWarBonus(key, factionId).catch(() => {});
 
             return res.status(200).json({ ok: true, totalRespect });
