@@ -53,7 +53,9 @@ async function isLeader(key) {
 }
 
 const snapshotsKey = (factionId) => `wwl:respect-snapshots:${factionId}`;
-const ocDailyKey = (factionId) => `wwl:oc-respect-daily:${factionId}`; // written by oc-fit.js
+const ocRewardsKey = (factionId) => `wwl:oc-rewards:${factionId}`; // shared with oc-fit.js
+const ocSeenKey = (factionId) => `wwl:oc-rewards-seen:${factionId}`; // shared dedup with oc-fit.js
+const ocDailyKey = (factionId) => `wwl:oc-respect-daily:${factionId}`; // shared with oc-fit.js
 const chainDailyKey = (factionId) => `wwl:chain-respect-daily:${factionId}`;
 const chainSeenKey = (factionId) => `wwl:chain-respect-seen:${factionId}`;
 const hitsDailyKey = (factionId) => `wwl:hits-respect-daily:${factionId}`;
@@ -62,6 +64,53 @@ const warEntriesKey = (factionId) => `wwl:war-respect:${factionId}`;
 const goalKey = (factionId) => `wwl:respect-goal:${factionId}`;
 
 function todayKey() { return new Date().toISOString().slice(0, 10); }
+
+function normScenario(name) {
+    return (name || 'Unknown').trim().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+        .toLowerCase().replace(/\s+v\d+$/i, '').trim();
+}
+
+// Captures completed-crime respect independently of OC Fit's own tracking, so the Respect
+// Tracker doesn't depend on someone having visited Team Builder first. Shares the exact same
+// "seen" dedup set as oc-fit.js, so whichever feature runs first claims each OC and the other
+// just skips it — no double-counting between the two.
+async function syncOc(key, factionId) {
+    const r = await fetch(`https://api.torn.com/v2/faction?selections=crimes&key=${encodeURIComponent(key)}`,
+        { headers: { accept: 'application/json' } });
+    const data = await r.json();
+    if (data.error) return { synced: 0, error: data.error.error };
+
+    const crimesList = Object.values(data.crimes || {});
+    const rewardsRaw = await redis(['GET', ocRewardsKey(factionId)]);
+    const rewards = rewardsRaw ? JSON.parse(rewardsRaw) : {};
+    const dailyRaw = await redis(['GET', ocDailyKey(factionId)]);
+    const daily = dailyRaw ? JSON.parse(dailyRaw) : {};
+    let synced = 0, rewardsChanged = false;
+    for (const oc of crimesList) {
+        if (!oc || !oc.executed_at) continue;
+        const status = (oc.status || '').toLowerCase();
+        if (!['successful', 'failed', 'expired'].includes(status)) continue;
+        const added = await redis(['SADD', ocSeenKey(factionId), String(oc.id)]);
+        if (added !== 1) continue; // already counted, whether by OC Fit or a previous sync here
+        const sKey = normScenario(oc.name);
+        if (!rewards[sKey]) rewards[sKey] = { scenario: oc.name || sKey, difficulty: oc.difficulty ?? '?', totalMoney: 0, totalRespect: 0, successCount: 0, totalRuns: 0 };
+        rewards[sKey].totalRuns++;
+        if (status === 'successful') {
+            rewards[sKey].successCount++;
+            rewards[sKey].totalMoney += Number(oc.rewards?.money ?? 0);
+            rewards[sKey].totalRespect += Number(oc.rewards?.respect ?? 0);
+            const dayKey = new Date(oc.executed_at * 1000).toISOString().slice(0, 10);
+            daily[dayKey] = (daily[dayKey] || 0) + Number(oc.rewards?.respect ?? 0);
+        }
+        rewardsChanged = true;
+        synced++;
+    }
+    if (rewardsChanged) {
+        await redis(['SET', ocRewardsKey(factionId), JSON.stringify(rewards)]);
+        await redis(['SET', ocDailyKey(factionId), JSON.stringify(daily)]);
+    }
+    return { synced };
+}
 
 // Pulls the faction's past chains (Torn keeps these with their own respect totals and end
 // timestamps) and buckets any not-yet-counted ones by the day the chain ended — genuinely
@@ -162,6 +211,12 @@ module.exports = async function handler(req, res) {
             return res.status(200).json({ ok: true, synced: result.synced });
         }
 
+        if (action === 'sync-oc') {
+            const result = await syncOc(key, factionId);
+            if (result.error) return res.status(403).json({ error: result.error });
+            return res.status(200).json({ ok: true, synced: result.synced });
+        }
+
         if (action === 'snapshot') {
             const r = await fetch(`https://api.torn.com/faction/?selections=basic&key=${encodeURIComponent(key)}`);
             const data = await r.json();
@@ -174,8 +229,9 @@ module.exports = async function handler(req, res) {
             snapshots[todayKey()] = totalRespect;
             await redis(['SET', snapshotsKey(factionId), JSON.stringify(snapshots)]);
 
-            // Piggyback chain and hit syncing onto every snapshot, so both stay current
-            // automatically without needing a separate visit.
+            // Piggyback OC, chain, and hit syncing onto every snapshot, so all three stay current
+            // automatically without needing a separate visit to any other page.
+            await syncOc(key, factionId).catch(() => {});
             await syncChains(key, factionId).catch(() => {});
             await syncHits(key, factionId).catch(() => {});
 
