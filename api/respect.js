@@ -213,39 +213,75 @@ async function syncWarBonus(key, factionId) {
     const wars = Object.values(data.rankedwars || data.ranked_wars || {});
     const dailyRaw = await redis(['GET', warBonusDailyKey(factionId)]);
     const daily = dailyRaw ? JSON.parse(dailyRaw) : {};
-    let synced = 0;
+    let synced = 0, skippedUnresolved = 0;
     for (const war of wars) {
         const warId = war.id || war.war_id;
         const endTs = war.war?.end || war.end;
         if (!warId || !endTs) continue; // still ongoing, or missing data
-        const added = await redis(['SADD', warBonusSeenKey(factionId), String(warId)]);
-        if (added !== 1) continue; // already counted
+
+        // Check first, without marking anything — a failed/inconclusive extraction attempt
+        // must NOT block a future retry once the field-matching logic gets fixed.
+        const alreadySeen = await redis(['SISMEMBER', warBonusSeenKey(factionId), String(warId)]);
+        if (alreadySeen === 1) continue;
 
         try {
             const reportRes = await fetch(`https://api.torn.com/torn/${warId}?selections=rankedwarreport&key=${encodeURIComponent(key)}`);
             const report = await reportRes.json();
-            const rw = report.rankedwarreport || report.rankedWarReport || report;
-            const factionA = rw?.factions?.[0] || rw?.faction_a;
-            const factionB = rw?.factions?.[1] || rw?.faction_b;
-            let bonus = 0;
-            if (String(factionA?.id ?? factionA?.ID) === factionId) bonus = Number(rw?.faction_a_reward_respect ?? factionA?.reward_respect ?? 0);
-            else if (String(factionB?.id ?? factionB?.ID) === factionId) bonus = Number(rw?.faction_b_reward_respect ?? factionB?.reward_respect ?? 0);
+            if (report.error) { skippedUnresolved++; continue; }
+            // Torn's exact shape here isn't something I could verify against live data, so this
+            // tries every plausible path rather than assuming one.
+            const rw = report.rankedwarreport || report.rankedWarReport || report.war || report;
+            const factions = rw?.factions || rw?.rankedwar?.factions;
+            let bonus = null;
+            if (Array.isArray(factions)) {
+                const mine = factions.find(f => String(f.id ?? f.ID ?? f.faction_id) === factionId);
+                if (mine) bonus = Number(mine.reward_respect ?? mine.respect ?? mine.reward?.respect ?? 0);
+            }
+            if (bonus === null) {
+                const aId = String(rw?.faction_a_id ?? rw?.faction_a?.id ?? rw?.faction_a?.ID ?? '');
+                const bId = String(rw?.faction_b_id ?? rw?.faction_b?.id ?? rw?.faction_b?.ID ?? '');
+                if (aId === factionId) bonus = Number(rw?.faction_a_reward_respect ?? rw?.faction_a?.reward_respect ?? 0);
+                else if (bId === factionId) bonus = Number(rw?.faction_b_reward_respect ?? rw?.faction_b?.reward_respect ?? 0);
+            }
+            if (bonus === null) { skippedUnresolved++; continue; } // couldn't identify our side — don't mark as seen, retry later
+
+            // Only mark as seen once we've genuinely resolved a value (even 0 counts as resolved).
+            await redis(['SADD', warBonusSeenKey(factionId), String(warId)]);
             if (bonus > 0) {
                 const dayKey = new Date(endTs * 1000).toISOString().slice(0, 10);
                 daily[dayKey] = (daily[dayKey] || 0) + bonus;
                 synced++;
             }
-        } catch (e) { /* skip this war's report if it fails, keep going with the rest */ }
+        } catch (e) { skippedUnresolved++; /* network hiccup — don't mark as seen, retry later */ }
     }
     if (synced > 0) await redis(['SET', warBonusDailyKey(factionId), JSON.stringify(daily)]);
-    return { synced, totalAvailable: wars.length };
+    return { synced, totalAvailable: wars.length, skippedUnresolved };
 }
 
-// Pulls real per-attack respect from faction:attacksfull — every attack any member made or
-// received, with its own respect_gain. Chain-tagged attacks are skipped here since Chains
-// already covers those; this is specifically the non-chain hit respect, measured directly
-// rather than guessed. Limited to whatever's in Torn's current rolling window (~1000 attacks),
-// same self-building philosophy as everything else in this app.
+// Processes one page of attacks. Shared between the regular single-page sync and the deep
+// multi-page backfill below.
+async function processAttacksPageAsync(attacks, factionId, daily) {
+    let synced = 0, dailyChanged = false, oldestSeen = null;
+    for (const [attackId, attack] of Object.entries(attacks)) {
+        const ts = attack.timestamp_ended || attack.timestamp_started;
+        if (ts && (oldestSeen === null || ts < oldestSeen)) oldestSeen = ts;
+        if (attack.chain) continue; // already counted under Chains
+        const added = await redis(['SADD', hitsSeenKey(factionId), attackId]);
+        if (added !== 1) continue; // already counted
+        const respect = Number(attack.respect ?? attack.respect_gain ?? 0);
+        if (!respect) continue; // known Torn quirk: losses don't always populate this — nothing to add either way
+        const dayKey = new Date(ts * 1000).toISOString().slice(0, 10);
+        daily[dayKey] = (daily[dayKey] || 0) + respect;
+        dailyChanged = true;
+        synced++;
+    }
+    return { synced, dailyChanged, oldestSeen };
+}
+
+// Pulls real per-attack respect from faction:attacksfull — one page (whatever's currently in
+// Torn's rolling window of the most recent ~1000 attacks/defends). For a busy faction that window
+// can be just a few hours, which is why a single sync often only catches a handful of a day's
+// hits — use deepSyncHits below to page further back and get the rest.
 async function syncHits(key, factionId) {
     const r = await fetch(`https://api.torn.com/faction/?selections=attacksfull&key=${encodeURIComponent(key)}`);
     const data = await r.json();
@@ -254,19 +290,40 @@ async function syncHits(key, factionId) {
     const attacks = data.attacks || {};
     const dailyRaw = await redis(['GET', hitsDailyKey(factionId)]);
     const daily = dailyRaw ? JSON.parse(dailyRaw) : {};
-    let synced = 0;
-    for (const [attackId, attack] of Object.entries(attacks)) {
-        if (attack.chain) continue; // already counted under Chains
-        const added = await redis(['SADD', hitsSeenKey(factionId), attackId]);
-        if (added !== 1) continue; // already counted
-        const respect = Number(attack.respect ?? attack.respect_gain ?? 0);
-        if (!respect) continue; // known Torn quirk: losses don't always populate this — nothing to add either way
-        const dayKey = new Date((attack.timestamp_ended || attack.timestamp_started) * 1000).toISOString().slice(0, 10);
-        daily[dayKey] = (daily[dayKey] || 0) + respect;
-        synced++;
+    const result = await processAttacksPageAsync(attacks, factionId, daily);
+    if (result.dailyChanged) await redis(['SET', hitsDailyKey(factionId), JSON.stringify(daily)]);
+    return { synced: result.synced, totalAvailable: Object.keys(attacks).length };
+}
+
+// Walks backward through time using Torn's "to" timestamp filter on attacksfull — since the
+// rolling window can be as little as a few hours of activity for a busy faction, a single sync
+// only ever sees a sliver of any given day. This pages back to actually capture full days,
+// bounded to a reasonable number of pages per click.
+async function deepSyncHits(key, factionId, maxPages = 15) {
+    const dailyRaw = await redis(['GET', hitsDailyKey(factionId)]);
+    const daily = dailyRaw ? JSON.parse(dailyRaw) : {};
+
+    let to = Math.floor(Date.now() / 1000);
+    let totalSynced = 0, pagesFetched = 0, emptyPagesInARow = 0;
+
+    for (let page = 0; page < maxPages; page++) {
+        const r = await fetch(`https://api.torn.com/faction/?selections=attacksfull&to=${to}&key=${encodeURIComponent(key)}`);
+        const data = await r.json();
+        if (data.error) break;
+        const attacks = data.attacks || {};
+        if (!Object.keys(attacks).length) break;
+        pagesFetched++;
+
+        const result = await processAttacksPageAsync(attacks, factionId, daily);
+        totalSynced += result.synced;
+        if (result.dailyChanged) await redis(['SET', hitsDailyKey(factionId), JSON.stringify(daily)]);
+
+        if (result.oldestSeen === null || result.oldestSeen >= to) break; // no older data available, stop
+        to = result.oldestSeen - 1;
+        emptyPagesInARow = result.synced === 0 ? emptyPagesInARow + 1 : 0;
+        if (emptyPagesInARow >= 3) break; // several pages of already-seen data — likely hit the edge
     }
-    if (synced > 0) await redis(['SET', hitsDailyKey(factionId), JSON.stringify(daily)]);
-    return { synced, totalAvailable: Object.keys(attacks).length };
+    return { synced: totalSynced, pagesFetched };
 }
 
 module.exports = async function handler(req, res) {
@@ -315,13 +372,18 @@ module.exports = async function handler(req, res) {
         if (action === 'sync-war-bonus') {
             const result = await syncWarBonus(key, factionId);
             if (result.error) return res.status(403).json({ error: result.error });
-            return res.status(200).json({ ok: true, synced: result.synced, totalAvailable: result.totalAvailable });
+            return res.status(200).json({ ok: true, synced: result.synced, totalAvailable: result.totalAvailable, skippedUnresolved: result.skippedUnresolved });
         }
 
         if (action === 'sync-hits') {
             const result = await syncHits(key, factionId);
             if (result.error) return res.status(403).json({ error: result.error });
             return res.status(200).json({ ok: true, synced: result.synced, totalAvailable: result.totalAvailable });
+        }
+
+        if (action === 'deep-sync-hits') {
+            const result = await deepSyncHits(key, factionId);
+            return res.status(200).json({ ok: true, synced: result.synced, pagesFetched: result.pagesFetched });
         }
 
         if (action === 'sync-oc') {
@@ -385,6 +447,15 @@ module.exports = async function handler(req, res) {
 
         if (action === 'clear-goal') {
             await redis(['DEL', goalKey(factionId)]);
+            return res.status(200).json({ ok: true });
+        }
+
+        if (action === 'reset-war-bonus-tracking') {
+            // The first version of syncWarBonus marked wars as "seen" before confirming
+            // extraction actually worked, so any war checked before this fix is stuck as
+            // permanently skipped. This wipes that dedup set (not the daily totals already
+            // saved) so the fixed logic gets a genuine first attempt at every war.
+            await redis(['DEL', warBonusSeenKey(factionId)]);
             return res.status(200).json({ ok: true });
         }
 
