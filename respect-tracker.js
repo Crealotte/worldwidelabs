@@ -17,10 +17,16 @@ async function respectFetch(body) {
 // existed, and that data shouldn't be invisible just because "total gain" can't be computed for
 // those older days. Where a snapshot pair genuinely doesn't exist, totalGain/other are null
 // (shown as "—") rather than guessed at.
-function respectComputeDaily(snapshots, ocDaily, chainDaily, hitsDaily, warEntries) {
+function respectComputeDaily(snapshots, ocDaily, chainDaily, hitsDaily, warBonusDaily, warEntries) {
     const snapDates = Object.keys(snapshots).sort();
     const warByDate = {};
     for (const w of warEntries) warByDate[w.date] = (warByDate[w.date] || 0) + w.amount;
+    // Auto-tracked war bonuses (from rankedwarreport) and manually-logged entries both feed the
+    // same "War" total — the manual log stays useful as a supplement/fallback for anything the
+    // auto-tracking doesn't reach (e.g. wars from before this existed).
+    for (const [date, amount] of Object.entries(warBonusDaily)) {
+        warByDate[date] = (warByDate[date] || 0) + amount;
+    }
 
     // A day has a valid "gain" only if the day before it also has a snapshot.
     const gainByDate = {};
@@ -147,7 +153,7 @@ async function loadRespectEditor() {
             });
         }
 
-        const daily = respectComputeDaily(data.snapshots, data.ocDaily, data.chainDaily, data.hitsDaily, data.warEntries).slice(0, 30);
+        const daily = respectComputeDaily(data.snapshots, data.ocDaily, data.chainDaily, data.hitsDaily, data.warBonusDaily, data.warEntries).slice(0, 30);
         const tableEl = $('rg-daily-table');
         if (!daily.length) {
             tableEl.innerHTML = '<p style="color:var(--muted);font-size:13px;">Not enough consecutive daily snapshots yet.</p>';
@@ -202,6 +208,23 @@ $('rg-clear').addEventListener('click', async () => {
     await respectFetch({ action: 'clear-goal' });
     $('rg-label').value = ''; $('rg-target').value = ''; $('rg-deadline').value = '';
     toast('Goal cleared');
+});
+
+$('rg-sync-war-bonus').addEventListener('click', async () => {
+    const btn = $('rg-sync-war-bonus');
+    const st = $('rg-war-bonus-status');
+    btn.disabled = true; btn.textContent = 'Syncing…';
+    try {
+        const result = await respectFetch({ action: 'sync-war-bonus' });
+        if (result.error) throw new Error(result.error);
+        st.className = 'status ok';
+        st.textContent = result.synced > 0 ? `Pulled in ${result.synced} war bonus${result.synced === 1 ? '' : 'es'}.` : `Already up to date (${result.totalAvailable ?? 0} war${result.totalAvailable === 1 ? '' : 's'} on record, all already tracked).`;
+        loadRespectEditor();
+    } catch (e) {
+        st.className = 'status err'; st.textContent = e.message;
+    } finally {
+        btn.disabled = false; btn.textContent = 'Sync war bonus history now';
+    }
 });
 
 $('rg-war-add').addEventListener('click', async () => {
