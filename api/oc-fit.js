@@ -233,8 +233,11 @@ module.exports = async function handler(req, res) {
             // ---- Capture completed-crime rewards (minimal first step, self-building over time) ----
             const seenKey = `wwl:oc-rewards-seen:${factionId}`;
             const rewardsKey = `wwl:oc-rewards:${factionId}`;
+            const ocDailyKey = `wwl:oc-respect-daily:${factionId}`;
             const rewardsRaw = await redis(['GET', rewardsKey]);
             const rewards = rewardsRaw ? JSON.parse(rewardsRaw) : {};
+            const ocDailyRaw = await redis(['GET', ocDailyKey]);
+            const ocDaily = ocDailyRaw ? JSON.parse(ocDailyRaw) : {};
             let rewardsChanged = false;
             for (const oc of crimesList) {
                 if (!oc || !oc.executed_at) continue;
@@ -249,10 +252,17 @@ module.exports = async function handler(req, res) {
                     rewards[sKey].successCount++;
                     rewards[sKey].totalMoney += Number(oc.rewards?.money ?? 0);
                     rewards[sKey].totalRespect += Number(oc.rewards?.respect ?? 0);
+                    // Also bucket by calendar day, feeding the Respect Tracker's daily breakdown —
+                    // shares this same completion-detection pass so nothing gets counted twice.
+                    const dayKey = new Date(oc.executed_at * 1000).toISOString().slice(0, 10);
+                    ocDaily[dayKey] = (ocDaily[dayKey] || 0) + Number(oc.rewards?.respect ?? 0);
                 }
                 rewardsChanged = true;
             }
-            if (rewardsChanged) await redis(['SET', rewardsKey, JSON.stringify(rewards)]);
+            if (rewardsChanged) {
+                await redis(['SET', rewardsKey, JSON.stringify(rewards)]);
+                await redis(['SET', ocDailyKey, JSON.stringify(ocDaily)]);
+            }
 
             // ---- Which scenarios/roles are live right now, and which of those are still open ----
             const liveByKey = buildLiveRoleSkeleton(crimesList);
