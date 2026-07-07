@@ -796,17 +796,24 @@
                     <h3>Daily breakdown</h3>
                     <p style="color:var(--muted);font-size:12px;margin:0 0 10px;">
                         OC, Chains, Hits, and War Bonus are all tracked automatically every time a leader
-                        opens the Dashboard — the buttons below just let you force it right now, or dig
-                        further back into history for OC and Hits specifically (Chains and War Bonus
-                        already pull their full available history every time).
+                        opens the Dashboard. Hits is cross-referenced against known chain time windows to
+                        avoid double-counting with Chains — Torn's attack log doesn't tag chain membership
+                        directly, so this is done by matching each attack's timestamp against actual chain
+                        start/end times instead.
                     </p>
                     <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;">
                         <button class="ghost small" id="rg-sync-all">Refresh tracking now</button>
                         <button class="ghost small" id="rg-deep-sync-oc">Dig deeper — OC</button>
                         <button class="ghost small" id="rg-deep-sync-hits">Dig deeper — Hits</button>
+                        <button class="ghost small" id="rg-reset-hits">Reset hits tracking</button>
                         <button class="ghost small" id="rg-reset-war-bonus">Reset war bonus tracking</button>
                     </div>
                     <div class="status" id="rg-sync-status"></div>
+                    <p style="color:var(--muted);font-size:11px;margin:6px 0 0;">
+                        "Reset hits tracking" clears anything counted before this fix went live (which could
+                        have been double-counted with Chains) and rebuilds cleanly — one-time cleanup, not
+                        something you'd normally need to click again.
+                    </p>
                     <p style="color:var(--muted);font-size:12px;margin:10px 0;">Every day with any known data. Total gain shows "≈" and a muted style when it's estimated from known categories only (no snapshot pair to confirm the real total that far back) — otherwise it's confirmed. "Other" is whatever's left after OC, Chains, Hits, and War — territory, raids, dirty bombs, or gaps, kept visible rather than hidden.</p>
                     <div id="rg-daily-table"></div>
                 </div>
