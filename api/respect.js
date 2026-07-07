@@ -14,7 +14,12 @@
 //     a signal something's off, not silently absorbed into "hits" and mislabeled.
 //
 // POST { key, action: 'snapshot' }                  -> leader-only: records today's total respect,
-//                                                        and syncs any newly-completed chains + hits
+//                                                        and syncs any newly-completed OC/chains/hits
+// POST { key, action: 'sync-oc' }                    -> leader-only: one-off sync of whatever OC
+//                                                        history is currently visible
+// POST { key, action: 'deep-sync-oc' }               -> leader-only: walks backward through time
+//                                                        using Torn's own date-range filtering to
+//                                                        pull real OC history beyond the current window
 // POST { key, action: 'sync-chains' }                -> leader-only: one-off backfill of chain
 //                                                        history — also runs automatically on snapshot
 // POST { key, action: 'sync-hits' }                  -> leader-only: one-off backfill of recent
@@ -54,7 +59,8 @@ async function isLeader(key) {
 
 const snapshotsKey = (factionId) => `wwl:respect-snapshots:${factionId}`;
 const ocRewardsKey = (factionId) => `wwl:oc-rewards:${factionId}`; // shared with oc-fit.js
-const ocSeenKey = (factionId) => `wwl:oc-rewards-seen:${factionId}`; // shared dedup with oc-fit.js
+const ocSeenKey = (factionId) => `wwl:oc-rewards-seen:${factionId}`; // shared dedup with oc-fit.js (cumulative totals only)
+const ocDailySeenKey = (factionId) => `wwl:oc-daily-seen:${factionId}`; // separate dedup, just for day-bucketing
 const ocDailyKey = (factionId) => `wwl:oc-respect-daily:${factionId}`; // shared with oc-fit.js
 const chainDailyKey = (factionId) => `wwl:chain-respect-daily:${factionId}`;
 const chainSeenKey = (factionId) => `wwl:chain-respect-seen:${factionId}`;
@@ -70,10 +76,49 @@ function normScenario(name) {
         .toLowerCase().replace(/\s+v\d+$/i, '').trim();
 }
 
+// Processes one page of crimes into the cumulative + daily stores. Shared between the regular
+// (single-page, auto-triggered) sync and the deep multi-page backfill below.
+async function processCrimesPage(crimesList, factionId, rewards, daily) {
+    let synced = 0, rewardsChanged = false, dailyChanged = false, oldestSeen = null;
+    for (const oc of crimesList) {
+        if (!oc || !oc.executed_at) continue;
+        if (oldestSeen === null || oc.executed_at < oldestSeen) oldestSeen = oc.executed_at;
+        const status = (oc.status || '').toLowerCase();
+        if (!['successful', 'failed', 'expired'].includes(status)) continue;
+
+        // Cumulative totals — gated by the original dedup shared with oc-fit.js (unchanged).
+        const addedCumulative = await redis(['SADD', ocSeenKey(factionId), String(oc.id)]);
+        if (addedCumulative === 1) {
+            const sKey = normScenario(oc.name);
+            if (!rewards[sKey]) rewards[sKey] = { scenario: oc.name || sKey, difficulty: oc.difficulty ?? '?', totalMoney: 0, totalRespect: 0, successCount: 0, totalRuns: 0 };
+            rewards[sKey].totalRuns++;
+            if (status === 'successful') {
+                rewards[sKey].successCount++;
+                rewards[sKey].totalMoney += Number(oc.rewards?.money ?? 0);
+                rewards[sKey].totalRespect += Number(oc.rewards?.respect ?? 0);
+            }
+            rewardsChanged = true;
+        }
+
+        // Daily bucket — its own independent dedup, so crimes already claimed by the older
+        // cumulative-only tracking (before day-bucketing existed) still get backfilled here.
+        if (status === 'successful') {
+            const addedDaily = await redis(['SADD', ocDailySeenKey(factionId), String(oc.id)]);
+            if (addedDaily === 1) {
+                const dayKey = new Date(oc.executed_at * 1000).toISOString().slice(0, 10);
+                daily[dayKey] = (daily[dayKey] || 0) + Number(oc.rewards?.respect ?? 0);
+                dailyChanged = true;
+                synced++;
+            }
+        }
+    }
+    return { synced, rewardsChanged, dailyChanged, oldestSeen };
+}
+
 // Captures completed-crime respect independently of OC Fit's own tracking, so the Respect
 // Tracker doesn't depend on someone having visited Team Builder first. Shares the exact same
 // "seen" dedup set as oc-fit.js, so whichever feature runs first claims each OC and the other
-// just skips it — no double-counting between the two.
+// just skips it — no double-counting between the two. Single page — whatever's currently live.
 async function syncOc(key, factionId) {
     const r = await fetch(`https://api.torn.com/v2/faction?selections=crimes&key=${encodeURIComponent(key)}`,
         { headers: { accept: 'application/json' } });
@@ -85,31 +130,47 @@ async function syncOc(key, factionId) {
     const rewards = rewardsRaw ? JSON.parse(rewardsRaw) : {};
     const dailyRaw = await redis(['GET', ocDailyKey(factionId)]);
     const daily = dailyRaw ? JSON.parse(dailyRaw) : {};
-    let synced = 0, rewardsChanged = false;
-    for (const oc of crimesList) {
-        if (!oc || !oc.executed_at) continue;
-        const status = (oc.status || '').toLowerCase();
-        if (!['successful', 'failed', 'expired'].includes(status)) continue;
-        const added = await redis(['SADD', ocSeenKey(factionId), String(oc.id)]);
-        if (added !== 1) continue; // already counted, whether by OC Fit or a previous sync here
-        const sKey = normScenario(oc.name);
-        if (!rewards[sKey]) rewards[sKey] = { scenario: oc.name || sKey, difficulty: oc.difficulty ?? '?', totalMoney: 0, totalRespect: 0, successCount: 0, totalRuns: 0 };
-        rewards[sKey].totalRuns++;
-        if (status === 'successful') {
-            rewards[sKey].successCount++;
-            rewards[sKey].totalMoney += Number(oc.rewards?.money ?? 0);
-            rewards[sKey].totalRespect += Number(oc.rewards?.respect ?? 0);
-            const dayKey = new Date(oc.executed_at * 1000).toISOString().slice(0, 10);
-            daily[dayKey] = (daily[dayKey] || 0) + Number(oc.rewards?.respect ?? 0);
-        }
-        rewardsChanged = true;
-        synced++;
+
+    const result = await processCrimesPage(crimesList, factionId, rewards, daily);
+    if (result.rewardsChanged) await redis(['SET', ocRewardsKey(factionId), JSON.stringify(rewards)]);
+    if (result.dailyChanged) await redis(['SET', ocDailyKey(factionId), JSON.stringify(daily)]);
+    return { synced: result.synced, totalAvailable: crimesList.length };
+}
+
+// Walks backward through time using Torn's "to" timestamp filter, pulling real historical OC
+// pages beyond whatever's currently visible in a single live call — genuinely deeper backfill,
+// not just "whatever's in the rolling window right now". Stops after a bounded number of pages
+// (to keep this a reasonable one-click action rather than an unbounded crawl) or once a page
+// contributes no new completions, whichever comes first.
+async function deepSyncOc(key, factionId, maxPages = 15) {
+    const rewardsRaw = await redis(['GET', ocRewardsKey(factionId)]);
+    const rewards = rewardsRaw ? JSON.parse(rewardsRaw) : {};
+    const dailyRaw = await redis(['GET', ocDailyKey(factionId)]);
+    const daily = dailyRaw ? JSON.parse(dailyRaw) : {};
+
+    let to = Math.floor(Date.now() / 1000);
+    let totalSynced = 0, pagesFetched = 0, emptyPagesInARow = 0;
+
+    for (let page = 0; page < maxPages; page++) {
+        const r = await fetch(`https://api.torn.com/v2/faction?selections=crimes&to=${to}&key=${encodeURIComponent(key)}`,
+            { headers: { accept: 'application/json' } });
+        const data = await r.json();
+        if (data.error) break;
+        const crimesList = Object.values(data.crimes || {});
+        if (!crimesList.length) break;
+        pagesFetched++;
+
+        const result = await processCrimesPage(crimesList, factionId, rewards, daily);
+        totalSynced += result.synced;
+        if (result.rewardsChanged) await redis(['SET', ocRewardsKey(factionId), JSON.stringify(rewards)]);
+        if (result.dailyChanged) await redis(['SET', ocDailyKey(factionId), JSON.stringify(daily)]);
+
+        if (result.oldestSeen === null || result.oldestSeen >= to) break; // no older data available, stop
+        to = result.oldestSeen - 1;
+        emptyPagesInARow = result.synced === 0 ? emptyPagesInARow + 1 : 0;
+        if (emptyPagesInARow >= 3) break; // several pages of already-seen data — likely hit the edge
     }
-    if (rewardsChanged) {
-        await redis(['SET', ocRewardsKey(factionId), JSON.stringify(rewards)]);
-        await redis(['SET', ocDailyKey(factionId), JSON.stringify(daily)]);
-    }
-    return { synced };
+    return { synced: totalSynced, pagesFetched };
 }
 
 // Pulls the faction's past chains (Torn keeps these with their own respect totals and end
@@ -133,7 +194,7 @@ async function syncChains(key, factionId) {
         synced++;
     }
     if (synced > 0) await redis(['SET', chainDailyKey(factionId), JSON.stringify(daily)]);
-    return { synced };
+    return { synced, totalAvailable: Object.keys(chains).length };
 }
 
 // Pulls real per-attack respect from faction:attacksfull — every attack any member made or
@@ -161,7 +222,7 @@ async function syncHits(key, factionId) {
         synced++;
     }
     if (synced > 0) await redis(['SET', hitsDailyKey(factionId), JSON.stringify(daily)]);
-    return { synced };
+    return { synced, totalAvailable: Object.keys(attacks).length };
 }
 
 module.exports = async function handler(req, res) {
@@ -202,19 +263,24 @@ module.exports = async function handler(req, res) {
         if (action === 'sync-chains') {
             const result = await syncChains(key, factionId);
             if (result.error) return res.status(403).json({ error: result.error });
-            return res.status(200).json({ ok: true, synced: result.synced });
+            return res.status(200).json({ ok: true, synced: result.synced, totalAvailable: result.totalAvailable });
         }
 
         if (action === 'sync-hits') {
             const result = await syncHits(key, factionId);
             if (result.error) return res.status(403).json({ error: result.error });
-            return res.status(200).json({ ok: true, synced: result.synced });
+            return res.status(200).json({ ok: true, synced: result.synced, totalAvailable: result.totalAvailable });
         }
 
         if (action === 'sync-oc') {
             const result = await syncOc(key, factionId);
             if (result.error) return res.status(403).json({ error: result.error });
-            return res.status(200).json({ ok: true, synced: result.synced });
+            return res.status(200).json({ ok: true, synced: result.synced, totalAvailable: result.totalAvailable });
+        }
+
+        if (action === 'deep-sync-oc') {
+            const result = await deepSyncOc(key, factionId);
+            return res.status(200).json({ ok: true, synced: result.synced, pagesFetched: result.pagesFetched });
         }
 
         if (action === 'snapshot') {
