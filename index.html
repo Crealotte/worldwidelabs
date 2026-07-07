@@ -797,9 +797,10 @@
                     <p style="color:var(--muted);font-size:12px;margin:0 0 10px;">
                         OC, Chains, Hits, and War Bonus are all tracked automatically every time a leader
                         opens the Dashboard. Hits is cross-referenced against known chain time windows to
-                        avoid double-counting with Chains — Torn's attack log doesn't tag chain membership
-                        directly, so this is done by matching each attack's timestamp against actual chain
-                        start/end times instead.
+                        avoid double-counting with Chains, and correctly treats attacks made <i>against</i>
+                        your faction as a 25% respect loss (per Torn's own mechanic) rather than a gain — a
+                        real bug that was inflating the total every time the faction got attacked. Click
+                        "Reset hits tracking" once after this update to rebuild with the corrected numbers.
                     </p>
                     <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;">
                         <button class="ghost small" id="rg-sync-all">Refresh tracking now</button>
