@@ -212,6 +212,23 @@ $('rg-war-add').addEventListener('click', async () => {
     }
 });
 
+$('rg-sync-oc').addEventListener('click', async () => {
+    const btn = $('rg-sync-oc');
+    const st = $('rg-oc-status');
+    btn.disabled = true; btn.textContent = 'Syncing…';
+    try {
+        const result = await respectFetch({ action: 'sync-oc' });
+        if (result.error) throw new Error(result.error);
+        st.className = 'status ok';
+        st.textContent = result.synced > 0 ? `Pulled in ${result.synced} completed crime${result.synced === 1 ? '' : 's'}.` : 'Already up to date — nothing new to pull in.';
+        loadRespectEditor();
+    } catch (e) {
+        st.className = 'status err'; st.textContent = e.message;
+    } finally {
+        btn.disabled = false; btn.textContent = 'Backfill OC history now';
+    }
+});
+
 $('rg-sync-chains').addEventListener('click', async () => {
     const btn = $('rg-sync-chains');
     const st = $('rg-chains-status');
