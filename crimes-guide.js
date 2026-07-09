@@ -131,10 +131,120 @@ const SEARCH_FOR_CASH = {
             tip: 'Mainly useful once unlocked for extra skill grinding and green Spray Cans.',
         },
     ],
+    // Full data from the community guide's actual drop-rate tables — general breakdown, money
+    // range, and the most notable items per location (curated to the standout finds rather than
+    // every single low-probability row, to keep this genuinely useful rather than a wall of
+    // numbers — full exhaustive tables are in the original forum guide for completionists).
+    dropTables: {
+        'Search the Trash': {
+            general: 'Money 76.14% · Items 12.12% · Ammo 0.69% · Fails 10.66% · Crits 0.39%',
+            money: '$3 – $600 (avg $65)',
+            notable: [
+                'Tin Can — 18.72%', 'Insurance Policy — 9.90%', 'Moldy Pizza — 9.84%', 'Festering Chicken — 7.98%',
+                'Smelly Cheese — 8.85%', 'Rotten Apple — 7.90%', 'Stale Bread — 7.06%', 'Spoiled Fish — 6.32%',
+                'Morphine x10 — 1.61% (unique)', 'Spray Cans (Blue/Green/White/Orange) — 1.46% combined', 'Card Skimmer — 1.38%',
+            ],
+            sample: '32,261 attempts, Jun 20 – Dec 1, 60 players',
+        },
+        'Search the Subway': {
+            general: 'Money 75.23% · Items 17.21% · Ammo 0% · Fails 7.21% · Crits 0.23% (approximate — worth double-checking against the original table)',
+            money: '$1 – $4,990 (avg $102)',
+            notable: [
+                'Travel Mug — 8.58%', 'Box of Tissues — 7.28%', 'Billfold — 7.30%', 'Bag of Bon Bons — 7.15%',
+                'Phone Card — 6.92%', 'Crazy Straw — 6.76%', 'Coin Purse — 6.62%', 'Magazine — 6.76%',
+                'Torn City Times x1, Zip Wallet x1 — unique, Off Peak (<24% ridership)',
+                'Empty Box + Card Skimmer x10 — unique, needs Lost and Found Office Key',
+                'Laptop — unique, Level 50, On/Rush hour (≥50% ridership)',
+            ],
+            sample: '68,222 attempts, Jun 20 – Dec 1, 60 players',
+        },
+        'Search the Junkyard': {
+            general: 'Money 31.45% · Items 53.24% · Ammo 0% · Fails 14.39% · Crits 0.93%',
+            money: '$5 – $2,500 (avg $110.6)',
+            notable: [
+                'Scrap Metal — up to ~17% combined across quantities', 'Tire — 3.49%', 'Blank DVDs — 3.49%',
+                'Spray Can: White — 2.86%', 'Car Battery — 2.15%', 'Golf Club — 2.02%', 'Axe — 1.95%',
+                'Metal Detector — unique, Level 30 (needed to unlock the Beach)',
+                'Mountain Bike — unique, Level 5 (newest unique, added Aug 8th)',
+                'Stash Box — unique, Level 40, Crushing rating ≥50%',
+            ],
+            sample: '42,312 attempts, Jun 20 – Dec 1, 60 players',
+        },
+        'Search the Beach': {
+            general: 'Money 30.83% · Items 46.20% · Ammo 0% · Fails 21.43% · Crits 1.55%',
+            money: '$3 – $4,920 (avg $182)',
+            notable: [
+                'Bottle Cap — ~20.5% at x1, more at higher quantities combined', 'Speedo — 3.62%', 'Silver Coin — 3.31%',
+                'Beach Ball — 2.51%', 'Gold Watch — 2.24%', 'Bottle of Beer — 2.02%',
+                'Cemetery Key — unique, needed to unlock the Cemetery', 'Sand — not in this table but confirmed low-tide-only, gives the Shore Thing honor bar',
+                'Coconut Bra — unique, Level 50, High Tide (≤40%)',
+            ],
+            sample: '28,995 attempts, Jun 20 – Dec 1, 60 players',
+        },
+        'Search the Cemetery': {
+            general: 'Money 36.16% · Items 49.55% · Ammo 0% · Fails 14.26% · Crits 0.77%',
+            money: '$10 – $1,000 (avg $239.3)',
+            notable: [
+                'Daffodil — 6.05%', 'Old Wallet — 6.00%', 'Car Keys — 4.28%', 'Single Red Rose — 3.52%',
+                'Candle x5 — 3.34%', 'Luger — 3.27%', 'Hit Contract — 3.22%', 'Funeral Wreath — 2.91%',
+                'Speed x3 — unique, Level 80, groundskeeping inactive',
+                'Golden Wreath — unique, Level 80, groundskeeping active',
+                'Money ($106,179–195,336) — unique, Level 100',
+            ],
+            sample: '37,010 attempts, Jun 20 – Dec 1, 60 players',
+        },
+        'Search the Fountain': {
+            general: 'Money 70.50% · Items 21.63% · Ammo 7.40% · Fails 0.41% (approximate)',
+            money: '$5 – $498 (avg $81.1)',
+            notable: [
+                'Coin Purse — 7.80%', 'Old Wallet — 7.72%', 'Syringe — 7.35%', 'Credit Card — 7.33%',
+                'Cannabis x4 — unique, Level 75', 'Lucky Quarter — unique, Level 80',
+                'PCP — unique, Level 85, needs Collections ≥25%', 'Ecstasy x2 — unique, Level 100, Collections ≥50%',
+            ],
+            sample: '29,332 attempts, Jun 20 – Dec 1, 60 players',
+        },
+    },
+    // All 34 uniques from the guide's consolidated table, grouped by location.
+    uniques: [
+        { location: 'Trash', name: 'Bag of Candy Kisses x4', skill: 'None', other: 'None' },
+        { location: 'Trash', name: 'Morphine x10', skill: 'Level 25', other: 'None' },
+        { location: 'Subway', name: 'Glasses x1', skill: 'None', other: 'Rush hour (≥75% ridership)' },
+        { location: 'Subway', name: 'Torn City Times x1, Zip Wallet x1', skill: 'None', other: 'Off Peak (<24% ridership)' },
+        { location: 'Subway', name: 'Empty Box x1, Card Skimmer x10', skill: 'None', other: 'Lost and Found Office Key' },
+        { location: 'Subway', name: 'Ecstasy x3, LSD x2', skill: 'Level 30', other: 'Rush hour (≥75% ridership)' },
+        { location: 'Subway', name: 'Laptop x1', skill: 'Level 50', other: 'On Peak or Rush hour (≥50% ridership)' },
+        { location: 'Subway', name: 'Vicodin x3, Xanax x1', skill: 'Level 60', other: 'Off Peak (<24% ridership)' },
+        { location: 'Subway', name: 'Lost and Found Office Key x1', skill: 'Level 85', other: 'None' },
+        { location: 'Junkyard', name: 'Mountain Bike x1', skill: 'Level 5', other: 'None' },
+        { location: 'Junkyard', name: 'Metal Detector x1', skill: 'Level 30', other: 'None' },
+        { location: 'Junkyard', name: 'Spray Can: Black x4, Red x3, White x3', skill: 'Level 30', other: 'Crushing rating < 50%' },
+        { location: 'Junkyard', name: 'Kevlar Gloves x1', skill: 'Level 30', other: 'Crushing rating ≥ 75%' },
+        { location: 'Junkyard', name: 'Stash Box x1', skill: 'Level 40', other: 'Crushing rating ≥ 50%' },
+        { location: 'Junkyard', name: 'High-Speed Drive x1', skill: 'Level 60', other: 'Crushing rating ≥ 75%' },
+        { location: 'Junkyard', name: 'Money ($50,620–79,820)', skill: 'Level 80', other: 'Crushing rating 50–75%' },
+        { location: 'Beach', name: 'Bottle of Beer x6, Sports Shades x5, Proda Sunglasses x4, Blanket x1', skill: 'None', other: 'None' },
+        { location: 'Beach', name: 'Trout x1, Fishing Rod x1', skill: 'Level 10', other: 'Low Tide (≥60%)' },
+        { location: 'Beach', name: 'First Aid Kit x2', skill: 'Level 20', other: 'Low Tide (≥60%)' },
+        { location: 'Beach', name: 'Cemetery Key x1', skill: 'Level 50', other: 'None' },
+        { location: 'Beach', name: 'Cork Hat x1', skill: 'Level 50', other: 'None' },
+        { location: 'Beach', name: 'Coconut Bra x1', skill: 'Level 50', other: 'High Tide (≤40%)' },
+        { location: 'Beach', name: 'Snorkel x1, Flippers x1, Wetsuit x1, Diving Gloves x1', skill: 'Level 65', other: 'High Tide (≤40%)' },
+        { location: 'Beach', name: 'Sextant x1', skill: 'Level 90', other: 'Mid or Low Tide (>40%)' },
+        { location: 'Beach', name: 'Silver Bead x1', skill: 'Level 95', other: 'High Tide (≤40%)' },
+        { location: 'Cemetery', name: 'Speed x3', skill: 'Level 80', other: 'Groundskeeping inactive' },
+        { location: 'Cemetery', name: 'Golden Wreath x1', skill: 'Level 80', other: 'Groundskeeping active' },
+        { location: 'Cemetery', name: 'WWII Helmet x1', skill: 'Level 90', other: 'Groundskeeping inactive' },
+        { location: 'Cemetery', name: 'Money ($106,179–195,336)', skill: 'Level 100', other: 'None' },
+        { location: 'Fountain', name: 'Cannabis x4', skill: 'Level 75', other: 'None' },
+        { location: 'Fountain', name: 'Lucky Quarter x1', skill: 'Level 80', other: 'None' },
+        { location: 'Fountain', name: 'PCP x1', skill: 'Level 85', other: 'Collections ≥ 25%' },
+        { location: 'Fountain', name: 'Spray Can: Pink x4, Purple x3, Blue x3, Orange x3', skill: 'Level 90', other: 'None' },
+        { location: 'Fountain', name: 'Ecstasy x2', skill: 'Level 100', other: 'Collections ≥ 50%' },
+    ],
     merits: [
-        { name: 'Pay Dirt', how: 'Reach Crime Skill 100 in Search For Cash.' },
-        { name: 'Spoiled Rotten', how: 'Find all seven "rotten" items — Search the Trash only, must be found (not bought/traded).' },
-        { name: 'Shore Thing', how: 'Find Sand while searching the Beach during low tide (70%+).' },
+        { name: 'Pay Dirt', rarity: 'Uncommon', how: 'Achieve a skill level of 100 in Search For Cash.' },
+        { name: 'Spoiled Rotten', rarity: 'Uncommon', how: 'Find all seven "rotten" items — Search the Trash only, must be found (not bought/traded).' },
+        { name: 'Shore Thing', rarity: 'Rare', how: 'Find Sand while searching the Beach during low tide (70%+).' },
     ],
     uniqueCount: 34,
     notes: 'All attempts here count as Theft crimes — useful for Theft-category medals.',
@@ -202,6 +312,8 @@ function renderCrimeTabs(crime) {
     const tabs = [
         { id: 'overview', label: 'Overview' },
         { id: 'locations', label: `Locations (${d.locations.length})` },
+        { id: 'droprates', label: 'Drop Rates' },
+        { id: 'uniques', label: `Uniques (${d.uniques ? d.uniques.length : 0})` },
         { id: 'items', label: 'Key Items' },
         { id: 'honors', label: 'Honor Bars' },
     ];
@@ -271,6 +383,56 @@ function renderCrimeTabBody(crime) {
         return;
     }
 
+    if (cgActiveTab === 'droprates') {
+        if (!d.dropTables) {
+            body.innerHTML = '<div class="panel"><p style="color:var(--muted);">No drop-rate data added yet.</p></div>';
+            return;
+        }
+        body.innerHTML = Object.entries(d.dropTables).map(([locName, t], i) => `
+            <div class="ocfit-scenario" data-collapse="crimes-drop-${i}" style="margin-bottom:10px;">
+                <div class="ocfit-scenario-header">
+                    <span>${esc(locName)}</span>
+                    <span class="chev">▾</span>
+                </div>
+                <div class="ocfit-scenario-body">
+                    <div class="crimes-subhead">📊 General breakdown</div>
+                    <p style="margin:0 0 10px;">${esc(t.general)}</p>
+                    <div class="crimes-subhead">💵 Money range</div>
+                    <p style="margin:0 0 10px;">${esc(t.money)}</p>
+                    <div class="crimes-subhead">🎯 Notable finds</div>
+                    <ul class="crimes-bullets">${t.notable.map(b => `<li>${esc(b)}</li>`).join('')}</ul>
+                    <p style="font-size:11px;color:var(--muted);margin-top:10px;">Sample: ${esc(t.sample)}</p>
+                </div>
+            </div>`).join('');
+        body.querySelectorAll('.ocfit-scenario-header').forEach(header => {
+            header.addEventListener('click', () => header.closest('.ocfit-scenario').classList.toggle('collapsed'));
+        });
+        return;
+    }
+
+    if (cgActiveTab === 'uniques') {
+        if (!d.uniques) {
+            body.innerHTML = '<div class="panel"><p style="color:var(--muted);">No uniques data added yet.</p></div>';
+            return;
+        }
+        body.innerHTML = `
+            <table style="width:100%;font-size:13px;border-collapse:collapse;">
+                <thead><tr style="color:var(--muted);text-align:left;">
+                    <th style="padding:6px 8px;">Location</th><th style="padding:6px 8px;">Find</th>
+                    <th style="padding:6px 8px;">Skill req.</th><th style="padding:6px 8px;">Other req.</th>
+                </tr></thead>
+                <tbody>${d.uniques.map(u => `
+                    <tr style="border-top:1px solid var(--line);">
+                        <td style="padding:6px 8px;white-space:nowrap;color:var(--muted);">${esc(u.location)}</td>
+                        <td style="padding:6px 8px;">${esc(u.name)}</td>
+                        <td style="padding:6px 8px;white-space:nowrap;">${esc(u.skill)}</td>
+                        <td style="padding:6px 8px;">${esc(u.other)}</td>
+                    </tr>`).join('')}
+                </tbody>
+            </table>`;
+        return;
+    }
+
     if (cgActiveTab === 'items') {
         body.innerHTML = d.keyItems.map(k => `
             <div class="panel" style="margin-bottom:10px;">
@@ -284,7 +446,7 @@ function renderCrimeTabBody(crime) {
     if (cgActiveTab === 'honors') {
         body.innerHTML = d.merits.map(m => `
             <div class="panel crimes-honor-row" data-honor="${esc(m.name)}" style="margin-bottom:10px;display:flex;justify-content:space-between;align-items:center;gap:10px;">
-                <div><div style="font-weight:700;margin-bottom:4px;">${esc(m.name)}</div><div style="font-size:13px;color:var(--muted);">${esc(m.how)}</div></div>
+                <div><div style="font-weight:700;margin-bottom:4px;">${esc(m.name)}${m.rarity ? ` <span style="font-weight:400;font-size:11px;color:var(--muted);">(${esc(m.rarity)})</span>` : ''}</div><div style="font-size:13px;color:var(--muted);">${esc(m.how)}</div></div>
                 <span class="crimes-honor-status" style="font-size:12px;color:var(--muted);white-space:nowrap;">loading…</span>
             </div>`).join('') + `<div class="status" id="crimes-honor-status"></div>`;
         loadCrimeMerits(crime.id);
