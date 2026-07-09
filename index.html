@@ -253,6 +253,19 @@
     .fs-item-meta { font-size: 12px; color: var(--muted); white-space: nowrap; }
     .fs-item-profit { font-family: var(--mono); font-weight: 700; white-space: nowrap; }
 
+    .crimes-grid {
+        display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 12px; margin-top: 16px;
+    }
+    .crimes-tile {
+        background: var(--bench); border: 1px solid var(--line); border-radius: var(--radius);
+        padding: 18px 12px; text-align: center; cursor: pointer; transition: border-color .15s;
+    }
+    .crimes-tile:hover { border-color: var(--reagent); }
+    .crimes-tile-icon { font-size: 32px; margin-bottom: 8px; }
+    .crimes-tile-name { font-weight: 700; margin-bottom: 4px; }
+    .crimes-tile-status { font-size: 11px; color: var(--muted); }
+    .crimes-tile:not(.crimes-tile-pending) .crimes-tile-status { color: var(--reagent); }
+
     /* ---------- chips ---------- */
     #chain-list { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
     .chip {
@@ -388,6 +401,7 @@
         <div class="nav-item" data-page="feedback">Feedback</div>
         <div class="nav-item" data-page="ocfit">OC Fit Tracker</div>
         <div class="nav-item" data-page="foreign-stock">Overseas Stock</div>
+        <div class="nav-item" data-page="crimes-guide">Crimes Guide</div>
 
         <div class="spacer"></div>
         <div class="whoami" id="whoami"></div>
@@ -838,6 +852,23 @@
             <div id="fs-body"></div>
         </section>
 
+        <!-- ========== CRIMES GUIDE ========== -->
+        <section class="page" id="page-crimes-guide">
+            <div class="lab-label">WWL·09 / crimes 2.0 guide</div>
+            <h2>Crimes Guide</h2>
+            <p class="pagedesc">
+                A reference for the individual (solo) Crimes 2.0 skills — requirements, success-rate cycles,
+                key items, and honor bars for each crime, built one guide at a time. Laid out in the same order
+                as the in-game hub.
+            </p>
+
+            <div id="crimes-hub">
+                <div class="crimes-grid" id="crimes-hub-grid"></div>
+            </div>
+
+            <div id="crimes-detail" style="display:none;"></div>
+        </section>
+
         <!-- ========== LEVELLING TARGETS ========== -->
         <section class="page" id="page-targets">
             <div class="lab-label">WWL·04 / levelling range</div>
@@ -1037,6 +1068,7 @@
 <script src="oc-fit-tracker.js"></script>
 <script src="foreign-stock-tracker.js"></script>
 <script src="respect-tracker.js"></script>
+<script src="crimes-guide.js"></script>
 <script src="app-init.js"></script>
 </body>
 </html>
