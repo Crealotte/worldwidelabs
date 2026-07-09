@@ -14,15 +14,15 @@ let cgMeritCache = null; // avoid refetching honors every tab switch
 // guideStatus: 'ready' once a real guide has been turned into structured content below.
 const CRIMES_DATA = [
     { id: 'searchforcash', name: 'Search For Cash', icon: '💵', category: 'Theft', nerveCost: 2, guideStatus: 'ready' },
-    { id: 'bootlegging', name: 'Bootlegging', icon: '🍾', category: null, nerveCost: null, guideStatus: 'pending' },
+    { id: 'bootlegging', name: 'Bootlegging', icon: '📀', category: null, nerveCost: null, guideStatus: 'pending' },
     { id: 'graffiti', name: 'Graffiti', icon: '🎨', category: null, nerveCost: null, guideStatus: 'pending' },
     { id: 'shoplifting', name: 'Shoplifting', icon: '🛍️', category: 'Theft', nerveCost: null, guideStatus: 'pending' },
     { id: 'pickpocketing', name: 'Pickpocketing', icon: '🤏', category: 'Theft', nerveCost: null, guideStatus: 'pending' },
     { id: 'cardskimming', name: 'Card Skimming', icon: '💳', category: null, nerveCost: null, guideStatus: 'pending' },
     { id: 'burglary', name: 'Burglary', icon: '🏚️', category: 'Theft', nerveCost: null, guideStatus: 'pending' },
     { id: 'hustling', name: 'Hustling', icon: '🎭', category: null, nerveCost: null, guideStatus: 'pending' },
-    { id: 'disposal', name: 'Disposal', icon: '🧟', category: 'Illicit Services', nerveCost: null, guideStatus: 'pending' },
-    { id: 'cracking', name: 'Cracking', icon: '💣', category: null, nerveCost: null, guideStatus: 'pending' },
+    { id: 'disposal', name: 'Disposal', icon: '🗑️', category: 'Illicit Services', nerveCost: null, guideStatus: 'pending' },
+    { id: 'cracking', name: 'Cracking', icon: '💻', category: null, nerveCost: null, guideStatus: 'pending' },
     { id: 'forgery', name: 'Forgery', icon: '📄', category: null, nerveCost: null, guideStatus: 'pending' },
     { id: 'scamming', name: 'Scamming', icon: '☎️', category: null, nerveCost: null, guideStatus: 'pending' },
     { id: 'arson', name: 'Arson', icon: '🔥', category: null, nerveCost: null, guideStatus: 'pending' },
