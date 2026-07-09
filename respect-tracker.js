@@ -46,15 +46,23 @@ function respectComputeDaily(snapshots, ocDaily, chainDaily, hitsDaily, warBonus
     const rows = [];
     for (const date of allDates) {
         const oc = ocDaily[date] || 0;
-        const chains = chainDaily[date] || 0;
+        const chainsRaw = chainDaily[date] || 0;
         const hitsRaw = hitsDaily[date] || 0;
         // Chain-attributed hits are already individually present in the raw Hits total (every
         // outgoing attack counts, chain or not) — so Chains is a breakdown WITHIN Hits, not a
         // separate amount on top. Adding both was double-counting the same respect twice, which
-        // is very likely the real source of the persistent overcount. Split for display only:
-        // "Hits" shown = non-chain portion, "Chains" shown = chain portion, but the sum of the
-        // two (and therefore the total) still equals the raw amount exactly once.
-        const hits = hitsRaw - chains;
+        // is very likely the real source of the persistent overcount.
+        //
+        // But Chains and Hits backfill independently and at very different depths — Chains pulls
+        // its ENTIRE history in one call, while Hits only gets backfilled a page at a time via
+        // "Dig deeper". For an older day, it's entirely possible Chains already has a number
+        // there while Hits hasn't been backfilled that far back yet, which would otherwise
+        // produce a nonsensical negative Hits value (0 raw hits minus a real chain bonus). Chains
+        // can never be attributed more than what raw Hits actually captured for that day — the
+        // rest just isn't split out yet, and correctly stays inside "Other" instead of showing up
+        // as a fabricated loss.
+        const chains = Math.min(chainsRaw, hitsRaw);
+        const hits = hitsRaw - chains; // always >= 0 by construction
         const war = warByDate[date] || 0;
         const knownSum = oc + hitsRaw + war; // chains NOT added again — already inside hitsRaw
         const hasGain = Object.prototype.hasOwnProperty.call(gainByDate, date);
@@ -357,7 +365,7 @@ $('rg-deep-sync-hits').addEventListener('click', async () => {
         st.className = result.rateLimited ? 'status err' : 'status ok';
         st.textContent = result.rateLimited
             ? `Hits: got rate-limited by Torn after ${result.pagesFetched} page${result.pagesFetched === 1 ? '' : 's'} (pulled in ${result.synced} so far) — wait a minute or two, then click this again to continue further back.`
-            : `Hits: checked ${result.pagesFetched} page${result.pagesFetched === 1 ? '' : 's'} of history, pulled in ${result.synced} attack${result.synced === 1 ? '' : 's'}.`;
+            : `Hits: checked ${result.pagesFetched} page${result.pagesFetched === 1 ? '' : 's'} of history, pulled in ${result.synced} attack${result.synced === 1 ? '' : 's'}. Stopped because: ${result.stopReason}.`;
         loadRespectEditor();
     } catch (e) {
         st.className = 'status err'; st.textContent = e.message;
@@ -376,7 +384,7 @@ $('rg-deep-sync-losses').addEventListener('click', async () => {
         st.className = result.rateLimited ? 'status err' : 'status ok';
         st.textContent = result.rateLimited
             ? `Losses: got rate-limited by Torn after ${result.pagesFetched} chunk${result.pagesFetched === 1 ? '' : 's'} (pulled in ${result.synced} so far) — wait a minute or two, then click this again to continue further back.`
-            : `Losses: checked ${result.pagesFetched} chunk${result.pagesFetched === 1 ? '' : 's'} of history, pulled in ${result.synced} loss${result.synced === 1 ? '' : 'es'}.`;
+            : `Losses: checked ${result.pagesFetched} chunk${result.pagesFetched === 1 ? '' : 's'} of history, pulled in ${result.synced} loss${result.synced === 1 ? '' : 'es'}. Stopped because: ${result.stopReason}.`;
         loadRespectEditor();
     } catch (e) {
         st.className = 'status err'; st.textContent = e.message;
