@@ -6,6 +6,8 @@
 
 let crimesGuideLoaded = false;
 let cgActiveCrime = null;
+let cgActiveTab = 'overview';
+let cgMeritCache = null; // avoid refetching honors every tab switch
 
 // Order and names match the in-game hub exactly (confirmed via screenshot). Category is only
 // filled in where a source has actually confirmed it — left blank rather than guessed otherwise.
@@ -29,6 +31,8 @@ const CRIMES_DATA = [
 // ---- Search For Cash — fully populated from the guide + real screenshot ----
 const SEARCH_FOR_CASH = {
     summary: 'The first crime in Crimes 2.0. Six searchable locations, each with its own success-rate cycle. Cheap at 2 nerve per attempt, making it a good early skill-grinding crime.',
+    // null until we have a real figure from a guide — never fabricated. Set as {min, max} nerve.
+    estimatedNerveToCS100: null,
     keyItems: [
         { name: 'Glasses', effect: 'Enhancer — +5% CE & CS gains', source: 'Search the Subway, or pickpocketing a businesswoman' },
         { name: 'Metal Detector', effect: 'Unlocks Search the Beach', source: 'Search the Junkyard, from CS30' },
@@ -111,10 +115,17 @@ function renderCrimesHub() {
     });
 }
 
+function cgNerveToCrimes(nerveEstimate, nerveCost) {
+    if (!nerveEstimate || !nerveCost) return null;
+    return { min: Math.round(nerveEstimate.min / nerveCost), max: Math.round(nerveEstimate.max / nerveCost) };
+}
+
 function renderCrimeDetail(id) {
     const crime = cgAttachData(CRIMES_DATA.find(c => c.id === id));
     if (!crime) return;
     cgActiveCrime = id;
+    cgActiveTab = 'overview';
+    cgMeritCache = null;
     $('crimes-hub').style.display = 'none';
     $('crimes-detail').style.display = 'block';
 
@@ -129,50 +140,126 @@ function renderCrimeDetail(id) {
         return;
     }
 
+    renderCrimeTabs(crime);
+}
+
+function renderCrimeTabs(crime) {
     const d = crime.data;
+    const tabs = [
+        { id: 'overview', label: 'Overview' },
+        { id: 'locations', label: `Locations (${d.locations.length})` },
+        { id: 'items', label: 'Key Items' },
+        { id: 'honors', label: 'Honor Bars' },
+    ];
+
     $('crimes-detail').innerHTML = `
         <button class="ghost small" id="crimes-back">← Back to all crimes</button>
         <h2 style="margin-top:14px;">${crime.icon} ${esc(crime.name)}</h2>
         <p style="color:var(--muted);font-size:12px;">${crime.category ? esc(crime.category) + ' · ' : ''}${crime.nerveCost != null ? crime.nerveCost + ' nerve per attempt' : ''}</p>
-        <p style="margin:10px 0;">${esc(d.summary)}</p>
-
-        <div class="panel">
-            <h3>Key items</h3>
-            ${d.keyItems.map(k => `
-                <div style="padding:8px 0;border-top:1px solid var(--line);">
-                    <b>${esc(k.name)}</b> — ${esc(k.effect)}
-                    <div style="font-size:12px;color:var(--muted);">Source: ${esc(k.source)}</div>
-                </div>`).join('')}
+        <div class="crimes-tabbar">
+            ${tabs.map(t => `<button class="crimes-tab ${cgActiveTab === t.id ? 'active' : ''}" data-tab="${t.id}">${esc(t.label)}</button>`).join('')}
         </div>
-
-        <div class="panel">
-            <h3>Locations</h3>
-            ${d.locations.map((loc, i) => `
-                <div class="ocfit-scenario" data-collapse="crimes-loc-${i}" style="margin-bottom:8px;">
-                    <div class="ocfit-scenario-header">
-                        <span>${esc(loc.name)}</span>
-                        ${loc.unlock ? `<span style="font-size:11px;color:var(--muted);">🔒 ${esc(loc.unlock)}</span>` : ''}
-                        <span class="chev">▾</span>
-                    </div>
-                    <div class="ocfit-scenario-body">
-                        <div style="margin-bottom:6px;"><b>Success cycle:</b> ${esc(loc.cycle)}</div>
-                        <div style="margin-bottom:6px;">${esc(loc.notes)}</div>
-                        <div style="font-size:12px;color:var(--reagent);">💡 ${esc(loc.tip)}</div>
-                    </div>
-                </div>`).join('')}
-        </div>
-
-        <div class="panel">
-            <h3>Honor bars</h3>
-            ${d.merits.map(m => `<div style="padding:6px 0;border-top:1px solid var(--line);"><b>${esc(m.name)}</b> — ${esc(m.how)}</div>`).join('')}
-        </div>
-
-        <div class="panel">
-            <p style="color:var(--muted);font-size:12px;margin:0;">${d.uniqueCount} unique finds across all locations. ${esc(d.notes)}</p>
-        </div>`;
+        <div id="crimes-tab-body" style="margin-top:14px;"></div>`;
 
     $('crimes-back').addEventListener('click', renderCrimesHub);
-    $('crimes-detail').querySelectorAll('.ocfit-scenario-header').forEach(header => {
-        header.addEventListener('click', () => header.closest('.ocfit-scenario').classList.toggle('collapsed'));
+    $('crimes-detail').querySelectorAll('.crimes-tab').forEach(btn => {
+        btn.addEventListener('click', () => {
+            cgActiveTab = btn.dataset.tab;
+            $('crimes-detail').querySelectorAll('.crimes-tab').forEach(b => b.classList.toggle('active', b.dataset.tab === cgActiveTab));
+            renderCrimeTabBody(crime);
+        });
     });
+    renderCrimeTabBody(crime);
+}
+
+function renderCrimeTabBody(crime) {
+    const d = crime.data;
+    const body = $('crimes-tab-body');
+
+    if (cgActiveTab === 'overview') {
+        const crimesEst = cgNerveToCrimes(d.estimatedNerveToCS100, crime.nerveCost);
+        body.innerHTML = `
+            <div class="panel">
+                <p style="margin:0 0 10px;">${esc(d.summary)}</p>
+                <div style="display:flex;gap:16px;flex-wrap:wrap;">
+                    <div><div style="font-size:11px;color:var(--muted);">Unique finds</div><div style="font-weight:700;">${d.uniqueCount}</div></div>
+                    <div><div style="font-size:11px;color:var(--muted);">Honor bars</div><div style="font-weight:700;">${d.merits.length}</div></div>
+                    <div><div style="font-size:11px;color:var(--muted);">Est. to CS100</div><div style="font-weight:700;">
+                        ${d.estimatedNerveToCS100
+                            ? `${d.estimatedNerveToCS100.min.toLocaleString()}–${d.estimatedNerveToCS100.max.toLocaleString()} nerve${crimesEst ? ` (~${crimesEst.min.toLocaleString()}–${crimesEst.max.toLocaleString()} crimes)` : ''}`
+                            : '<span style="color:var(--muted);font-weight:400;">not specified in guide yet</span>'}
+                    </div></div>
+                </div>
+                <p style="font-size:12px;color:var(--muted);margin-top:10px;">${esc(d.notes)}</p>
+            </div>`;
+        return;
+    }
+
+    if (cgActiveTab === 'locations') {
+        body.innerHTML = d.locations.map((loc, i) => `
+            <div class="ocfit-scenario" data-collapse="crimes-loc-${i}" style="margin-bottom:8px;">
+                <div class="ocfit-scenario-header">
+                    <span>${esc(loc.name)}</span>
+                    ${loc.unlock ? `<span style="font-size:11px;color:var(--muted);">🔒 ${esc(loc.unlock)}</span>` : ''}
+                    <span class="chev">▾</span>
+                </div>
+                <div class="ocfit-scenario-body">
+                    <div style="margin-bottom:6px;"><b>Success cycle:</b> ${esc(loc.cycle)}</div>
+                    <div style="margin-bottom:6px;">${esc(loc.notes)}</div>
+                    <div style="font-size:12px;color:var(--reagent);">💡 ${esc(loc.tip)}</div>
+                </div>
+            </div>`).join('');
+        body.querySelectorAll('.ocfit-scenario-header').forEach(header => {
+            header.addEventListener('click', () => header.closest('.ocfit-scenario').classList.toggle('collapsed'));
+        });
+        return;
+    }
+
+    if (cgActiveTab === 'items') {
+        body.innerHTML = `<div class="panel">${d.keyItems.map(k => `
+            <div style="padding:8px 0;border-top:1px solid var(--line);">
+                <b>${esc(k.name)}</b> — ${esc(k.effect)}
+                <div style="font-size:12px;color:var(--muted);">Source: ${esc(k.source)}</div>
+            </div>`).join('')}</div>`;
+        return;
+    }
+
+    if (cgActiveTab === 'honors') {
+        body.innerHTML = `
+            <div class="panel">
+                ${d.merits.map(m => `
+                    <div class="crimes-honor-row" data-honor="${esc(m.name)}" style="padding:8px 0;border-top:1px solid var(--line);display:flex;justify-content:space-between;align-items:center;gap:10px;">
+                        <div><b>${esc(m.name)}</b><div style="font-size:12px;color:var(--muted);">${esc(m.how)}</div></div>
+                        <span class="crimes-honor-status" style="font-size:12px;color:var(--muted);white-space:nowrap;">loading…</span>
+                    </div>`).join('')}
+                <div class="status" id="crimes-honor-status" style="margin-top:10px;"></div>
+            </div>`;
+        loadCrimeMerits(crime.id);
+        return;
+    }
+}
+
+async function loadCrimeMerits(crimeId) {
+    const st = $('crimes-honor-status');
+    try {
+        if (!cgMeritCache) {
+            const res = await fetch('/api/crimes-merits', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ key: apiKey, action: 'read' }),
+            });
+            cgMeritCache = await res.json();
+        }
+        if (cgMeritCache.error) throw new Error(cgMeritCache.error);
+        const honors = (cgMeritCache.honors || []).filter(h => h.crime === crimeId);
+        honors.forEach(h => {
+            const row = document.querySelector(`.crimes-honor-row[data-honor="${CSS.escape(h.name)}"] .crimes-honor-status`);
+            if (!row) return;
+            if (!h.resolvable) { row.textContent = 'not matched yet'; row.style.color = 'var(--muted)'; return; }
+            row.textContent = h.earned ? '✓ earned' : 'not yet';
+            row.style.color = h.earned ? 'var(--reagent)' : 'var(--muted)';
+        });
+        st.className = 'status'; st.textContent = '';
+    } catch (e) {
+        st.className = 'status err'; st.textContent = e.message;
+    }
 }
