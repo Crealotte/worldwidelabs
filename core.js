@@ -265,6 +265,7 @@
         if (page === 'ocfit-team') loadOcFitTeamBuilder();
         if (page === 'respect-edit') loadRespectEditor();
         if (page === 'foreign-stock' && !foreignStockLoaded) { foreignStockLoaded = true; loadForeignStock(); }
+        if (page === 'crimes-guide' && !crimesGuideLoaded) { crimesGuideLoaded = true; loadCrimesGuide(); }
         if (page === 'feedback-edit') {
             $('feedback-locked').style.display = isLeaderCached ? 'none' : 'block';
             $('feedback-editor').style.display = isLeaderCached ? 'block' : 'none';
