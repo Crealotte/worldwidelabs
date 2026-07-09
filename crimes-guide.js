@@ -42,39 +42,93 @@ const SEARCH_FOR_CASH = {
     locations: [
         {
             name: 'Search the Trash', unlock: null,
-            cycle: 'Weekly — resets to 0% Monday 18:00 TCT, rises steadily through the week, peaks in the early hours of Monday (just before 08:00 TCT), then drops sharply back to 0%.',
-            notes: '86% of searches give a small cash payout, the other 14% an item. Mostly low value, but the only source of the 7 "rotten" items needed for the Spoiled Rotten honor bar — also gives Card Skimmers and Spray Cans (materials for later crimes).',
-            tip: 'Best location specifically for grinding toward the Spoiled Rotten honor bar; otherwise the weakest location for value.',
+            cycle: [
+                'Weekly cycle',
+                'Resets to 0% Monday 18:00 TCT',
+                'Rises steadily through the week',
+                'Peaks early Monday morning, just before 08:00 TCT',
+                'Then drops sharply back to 0%',
+            ],
+            highlights: [
+                '86% of searches → small cash payout',
+                '14% → an item',
+                'Only source of the 7 "rotten" items (needed for the Spoiled Rotten honor bar)',
+                'Also gives Card Skimmers and Spray Cans (materials for later crimes)',
+            ],
+            tip: 'Best location specifically for grinding toward Spoiled Rotten — otherwise the weakest location for value.',
         },
         {
             name: 'Search the Subway', unlock: null,
-            cycle: 'Daily — success rate tracks how many players are currently active, rather than a fixed day/week pattern.',
-            notes: 'Higher chance of cash than items, similar to Trash. Billfolds (~9% chance) are the standout item here. The Office Key (found here at CS85) unlocks extra outcomes at this same location, and the Glasses enhancer can also turn up here.',
-            tip: 'The most time-consistent location since it tracks player activity rather than a day/week cycle.',
+            cycle: [
+                'Daily cycle',
+                'Tracks how many players are currently active, not a fixed day/week pattern',
+            ],
+            highlights: [
+                'Higher chance of cash than items, similar to Trash',
+                'Billfolds are the standout item (~9% chance)',
+                'Office Key (found here at CS85) unlocks extra outcomes at this same location',
+                'Glasses enhancer can also turn up here',
+            ],
+            tip: 'The most time-consistent location since it tracks player activity, not a day/week cycle.',
         },
         {
             name: 'Search the Junkyard', unlock: null,
-            cycle: 'Weekly — best Sunday and Monday morning, noticeably less consistent the rest of the week.',
-            notes: 'Highest item-drop rate of any location, and the source of the Metal Detector (unlocks the Beach). Frequently the first place new crime materials/enhancers get added — also gives Spray Cans, Card Skimmers, Spy Cameras, Rope, Blank DVDs, and Computer Parts.',
-            tip: 'Probably the single best all-round location given item variety and priority placement of new materials.',
+            cycle: [
+                'Weekly cycle',
+                'Best on Sunday and Monday morning',
+                'Noticeably less consistent the rest of the week',
+            ],
+            highlights: [
+                'Highest item-drop rate of any location',
+                'Source of the Metal Detector (unlocks the Beach)',
+                'Usually the first place new crime materials/enhancers get added',
+                'Also gives Spray Cans, Card Skimmers, Spy Cameras, Rope, Blank DVDs, and Computer Parts',
+            ],
+            tip: 'Probably the single best all-round location — item variety plus first dibs on new materials.',
         },
         {
             name: 'Search the Beach', unlock: 'Metal Detector (from Junkyard, CS30+)',
-            cycle: 'Tidal — cycles between high and low tide, both within a single day and again across the month.',
-            notes: 'Mostly junk loot, and the location most likely to hospitalize you. Source of the Cemetery Key. Sand (needed for Forgery, likely also Arson) only appears during low tide (70%+) — a Bucket improves the odds — and finding it grants the Shore Thing honor bar (not a unique find; can take up to ~600 nerve).',
+            cycle: [
+                'Tidal cycle — high tide and low tide',
+                'Varies both within a single day and again across the month',
+            ],
+            highlights: [
+                'Mostly junk loot',
+                'Highest hospitalization risk of any location',
+                'Source of the Cemetery Key',
+                'Sand only appears during low tide (70%+) — a Bucket improves the odds',
+                'Sand is needed for Forgery (likely Arson too), and grants the Shore Thing honor bar (can take up to ~600 nerve)',
+            ],
             tip: 'Time your visits to low tide specifically when hunting Sand.',
         },
         {
             name: 'Search the Cemetery', unlock: 'Cemetery Key (from Beach, CS50+)',
-            cycle: 'The most consistent location — a flat 75% success rate normally, dropping to 25% on weekdays 09:00–17:00 TCT while groundskeeping is active (though those hours unlock some extra outcomes).',
-            notes: 'Loot is mostly unremarkable, but includes Hit Contracts (theorized component for a future Assassination-style crime) and Car Keys (theorized component for a future Grand Theft Auto-style crime), plus Fertilizer and Candles (purpose still undetermined).',
+            cycle: [
+                'The most consistent location of all six',
+                'Flat 75% success rate normally',
+                'Drops to 25% on weekdays 09:00–17:00 TCT while groundskeeping is active',
+                'Those groundskeeping hours do unlock some extra outcomes',
+            ],
+            highlights: [
+                'Loot is mostly unremarkable',
+                'Hit Contracts — theorized component for a future Assassination-style crime',
+                'Car Keys — theorized component for a future Grand Theft Auto-style crime',
+                'Fertilizer and Candles also appear — purpose still undetermined',
+            ],
             tip: 'A reliable fallback location when every other location\'s cycle is in a low period.',
         },
         {
             name: 'Search the Fountain', unlock: 'CS75 (no item needed)',
-            cycle: 'Monthly — resets to 0% on the 1st, peaks around the 30th/31st.',
-            notes: 'The weakest loot table of all six locations — mostly loot containers, spray cans, and minor consumables.',
-            tip: 'Mainly useful once unlocked just for extra skill grinding and green Spray Cans.',
+            cycle: [
+                'Monthly cycle',
+                'Resets to 0% on the 1st',
+                'Peaks around the 30th/31st',
+            ],
+            highlights: [
+                'Weakest loot table of all six locations',
+                'Mostly loot containers, spray cans, and minor consumables',
+            ],
+            tip: 'Mainly useful once unlocked for extra skill grinding and green Spray Cans.',
         },
     ],
     merits: [
@@ -197,16 +251,18 @@ function renderCrimeTabBody(crime) {
 
     if (cgActiveTab === 'locations') {
         body.innerHTML = d.locations.map((loc, i) => `
-            <div class="ocfit-scenario" data-collapse="crimes-loc-${i}" style="margin-bottom:8px;">
+            <div class="ocfit-scenario" data-collapse="crimes-loc-${i}" style="margin-bottom:10px;">
                 <div class="ocfit-scenario-header">
                     <span>${esc(loc.name)}</span>
                     ${loc.unlock ? `<span style="font-size:11px;color:var(--muted);">🔒 ${esc(loc.unlock)}</span>` : ''}
                     <span class="chev">▾</span>
                 </div>
                 <div class="ocfit-scenario-body">
-                    <div style="margin-bottom:6px;"><b>Success cycle:</b> ${esc(loc.cycle)}</div>
-                    <div style="margin-bottom:6px;">${esc(loc.notes)}</div>
-                    <div style="font-size:12px;color:var(--reagent);">💡 ${esc(loc.tip)}</div>
+                    <div class="crimes-subhead">⏱ Success cycle</div>
+                    <ul class="crimes-bullets">${loc.cycle.map(b => `<li>${esc(b)}</li>`).join('')}</ul>
+                    <div class="crimes-subhead">💰 What you'll find</div>
+                    <ul class="crimes-bullets">${loc.highlights.map(b => `<li>${esc(b)}</li>`).join('')}</ul>
+                    <div class="crimes-tip">💡 ${esc(loc.tip)}</div>
                 </div>
             </div>`).join('');
         body.querySelectorAll('.ocfit-scenario-header').forEach(header => {
@@ -216,24 +272,21 @@ function renderCrimeTabBody(crime) {
     }
 
     if (cgActiveTab === 'items') {
-        body.innerHTML = `<div class="panel">${d.keyItems.map(k => `
-            <div style="padding:8px 0;border-top:1px solid var(--line);">
-                <b>${esc(k.name)}</b> — ${esc(k.effect)}
-                <div style="font-size:12px;color:var(--muted);">Source: ${esc(k.source)}</div>
-            </div>`).join('')}</div>`;
+        body.innerHTML = d.keyItems.map(k => `
+            <div class="panel" style="margin-bottom:10px;">
+                <div style="font-weight:700;margin-bottom:4px;">${esc(k.name)}</div>
+                <div style="margin-bottom:8px;">${esc(k.effect)}</div>
+                <div style="font-size:12px;color:var(--muted);">📍 ${esc(k.source)}</div>
+            </div>`).join('');
         return;
     }
 
     if (cgActiveTab === 'honors') {
-        body.innerHTML = `
-            <div class="panel">
-                ${d.merits.map(m => `
-                    <div class="crimes-honor-row" data-honor="${esc(m.name)}" style="padding:8px 0;border-top:1px solid var(--line);display:flex;justify-content:space-between;align-items:center;gap:10px;">
-                        <div><b>${esc(m.name)}</b><div style="font-size:12px;color:var(--muted);">${esc(m.how)}</div></div>
-                        <span class="crimes-honor-status" style="font-size:12px;color:var(--muted);white-space:nowrap;">loading…</span>
-                    </div>`).join('')}
-                <div class="status" id="crimes-honor-status" style="margin-top:10px;"></div>
-            </div>`;
+        body.innerHTML = d.merits.map(m => `
+            <div class="panel crimes-honor-row" data-honor="${esc(m.name)}" style="margin-bottom:10px;display:flex;justify-content:space-between;align-items:center;gap:10px;">
+                <div><div style="font-weight:700;margin-bottom:4px;">${esc(m.name)}</div><div style="font-size:13px;color:var(--muted);">${esc(m.how)}</div></div>
+                <span class="crimes-honor-status" style="font-size:12px;color:var(--muted);white-space:nowrap;">loading…</span>
+            </div>`).join('') + `<div class="status" id="crimes-honor-status"></div>`;
         loadCrimeMerits(crime.id);
         return;
     }
