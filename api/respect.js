@@ -155,13 +155,19 @@ async function syncOc(key, factionId) {
 // not just "whatever's in the rolling window right now". Stops after a bounded number of pages
 // (to keep this a reasonable one-click action rather than an unbounded crawl) or once a page
 // contributes no new completions, whichever comes first.
+const ocDeepCursorKey = (factionId) => `wwl:oc-deep-cursor:${factionId}`;
+
 async function deepSyncOc(key, factionId, maxPages = 15) {
     const rewardsRaw = await redis(['GET', ocRewardsKey(factionId)]);
     const rewards = rewardsRaw ? JSON.parse(rewardsRaw) : {};
     const dailyRaw = await redis(['GET', ocDailyKey(factionId)]);
     const daily = dailyRaw ? JSON.parse(dailyRaw) : {};
 
-    let to = Math.floor(Date.now() / 1000);
+    // Resume from wherever the last click left off, rather than starting over from "now" every
+    // time — restarting from the top meant every fresh click just re-walked the same already-seen
+    // recent pages (finding nothing new there) and gave up before ever reaching older territory.
+    const cursorRaw = await redis(['GET', ocDeepCursorKey(factionId)]);
+    let to = cursorRaw ? Number(cursorRaw) : Math.floor(Date.now() / 1000);
     let totalSynced = 0, pagesFetched = 0, emptyPagesInARow = 0, rateLimited = false, stopReason = 'max-pages';
 
     for (let page = 0; page < maxPages; page++) {
@@ -185,6 +191,7 @@ async function deepSyncOc(key, factionId, maxPages = 15) {
 
         if (result.oldestSeen === null || result.oldestSeen >= to) { stopReason = 'no-progress (oldest crime on this page wasn\'t older than the last page)'; break; }
         to = result.oldestSeen - 1;
+        await redis(['SET', ocDeepCursorKey(factionId), String(to)]); // save progress after every page, not just at the end
         emptyPagesInARow = result.synced === 0 ? emptyPagesInARow + 1 : 0;
         if (emptyPagesInARow >= 3) { stopReason = '3-empty-pages-in-a-row (everything on these pages was already tracked)'; break; }
     }
@@ -322,12 +329,15 @@ async function syncHits(key, factionId) {
 // rolling window can be as little as a few hours of activity for a busy faction, a single sync
 // only ever sees a sliver of any given day. This pages back to actually capture full days,
 // bounded to a reasonable number of pages per click.
+const hitsDeepCursorKey = (factionId) => `wwl:hits-deep-cursor:${factionId}`;
+
 async function deepSyncHits(key, factionId, maxPages = 15) {
     const dailyRaw = await redis(['GET', hitsDailyKey(factionId)]);
     const daily = dailyRaw ? JSON.parse(dailyRaw) : {};
 
-    let to = Math.floor(Date.now() / 1000);
-    let totalSynced = 0, pagesFetched = 0, emptyPagesInARow = 0, rateLimited = false;
+    const cursorRaw = await redis(['GET', hitsDeepCursorKey(factionId)]);
+    let to = cursorRaw ? Number(cursorRaw) : Math.floor(Date.now() / 1000);
+    let totalSynced = 0, pagesFetched = 0, emptyPagesInARow = 0, rateLimited = false, stopReason = 'max-pages';
 
     for (let page = 0; page < maxPages; page++) {
         if (page > 0) await sleep(1100); // stay well clear of Torn's rate limit across a multi-page loop
@@ -335,22 +345,24 @@ async function deepSyncHits(key, factionId, maxPages = 15) {
         const data = await r.json();
         if (data.error) {
             if (isRateLimited(data)) rateLimited = true;
+            stopReason = `torn-error: ${data.error.error || data.error.code}`;
             break;
         }
         const attacks = data.attacks || {};
-        if (!Object.keys(attacks).length) break;
+        if (!Object.keys(attacks).length) { stopReason = 'empty-page (Torn returned no attacks at this point in time)'; break; }
         pagesFetched++;
 
         const result = await processAttacksPageAsync(attacks, factionId, daily);
         totalSynced += result.synced;
         if (result.dailyChanged) await redis(['SET', hitsDailyKey(factionId), JSON.stringify(daily)]);
 
-        if (result.oldestSeen === null || result.oldestSeen >= to) break; // no older data available, stop
+        if (result.oldestSeen === null || result.oldestSeen >= to) { stopReason = 'no-progress (oldest attack on this page wasn\'t older than the last page)'; break; }
         to = result.oldestSeen - 1;
+        await redis(['SET', hitsDeepCursorKey(factionId), String(to)]); // save progress after every page, not just at the end
         emptyPagesInARow = result.synced === 0 ? emptyPagesInARow + 1 : 0;
-        if (emptyPagesInARow >= 3) break; // several pages of already-seen data — likely hit the edge
+        if (emptyPagesInARow >= 3) { stopReason = '3-empty-pages-in-a-row (everything on these pages was already tracked, or was defend-side which this doesn\'t count)'; break; }
     }
-    return { synced: totalSynced, pagesFetched, rateLimited };
+    return { synced: totalSynced, pagesFetched, rateLimited, stopReason };
 }
 
 // attacksfull only ever shows the attacker's own gain — it has no field for what OUR faction
@@ -401,6 +413,8 @@ async function syncLosses(key, factionId) {
 // Deep backfill for losses — attacknews needs both "from" and "to" to page beyond the most
 // recent ~100 entries (a single timestamp alone gets ignored by Torn's API for news-type
 // selections), so this walks backward in fixed time chunks rather than relying on "oldest seen".
+const lossesDeepCursorKey = (factionId) => `wwl:losses-deep-cursor:${factionId}`;
+
 async function deepSyncLosses(key, factionId, maxPages = 15) {
     const dailyRaw = await redis(['GET', hitsDailyKey(factionId)]);
     const daily = dailyRaw ? JSON.parse(dailyRaw) : {};
@@ -408,8 +422,9 @@ async function deepSyncLosses(key, factionId, maxPages = 15) {
     const seenIds = new Set(seenRaw ? JSON.parse(seenRaw) : []);
 
     const CHUNK_SECONDS = 6 * 60 * 60; // 6-hour windows
-    let to = Math.floor(Date.now() / 1000);
-    let totalSynced = 0, pagesFetched = 0, emptyPagesInARow = 0, rateLimited = false;
+    const cursorRaw = await redis(['GET', lossesDeepCursorKey(factionId)]);
+    let to = cursorRaw ? Number(cursorRaw) : Math.floor(Date.now() / 1000);
+    let totalSynced = 0, pagesFetched = 0, emptyPagesInARow = 0, rateLimited = false, stopReason = 'max-pages';
 
     for (let page = 0; page < maxPages; page++) {
         if (page > 0) await sleep(1100);
@@ -418,6 +433,7 @@ async function deepSyncLosses(key, factionId, maxPages = 15) {
         const data = await r.json();
         if (data.error) {
             if (isRateLimited(data)) rateLimited = true;
+            stopReason = `torn-error: ${data.error.error || data.error.code}`;
             break;
         }
         const newsEntries = data.attacknews || {};
@@ -431,10 +447,11 @@ async function deepSyncLosses(key, factionId, maxPages = 15) {
         }
 
         to = from - 1; // always move the window back, even if this chunk was empty
+        await redis(['SET', lossesDeepCursorKey(factionId), String(to)]); // save progress after every chunk, not just at the end
         emptyPagesInARow = result.synced === 0 ? emptyPagesInARow + 1 : 0;
-        if (emptyPagesInARow >= 5) break; // several empty chunks in a row — likely reached the edge
+        if (emptyPagesInARow >= 5) { stopReason = '5-empty-chunks-in-a-row (no losses found in these 6-hour windows, or reached the edge of available history)'; break; }
     }
-    return { synced: totalSynced, pagesFetched, rateLimited };
+    return { synced: totalSynced, pagesFetched, rateLimited, stopReason };
 }
 
 module.exports = async function handler(req, res) {
@@ -495,7 +512,7 @@ module.exports = async function handler(req, res) {
 
         if (action === 'deep-sync-hits') {
             const result = await deepSyncHits(key, factionId);
-            return res.status(200).json({ ok: true, synced: result.synced, pagesFetched: result.pagesFetched, rateLimited: result.rateLimited });
+            return res.status(200).json({ ok: true, synced: result.synced, pagesFetched: result.pagesFetched, rateLimited: result.rateLimited, stopReason: result.stopReason });
         }
 
         if (action === 'sync-losses') {
@@ -506,7 +523,7 @@ module.exports = async function handler(req, res) {
 
         if (action === 'deep-sync-losses') {
             const result = await deepSyncLosses(key, factionId);
-            return res.status(200).json({ ok: true, synced: result.synced, pagesFetched: result.pagesFetched, rateLimited: result.rateLimited });
+            return res.status(200).json({ ok: true, synced: result.synced, pagesFetched: result.pagesFetched, rateLimited: result.rateLimited, stopReason: result.stopReason });
         }
 
         if (action === 'reset-hits-tracking') {
@@ -517,6 +534,8 @@ module.exports = async function handler(req, res) {
             await redis(['DEL', hitsDailyKey(factionId)]);
             await redis(['DEL', hitsSeenKey(factionId)]);
             await redis(['DEL', lossesSeenKey(factionId)]);
+            await redis(['DEL', hitsDeepCursorKey(factionId)]);
+            await redis(['DEL', lossesDeepCursorKey(factionId)]);
             return res.status(200).json({ ok: true });
         }
 
