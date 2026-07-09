@@ -765,7 +765,7 @@
                     </div>
                     <div class="field">
                         <label for="rg-war-amount">Respect gained</label>
-                        <input id="rg-war-amount" type="number" placeholder="25000">
+                        <input id="rg-war-amount" type="text" inputmode="decimal" placeholder="25000">
                     </div>
                     <button id="rg-war-add">Add entry</button>
                     <div class="status" id="rg-war-status"></div>
@@ -827,13 +827,15 @@
             <h2>Overseas Stock</h2>
             <p class="pagedesc">
                 Live foreign stock and real profit per item, sourced from YATA's shared community database — the
-                same one nearly every Torn travel tool reads from. Each country shows exactly how old its data is,
-                since that's the actual reason these tools sometimes look wrong: it's only ever as fresh as the
-                last person who happened to land there.
+                same one nearly every Torn travel tool reads from. Every country's items in one sortable, filterable
+                list — pick which countries to include, hide anything at a loss, and sort by profit, price, or
+                stock. Each row shows exactly how old its data is, since that's the actual reason these tools
+                sometimes look wrong: it's only ever as fresh as the last person who happened to land there.
             </p>
             <button class="ghost small" id="fs-refresh">Refresh</button>
             <div class="status" id="fs-status"></div>
-            <div id="fs-body" style="margin-top:16px;"></div>
+            <div id="fs-controls" style="margin-top:16px;"></div>
+            <div id="fs-body"></div>
         </section>
 
         <!-- ========== LEVELLING TARGETS ========== -->
