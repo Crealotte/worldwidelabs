@@ -80,7 +80,7 @@ function renderFsControls() {
         <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:14px;">
             <div style="position:relative;">
                 <button class="ghost small" id="fs-country-toggle">Countries (${selected.size}/${allCodes.length}) ▾</button>
-                <div id="fs-country-dropdown" style="display:none;position:absolute;top:100%;left:0;margin-top:4px;background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:10px;z-index:20;min-width:200px;box-shadow:0 8px 24px rgba(0,0,0,.4);">
+                <div id="fs-country-dropdown" style="display:none;position:absolute;top:100%;left:0;margin-top:4px;background:var(--bench);border:1px solid var(--line);border-radius:var(--radius);padding:10px;z-index:20;min-width:200px;box-shadow:0 8px 24px rgba(0,0,0,.6);">
                     <div style="display:flex;gap:8px;margin-bottom:8px;">
                         <button class="ghost small" id="fs-country-all">All</button>
                         <button class="ghost small" id="fs-country-none">None</button>
