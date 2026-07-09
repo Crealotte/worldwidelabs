@@ -73,7 +73,14 @@ module.exports = async function handler(req, res) {
         const myHonorsData = await myHonorsRes.json();
         const myProfile = await myProfileRes.json();
         if (myHonorsData.error) return res.status(403).json({ error: myHonorsData.error.error });
-        const myEarnedIds = new Set(Object.keys(myHonorsData.honors_awarded || myHonorsData.honors || {}));
+        // honors_awarded is a plain array of honor IDs (e.g. [1, 3, 4, 9, ...]) — confirmed
+        // against a real sample. Reading Object.keys() on that (as before) returns array
+        // indices ("0","1","2"...) instead of the actual ID values, which is why this silently
+        // never matched. Defensively also handle an object-keyed shape in case that ever varies.
+        const rawAwarded = myHonorsData.honors_awarded ?? myHonorsData.honors ?? [];
+        const myEarnedIds = new Set(
+            Array.isArray(rawAwarded) ? rawAwarded.map(String) : Object.keys(rawAwarded)
+        );
         const myId = String(myProfile.player_id || '');
         const myName = myProfile.name || 'You';
 
