@@ -1,0 +1,136 @@
+// api/war-payout.js — WorldWideLabs War Payout Calculator.
+// Hit-count-based payout for ranked wars, extended to cover chain hits that spill outside the
+// war's official time window — a real gap in most existing payout tools, which only count hits
+// within the war's exact start/end and leave overflow chain hits unpaid.
+//
+// Built on the same proven endpoint our existing (non-war) Chain Payout tool already uses:
+// /v2/faction/{chainId}/chainreport returns, per attacker, both attacks.total and attacks.war
+// for that specific chain — so attacks.total - attacks.war IS the "hits outside the war" figure
+// directly, computed by Torn itself. No date-range guessing, no attack-log scanning needed. The
+// leader adds one or more chain IDs (same input pattern as the existing tool — a raw ID or a
+// pasted chain report URL both work) covering the war, and results are summed across all of them.
+
+const REDIS_URL = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL;
+const REDIS_TOKEN = process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN;
+
+async function redis(command) {
+    const res = await fetch(REDIS_URL, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${REDIS_TOKEN}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify(command),
+    });
+    const data = await res.json();
+    if (data.error) throw new Error(data.error);
+    return data.result;
+}
+
+async function getFactionId(key) {
+    const r = await fetch(`https://api.torn.com/user/?selections=profile&key=${encodeURIComponent(key)}`);
+    const profile = await r.json();
+    if (profile.error || !profile.faction?.faction_id) return null;
+    return String(profile.faction.faction_id);
+}
+async function isLeader(key) {
+    const r = await fetch(`https://api.torn.com/v2/faction/balance?key=${encodeURIComponent(key)}`,
+        { headers: { accept: 'application/json' } });
+    const d = await r.json();
+    return !d.error;
+}
+
+module.exports = async function handler(req, res) {
+    try {
+        if (!REDIS_URL || !REDIS_TOKEN) {
+            return res.status(500).json({ error: 'Database not connected. In Vercel: Storage -> Create Database -> Upstash Redis, and connect it to this project.' });
+        }
+        if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+        const { key, action } = req.body || {};
+        if (!key) return res.status(400).json({ error: 'Missing key' });
+
+        // Receipts are readable by anyone with the link — no leader check, matches the "send a
+        // receipt to members" use case directly.
+        if (action === 'get-receipt') {
+            const { id } = req.body;
+            if (!id) return res.status(400).json({ error: 'Missing id' });
+            const raw = await redis(['GET', `wwl:payout-receipt:${id}`]);
+            if (!raw) return res.status(404).json({ error: 'Receipt not found — the link may be wrong, or it may have been generated on a different deployment.' });
+            return res.status(200).json({ receipt: JSON.parse(raw) });
+        }
+
+        const factionId = await getFactionId(key);
+        if (!factionId) return res.status(403).json({ error: 'Could not determine your faction from this key' });
+        if (!(await isLeader(key))) return res.status(403).json({ error: 'Leaders only' });
+
+        if (action === 'list-wars') {
+            const r = await fetch(`https://api.torn.com/v2/faction?selections=rankedwars&key=${encodeURIComponent(key)}`,
+                { headers: { accept: 'application/json' } });
+            const data = await r.json();
+            if (data.error) return res.status(403).json({ error: data.error.error });
+            const wars = Object.values(data.rankedwars || {});
+            const list = wars.filter(w => w.end).map(w => {
+                const us = (w.factions || []).find(f => String(f.id) === factionId);
+                const them = (w.factions || []).find(f => String(f.id) !== factionId);
+                return {
+                    id: w.id, start: w.start, end: w.end,
+                    us: us ? { id: us.id, name: us.name, score: us.score } : null,
+                    them: them ? { id: them.id, name: them.name, score: them.score } : null,
+                    winner: w.winner,
+                };
+            }).sort((a, b) => b.end - a.end);
+            return res.status(200).json({ wars: list });
+        }
+
+        if (action === 'calculate') {
+            const { chainIds } = req.body;
+            if (!Array.isArray(chainIds) || !chainIds.length) return res.status(400).json({ error: 'Add at least one chain ID first.' });
+
+            const membersByAttacker = {}; // attackerId -> { warHits, overflowHits, perChain: { chainId: totalHitsInThatChain } }
+            const perChainMeta = [];
+            for (const chainId of chainIds) {
+                const r = await fetch(`https://api.torn.com/v2/faction/${chainId}/chainreport?key=${encodeURIComponent(key)}`,
+                    { headers: { accept: 'application/json' } });
+                const data = await r.json();
+                if (data.error) return res.status(403).json({ error: `Chain #${chainId}: ${data.error.error}` });
+                const report = data.chainreport;
+                perChainMeta.push({ id: chainId, totalHits: report?.details?.chain ?? null });
+                for (const att of (report?.attackers || [])) {
+                    const total = att.attacks?.total ?? 0;
+                    const war = att.attacks?.war ?? 0;
+                    const nonWar = Math.max(0, total - war); // hits in this chain that weren't war hits
+                    const id = String(att.id);
+                    if (!membersByAttacker[id]) membersByAttacker[id] = { warHits: 0, overflowHits: 0, perChain: {} };
+                    membersByAttacker[id].warHits += war;
+                    membersByAttacker[id].overflowHits += nonWar;
+                    membersByAttacker[id].perChain[chainId] = (membersByAttacker[id].perChain[chainId] || 0) + total;
+                }
+            }
+
+            // Resolve attacker names via the current member list — best-effort, ex-members won't resolve.
+            const membersRes = await fetch(`https://api.torn.com/v2/faction/members?key=${encodeURIComponent(key)}`,
+                { headers: { accept: 'application/json' } });
+            const membersData = await membersRes.json();
+            const nameById = {};
+            for (const m of (membersData.members || [])) nameById[String(m.id)] = m.name;
+
+            const members = Object.entries(membersByAttacker).map(([id, counts]) => ({
+                id, name: nameById[id] || `Ex-member #${id}`,
+                warHits: counts.warHits, overflowHits: counts.overflowHits,
+                totalHits: counts.warHits + counts.overflowHits,
+                perChain: counts.perChain,
+            })).sort((a, b) => b.totalHits - a.totalHits);
+
+            return res.status(200).json({ members, chains: perChainMeta });
+        }
+
+        if (action === 'save-receipt') {
+            const { receipt } = req.body;
+            if (!receipt) return res.status(400).json({ error: 'Missing receipt' });
+            const id = Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
+            await redis(['SET', `wwl:payout-receipt:${id}`, JSON.stringify({ ...receipt, factionId, createdAt: Date.now() })]);
+            return res.status(200).json({ ok: true, id });
+        }
+
+        return res.status(400).json({ error: 'Unknown action' });
+    } catch (e) {
+        return res.status(500).json({ error: String(e.message || e) });
+    }
+};
