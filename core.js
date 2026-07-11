@@ -5,7 +5,6 @@
     // ================= CONFIG =================
     const KEY_STORAGE = 'wwl_api_key';
     const LINKS_STORAGE = 'wwl_custom_links';
-    const RATE_STORAGE = 'wwl_payout_rate';
     const XANAX_ENERGY = 250;
 
     const DEFAULT_LINKS = [
@@ -104,15 +103,20 @@
         $('app-view').style.display = 'block';
         renderDashboard();
         renderLinks();
-        $('cp-rate').value = localStorage.getItem(RATE_STORAGE) || '100,000';
         await pingTracker();
         checkFactionAccess();
 
-        const lastPage = sessionStorage.getItem(CURRENT_PAGE_KEY) || 'dashboard';
-        const navItem = document.querySelector(`.nav-item[data-page="${lastPage}"]`);
-        const parentGroup = navItem?.closest('.nav-group');
-        if (parentGroup) parentGroup.classList.remove('collapsed'); // reveal it even if its group was left collapsed
-        goToPage(lastPage);
+        const receiptId = new URLSearchParams(window.location.search).get('receipt');
+        if (receiptId) {
+            goToPage('payout-receipt');
+            loadPayoutReceipt(receiptId);
+        } else {
+            const lastPage = sessionStorage.getItem(CURRENT_PAGE_KEY) || 'dashboard';
+            const navItem = document.querySelector(`.nav-item[data-page="${lastPage}"]`);
+            const parentGroup = navItem?.closest('.nav-group');
+            if (parentGroup) parentGroup.classList.remove('collapsed'); // reveal it even if its group was left collapsed
+            goToPage(lastPage);
+        }
         loadAnnouncement();
         loadPolls();
     }
@@ -150,25 +154,21 @@
         try {
             await tornV2('/faction/balance');
             isLeaderCached = true;
-            setNavLock('payout', false);
             setNavLock('announce-edit', false);
             setNavLock('feedback-edit', false);
             setNavLock('ocfit-team', false);
             setNavLock('respect-edit', false);
-            $('cp-locked').style.display = 'none';
-            $('cp-tools').style.display = 'block';
+            setNavLock('war-payout', false);
             loadAdoption();
             loadFactionSharing();
             loadRespectGoalPanel();
         } catch (e) {
             isLeaderCached = false;
-            setNavLock('payout', true);
             setNavLock('announce-edit', true);
             setNavLock('feedback-edit', true);
             setNavLock('ocfit-team', true);
             setNavLock('respect-edit', true);
-            $('cp-locked').style.display = 'block';
-            $('cp-tools').style.display = 'none';
+            setNavLock('war-payout', true);
         }
         if (document.querySelector('.nav-item[data-page="announce-edit"]').classList.contains('active')) {
             $('announce-locked').style.display = isLeaderCached ? 'none' : 'block';
@@ -185,6 +185,9 @@
         }
         if (document.querySelector('.nav-item[data-page="respect-edit"]').classList.contains('active')) {
             loadRespectEditor();
+        }
+        if (document.querySelector('.nav-item[data-page="war-payout"]').classList.contains('active')) {
+            loadWarPayout();
         }
     }
 
@@ -264,6 +267,7 @@
         if (page === 'ocfit' && !ocfitLoaded) { ocfitLoaded = true; loadOcFit(); }
         if (page === 'ocfit-team') loadOcFitTeamBuilder();
         if (page === 'respect-edit') loadRespectEditor();
+        if (page === 'war-payout') loadWarPayout();
         if (page === 'foreign-stock' && !foreignStockLoaded) { foreignStockLoaded = true; loadForeignStock(); }
         if (page === 'crimes-guide' && !crimesGuideLoaded) { crimesGuideLoaded = true; loadCrimesGuide(); }
         if (page === 'feedback-edit') {
