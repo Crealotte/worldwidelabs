@@ -411,11 +411,11 @@
                 <svg class="nav-chevron" width="10" height="10" viewBox="0 0 10 10"><path d="M2 3.5L5 6.5L8 3.5" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
             </div>
             <div class="nav-group-items" data-group-items="leadership">
-                <div class="nav-item" data-page="payout">Chain payout</div>
                 <div class="nav-item" data-page="announce-edit">Announcements</div>
                 <div class="nav-item" data-page="feedback-edit">Feedback form</div>
                 <div class="nav-item" data-page="ocfit-team">OC Team Builder</div>
                 <div class="nav-item" data-page="respect-edit">Respect Tracker</div>
+                <div class="nav-item" data-page="war-payout">War Payout</div>
             </div>
         </div>
 
@@ -545,61 +545,6 @@
                 <ul class="crimes-bullets" id="eg-jump-intro"></ul>
                 <div id="eg-jumps" style="margin-top:14px;"></div>
             </div>
-        </section>
-
-        <!-- ========== CHAIN PAYOUT ========== -->
-        <section class="page" id="page-payout">
-            <div class="lab-label">WWL·03 / leadership tools</div>
-            <h2>Chain payout — non-war hits</h2>
-            <p class="pagedesc">Add chain IDs, combine them, and pay members per non-war hit (total hits &minus; war hits). Needs a leader key with faction chain-report access.</p>
-
-            <div class="panel" id="cp-locked" style="display:none;">
-                <h3>🔒 Leaders only</h3>
-                <p style="color:var(--muted);line-height:1.6;margin:0;">
-                    This tool reads faction chain reports, which the Torn API only allows for members with the
-                    <b>API Access</b> faction permission. Your key doesn't have it — if you think you should,
-                    ask your leadership to enable it for your position in the faction's permission settings.
-                    Everything else in WorldWideLabs works for you as normal.
-                </p>
-            </div>
-
-            <div id="cp-tools">
-            <div class="panel">
-                <div class="grid2">
-                    <div class="field" style="margin:0;">
-                        <label for="chain-input">Chain ID or full report URL</label>
-                        <input type="text" id="chain-input" placeholder="e.g. 65656724 or https://www.torn.com/war.php?step=chainreport&chainID=65656724">
-                    </div>
-                    <div style="display:flex;gap:10px;align-items:flex-end;">
-                        <div class="field" style="margin:0;flex:1;">
-                            <label for="cp-rate">$ per non-war hit</label>
-                            <input type="text" id="cp-rate" value="100,000">
-                        </div>
-                        <button class="ghost" id="add-chain">Add chain</button>
-                        <button id="cp-calc">Calculate</button>
-                    </div>
-                </div>
-                <div id="chain-list"></div>
-                <div class="status" id="cp-status"></div>
-            </div>
-
-            <div class="panel" id="cp-results-panel" style="display:none;">
-                <h3>Payouts</h3>
-                <div class="table-scroll">
-                    <table>
-                        <thead id="cp-head"></thead>
-                        <tbody id="cp-body"></tbody>
-                        <tfoot id="cp-foot"></tfoot>
-                    </table>
-                </div>
-                <div style="display:flex;gap:10px;margin-top:12px;flex-wrap:wrap;align-items:center;">
-                    <button class="ghost" id="cp-copy">Copy payout list</button>
-                    <label style="display:flex;align-items:center;gap:6px;margin:0;cursor:pointer;">
-                        <input type="checkbox" id="cp-hidezero" checked style="width:auto;"> Hide members with 0 non-war hits
-                    </label>
-                </div>
-            </div>
-            </div><!-- /cp-tools -->
         </section>
 
         <!-- ========== ANNOUNCEMENTS EDITOR (leaders only) ========== -->
@@ -865,6 +810,102 @@
             </div>
         </section>
 
+        <!-- ========== WAR PAYOUT CALCULATOR (leadership) ========== -->
+        <section class="page" id="page-war-payout">
+            <div class="lab-label">WWL·10 / leadership tools</div>
+            <h2>War Payout Calculator</h2>
+            <p class="pagedesc">
+                Hit-count based, and picks up chain hits that spill outside the war's official time window
+                — pick a wider date range below to capture the whole chain, not just the war-bounded portion.
+            </p>
+
+            <div class="panel" id="wp-locked" style="display:none;">
+                <h3>🔒 Leaders only</h3>
+                <p style="color:var(--muted);line-height:1.6;margin:0;">The War Payout Calculator needs the same <b>API Access</b> faction permission as Chain payout.</p>
+            </div>
+
+            <div id="wp-editor" style="display:none;">
+                <div class="panel">
+                    <h3>1. Pick a war</h3>
+                    <p style="color:var(--muted);font-size:12px;margin:0 0 10px;">Optional — just sets the opponent's name for the receipt. The chain IDs below do the actual counting.</p>
+                    <div class="status" id="wp-war-status"></div>
+                    <div id="wp-war-list" style="margin-top:10px;"></div>
+                </div>
+
+                <div class="panel" id="wp-chains-panel">
+                    <h3>2. Add chain IDs</h3>
+                    <p id="wp-chains-note" style="color:var(--muted);font-size:12px;margin:0 0 10px;">Add every chain that ran during (or spilled outside) the war — a chain ID or a pasted chain report URL both work.</p>
+                    <div style="display:flex;gap:8px;">
+                        <input id="wp-chain-input" type="text" placeholder="Chain ID or report URL" style="flex:1;">
+                        <button id="wp-add-chain">Add</button>
+                    </div>
+                    <div class="status" id="wp-chain-status" style="margin-top:8px;"></div>
+                    <div id="wp-chain-list" style="display:flex;flex-wrap:wrap;gap:8px;margin-top:10px;"></div>
+                    <button id="wp-calculate" style="margin-top:14px;">Calculate hits</button>
+                    <div class="status" id="wp-calc-status" style="margin-top:8px;"></div>
+                </div>
+
+                <div class="panel" id="wp-results-panel" style="display:none;">
+                    <h3>3. Hits found</h3>
+                    <div id="wp-results-body"></div>
+                </div>
+
+                <div class="panel" id="wp-config-panel" style="display:none;">
+                    <h3>4. Configure payout</h3>
+                    <div style="display:flex;gap:14px;flex-wrap:wrap;">
+                        <div class="field" style="margin:0;">
+                            <label for="wp-pool">Total pool ($)</label>
+                            <input id="wp-pool" type="text" inputmode="decimal" placeholder="10000000">
+                        </div>
+                        <div class="field" style="margin:0;">
+                            <label for="wp-costs">Costs to deduct ($)</label>
+                            <input id="wp-costs" type="text" inputmode="decimal" placeholder="0">
+                        </div>
+                        <div class="field" style="margin:0;">
+                            <label for="wp-retain-pct">Retain %</label>
+                            <input id="wp-retain-pct" type="number" value="20" style="width:80px;">
+                        </div>
+                    </div>
+                    <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px;margin-top:10px;">
+                        <input type="checkbox" id="wp-sub-faction" style="width:auto;"> This is a sub-faction (5% their leadership / 5% you / 10% mutual fund)
+                    </label>
+
+                    <div style="margin-top:14px;">
+                        <div style="font-size:13px;color:var(--muted);margin-bottom:6px;">Payout mode</div>
+                        <label style="display:block;margin-bottom:4px;cursor:pointer;font-size:13px;">
+                            <input type="radio" name="wp-mode" id="wp-mode-equal" value="equal" checked style="width:auto;"> Equal — pool split across ALL hits, war and overflow treated the same
+                        </label>
+                        <label style="display:block;cursor:pointer;font-size:13px;">
+                            <input type="radio" name="wp-mode" id="wp-mode-split" value="split" style="width:auto;"> Split — war hits paid from the pool, overflow hits paid a separate fixed rate
+                        </label>
+                    </div>
+                    <div class="field" id="wp-fixed-rate-field" style="display:none;margin-top:10px;max-width:220px;">
+                        <label for="wp-fixed-rate">Fixed $ per overflow hit</label>
+                        <input id="wp-fixed-rate" type="text" inputmode="decimal" placeholder="500">
+                    </div>
+                </div>
+
+                <div class="panel" id="wp-payout-panel">
+                    <h3>5. Payout</h3>
+                    <div id="wp-payout-body"></div>
+                    <div style="margin-top:14px;display:flex;gap:8px;flex-wrap:wrap;">
+                        <button class="ghost small" id="wp-save-receipt">Save & get shareable receipt link</button>
+                        <button class="ghost small" id="wp-copy">Copy as text</button>
+                    </div>
+                    <div class="status" id="wp-receipt-status" style="margin-top:8px;"></div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ========== PAYOUT RECEIPT (shared link, any logged-in member) ========== -->
+        <section class="page" id="page-payout-receipt">
+            <div class="lab-label">WWL·10 / receipt</div>
+            <h2>War Payout Receipt</h2>
+            <div class="panel">
+                <div id="receipt-body"><p style="color:var(--muted);">Loading…</p></div>
+            </div>
+        </section>
+
         <!-- ========== OVERSEAS STOCK ========== -->
         <section class="page" id="page-foreign-stock">
             <div class="lab-label">WWL·07 / overseas stock</div>
@@ -1090,7 +1131,6 @@
 <script src="polls.js"></script>
 <script src="feedback.js"></script>
 <script src="energy-planner.js"></script>
-<script src="chain-payout.js"></script>
 <script src="level-targets.js"></script>
 <script src="tools-links.js"></script>
 <script src="player-profile.js"></script>
@@ -1099,6 +1139,7 @@
 <script src="foreign-stock-tracker.js"></script>
 <script src="respect-tracker.js"></script>
 <script src="crimes-guide.js"></script>
+<script src="war-payout-tracker.js"></script>
 <script src="app-init.js"></script>
 </body>
 </html>
