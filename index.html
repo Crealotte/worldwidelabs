@@ -858,15 +858,23 @@
                             <input id="wp-pool" type="text" inputmode="decimal" placeholder="10000000">
                         </div>
                         <div class="field" style="margin:0;">
-                            <label for="wp-costs">Costs to deduct ($)</label>
-                            <input id="wp-costs" type="text" inputmode="decimal" placeholder="0">
-                        </div>
-                        <div class="field" style="margin:0;">
                             <label for="wp-retain-pct">Retain %</label>
                             <input id="wp-retain-pct" type="number" value="20" style="width:80px;">
                         </div>
                     </div>
-                    <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px;margin-top:10px;">
+
+                    <div style="margin-top:14px;">
+                        <div style="font-size:13px;color:var(--muted);margin-bottom:6px;">Costs to deduct</div>
+                        <div id="wp-cost-items"></div>
+                        <div style="display:flex;gap:8px;margin-top:6px;">
+                            <input id="wp-cost-label" type="text" placeholder="Label, e.g. Xanax" style="flex:1;">
+                            <input id="wp-cost-amount" type="text" inputmode="decimal" placeholder="$ amount" style="width:140px;">
+                            <button class="ghost small" id="wp-add-cost">Add cost</button>
+                        </div>
+                        <div style="font-size:12px;color:var(--muted);margin-top:6px;">Total costs: <span id="wp-cost-total">$0</span></div>
+                    </div>
+
+                    <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px;margin-top:14px;">
                         <input type="checkbox" id="wp-sub-faction" style="width:auto;"> This is a sub-faction (5% their leadership / 5% you / 10% mutual fund)
                     </label>
 
