@@ -1,20 +1,20 @@
 // api/respect.js — WorldWideLabs faction Respect Tracker.
-// Total faction respect is a real, simple API field, so we snapshot it daily as the ground truth.
-// Everything else is tracked from genuinely real sources, not guesswork:
+// Daily totals are built entirely from real, individually-tracked sources — no snapshot-diffing
+// against Torn's total respect field. That was tried first and reported as unreliable/inconsistent
+// day to day, so it's gone: every day's total is simply the sum of what's actually been measured.
 //   - Organized Crimes: shared with OC Fit's existing tracking
 //   - Chains: Torn's own per-chain respect totals, genuinely backfillable from history
-//   - Hits: real per-attack respect_gain from faction:attacksfull, excluding chain-tagged
-//     attacks (those are already counted under Chains) — this used to be a leftover guess,
-//     now it's directly measured. One known imperfection, confirmed by the community: Torn's
-//     own respect_gain field doesn't always populate reliably for losses (being attacked and
-//     losing respect) — gains are solid, losses are spottier. Worth knowing, not fixable on our end.
-//   - War: manually logged (not independently recoverable from any API source)
-//   - Other/unaccounted: whatever's left after all of the above — territory, raids, dirty
-//     bombs, or any data-quality gaps. Kept visible rather than hidden, so a big number here is
-//     a signal something's off, not silently absorbed into "hits" and mislabeled.
+//   - Hits: real per-attack respect from faction:attacksfull for our own outgoing attacks
+//   - Losses: exact per-event loss figures parsed from faction:attacknews, for when we're attacked
+//   - War: auto-tracked from each ranked war's own report, plus a manual log as a fallback/supplement
+// A real tradeoff of dropping the snapshot comparison: genuinely untracked respect sources
+// (territory, raids, etc.) that used to surface via an "Other" column are no longer visible —
+// but a wrong number was worse than a missing one.
 //
-// POST { key, action: 'snapshot' }                  -> leader-only: records today's total respect,
-//                                                        and syncs any newly-completed OC/chains/hits
+// POST { key, action: 'snapshot' }                  -> leader-only: fetches the current live total
+//                                                        respect (for the Goal panel's progress bar
+//                                                        only, not stored as daily history), and
+//                                                        triggers all the auto-syncing below
 // POST { key, action: 'sync-oc' }                    -> leader-only: one-off sync of whatever OC
 //                                                        history is currently visible
 // POST { key, action: 'deep-sync-oc' }               -> leader-only: walks backward through time
@@ -67,7 +67,6 @@ async function isLeader(key) {
     return !d.error;
 }
 
-const snapshotsKey = (factionId) => `wwl:respect-snapshots:${factionId}`;
 const ocRewardsKey = (factionId) => `wwl:oc-rewards:${factionId}`; // shared with oc-fit.js
 const ocSeenKey = (factionId) => `wwl:oc-rewards-seen:${factionId}`; // shared dedup with oc-fit.js (cumulative totals only)
 const ocDailySeenKey = (factionId) => `wwl:oc-daily-seen:${factionId}`; // separate dedup, just for day-bucketing
@@ -469,8 +468,7 @@ module.exports = async function handler(req, res) {
         const factionId = factionResult.factionId;
 
         if (action === 'read') {
-            const [snapRaw, ocDailyRaw, chainDailyRaw, hitsDailyRaw, warBonusDailyRaw, warRaw, goalRaw] = await Promise.all([
-                redis(['GET', snapshotsKey(factionId)]),
+            const [ocDailyRaw, chainDailyRaw, hitsDailyRaw, warBonusDailyRaw, warRaw, goalRaw] = await Promise.all([
                 redis(['GET', ocDailyKey(factionId)]),
                 redis(['GET', chainDailyKey(factionId)]),
                 redis(['GET', hitsDailyKey(factionId)]),
@@ -479,7 +477,6 @@ module.exports = async function handler(req, res) {
                 redis(['GET', goalKey(factionId)]),
             ]);
             return res.status(200).json({
-                snapshots: snapRaw ? JSON.parse(snapRaw) : {},
                 ocDaily: ocDailyRaw ? JSON.parse(ocDailyRaw) : {},
                 chainDaily: chainDailyRaw ? JSON.parse(chainDailyRaw) : {},
                 hitsDaily: hitsDailyRaw ? JSON.parse(hitsDailyRaw) : {},
@@ -550,20 +547,26 @@ module.exports = async function handler(req, res) {
             return res.status(200).json({ ok: true, synced: result.synced, pagesFetched: result.pagesFetched, rateLimited: result.rateLimited, stopReason: result.stopReason });
         }
 
-        if (action === 'snapshot') {
+        if (action === 'current-respect') {
+            // Lightweight — just the live respect figure, no sync side effects. Used for repeat
+            // reads within the same session so the Goal panel doesn't re-trigger a full sync
+            // (OC/Chains/Hits/Losses/War) every time it's viewed.
             const r = await fetch(`https://api.torn.com/faction/?selections=basic&key=${encodeURIComponent(key)}`);
             const data = await r.json();
-            if (data.error) return res.status(403).json({ error: data.error.error || 'Could not read faction respect' });
-            const totalRespect = data.respect ?? data.faction?.respect ?? null;
-            if (totalRespect == null) return res.status(500).json({ error: 'Faction respect field not found in response' });
+            const totalRespect = data.error ? null : (data.respect ?? data.faction?.respect ?? null);
+            return res.status(200).json({ ok: true, totalRespect });
+        }
 
-            const raw = await redis(['GET', snapshotsKey(factionId)]);
-            const snapshots = raw ? JSON.parse(raw) : {};
-            snapshots[todayKey()] = totalRespect;
-            await redis(['SET', snapshotsKey(factionId), JSON.stringify(snapshots)]);
+        if (action === 'snapshot') {
+            // No longer stores daily snapshot history — reported as unreliable/inconsistent day
+            // to day, and the log-based categories (OC/Chains/Hits/Losses/War) are the sole
+            // source of truth for daily totals now. Still fetches the LIVE current respect figure
+            // (for the Goal panel's progress bar) and still triggers all the auto-syncing — that
+            // side effect is relied on by every other part of this tracker and must stay.
+            const r = await fetch(`https://api.torn.com/faction/?selections=basic&key=${encodeURIComponent(key)}`);
+            const data = await r.json();
+            const totalRespect = data.error ? null : (data.respect ?? data.faction?.respect ?? null);
 
-            // Piggyback OC, chain, hit, and war-bonus syncing onto every snapshot, so everything
-            // stays current automatically without needing a separate visit to any other page.
             await syncOc(key, factionId).catch(() => {});
             await syncChains(key, factionId).catch(() => {});
             await syncHits(key, factionId).catch(() => {});
