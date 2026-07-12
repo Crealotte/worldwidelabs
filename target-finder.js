@@ -128,8 +128,8 @@
                 <td class="num" style="font-family:var(--mono);">${r.ff != null ? r.ff.toFixed(2) : '—'}</td>
                 <td class="num" style="font-family:var(--mono);">${esc(r.estHuman || '—')}</td>
                 <td id="tf-st-${r.id}" style="color:${baldrStateColor(r.state)};font-size:12px;font-weight:${r.state === 'Okay' ? '700' : '400'};">${esc(tfStatusCell(r))}</td>
-                <td><a href="https://www.torn.com/loader.php?sid=attack&user2ID=${r.id}" target="_blank" rel="noopener"
-                       style="background:var(--reagent);color:#06130d;padding:4px 10px;border-radius:4px;text-decoration:none;font-weight:600;font-size:12px;">Attack</a></td>
+                <td><a href="https://www.torn.com/profiles.php?XID=${r.id}" target="_blank" rel="noopener"
+                       style="background:var(--reagent);color:#06130d;padding:4px 10px;border-radius:4px;text-decoration:none;font-weight:600;font-size:12px;">Attack →</a></td>
             </tr>`).join('') : `<tr><td colspan="6" style="color:var(--muted)">No results.</td></tr>`;
     }
 
