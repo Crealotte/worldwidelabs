@@ -112,8 +112,8 @@
                 <td class="num">${t.str}</td><td class="num">${t.def}</td>
                 <td class="num">${t.spd}</td><td class="num">${t.dex}</td>
                 <td id="bt-st-${t.id}" style="color:${baldrStateColor(t.state)};font-family:var(--mono);font-size:12px;font-weight:${t.state === 'Okay' ? '700' : '400'};">${btStatusLabel(t)}</td>
-                <td><a href="https://www.torn.com/loader.php?sid=attack&user2ID=${t.id}" target="_blank" rel="noopener"
-                       style="background:var(--reagent);color:#06130d;padding:4px 10px;border-radius:4px;text-decoration:none;font-weight:600;font-size:12px;">Attack</a></td>
+                <td><a href="https://www.torn.com/profiles.php?XID=${t.id}" target="_blank" rel="noopener"
+                       style="background:var(--reagent);color:#06130d;padding:4px 10px;border-radius:4px;text-decoration:none;font-weight:600;font-size:12px;">Attack →</a></td>
             </tr>`).join('');
         $('bt-body').innerHTML = rows || `<tr><td colspan="9" style="color:var(--muted)">No targets to show${okOnly ? ' — none are Okay (yet). Run a check or untick the filter.' : '.'}</td></tr>`;
     }
