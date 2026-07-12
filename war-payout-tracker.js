@@ -7,6 +7,7 @@ let wpSelectedWar = null; // optional — just for opponent name context on the 
 let wpChains = []; // { id, totalHits }
 let wpCalcResult = null; // { members: [...] }
 let wpPenalties = {}; // memberId -> amount
+let wpCosts = []; // { label, amount }
 
 async function wpFetch(body) {
     const res = await fetch('/api/war-payout', {
@@ -163,10 +164,42 @@ function renderWpResultsPreview() {
     $('wp-hide-zero').addEventListener('change', renderWpResultsPreview);
 }
 
+function wpCostTotal() {
+    return wpCosts.reduce((s, c) => s + c.amount, 0);
+}
+
+function renderWpCosts() {
+    $('wp-cost-items').innerHTML = wpCosts.map((c, i) => `
+        <div style="display:flex;gap:8px;align-items:center;padding:4px 0;font-size:13px;">
+            <span style="flex:1;">${esc(c.label)}</span>
+            <span style="font-family:var(--mono);">$${c.amount.toLocaleString()}</span>
+            <button class="wp-remove-cost" data-idx="${i}" style="background:none;color:var(--muted);padding:0 4px;">✕</button>
+        </div>`).join('');
+    $('wp-cost-total').textContent = `$${wpCostTotal().toLocaleString()}`;
+    $('wp-cost-items').querySelectorAll('.wp-remove-cost').forEach(btn => {
+        btn.addEventListener('click', () => {
+            wpCosts.splice(Number(btn.dataset.idx), 1);
+            renderWpCosts();
+            if (wpCalcResult) renderWpPayout();
+        });
+    });
+}
+
+$('wp-add-cost').addEventListener('click', () => {
+    const label = $('wp-cost-label').value.trim();
+    const amount = Number(($('wp-cost-amount').value || '0').replace(/[,\s]/g, ''));
+    if (!label || !amount) return;
+    wpCosts.push({ label, amount });
+    $('wp-cost-label').value = ''; $('wp-cost-amount').value = '';
+    renderWpCosts();
+    if (wpCalcResult) renderWpPayout();
+});
+$('wp-cost-amount').addEventListener('keydown', e => { if (e.key === 'Enter') $('wp-add-cost').click(); });
+
 function wpGetConfig() {
     return {
         pool: Number(($('wp-pool').value || '0').replace(/[,\s]/g, '')),
-        costs: Number(($('wp-costs').value || '0').replace(/[,\s]/g, '')),
+        costs: wpCostTotal(),
         retainPct: Number($('wp-retain-pct').value || 20),
         isSubFaction: $('wp-sub-faction').checked,
         mode: document.querySelector('input[name="wp-mode"]:checked')?.value || 'equal',
@@ -259,7 +292,7 @@ function renderWpPayout() {
     });
 }
 
-['wp-pool', 'wp-costs', 'wp-retain-pct', 'wp-fixed-rate'].forEach(id => {
+['wp-pool', 'wp-retain-pct', 'wp-fixed-rate'].forEach(id => {
     $(id).addEventListener('input', () => { if (wpCalcResult) renderWpPayout(); });
 });
 $('wp-sub-faction').addEventListener('change', () => { if (wpCalcResult) renderWpPayout(); });
@@ -291,8 +324,8 @@ $('wp-save-receipt').addEventListener('click', async () => {
     try {
         const computed = wpCompute();
         const receipt = {
-            opponent: wpSelectedWar.them?.name || 'Unknown', warEnd: wpSelectedWar.end,
-            netPool: computed.netPool, retained: computed.retained, payoutPool: computed.payoutPool,
+            opponent: wpSelectedWar?.them?.name || 'Not specified', warEnd: wpSelectedWar?.end || Math.floor(Date.now() / 1000),
+            costs: wpCosts, netPool: computed.netPool, retained: computed.retained, payoutPool: computed.payoutPool,
             retainPct: computed.cfg.retainPct, mode: computed.cfg.mode, subSplit: computed.subSplit,
             rows: computed.rows.map(r => ({ name: r.name, totalHits: r.totalHits, overflowHits: r.overflowHits, gross: r.gross, penalty: r.penalty, net: r.net })),
         };
@@ -316,6 +349,11 @@ async function loadPayoutReceipt(id) {
         const result = await wpFetch({ action: 'get-receipt', id });
         if (result.error) throw new Error(result.error);
         const r = result.receipt;
+        const costsHtml = (r.costs && r.costs.length) ? `
+            <div style="margin-bottom:14px;">
+                <div style="color:var(--muted);font-size:11px;margin-bottom:4px;">Costs deducted</div>
+                ${r.costs.map(c => `<div style="font-size:13px;">${esc(c.label)} — $${Math.round(c.amount).toLocaleString()}</div>`).join('')}
+            </div>` : '';
         el.innerHTML = `
             <h3 style="margin-top:0;">War vs ${esc(r.opponent)} — ${esc(new Date(r.warEnd * 1000).toLocaleDateString())}</h3>
             <div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:14px;">
@@ -323,6 +361,7 @@ async function loadPayoutReceipt(id) {
                 <div><div style="color:var(--muted);font-size:11px;">Retained (${r.retainPct}%)</div><div style="font-weight:700;">$${Math.round(r.retained).toLocaleString()}</div></div>
                 <div><div style="color:var(--muted);font-size:11px;">Payout pool</div><div style="font-weight:700;color:var(--reagent);">$${Math.round(r.payoutPool).toLocaleString()}</div></div>
             </div>
+            ${costsHtml}
             <table style="width:100%;font-size:13px;border-collapse:collapse;">
                 <thead><tr style="color:var(--muted);text-align:left;">
                     <th style="padding:4px 8px;">Member</th><th style="padding:4px 8px;">Hits</th>
