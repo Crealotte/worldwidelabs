@@ -215,6 +215,7 @@ function wpGetConfig() {
         isSubFaction: $('wp-sub-faction').checked,
         mode: document.querySelector('input[name="wp-mode"]:checked')?.value || 'equal',
         fixedOverflowRate: Number(($('wp-fixed-rate').value || '0').replace(/[,\s]/g, '')),
+        overflowWeight: Number($('wp-weight').value || 50) / 100,
     };
 }
 
@@ -226,20 +227,41 @@ function wpCompute() {
 
     const members = wpCalcResult.members;
     const totalWarHits = members.reduce((s, m) => s + m.warHits, 0);
+    const totalOverflowHits = members.reduce((s, m) => s + m.overflowHits, 0);
     const totalAllHits = members.reduce((s, m) => s + m.totalHits, 0);
 
+    // Every mode resolves to one rate per hit-type, so the math is fully visible per member —
+    // no mode is a special case, they just arrive at warRate/overflowRate differently.
+    let warRate = 0, overflowRate = 0, poolExceeded = false;
+    if (cfg.mode === 'equal') {
+        warRate = overflowRate = totalAllHits > 0 ? payoutPool / totalAllHits : 0;
+    } else if (cfg.mode === 'weighted') {
+        // Solve for a war-hit rate x such that x * totalWarHits + (x * weight) * totalOverflowHits
+        // exactly exhausts the payout pool — i.e. overflow hits are worth a fixed fraction of a war hit.
+        const denominator = totalWarHits + totalOverflowHits * cfg.overflowWeight;
+        warRate = denominator > 0 ? payoutPool / denominator : 0;
+        overflowRate = warRate * cfg.overflowWeight;
+    } else {
+        // Split mode: overflow hits are paid a fixed rate FIRST (deducted from the pool), and
+        // whatever remains is what war hits split. Previously the fixed payments were added on
+        // TOP of the war-hit pool share instead of coming out of it, which meant the total paid
+        // out could exceed the configured pool whenever there were a lot of chain-only hits —
+        // that's very likely what looked like "getting paid more than expected", not any actual
+        // double-counting of hits.
+        overflowRate = cfg.fixedOverflowRate;
+        const overflowTotal = totalOverflowHits * overflowRate;
+        poolExceeded = overflowTotal > payoutPool;
+        const remainingForWar = Math.max(0, payoutPool - overflowTotal);
+        warRate = totalWarHits > 0 ? remainingForWar / totalWarHits : 0;
+    }
+
     const rows = members.map(m => {
-        let gross;
-        if (cfg.mode === 'equal') {
-            gross = totalAllHits > 0 ? (payoutPool / totalAllHits) * m.totalHits : 0;
-        } else {
-            const warShare = totalWarHits > 0 ? (payoutPool / totalWarHits) * m.warHits : 0;
-            const overflowShare = m.overflowHits * cfg.fixedOverflowRate;
-            gross = warShare + overflowShare;
-        }
+        const warPay = m.warHits * warRate;
+        const overflowPay = m.overflowHits * overflowRate;
+        const gross = warPay + overflowPay;
         const penalty = wpPenalties[m.id] || 0;
         const net = Math.max(0, gross - penalty);
-        return { ...m, gross, penalty, net };
+        return { ...m, warPay, overflowPay, gross, penalty, net };
     });
 
     const subSplit = cfg.isSubFaction ? {
@@ -248,7 +270,7 @@ function wpCompute() {
         mutualFund: netPool * 0.10,
     } : null;
 
-    return { cfg, netPool, retained, payoutPool, rows, subSplit, totalWarHits, totalAllHits };
+    return { cfg, netPool, retained, payoutPool, rows, subSplit, totalWarHits, totalOverflowHits, totalAllHits, warRate, overflowRate, poolExceeded };
 }
 
 function renderWpPayout() {
@@ -263,23 +285,33 @@ function renderWpPayout() {
             <div style="font-size:11px;color:var(--muted);align-self:center;">Sub-faction sends you 15% total (leadership share stays local)</div>
         </div>` : '';
 
+    const exceededHtml = computed.poolExceeded ? `
+        <div style="margin-top:10px;padding:8px 12px;background:rgba(220,80,80,.12);border:1px solid var(--danger);border-radius:var(--radius);font-size:12px;color:var(--danger);">
+            ⚠ The fixed overflow rate alone (${computed.totalOverflowHits} hits × $${computed.overflowRate.toLocaleString()}) exceeds the payout pool — war hitters are getting $0/hit as a result. Lower the fixed rate or raise the pool.
+        </div>` : '';
+
     el.innerHTML = `
         <div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:14px;">
             <div><div style="color:var(--muted);font-size:11px;">Net pool (after costs)</div><div style="font-weight:700;">$${Math.round(computed.netPool).toLocaleString()}</div></div>
             <div><div style="color:var(--muted);font-size:11px;">Retained (${computed.cfg.retainPct}%)</div><div style="font-weight:700;">$${Math.round(computed.retained).toLocaleString()}</div></div>
             <div><div style="color:var(--muted);font-size:11px;">Payout pool</div><div style="font-weight:700;color:var(--reagent);">$${Math.round(computed.payoutPool).toLocaleString()}</div></div>
+            <div><div style="color:var(--muted);font-size:11px;">$ / war hit</div><div style="font-weight:700;">$${Math.round(computed.warRate).toLocaleString()}</div></div>
+            <div><div style="color:var(--muted);font-size:11px;">$ / overflow hit</div><div style="font-weight:700;">$${Math.round(computed.overflowRate).toLocaleString()}</div></div>
         </div>
         ${subSplitHtml}
+        ${exceededHtml}
         <table style="width:100%;font-size:13px;border-collapse:collapse;margin-top:14px;">
             <thead><tr style="color:var(--muted);text-align:left;">
-                <th style="padding:4px 8px;">Member</th><th style="padding:4px 8px;">Hits</th>
+                <th style="padding:4px 8px;">Member</th><th style="padding:4px 8px;">Breakdown</th>
                 <th style="padding:4px 8px;">Gross</th><th style="padding:4px 8px;">Penalty</th>
                 <th style="padding:4px 8px;">Net pay</th><th style="padding:4px 8px;"></th>
             </tr></thead>
             <tbody>${computed.rows.map(r => `
                 <tr style="border-top:1px solid var(--line);">
                     <td style="padding:4px 8px;">${esc(r.name)}</td>
-                    <td style="padding:4px 8px;font-family:var(--mono);color:var(--muted);">${r.totalHits}${r.overflowHits ? ` (+${r.overflowHits} overflow)` : ''}</td>
+                    <td style="padding:4px 8px;font-family:var(--mono);font-size:12px;color:var(--muted);">
+                        ${r.warHits} war @ $${Math.round(computed.warRate).toLocaleString()} = $${Math.round(r.warPay).toLocaleString()}${r.overflowHits ? `<br>${r.overflowHits} chain @ $${Math.round(computed.overflowRate).toLocaleString()} = $${Math.round(r.overflowPay).toLocaleString()}` : ''}
+                    </td>
                     <td style="padding:4px 8px;font-family:var(--mono);">$${Math.round(r.gross).toLocaleString()}</td>
                     <td style="padding:4px 8px;"><input type="text" inputmode="decimal" class="wp-penalty-input" data-id="${esc(r.id)}" value="${r.penalty || ''}" placeholder="0" style="width:80px;font-size:12px;padding:4px 6px;"></td>
                     <td style="padding:4px 8px;font-family:var(--mono);font-weight:700;color:var(--reagent);">$${Math.round(r.net).toLocaleString()}</td>
@@ -307,22 +339,31 @@ function renderWpPayout() {
     $(id).addEventListener('input', () => { if (wpCalcResult) renderWpPayout(); });
 });
 $('wp-sub-faction').addEventListener('change', () => { if (wpCalcResult) renderWpPayout(); });
-document.querySelectorAll('input[name="wp-mode"]').forEach(radio => {
-    radio.addEventListener('change', () => {
-        $('wp-fixed-rate-field').style.display = radio.value === 'split' && radio.checked ? 'block' : $('wp-fixed-rate-field').style.display;
-        if (wpCalcResult) renderWpPayout();
-    });
+$('wp-mode-equal').addEventListener('change', () => {
+    $('wp-fixed-rate-field').style.display = 'none';
+    $('wp-weight-field').style.display = 'none';
+    if (wpCalcResult) renderWpPayout();
 });
-$('wp-mode-equal').addEventListener('change', () => { $('wp-fixed-rate-field').style.display = 'none'; });
-$('wp-mode-split').addEventListener('change', () => { $('wp-fixed-rate-field').style.display = 'block'; });
+$('wp-mode-split').addEventListener('change', () => {
+    $('wp-fixed-rate-field').style.display = 'block';
+    $('wp-weight-field').style.display = 'none';
+    if (wpCalcResult) renderWpPayout();
+});
+$('wp-mode-weighted').addEventListener('change', () => {
+    $('wp-fixed-rate-field').style.display = 'none';
+    $('wp-weight-field').style.display = 'block';
+    if (wpCalcResult) renderWpPayout();
+});
+$('wp-weight').addEventListener('input', () => { if (wpCalcResult) renderWpPayout(); });
 
 $('wp-copy').addEventListener('click', () => {
     if (!wpCalcResult) return;
     const computed = wpCompute();
     const chainLabel = wpChains.map(c => '#' + c.id).join(' + ');
     const text = `War payout${wpSelectedWar ? ` vs ${wpSelectedWar.them?.name || 'unknown'}` : ''} (chains ${chainLabel})\n`
-        + `Payout pool: $${Math.round(computed.payoutPool).toLocaleString()} (${computed.cfg.mode} mode)\n\n`
-        + computed.rows.filter(r => r.totalHits > 0).map(r => `${r.name} [${r.id}] — ${r.totalHits} hits — $${Math.round(r.net).toLocaleString()}`).join('\n')
+        + `Payout pool: $${Math.round(computed.payoutPool).toLocaleString()} (${computed.cfg.mode} mode — $${Math.round(computed.warRate).toLocaleString()}/war hit, $${Math.round(computed.overflowRate).toLocaleString()}/chain hit)\n\n`
+        + computed.rows.filter(r => r.totalHits > 0).map(r =>
+            `${r.name} [${r.id}] — ${r.warHits} war + ${r.overflowHits} chain — $${Math.round(r.net).toLocaleString()}`).join('\n')
         + `\n\nTOTAL: ${computed.totalAllHits} hits — $${Math.round(computed.rows.reduce((s, r) => s + r.net, 0)).toLocaleString()}`;
     navigator.clipboard.writeText(text).then(() => toast('Payout list copied'));
 });
@@ -338,7 +379,8 @@ $('wp-save-receipt').addEventListener('click', async () => {
             opponent: wpSelectedWar?.them?.name || 'Not specified', warEnd: wpSelectedWar?.end || Math.floor(Date.now() / 1000),
             costs: wpCosts, netPool: computed.netPool, retained: computed.retained, payoutPool: computed.payoutPool,
             retainPct: computed.cfg.retainPct, mode: computed.cfg.mode, subSplit: computed.subSplit,
-            rows: computed.rows.map(r => ({ name: r.name, totalHits: r.totalHits, overflowHits: r.overflowHits, gross: r.gross, penalty: r.penalty, net: r.net })),
+            warRate: computed.warRate, overflowRate: computed.overflowRate,
+            rows: computed.rows.map(r => ({ name: r.name, warHits: r.warHits, overflowHits: r.overflowHits, warPay: r.warPay, overflowPay: r.overflowPay, gross: r.gross, penalty: r.penalty, net: r.net })),
         };
         const result = await wpFetch({ action: 'save-receipt', receipt });
         if (result.error) throw new Error(result.error);
@@ -371,17 +413,21 @@ async function loadPayoutReceipt(id) {
                 <div><div style="color:var(--muted);font-size:11px;">Net pool</div><div style="font-weight:700;">$${Math.round(r.netPool).toLocaleString()}</div></div>
                 <div><div style="color:var(--muted);font-size:11px;">Retained (${r.retainPct}%)</div><div style="font-weight:700;">$${Math.round(r.retained).toLocaleString()}</div></div>
                 <div><div style="color:var(--muted);font-size:11px;">Payout pool</div><div style="font-weight:700;color:var(--reagent);">$${Math.round(r.payoutPool).toLocaleString()}</div></div>
+                ${r.warRate != null ? `<div><div style="color:var(--muted);font-size:11px;">$ / war hit</div><div style="font-weight:700;">$${Math.round(r.warRate).toLocaleString()}</div></div>` : ''}
+                ${r.overflowRate != null ? `<div><div style="color:var(--muted);font-size:11px;">$ / chain hit</div><div style="font-weight:700;">$${Math.round(r.overflowRate).toLocaleString()}</div></div>` : ''}
             </div>
             ${costsHtml}
             <table style="width:100%;font-size:13px;border-collapse:collapse;">
                 <thead><tr style="color:var(--muted);text-align:left;">
-                    <th style="padding:4px 8px;">Member</th><th style="padding:4px 8px;">Hits</th>
+                    <th style="padding:4px 8px;">Member</th><th style="padding:4px 8px;">Breakdown</th>
                     <th style="padding:4px 8px;">Gross</th><th style="padding:4px 8px;">Penalty</th><th style="padding:4px 8px;">Net pay</th>
                 </tr></thead>
                 <tbody>${r.rows.map(row => `
                     <tr style="border-top:1px solid var(--line);">
                         <td style="padding:4px 8px;">${esc(row.name)}</td>
-                        <td style="padding:4px 8px;font-family:var(--mono);color:var(--muted);">${row.totalHits}${row.overflowHits ? ` (+${row.overflowHits} overflow)` : ''}</td>
+                        <td style="padding:4px 8px;font-family:var(--mono);font-size:12px;color:var(--muted);">
+                            ${row.warHits != null ? `${row.warHits} war = $${Math.round(row.warPay).toLocaleString()}${row.overflowHits ? `<br>${row.overflowHits} chain = $${Math.round(row.overflowPay).toLocaleString()}` : ''}` : `${row.totalHits} hits`}
+                        </td>
                         <td style="padding:4px 8px;font-family:var(--mono);">$${Math.round(row.gross).toLocaleString()}</td>
                         <td style="padding:4px 8px;font-family:var(--mono);color:var(--muted);">${row.penalty ? `-$${Math.round(row.penalty).toLocaleString()}` : '—'}</td>
                         <td style="padding:4px 8px;font-family:var(--mono);font-weight:700;color:var(--reagent);">$${Math.round(row.net).toLocaleString()}</td>
