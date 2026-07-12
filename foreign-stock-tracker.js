@@ -6,7 +6,7 @@ let fsCountries = []; // last fetched data, cached so filtering/sorting doesn't 
 
 const FS_COUNTRIES_KEY = 'wwl_fs_countries';   // which country checkboxes are selected
 const FS_HIDE_LOSS_KEY = 'wwl_fs_hide_loss';
-const FS_SORT_KEY = 'wwl_fs_sort';             // "field:dir", e.g. "profit:desc"
+const FS_SORT_KEY = 'wwl_fs_sort';             // "field:dir", e.g. "profitPct:desc"
 
 const FS_FLAGS = {
     mex: '🇲🇽', cay: '🇰🇾', can: '🇨🇦', haw: '🇺🇸', uni: '🇬🇧',
@@ -25,9 +25,9 @@ function fsSaveSelectedCountries(set) {
 }
 function fsGetHideLoss() { return localStorage.getItem(FS_HIDE_LOSS_KEY) === '1'; }
 function fsGetSort() {
-    const raw = localStorage.getItem(FS_SORT_KEY) || 'profit:desc';
+    const raw = localStorage.getItem(FS_SORT_KEY) || 'profitPct:desc';
     const [field, dir] = raw.split(':');
-    return { field: field || 'profit', dir: dir || 'desc' };
+    return { field: field || 'profitPct', dir: dir || 'desc' };
 }
 function fsSaveSort(field, dir) { localStorage.setItem(FS_SORT_KEY, `${field}:${dir}`); }
 
@@ -99,6 +99,7 @@ function renderFsControls() {
             <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--muted);">
                 Sort by
                 <select id="fs-sort-field" style="font-size:13px;">
+                    <option value="profitPct" ${sort.field === 'profitPct' ? 'selected' : ''}>Profit %</option>
                     <option value="profit" ${sort.field === 'profit' ? 'selected' : ''}>Profit</option>
                     <option value="cost" ${sort.field === 'cost' ? 'selected' : ''}>Price</option>
                     <option value="quantity" ${sort.field === 'quantity' ? 'selected' : ''}>Stock</option>
@@ -179,6 +180,7 @@ function renderForeignStock() {
         let av, bv;
         if (field === 'cost') { av = a.cost; bv = b.cost; }
         else if (field === 'quantity') { av = a.quantity; bv = b.quantity; }
+        else if (field === 'profitPct') { av = a.profitPct ?? -Infinity; bv = b.profitPct ?? -Infinity; }
         else { av = a.profit ?? -Infinity; bv = b.profit ?? -Infinity; }
         return dir === 'asc' ? av - bv : bv - av;
     });
