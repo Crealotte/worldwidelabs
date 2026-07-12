@@ -704,9 +704,9 @@
             <div class="lab-label">WWL·08 / leadership tools</div>
             <h2>🎖️ Respect Tracker</h2>
             <p class="pagedesc">
-                Total faction respect is snapshotted daily whenever a leader opens the Dashboard. OC respect is
-                captured automatically (shared with the OC Fit Tracker); log war respect manually after each war —
-                whatever's left over each day is attributed to regular hits.
+                Every day's total is built entirely from tracked categories — OC, Chains, Hits, Losses, and War —
+                with no daily snapshot involved. OC is captured automatically (shared with the OC Fit Tracker);
+                log war respect manually after each war if the auto-tracked figure doesn't cover it.
             </p>
 
             <div class="panel" id="respect-locked" style="display:none;">
@@ -804,7 +804,7 @@
                         "Reset hits tracking" clears anything counted with the old (flawed) logic and rebuilds
                         cleanly — one-time cleanup, not something you'd normally need to click again.
                     </p>
-                    <p style="color:var(--muted);font-size:12px;margin:10px 0;">Every day with any known data. "Chains" is carved out of "Hits" for display, not added on top of it — chain-attributed respect is already inside the raw hits total, so showing both separately without subtracting would double-count. Total gain shows "≈" and a muted style when it's estimated from known categories only (no snapshot pair to confirm the real total that far back) — otherwise it's confirmed. "Other" is whatever's left after OC, Chains, Hits, and War — territory, raids, dirty bombs, or gaps, kept visible rather than hidden.</p>
+                    <p style="color:var(--muted);font-size:12px;margin:10px 0;">Every day with any known data. "Chains" is carved out of "Hits" for display, not added on top of it — chain-attributed respect is already inside the raw hits total, so showing both separately without subtracting would double-count. Total gain is the sum of OC, Chains, Hits, and War for that day — no daily snapshot involved, so genuinely untracked respect sources (territory, raids, etc.) won't show up separately here.</p>
                     <div id="rg-daily-table"></div>
                 </div>
             </div>
@@ -883,13 +883,20 @@
                         <label style="display:block;margin-bottom:4px;cursor:pointer;font-size:13px;">
                             <input type="radio" name="wp-mode" id="wp-mode-equal" value="equal" checked style="width:auto;"> Equal — pool split across ALL hits, war and overflow treated the same
                         </label>
-                        <label style="display:block;cursor:pointer;font-size:13px;">
+                        <label style="display:block;margin-bottom:4px;cursor:pointer;font-size:13px;">
                             <input type="radio" name="wp-mode" id="wp-mode-split" value="split" style="width:auto;"> Split — war hits paid from the pool, overflow hits paid a separate fixed rate
+                        </label>
+                        <label style="display:block;cursor:pointer;font-size:13px;">
+                            <input type="radio" name="wp-mode" id="wp-mode-weighted" value="weighted" style="width:auto;"> Weighted — whole pool split proportionally, overflow hits worth a fraction of a war hit
                         </label>
                     </div>
                     <div class="field" id="wp-fixed-rate-field" style="display:none;margin-top:10px;max-width:220px;">
                         <label for="wp-fixed-rate">Fixed $ per overflow hit</label>
                         <input id="wp-fixed-rate" type="text" inputmode="decimal" placeholder="500">
+                    </div>
+                    <div class="field" id="wp-weight-field" style="display:none;margin-top:10px;max-width:220px;">
+                        <label for="wp-weight">Overflow hit value (% of a war hit)</label>
+                        <input id="wp-weight" type="number" value="50" min="0" max="100" style="width:80px;">
                     </div>
                 </div>
 
