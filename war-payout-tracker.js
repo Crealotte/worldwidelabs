@@ -55,12 +55,23 @@ function renderWarList() {
         el.innerHTML = '<p style="color:var(--muted);font-size:13px;">No past wars found on this key.</p>';
         return;
     }
-    el.innerHTML = wpWars.map((w, i) => `
-        <div class="ocfit-role-row" data-war-idx="${i}" style="cursor:pointer;">
-            <span class="ocfit-role-name">${esc(w.them?.name || 'Unknown opponent')}</span>
-            <span style="font-size:12px;color:var(--muted);">${esc(wpFmtDate(w.end))}</span>
-            <span style="font-size:12px;color:${String(w.winner) === String(w.us?.id) ? 'var(--reagent)' : 'var(--danger)'};">${String(w.winner) === String(w.us?.id) ? 'Won' : 'Lost'}</span>
-        </div>`).join('');
+    el.innerHTML = `
+        <div class="ocfit-scenario collapsed" data-collapse="wp-wars">
+            <div class="ocfit-scenario-header">
+                <span>Past wars (${wpWars.length})</span>
+                <span class="chev">▾</span>
+            </div>
+            <div class="ocfit-scenario-body">${wpWars.map((w, i) => `
+                <div class="ocfit-role-row" data-war-idx="${i}" style="cursor:pointer;">
+                    <span class="ocfit-role-name">${esc(w.them?.name || 'Unknown opponent')}</span>
+                    <span style="font-size:12px;color:var(--muted);">${esc(wpFmtDate(w.end))}</span>
+                    <span style="font-size:12px;color:${String(w.winner) === String(w.us?.id) ? 'var(--reagent)' : 'var(--danger)'};">${String(w.winner) === String(w.us?.id) ? 'Won' : 'Lost'}</span>
+                </div>`).join('')}
+            </div>
+        </div>`;
+    el.querySelector('.ocfit-scenario-header').addEventListener('click', () => {
+        el.querySelector('.ocfit-scenario').classList.toggle('collapsed');
+    });
     el.querySelectorAll('[data-war-idx]').forEach(row => {
         row.addEventListener('click', () => selectWar(Number(row.dataset.warIdx)));
     });
