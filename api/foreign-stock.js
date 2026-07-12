@@ -84,7 +84,7 @@ module.exports = async function handler(req, res) {
                     profit,
                     profitPct: marketValue && item.cost > 0 ? Math.round((profit / item.cost) * 100) : null,
                 };
-            }).sort((a, b) => (b.profit ?? -Infinity) - (a.profit ?? -Infinity));
+            }).sort((a, b) => (b.profitPct ?? -Infinity) - (a.profitPct ?? -Infinity));
 
             const updatedAt = country.update ? country.update * 1000 : null;
             return {
