@@ -1,7 +1,7 @@
 // respect-tracker.js — WorldWideLabs Respect Tracker (Dashboard goal panel + leadership editor).
 'use strict';
 
-let respectSnapshotTaken = false; // only fire the daily snapshot once per session
+let respectAutoSyncDone = false; // only fire the auto-sync once per session
 
 async function respectFetch(body) {
     const res = await fetch('/api/respect', {
@@ -11,14 +11,14 @@ async function respectFetch(body) {
     return res.json();
 }
 
-// Builds a sorted list of { date, totalGain, oc, chains, hits, war, other } covering every day
-// that has EITHER a snapshot pair (for a real total gain) OR any known category data (OC, chains,
-// hits, war) — backfilled category history often reaches further back than snapshotting has
-// existed, and that data shouldn't be invisible just because "total gain" can't be computed for
-// those older days. Where a snapshot pair genuinely doesn't exist, totalGain/other are null
-// (shown as "—") rather than guessed at.
-function respectComputeDaily(snapshots, ocDaily, chainDaily, hitsDaily, warBonusDaily, warEntries) {
-    const snapDates = Object.keys(snapshots).sort();
+// Builds a sorted list of { date, totalGain, oc, chains, hits, war } covering every day with any
+// known category data (OC, chains, hits, war). Previously this used daily snapshot diffs for the
+// "real" total when available, falling back to the summed categories otherwise — reported as
+// unreliable day to day, so this now always uses the summed categories as the sole total. That
+// means genuinely untracked respect sources (territory, raids, etc.) that used to surface via an
+// "Other" column are no longer visible — a real tradeoff, but a wrong number is worse than a
+// missing one.
+function respectComputeDaily(ocDaily, chainDaily, hitsDaily, warBonusDaily, warEntries) {
     const warByDate = {};
     for (const w of warEntries) warByDate[w.date] = (warByDate[w.date] || 0) + w.amount;
     // Auto-tracked war bonuses (from rankedwarreport) and manually-logged entries both feed the
@@ -28,19 +28,9 @@ function respectComputeDaily(snapshots, ocDaily, chainDaily, hitsDaily, warBonus
         warByDate[date] = (warByDate[date] || 0) + amount;
     }
 
-    // A day has a valid "gain" only if the day before it also has a snapshot.
-    const gainByDate = {};
-    for (let i = 1; i < snapDates.length; i++) {
-        const date = snapDates[i], prevDate = snapDates[i - 1];
-        const prev = new Date(prevDate); prev.setDate(prev.getDate() + 1);
-        if (prev.toISOString().slice(0, 10) !== date) continue; // gap — not a real consecutive pair
-        gainByDate[date] = snapshots[date] - snapshots[prevDate];
-    }
-
     // Union of every date we know ANYTHING about, from any source.
     const allDates = new Set([
-        ...Object.keys(gainByDate), ...Object.keys(ocDaily), ...Object.keys(chainDaily),
-        ...Object.keys(hitsDaily), ...Object.keys(warByDate),
+        ...Object.keys(ocDaily), ...Object.keys(chainDaily), ...Object.keys(hitsDaily), ...Object.keys(warByDate),
     ]);
 
     const rows = [];
@@ -50,61 +40,60 @@ function respectComputeDaily(snapshots, ocDaily, chainDaily, hitsDaily, warBonus
         const hitsRaw = hitsDaily[date] || 0;
         // Chain-attributed hits are already individually present in the raw Hits total (every
         // outgoing attack counts, chain or not) — so Chains is a breakdown WITHIN Hits, not a
-        // separate amount on top. Adding both was double-counting the same respect twice, which
-        // is very likely the real source of the persistent overcount.
+        // separate amount on top. Adding both was double-counting the same respect twice.
         //
         // But Chains and Hits backfill independently and at very different depths — Chains pulls
         // its ENTIRE history in one call, while Hits only gets backfilled a page at a time via
-        // "Dig deeper". For an older day, it's entirely possible Chains already has a number
-        // there while Hits hasn't been backfilled that far back yet, which would otherwise
-        // produce a nonsensical negative Hits value (0 raw hits minus a real chain bonus). Chains
-        // can never be attributed more than what raw Hits actually captured for that day — the
-        // rest just isn't split out yet, and correctly stays inside "Other" instead of showing up
-        // as a fabricated loss.
+        // "Dig deeper". Chains can never be attributed more than what raw Hits actually captured
+        // for that day, to avoid a nonsensical negative Hits value on days where backfill depth
+        // doesn't line up yet.
         const chains = Math.min(chainsRaw, hitsRaw);
         const hits = hitsRaw - chains; // always >= 0 by construction
         const war = warByDate[date] || 0;
-        const knownSum = oc + hitsRaw + war; // chains NOT added again — already inside hitsRaw
-        const hasGain = Object.prototype.hasOwnProperty.call(gainByDate, date);
-        // Without a real snapshot pair, the true total is unknowable — but showing the sum of
-        // whatever categories ARE known is still more useful than a bare dash, as long as it's
-        // clearly marked as an estimate rather than passed off as the verified total.
-        const totalGain = hasGain ? gainByDate[date] : knownSum;
-        const totalIsExact = hasGain;
-        const other = hasGain ? totalGain - knownSum : null;
-        rows.push({ date, totalGain, totalIsExact, oc, chains, hits, war, other });
+        const totalGain = oc + hitsRaw + war; // chains NOT added again — already inside hitsRaw
+        rows.push({ date, totalGain, oc, chains, hits, war });
     }
     return rows.sort((a, b) => b.date.localeCompare(a.date)); // newest first
 }
 
-// Average weekly gain from the earliest to latest available snapshot (gap-tolerant) — needs at
-// least two snapshots spanning some real time, otherwise there's genuinely not enough data yet.
-function respectWeeklyRate(snapshots) {
-    const dates = Object.keys(snapshots).sort();
-    if (dates.length < 2) return null;
-    const first = dates[0], last = dates[dates.length - 1];
+// Average weekly gain from the log-based daily totals — needs at least a few days of data,
+// otherwise there's genuinely not enough history yet for a meaningful pace estimate.
+function respectWeeklyRate(dailyRows) {
+    if (dailyRows.length < 2) return null;
+    const sorted = [...dailyRows].sort((a, b) => a.date.localeCompare(b.date));
+    const first = sorted[0].date, last = sorted[sorted.length - 1].date;
     const days = (new Date(last) - new Date(first)) / 86400000;
     if (days < 1) return null;
-    const totalGain = snapshots[last] - snapshots[first];
+    const totalGain = sorted.reduce((s, r) => s + r.totalGain, 0);
     return (totalGain / days) * 7;
 }
 
 async function loadRespectGoalPanel() {
     if (!isLeaderCached) { $('respect-goal-panel').style.display = 'none'; return; }
     try {
-        if (!respectSnapshotTaken) {
-            respectSnapshotTaken = true;
-            respectFetch({ action: 'snapshot' }).catch(() => {}); // fire-and-forget, don't block the dashboard
+        let totalRespect = null;
+        if (!respectAutoSyncDone) {
+            respectAutoSyncDone = true;
+            // Needs to be awaited now (not fire-and-forget) since the live current-respect figure
+            // used for the progress bar below comes from this call's response.
+            const syncResult = await respectFetch({ action: 'snapshot' }).catch(() => null);
+            totalRespect = syncResult?.totalRespect ?? null;
         }
         const data = await respectFetch({ action: 'read' });
         if (data.error || !data.goal) { $('respect-goal-panel').style.display = 'none'; return; }
+        if (totalRespect == null) {
+            // Already auto-synced earlier this session — get a fresh current total without
+            // re-triggering the full sync again.
+            const liveResult = await respectFetch({ action: 'current-respect' }).catch(() => null);
+            totalRespect = liveResult?.totalRespect ?? null;
+        }
+        if (totalRespect == null) { $('respect-goal-panel').style.display = 'none'; return; }
 
-        const dates = Object.keys(data.snapshots).sort();
-        if (!dates.length) { $('respect-goal-panel').style.display = 'none'; return; }
-        const current = data.snapshots[dates[dates.length - 1]];
+        const current = totalRespect;
         const { target, deadline, label } = data.goal;
         const pct = Math.max(0, Math.min(100, Math.round((current / target) * 100)));
-        const weeklyRate = respectWeeklyRate(data.snapshots);
+        const dailyRows = respectComputeDaily(data.ocDaily, data.chainDaily, data.hitsDaily, data.warBonusDaily, data.warEntries);
+        const weeklyRate = respectWeeklyRate(dailyRows);
 
         let etaLine;
         if (current >= target) {
@@ -159,12 +148,23 @@ async function loadRespectEditor() {
         if (!data.warEntries.length) {
             warList.innerHTML = '<p style="color:var(--muted);font-size:13px;">No war entries logged yet.</p>';
         } else {
-            warList.innerHTML = [...data.warEntries].reverse().map(w => `
-                <div style="display:flex;align-items:center;gap:10px;padding:6px 0;border-top:1px solid var(--line);">
-                    <span style="flex:1;">${esc(w.label)} <span style="color:var(--muted);font-size:12px;">${esc(w.date)}</span></span>
-                    <span style="font-family:var(--mono);color:var(--reagent);">+${Number(w.amount).toLocaleString()}</span>
-                    <button class="ghost small rg-war-remove" data-id="${esc(w.id)}">Remove</button>
-                </div>`).join('');
+            warList.innerHTML = `
+                <div class="ocfit-scenario collapsed" data-collapse="rg-wars">
+                    <div class="ocfit-scenario-header">
+                        <span>Logged war entries (${data.warEntries.length})</span>
+                        <span class="chev">▾</span>
+                    </div>
+                    <div class="ocfit-scenario-body">${[...data.warEntries].reverse().map(w => `
+                        <div style="display:flex;align-items:center;gap:10px;padding:6px 0;border-top:1px solid var(--line);">
+                            <span style="flex:1;">${esc(w.label)} <span style="color:var(--muted);font-size:12px;">${esc(w.date)}</span></span>
+                            <span style="font-family:var(--mono);color:var(--reagent);">+${Number(w.amount).toLocaleString()}</span>
+                            <button class="ghost small rg-war-remove" data-id="${esc(w.id)}">Remove</button>
+                        </div>`).join('')}
+                    </div>
+                </div>`;
+            warList.querySelector('.ocfit-scenario-header').addEventListener('click', () => {
+                warList.querySelector('.ocfit-scenario').classList.toggle('collapsed');
+            });
             warList.querySelectorAll('.rg-war-remove').forEach(btn => {
                 btn.addEventListener('click', async () => {
                     await respectFetch({ action: 'remove-war-entry', id: btn.dataset.id });
@@ -174,7 +174,7 @@ async function loadRespectEditor() {
         }
 
         rgLastData = data; // stashed for the date-range filter below, no need to refetch
-        const daily = respectComputeDaily(data.snapshots, data.ocDaily, data.chainDaily, data.hitsDaily, data.warBonusDaily, data.warEntries);
+        const daily = respectComputeDaily(data.ocDaily, data.chainDaily, data.hitsDaily, data.warBonusDaily, data.warEntries);
         rgLastDaily = daily;
         renderRgDailyTable(daily);
     } catch (e) {
@@ -194,17 +194,15 @@ function renderRgDailyTable(daily) {
                 <th style="padding:4px 8px;">Date</th><th style="padding:4px 8px;">Total gain</th>
                 <th style="padding:4px 8px;">OC</th><th style="padding:4px 8px;">Chains</th>
                 <th style="padding:4px 8px;">Hits</th><th style="padding:4px 8px;">War</th>
-                <th style="padding:4px 8px;">Other</th>
             </tr></thead>
             <tbody>${daily.map(d => `
                 <tr style="border-top:1px solid var(--line);">
                     <td style="padding:4px 8px;">${esc(d.date)}</td>
-                    <td style="padding:4px 8px;font-family:var(--mono);${d.totalIsExact ? '' : 'color:var(--muted);font-style:italic;'}" title="${d.totalIsExact ? 'Confirmed from daily snapshots' : 'Estimated — sum of known categories only, no snapshot pair for this date to confirm the real total'}">${d.totalGain.toLocaleString()}${d.totalIsExact ? '' : ' ≈'}</td>
+                    <td style="padding:4px 8px;font-family:var(--mono);font-weight:700;">${d.totalGain.toLocaleString()}</td>
                     <td style="padding:4px 8px;font-family:var(--mono);color:var(--muted);">${d.oc.toLocaleString()}</td>
                     <td style="padding:4px 8px;font-family:var(--mono);color:var(--muted);">${d.chains.toLocaleString()}</td>
                     <td style="padding:4px 8px;font-family:var(--mono);color:var(--muted);">${d.hits.toLocaleString()}</td>
                     <td style="padding:4px 8px;font-family:var(--mono);color:var(--muted);">${d.war.toLocaleString()}</td>
-                    <td style="padding:4px 8px;font-family:var(--mono);">${d.other != null ? d.other.toLocaleString() : '—'}</td>
                 </tr>`).join('')}
             </tbody>
         </table>`;
@@ -213,23 +211,17 @@ function renderRgDailyTable(daily) {
 let rgLastData = null;
 let rgLastDaily = [];
 
-// Computing the true total for a range needs a real snapshot at both ends — otherwise it falls
-// back to summing whatever's known per day, same "≈" honesty as the daily table.
-function respectRangeSummary(data, daily, fromDate, toDate) {
+// Total for a range is always the sum of the log-based daily categories now — snapshot diffing
+// was reported as unreliable day to day, so it's no longer used anywhere in this tracker.
+function respectRangeSummary(daily, fromDate, toDate) {
     const inRange = daily.filter(d => d.date >= fromDate && d.date <= toDate);
     const oc = inRange.reduce((s, d) => s + d.oc, 0);
     const chains = inRange.reduce((s, d) => s + d.chains, 0);
     const hits = inRange.reduce((s, d) => s + d.hits, 0);
     const war = inRange.reduce((s, d) => s + d.war, 0);
-    const knownSum = oc + chains + hits + war;
+    const totalGain = oc + chains + hits + war;
 
-    const dayBeforeFrom = new Date(fromDate); dayBeforeFrom.setDate(dayBeforeFrom.getDate() - 1);
-    const startKey = dayBeforeFrom.toISOString().slice(0, 10);
-    const hasExactRange = data.snapshots[startKey] != null && data.snapshots[toDate] != null;
-    const totalGain = hasExactRange ? data.snapshots[toDate] - data.snapshots[startKey] : knownSum;
-    const other = hasExactRange ? totalGain - knownSum : null;
-
-    return { totalGain, totalIsExact: hasExactRange, oc, chains, hits, war, other, days: inRange.length };
+    return { totalGain, oc, chains, hits, war, days: inRange.length };
 }
 
 $('rg-save').addEventListener('click', async () => {
@@ -287,17 +279,16 @@ $('rg-range-show').addEventListener('click', () => {
     if (!from || !to) { resultEl.innerHTML = '<p style="color:var(--danger);font-size:13px;">Pick both a start and end date.</p>'; return; }
     if (!rgLastData) { resultEl.innerHTML = '<p style="color:var(--muted);font-size:13px;">Data still loading — try again in a moment.</p>'; return; }
 
-    const s = respectRangeSummary(rgLastData, rgLastDaily, from, to);
+    const s = respectRangeSummary(rgLastDaily, from, to);
     resultEl.innerHTML = `
         <div style="display:flex;gap:16px;flex-wrap:wrap;margin-top:10px;padding:10px 12px;background:var(--bench-2);border-radius:var(--radius);">
-            <div><div style="font-size:11px;color:var(--muted);">Total gain${s.totalIsExact ? '' : ' (≈ estimate)'}</div><div style="font-family:var(--mono);font-size:16px;font-weight:700;">${s.totalGain.toLocaleString()}</div></div>
+            <div><div style="font-size:11px;color:var(--muted);">Total gain</div><div style="font-family:var(--mono);font-size:16px;font-weight:700;">${s.totalGain.toLocaleString()}</div></div>
             <div><div style="font-size:11px;color:var(--muted);">OC</div><div style="font-family:var(--mono);">${s.oc.toLocaleString()}</div></div>
             <div><div style="font-size:11px;color:var(--muted);">Chains</div><div style="font-family:var(--mono);">${s.chains.toLocaleString()}</div></div>
             <div><div style="font-size:11px;color:var(--muted);">Hits</div><div style="font-family:var(--mono);">${s.hits.toLocaleString()}</div></div>
             <div><div style="font-size:11px;color:var(--muted);">War</div><div style="font-family:var(--mono);">${s.war.toLocaleString()}</div></div>
-            <div><div style="font-size:11px;color:var(--muted);">Other</div><div style="font-family:var(--mono);">${s.other != null ? s.other.toLocaleString() : '—'}</div></div>
         </div>
-        <p style="font-size:11px;color:var(--muted);margin-top:6px;">${esc(from)} to ${esc(to)} · ${s.days} day${s.days === 1 ? '' : 's'} with data${s.totalIsExact ? '' : ' · no snapshot at both ends of this range, so Total gain is an estimate from known categories only'}</p>`;
+        <p style="font-size:11px;color:var(--muted);margin-top:6px;">${esc(from)} to ${esc(to)} · ${s.days} day${s.days === 1 ? '' : 's'} with data</p>`;
 });
 
 // One button runs every tracked source's regular sync (single page each) in one go.
