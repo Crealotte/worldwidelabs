@@ -3,12 +3,17 @@
 // goToPage restoring whatever page was last open) — so everything else has to exist first.
 'use strict';
 
-    // Auto-login with a stored key.
-    // Only a genuinely bad key (Torn error code 2 — incorrect key) should force a full re-login.
-    // Anything else (rate limiting, a fed-jail/inactivity/paused key, or a plain network hiccup on
-    // refresh) is temporary and the same stored key will work again shortly — so keep it and let
-    // the person retry with one click instead of silently wiping their login.
-    if (apiKey) {
+    // A war payout receipt is meant to be genuinely public — shareable with anyone, including
+    // people with no Torn account at all, not just logged-in faction members. So this skips the
+    // entire login flow when a receipt link is opened: no key needed, no session, nothing.
+    const receiptId = new URLSearchParams(window.location.search).get('receipt');
+    if (receiptId) {
+        $('login-view').style.display = 'none';
+        $('app-view').style.display = 'block';
+        document.querySelector('nav.side').style.display = 'none'; // irrelevant without a real login
+        goToPage('payout-receipt');
+        loadPayoutReceipt(receiptId);
+    } else if (apiKey) {
         login(apiKey).catch(async e => {
             if (e.tornCode === 2) {
                 localStorage.removeItem(KEY_STORAGE);
