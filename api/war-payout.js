@@ -44,10 +44,9 @@ module.exports = async function handler(req, res) {
         }
         if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
         const { key, action } = req.body || {};
-        if (!key) return res.status(400).json({ error: 'Missing key' });
 
-        // Receipts are readable by anyone with the link — no leader check, matches the "send a
-        // receipt to members" use case directly.
+        // Receipts are readable by anyone with the link — genuinely public, no key or login
+        // required, since the whole point is being shareable outside the faction too.
         if (action === 'get-receipt') {
             const { id } = req.body;
             if (!id) return res.status(400).json({ error: 'Missing id' });
@@ -55,6 +54,8 @@ module.exports = async function handler(req, res) {
             if (!raw) return res.status(404).json({ error: 'Receipt not found — the link may be wrong, or it may have been generated on a different deployment.' });
             return res.status(200).json({ receipt: JSON.parse(raw) });
         }
+
+        if (!key) return res.status(400).json({ error: 'Missing key' });
 
         const factionId = await getFactionId(key);
         if (!factionId) return res.status(403).json({ error: 'Could not determine your faction from this key' });
