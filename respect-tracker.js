@@ -58,9 +58,18 @@ function respectComputeDaily(ocDaily, chainDaily, hitsDaily, warBonusDaily, warE
 
 // Average weekly gain from the log-based daily totals — needs at least a few days of data,
 // otherwise there's genuinely not enough history yet for a meaningful pace estimate.
+// Deliberately only looks at a recent window (last 14 days) rather than the entire available
+// history: a "current pace" projection should reflect current behavior, not a lifetime average —
+// and older days are more likely to carry incomplete backfill data or since-fixed bugs, which
+// could otherwise drag the whole average down (or up) without reflecting anything real about
+// recent performance.
 function respectWeeklyRate(dailyRows) {
-    if (dailyRows.length < 2) return null;
-    const sorted = [...dailyRows].sort((a, b) => a.date.localeCompare(b.date));
+    const cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() - 14);
+    const cutoffStr = cutoff.toISOString().slice(0, 10);
+    const recent = dailyRows.filter(r => r.date >= cutoffStr);
+    if (recent.length < 2) return null;
+    const sorted = [...recent].sort((a, b) => a.date.localeCompare(b.date));
     const first = sorted[0].date, last = sorted[sorted.length - 1].date;
     const days = (new Date(last) - new Date(first)) / 86400000;
     if (days < 1) return null;
@@ -423,4 +432,3 @@ $('rg-reset-war-bonus').addEventListener('click', async () => {
         btn.disabled = false; btn.textContent = 'Reset war bonus tracking';
     }
 });
-
