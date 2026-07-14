@@ -264,7 +264,7 @@ function wpCompute() {
         const penalty = wpPenalties[m.id] || 0;
         const net = Math.max(0, gross - penalty);
         return { ...m, warPay, overflowPay, gross, penalty, net };
-    });
+    }).sort((a, b) => b.net - a.net);
 
     const subSplit = cfg.isSubFaction ? {
         theirLeadership: netPool * 0.05,
