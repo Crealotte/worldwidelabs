@@ -7,6 +7,7 @@ let wpSelectedWar = null; // optional — just for opponent name context on the 
 let wpChains = []; // { id, totalHits }
 let wpCalcResult = null; // { members: [...] }
 let wpPenalties = {}; // memberId -> amount
+let wpPaidIds = new Set(); // memberId -> marked as paid this session
 let wpCosts = []; // { label, amount }
 
 async function wpFetch(body) {
@@ -125,6 +126,7 @@ $('wp-calculate').addEventListener('click', async () => {
         if (result.error) throw new Error(result.error);
         wpCalcResult = result;
         wpPenalties = {};
+        wpPaidIds = new Set();
         if (result.chains) {
             for (const c of result.chains) {
                 const match = wpChains.find(x => x.id === c.id);
@@ -306,19 +308,25 @@ function renderWpPayout() {
                 <th style="padding:4px 8px;">Gross</th><th style="padding:4px 8px;">Penalty</th>
                 <th style="padding:4px 8px;">Net pay</th><th style="padding:4px 8px;"></th>
             </tr></thead>
-            <tbody>${computed.rows.map(r => `
-                <tr style="border-top:1px solid var(--line);">
-                    <td style="padding:4px 8px;">${esc(r.name)}</td>
+            <tbody>${computed.rows.map(r => {
+                const isPaid = wpPaidIds.has(r.id);
+                return `
+                <tr class="wp-payout-row" data-id="${esc(r.id)}" style="border-top:1px solid var(--line);${isPaid ? 'background:rgba(90,200,140,.08);' : ''}">
+                    <td style="padding:4px 8px;${isPaid ? 'color:var(--muted);' : ''}">${isPaid ? '✓ ' : ''}${esc(r.name)}</td>
                     <td style="padding:4px 8px;font-family:var(--mono);font-size:12px;color:var(--muted);">
                         ${r.warHits} war @ $${Math.round(computed.warRate).toLocaleString()} = $${Math.round(r.warPay).toLocaleString()}${r.overflowHits ? `<br>${r.overflowHits} chain @ $${Math.round(computed.overflowRate).toLocaleString()} = $${Math.round(r.overflowPay).toLocaleString()}` : ''}
                     </td>
                     <td style="padding:4px 8px;font-family:var(--mono);">$${Math.round(r.gross).toLocaleString()}</td>
                     <td style="padding:4px 8px;"><input type="text" inputmode="decimal" class="wp-penalty-input" data-id="${esc(r.id)}" value="${r.penalty || ''}" placeholder="0" style="width:80px;font-size:12px;padding:4px 6px;"></td>
                     <td style="padding:4px 8px;font-family:var(--mono);font-weight:700;color:var(--reagent);">$${Math.round(r.net).toLocaleString()}</td>
-                    <td style="padding:4px 8px;"><button class="ghost small wp-pay-btn" data-id="${esc(r.id)}" data-amount="${Math.round(r.net)}">Pay</button></td>
-                </tr>`).join('')}
+                    <td style="padding:4px 8px;"><a href="https://www.torn.com/factions.php?step=your#/tab=controls&addMoneyTo=${esc(r.id)}&money=${Math.round(r.net)}"
+                            target="_blank" rel="noopener" class="ghost small wp-pay-btn" data-id="${esc(r.id)}"
+                            style="display:inline-block;text-decoration:none;">${isPaid ? 'Paid ✓' : 'Pay'}</a></td>
+                </tr>`;
+            }).join('')}
             </tbody>
-        </table>`;
+        </table>
+        <p style="font-size:11px;color:var(--muted);margin-top:8px;">Tip: Ctrl/Cmd-click (or middle-click) "Pay" to open it in a background tab without leaving this page — handy for paying several people in a row.</p>`;
 
     el.querySelectorAll('.wp-penalty-input').forEach(inp => {
         inp.addEventListener('change', () => {
@@ -329,8 +337,13 @@ function renderWpPayout() {
     });
     el.querySelectorAll('.wp-pay-btn').forEach(btn => {
         btn.addEventListener('click', () => {
-            const url = `https://www.torn.com/factions.php?step=your#/tab=controls&addMoneyTo=${btn.dataset.id}&money=${btn.dataset.amount}`;
-            window.open(url, '_blank');
+            wpPaidIds.add(btn.dataset.id);
+            const row = btn.closest('.wp-payout-row');
+            const nameCell = row.querySelector('td');
+            row.style.background = 'rgba(90,200,140,.08)';
+            nameCell.textContent = '✓ ' + nameCell.textContent;
+            nameCell.style.color = 'var(--muted)';
+            btn.textContent = 'Paid ✓';
         });
     });
 }
