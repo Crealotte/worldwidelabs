@@ -106,17 +106,11 @@
         await pingTracker();
         checkFactionAccess();
 
-        const receiptId = new URLSearchParams(window.location.search).get('receipt');
-        if (receiptId) {
-            goToPage('payout-receipt');
-            loadPayoutReceipt(receiptId);
-        } else {
-            const lastPage = sessionStorage.getItem(CURRENT_PAGE_KEY) || 'dashboard';
-            const navItem = document.querySelector(`.nav-item[data-page="${lastPage}"]`);
-            const parentGroup = navItem?.closest('.nav-group');
-            if (parentGroup) parentGroup.classList.remove('collapsed'); // reveal it even if its group was left collapsed
-            goToPage(lastPage);
-        }
+        const lastPage = sessionStorage.getItem(CURRENT_PAGE_KEY) || 'dashboard';
+        const navItem = document.querySelector(`.nav-item[data-page="${lastPage}"]`);
+        const parentGroup = navItem?.closest('.nav-group');
+        if (parentGroup) parentGroup.classList.remove('collapsed'); // reveal it even if its group was left collapsed
+        goToPage(lastPage);
         loadAnnouncement();
         loadPolls();
     }
