@@ -416,6 +416,7 @@
                 <div class="nav-item" data-page="ocfit-team">OC Team Builder</div>
                 <div class="nav-item" data-page="respect-edit">Respect Tracker</div>
                 <div class="nav-item" data-page="war-payout">War Payout</div>
+                <div class="nav-item" data-page="extended-search">Extended Search</div>
             </div>
         </div>
 
@@ -921,7 +922,68 @@
             </div>
         </section>
 
-        <!-- ========== OVERSEAS STOCK ========== -->
+        <!-- ========== EXTENDED SEARCH (leadership only) ========== -->
+        <section class="page" id="page-extended-search">
+            <div class="lab-label">WWL·11 / leadership tools</div>
+            <h2>Extended Search</h2>
+            <p class="pagedesc">
+                Same FFScouter-powered search as Target Finder, plus filters FFScouter doesn't support —
+                account age and faction status — checked against each candidate's real Torn profile. Slower
+                than a normal search since that's an extra live lookup per result, which is exactly why this
+                stays a leadership tool rather than something every member reaches for.
+            </p>
+
+            <div class="panel" id="es-locked" style="display:none;">
+                <h3>🔒 Leaders only</h3>
+                <p style="color:var(--muted);line-height:1.6;margin:0;">This tool is restricted to faction leadership.</p>
+            </div>
+
+            <div id="es-tool" style="display:none;">
+                <div class="panel">
+                    <h3>Search</h3>
+                    <div class="grid3">
+                        <div class="field"><label for="es-minlevel">Min level</label><input type="number" id="es-minlevel" value="1" min="1" max="100"></div>
+                        <div class="field"><label for="es-maxlevel">Max level</label><input type="number" id="es-maxlevel" value="100" min="1" max="100"></div>
+                        <div class="field"><label for="es-limit">Results (max 50)</label><input type="number" id="es-limit" value="20" min="1" max="50"></div>
+                        <div class="field"><label for="es-minff">Min Fair Fight</label><input type="number" id="es-minff" value="1.00" min="1" max="3" step="0.01"></div>
+                        <div class="field"><label for="es-maxff">Max Fair Fight</label><input type="number" id="es-maxff" value="3.00" min="1" max="3" step="0.01"></div>
+                    </div>
+                    <div class="row" style="display:flex;gap:18px;margin:6px 0 14px;flex-wrap:wrap;">
+                        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin:0;">
+                            <input type="checkbox" id="es-inactive" style="width:auto;"> Inactive only (14+ days)
+                        </label>
+                        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin:0;">
+                            <input type="checkbox" id="es-factionless" style="width:auto;"> Factionless only
+                        </label>
+                    </div>
+                    <div class="field" style="max-width:260px;">
+                        <label for="es-faction-status">Faction status</label>
+                        <select id="es-faction-status">
+                            <option value="any">Any</option>
+                            <option value="in">In a faction only</option>
+                        </select>
+                    </div>
+                    <div class="grid3" style="margin-top:10px;">
+                        <div class="field"><label for="es-minage">Min account age (days)</label><input type="number" id="es-minage" placeholder="none" min="0"></div>
+                        <div class="field"><label for="es-maxage">Max account age (days)</label><input type="number" id="es-maxage" placeholder="none" min="0"></div>
+                    </div>
+                    <p id="es-refine-note" style="color:var(--muted);font-size:11px;margin:4px 0 10px;display:none;">Account age and "in a faction only" run as an extra pass afterward, checking each candidate's real Torn profile one at a time — results may take a bit longer and the final count may be lower than the requested limit.</p>
+                    <button id="es-search-btn">Search</button>
+                    <div class="status" id="es-status"></div>
+                </div>
+
+                <div class="panel" id="es-results-panel" style="display:none;">
+                    <h3>Results</h3>
+                    <div class="table-scroll">
+                        <table>
+                            <thead><tr><th>Player</th><th>Level</th><th>Fair Fight</th><th>Est. stats</th><th>Last action</th><th></th></tr></thead>
+                            <tbody id="es-results-body"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </section>
+
         <section class="page" id="page-foreign-stock">
             <div class="lab-label">WWL·07 / overseas stock</div>
             <h2>Overseas Stock</h2>
@@ -1078,10 +1140,28 @@
 
             <div id="tf-tool" style="display:none;">
                 <div class="panel">
-                    <div class="row" style="display:flex;gap:12px;">
+                    <div class="row" style="display:flex;gap:12px;flex-wrap:wrap;">
+                        <button id="tf-mode-respect" class="ghost" style="flex:1;">Respect preset</button>
+                        <button id="tf-mode-level" class="ghost" style="flex:1;">Level preset</button>
                         <button id="tf-mode-custom" class="ghost" style="flex:1;">Custom search</button>
                         <button id="tf-mode-manual" class="ghost" style="flex:1;">Manual list</button>
                     </div>
+                </div>
+
+                <div class="panel" id="tf-respect-panel" style="display:none;">
+                    <h3>Respect preset</h3>
+                    <p style="color:var(--muted);font-size:12px;margin:0 0 10px;">Optimized for maximum respect per attack — fair fight locked to 2.00–3.00, inactive players only (14+ days), sorted by battle stats.</p>
+                    <div class="field" style="max-width:160px;"><label for="tf-respect-limit">Results (max 50)</label><input type="number" id="tf-respect-limit" value="20" min="1" max="50"></div>
+                    <button id="tf-respect-btn">Search</button>
+                    <div class="status" id="tf-respect-status"></div>
+                </div>
+
+                <div class="panel" id="tf-level-panel" style="display:none;">
+                    <h3>Level preset</h3>
+                    <p style="color:var(--muted);font-size:12px;margin:0 0 10px;">Optimized for levelling/XP — fair fight capped at 3.00, no minimum, sorted by level (highest first).</p>
+                    <div class="field" style="max-width:160px;"><label for="tf-level-limit">Results (max 50)</label><input type="number" id="tf-level-limit" value="20" min="1" max="50"></div>
+                    <button id="tf-level-btn">Search</button>
+                    <div class="status" id="tf-level-status"></div>
                 </div>
 
                 <div class="panel" id="tf-custom-panel" style="display:none;">
@@ -1155,6 +1235,7 @@
 <script src="respect-tracker.js"></script>
 <script src="crimes-guide.js"></script>
 <script src="war-payout-tracker.js"></script>
+<script src="extended-search.js"></script>
 <script src="app-init.js"></script>
 </body>
 </html>
