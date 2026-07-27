@@ -74,17 +74,52 @@
 
     function selectTfMode(mode) {
         tfMode = mode;
-        $('tf-mode-custom').style.borderColor = mode === 'custom' ? 'var(--reagent)' : 'var(--line)';
-        $('tf-mode-custom').style.color = mode === 'custom' ? 'var(--reagent)' : 'var(--text)';
-        $('tf-mode-manual').style.borderColor = mode === 'manual' ? 'var(--reagent)' : 'var(--line)';
-        $('tf-mode-manual').style.color = mode === 'manual' ? 'var(--reagent)' : 'var(--text)';
-        $('tf-custom-panel').style.display = mode === 'custom' ? 'block' : 'none';
-        $('tf-manual-panel').style.display = mode === 'manual' ? 'block' : 'none';
+        const modes = ['respect', 'level', 'custom', 'manual'];
+        modes.forEach(m => {
+            const btn = $(`tf-mode-${m}`);
+            btn.style.borderColor = mode === m ? 'var(--reagent)' : 'var(--line)';
+            btn.style.color = mode === m ? 'var(--reagent)' : 'var(--text)';
+            $(`tf-${m}-panel`).style.display = mode === m ? 'block' : 'none';
+        });
         $('tf-results-panel').style.display = 'none';
         stopTfLive();
     }
+    $('tf-mode-respect').addEventListener('click', () => selectTfMode('respect'));
+    $('tf-mode-level').addEventListener('click', () => selectTfMode('level'));
     $('tf-mode-custom').addEventListener('click', () => selectTfMode('custom'));
     $('tf-mode-manual').addEventListener('click', () => selectTfMode('manual'));
+
+    // ---- Preset searches: GET /get-targets?preset=respect|level ----
+    // Presets only accept "key" and "limit" — Torn-side validation rejects any other parameter
+    // when a preset is set, so these stay deliberately minimal.
+    async function runTfPreset(preset, limitElId, statusElId, btnElId) {
+        const btn = $(btnElId);
+        btn.disabled = true; btn.textContent = 'Searching…';
+        tfStatus(statusElId, '');
+        try {
+            const params = new URLSearchParams({
+                key: apiKey,
+                preset,
+                limit: Math.min(50, Math.max(1, parseInt($(limitElId).value, 10) || 20)),
+            });
+            const res = await fetch(`${FF_API}/get-targets?${params.toString()}`);
+            const data = await res.json();
+            if (data.error) throw new Error(data.error);
+            const rows = (data.targets || []).map(t => ({
+                id: t.player_id, name: t.name || `User #${t.player_id}`, level: t.level,
+                ff: t.fair_fight, estHuman: t.bs_estimate_human,
+                state: null, until: null, lastAction: t.last_action,
+            }));
+            renderTfResults(rows);
+            tfStatus(statusElId, `${rows.length} target(s) found.`, false);
+        } catch (e) {
+            tfStatus(statusElId, e.message, true);
+        } finally {
+            btn.disabled = false; btn.textContent = 'Search';
+        }
+    }
+    $('tf-respect-btn').addEventListener('click', () => runTfPreset('respect', 'tf-respect-limit', 'tf-respect-status', 'tf-respect-btn'));
+    $('tf-level-btn').addEventListener('click', () => runTfPreset('level', 'tf-level-limit', 'tf-level-status', 'tf-level-btn'));
 
     function tfStatus(elId, msg, isErr) {
         const el = $(elId);
