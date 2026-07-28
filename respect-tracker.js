@@ -58,16 +58,19 @@ function respectComputeDaily(ocDaily, chainDaily, hitsDaily, warBonusDaily, warE
 
 // Average weekly gain from the log-based daily totals — needs at least a few days of data,
 // otherwise there's genuinely not enough history yet for a meaningful pace estimate.
-// Deliberately only looks at a recent window (last 14 days) rather than the entire available
-// history: a "current pace" projection should reflect current behavior, not a lifetime average —
-// and older days are more likely to carry incomplete backfill data or since-fixed bugs, which
-// could otherwise drag the whole average down (or up) without reflecting anything real about
-// recent performance.
+// Deliberately excludes the most recent 7 days rather than including them: today's total is
+// always incomplete (the day isn't over yet), and even yesterday can still be catching up if
+// a "Dig deeper" backfill hasn't been run recently — including that window would systematically
+// understate the real pace. Uses the 14 days before that instead (day 8 through day 21 back),
+// which should be settled, complete data by the time it's read.
 function respectWeeklyRate(dailyRows) {
-    const cutoff = new Date();
-    cutoff.setDate(cutoff.getDate() - 14);
-    const cutoffStr = cutoff.toISOString().slice(0, 10);
-    const recent = dailyRows.filter(r => r.date >= cutoffStr);
+    const windowEnd = new Date();
+    windowEnd.setDate(windowEnd.getDate() - 7);
+    const windowStart = new Date();
+    windowStart.setDate(windowStart.getDate() - 21);
+    const endStr = windowEnd.toISOString().slice(0, 10);
+    const startStr = windowStart.toISOString().slice(0, 10);
+    const recent = dailyRows.filter(r => r.date >= startStr && r.date < endStr);
     if (recent.length < 2) return null;
     const sorted = [...recent].sort((a, b) => a.date.localeCompare(b.date));
     const first = sorted[0].date, last = sorted[sorted.length - 1].date;
@@ -122,7 +125,7 @@ async function loadRespectGoalPanel() {
                     ? ` — <span style="color:var(--reagent);">on track for your ${esc(new Date(deadline).toLocaleDateString(undefined, { day: '2-digit', month: 'short' }))} deadline</span>`
                     : ` — <span style="color:var(--danger);">behind your ${esc(new Date(deadline).toLocaleDateString(undefined, { day: '2-digit', month: 'short' }))} deadline at this pace</span>`;
             }
-            etaLine = `At ~${Math.round(weeklyRate).toLocaleString()} respect/week, projected: <b>${projectedStr}</b>${deadlineNote}`;
+            etaLine = `At ~${Math.round(weeklyRate).toLocaleString()} respect/week <span style="color:var(--muted);font-size:11px;">(based on 2 weeks ago, excluding the last 7 days)</span>, projected: <b>${projectedStr}</b>${deadlineNote}`;
         }
 
         $('respect-goal-panel').style.display = 'block';
