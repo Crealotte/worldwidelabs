@@ -153,7 +153,6 @@
             setNavLock('ocfit-team', false);
             setNavLock('respect-edit', false);
             setNavLock('war-payout', false);
-            setNavLock('extended-search', false);
             loadAdoption();
             loadFactionSharing();
             loadRespectGoalPanel();
@@ -164,7 +163,6 @@
             setNavLock('ocfit-team', true);
             setNavLock('respect-edit', true);
             setNavLock('war-payout', true);
-            setNavLock('extended-search', true);
         }
         if (document.querySelector('.nav-item[data-page="announce-edit"]').classList.contains('active')) {
             $('announce-locked').style.display = isLeaderCached ? 'none' : 'block';
@@ -276,10 +274,6 @@
             $('announce-locked').style.display = isLeaderCached ? 'none' : 'block';
             $('announce-editor').style.display = isLeaderCached ? 'block' : 'none';
             if (isLeaderCached) { loadAnnouncementEditor(); loadPollEditor(); }
-        }
-        if (page === 'extended-search') {
-            $('es-locked').style.display = isLeaderCached ? 'none' : 'block';
-            $('es-tool').style.display = isLeaderCached ? 'block' : 'none';
         }
     }
 
