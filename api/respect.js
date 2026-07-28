@@ -27,8 +27,9 @@
 // POST { key, action: 'read' }                       -> anyone: full history + goal + daily breakdown
 // POST { key, action: 'add-war-entry', date, amount, label } -> leader-only
 // POST { key, action: 'remove-war-entry', id }       -> leader-only
-// POST { key, action: 'set-goal', target, deadline, label }  -> leader-only
-// POST { key, action: 'clear-goal' }                 -> leader-only
+// POST { key, action: 'set-goal', target, deadline, label }  -> leader-only: adds a new goal
+//                                                                to the list (multiple goals supported)
+// POST { key, action: 'remove-goal', id }                    -> leader-only
 
 const REDIS_URL = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL;
 const REDIS_TOKEN = process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN;
@@ -80,6 +81,7 @@ const warEntriesKey = (factionId) => `wwl:war-respect:${factionId}`; // manual e
 const warBonusDailyKey = (factionId) => `wwl:war-bonus-daily:${factionId}`; // auto-tracked
 const warBonusSeenKey = (factionId) => `wwl:war-bonus-seen:${factionId}`;
 const goalKey = (factionId) => `wwl:respect-goal:${factionId}`;
+const windowKey = (factionId) => `wwl:respect-window:${factionId}`; // pace calculation window in days (14/21/28)
 
 function todayKey() { return new Date().toISOString().slice(0, 10); }
 
@@ -468,13 +470,14 @@ module.exports = async function handler(req, res) {
         const factionId = factionResult.factionId;
 
         if (action === 'read') {
-            const [ocDailyRaw, chainDailyRaw, hitsDailyRaw, warBonusDailyRaw, warRaw, goalRaw] = await Promise.all([
+            const [ocDailyRaw, chainDailyRaw, hitsDailyRaw, warBonusDailyRaw, warRaw, goalRaw, windowRaw] = await Promise.all([
                 redis(['GET', ocDailyKey(factionId)]),
                 redis(['GET', chainDailyKey(factionId)]),
                 redis(['GET', hitsDailyKey(factionId)]),
                 redis(['GET', warBonusDailyKey(factionId)]),
                 redis(['GET', warEntriesKey(factionId)]),
                 redis(['GET', goalKey(factionId)]),
+                redis(['GET', windowKey(factionId)]),
             ]);
             return res.status(200).json({
                 ocDaily: ocDailyRaw ? JSON.parse(ocDailyRaw) : {},
@@ -482,8 +485,16 @@ module.exports = async function handler(req, res) {
                 hitsDaily: hitsDailyRaw ? JSON.parse(hitsDailyRaw) : {},
                 warBonusDaily: warBonusDailyRaw ? JSON.parse(warBonusDailyRaw) : {},
                 warEntries: warRaw ? JSON.parse(warRaw) : [],
-                goal: goalRaw ? JSON.parse(goalRaw) : null,
+                goals: goalRaw ? JSON.parse(goalRaw) : [],
+                windowDays: windowRaw ? Number(windowRaw) : 14,
             });
+        }
+
+        if (action === 'set-window') {
+            const { windowDays } = req.body;
+            if (![14, 21, 28].includes(Number(windowDays))) return res.status(400).json({ error: 'windowDays must be 14, 21, or 28' });
+            await redis(['SET', windowKey(factionId), String(windowDays)]);
+            return res.status(200).json({ ok: true });
         }
 
         // Everything below is leaders only.
@@ -598,12 +609,21 @@ module.exports = async function handler(req, res) {
         if (action === 'set-goal') {
             const { target, deadline, label } = req.body;
             if (!target) return res.status(400).json({ error: 'Missing target' });
-            await redis(['SET', goalKey(factionId), JSON.stringify({ target: Number(target), deadline: deadline || null, label: label || 'Respect goal', setAt: Date.now() })]);
-            return res.status(200).json({ ok: true });
+            const raw = await redis(['GET', goalKey(factionId)]);
+            const goals = raw ? JSON.parse(raw) : [];
+            const id = Math.random().toString(36).slice(2, 10);
+            goals.push({ id, target: Number(target), deadline: deadline || null, label: label || 'Respect goal', setAt: Date.now() });
+            await redis(['SET', goalKey(factionId), JSON.stringify(goals)]);
+            return res.status(200).json({ ok: true, id });
         }
 
-        if (action === 'clear-goal') {
-            await redis(['DEL', goalKey(factionId)]);
+        if (action === 'remove-goal') {
+            const { id } = req.body;
+            if (!id) return res.status(400).json({ error: 'Missing id' });
+            const raw = await redis(['GET', goalKey(factionId)]);
+            const goals = raw ? JSON.parse(raw) : [];
+            const filtered = goals.filter(g => g.id !== id);
+            await redis(['SET', goalKey(factionId), JSON.stringify(filtered)]);
             return res.status(200).json({ ok: true });
         }
 
