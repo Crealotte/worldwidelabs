@@ -132,11 +132,35 @@
                         <div>
                             <b style="font-size:13px;">${esc(p.question)}</b>
                             ${i === 0 ? '<span class="badge" style="position:static;margin-left:8px;">Active</span>' : ''}
-                            <div style="color:var(--muted);font-size:11px;margin-top:2px;">${p.totalVotes || 0} vote${p.totalVotes === 1 ? '' : 's'} · created ${new Date(p.createdAt).toLocaleDateString()}</div>
+                            <div style="color:var(--muted);font-size:11px;margin-top:2px;">${p.totalVotes || 0} vote${p.totalVotes === 1 ? '' : 's'} · created ${new Date(p.createdAt).toLocaleDateString()}${p.closed ? ' · closed' : ''}</div>
                         </div>
-                        <button class="ghost small poll-delete" data-pollid="${esc(p.pollId)}">Delete</button>
+                        <div style="display:flex;gap:8px;">
+                            ${i === 0 && !p.closed ? `<button class="ghost small poll-close" data-pollid="${esc(p.pollId)}">Close vote</button>` : ''}
+                            <button class="ghost small poll-delete" data-pollid="${esc(p.pollId)}">Delete</button>
+                        </div>
                     </div>
                 </div>`).join('');
+
+            $('an-poll-list').querySelectorAll('.poll-close').forEach(btn => {
+                btn.addEventListener('click', async () => {
+                    if (!confirm('Close this vote now? No more votes will be accepted, and results become final.')) return;
+                    btn.disabled = true; btn.textContent = 'Closing…';
+                    try {
+                        const res = await fetch('/api/polls', {
+                            method: 'POST', headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ key: apiKey, action: 'close', pollId: btn.dataset.pollid }),
+                        });
+                        const result = await res.json();
+                        if (result.error) throw new Error(result.error);
+                        loadPollEditor();
+                        loadPolls();
+                        toast('Vote closed');
+                    } catch (e) {
+                        toast(e.message || 'Could not close the vote');
+                        btn.disabled = false; btn.textContent = 'Close vote';
+                    }
+                });
+            });
 
             $('an-poll-list').querySelectorAll('.poll-delete').forEach(btn => {
                 btn.addEventListener('click', async () => {
