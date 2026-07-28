@@ -56,21 +56,13 @@ function respectComputeDaily(ocDaily, chainDaily, hitsDaily, warBonusDaily, warE
     return rows.sort((a, b) => b.date.localeCompare(a.date)); // newest first
 }
 
-// Average weekly gain from the log-based daily totals — needs at least a few days of data,
-// otherwise there's genuinely not enough history yet for a meaningful pace estimate.
-// Deliberately excludes the most recent 7 days rather than including them: today's total is
-// always incomplete (the day isn't over yet), and even yesterday can still be catching up if
-// a "Dig deeper" backfill hasn't been run recently — including that window would systematically
-// understate the real pace. Uses the 14 days before that instead (day 8 through day 21 back),
-// which should be settled, complete data by the time it's read.
-function respectWeeklyRate(dailyRows) {
-    const windowEnd = new Date();
-    windowEnd.setDate(windowEnd.getDate() - 7);
+// Average weekly gain from the log-based daily totals — the trailing N days (14/21/28,
+// leader's choice), needs at least a couple of days of data to mean anything.
+function respectWeeklyRate(dailyRows, windowDays) {
     const windowStart = new Date();
-    windowStart.setDate(windowStart.getDate() - 21);
-    const endStr = windowEnd.toISOString().slice(0, 10);
+    windowStart.setDate(windowStart.getDate() - (windowDays || 14));
     const startStr = windowStart.toISOString().slice(0, 10);
-    const recent = dailyRows.filter(r => r.date >= startStr && r.date < endStr);
+    const recent = dailyRows.filter(r => r.date >= startStr);
     if (recent.length < 2) return null;
     const sorted = [...recent].sort((a, b) => a.date.localeCompare(b.date));
     const first = sorted[0].date, last = sorted[sorted.length - 1].date;
@@ -92,7 +84,7 @@ async function loadRespectGoalPanel() {
             totalRespect = syncResult?.totalRespect ?? null;
         }
         const data = await respectFetch({ action: 'read' });
-        if (data.error || !data.goal) { $('respect-goal-panel').style.display = 'none'; return; }
+        if (data.error || !data.goals || !data.goals.length) { $('respect-goal-panel').style.display = 'none'; return; }
         if (totalRespect == null) {
             // Already auto-synced earlier this session — get a fresh current total without
             // re-triggering the full sync again.
@@ -102,40 +94,44 @@ async function loadRespectGoalPanel() {
         if (totalRespect == null) { $('respect-goal-panel').style.display = 'none'; return; }
 
         const current = totalRespect;
-        const { target, deadline, label } = data.goal;
-        const pct = Math.max(0, Math.min(100, Math.round((current / target) * 100)));
         const dailyRows = respectComputeDaily(data.ocDaily, data.chainDaily, data.hitsDaily, data.warBonusDaily, data.warEntries);
-        const weeklyRate = respectWeeklyRate(dailyRows);
+        const weeklyRate = respectWeeklyRate(dailyRows, data.windowDays);
 
-        let etaLine;
-        if (current >= target) {
-            etaLine = `<span style="color:var(--reagent);">Goal reached! 🎉</span>`;
-        } else if (weeklyRate == null) {
-            etaLine = `<span style="color:var(--muted);">Not enough data yet for a pace estimate — check back in a few days.</span>`;
-        } else if (weeklyRate <= 0) {
-            etaLine = `<span style="color:var(--danger);">Respect isn't trending upward right now — no ETA available.</span>`;
-        } else {
-            const weeksNeeded = (target - current) / weeklyRate;
-            const projected = new Date(Date.now() + weeksNeeded * 7 * 86400000);
-            const projectedStr = projected.toLocaleDateString(undefined, { day: '2-digit', month: 'short', year: 'numeric' });
-            let deadlineNote = '';
-            if (deadline) {
-                const onTrack = projected <= new Date(deadline);
-                deadlineNote = onTrack
-                    ? ` — <span style="color:var(--reagent);">on track for your ${esc(new Date(deadline).toLocaleDateString(undefined, { day: '2-digit', month: 'short' }))} deadline</span>`
-                    : ` — <span style="color:var(--danger);">behind your ${esc(new Date(deadline).toLocaleDateString(undefined, { day: '2-digit', month: 'short' }))} deadline at this pace</span>`;
+        const cards = data.goals.map(({ target, deadline, label }) => {
+            const pct = Math.max(0, Math.min(100, Math.round((current / target) * 100)));
+            let etaLine;
+            if (current >= target) {
+                etaLine = `<span style="color:var(--reagent);">Goal reached! 🎉</span>`;
+            } else if (weeklyRate == null) {
+                etaLine = `<span style="color:var(--muted);">Not enough data yet for a pace estimate — check back in a few days.</span>`;
+            } else if (weeklyRate <= 0) {
+                etaLine = `<span style="color:var(--danger);">Respect isn't trending upward right now — no ETA available.</span>`;
+            } else {
+                const weeksNeeded = (target - current) / weeklyRate;
+                const projected = new Date(Date.now() + weeksNeeded * 7 * 86400000);
+                const projectedStr = projected.toLocaleDateString(undefined, { day: '2-digit', month: 'short', year: 'numeric' });
+                let deadlineNote = '';
+                if (deadline) {
+                    const onTrack = projected <= new Date(deadline);
+                    deadlineNote = onTrack
+                        ? ` — <span style="color:var(--reagent);">on track for your ${esc(new Date(deadline).toLocaleDateString(undefined, { day: '2-digit', month: 'short' }))} deadline</span>`
+                        : ` — <span style="color:var(--danger);">behind your ${esc(new Date(deadline).toLocaleDateString(undefined, { day: '2-digit', month: 'short' }))} deadline at this pace</span>`;
+                }
+                etaLine = `At ~${Math.round(weeklyRate).toLocaleString()} respect/week <span style="color:var(--muted);font-size:11px;">(based on the past ${data.windowDays || 14} days)</span>, projected: <b>${projectedStr}</b>${deadlineNote}`;
             }
-            etaLine = `At ~${Math.round(weeklyRate).toLocaleString()} respect/week <span style="color:var(--muted);font-size:11px;">(based on 2 weeks ago, excluding the last 7 days)</span>, projected: <b>${projectedStr}</b>${deadlineNote}`;
-        }
+            return `
+                <div style="margin-bottom:14px;">
+                    <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px;">
+                        <b>${esc(label)}</b>
+                        <span style="font-family:var(--mono);">${current.toLocaleString()} / ${target.toLocaleString()}</span>
+                    </div>
+                    <div class="bar-track"><div class="bar-fill" style="width:${pct}%;background:var(--reagent);"></div></div>
+                    <p style="font-size:12px;color:var(--muted);margin:8px 0 0;">${pct}% there · ${etaLine}</p>
+                </div>`;
+        });
 
         $('respect-goal-panel').style.display = 'block';
-        $('respect-goal-body').innerHTML = `
-            <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px;">
-                <b>${esc(label)}</b>
-                <span style="font-family:var(--mono);">${current.toLocaleString()} / ${target.toLocaleString()}</span>
-            </div>
-            <div class="bar-track"><div class="bar-fill" style="width:${pct}%;background:var(--reagent);"></div></div>
-            <p style="font-size:12px;color:var(--muted);margin:8px 0 0;">${pct}% there · ${etaLine}</p>`;
+        $('respect-goal-body').innerHTML = cards.join('<hr style="border:none;border-top:1px solid var(--line);margin:0 0 14px;">');
     } catch (e) {
         $('respect-goal-panel').style.display = 'none';
     }
@@ -150,10 +146,23 @@ async function loadRespectEditor() {
         const data = await respectFetch({ action: 'read' });
         if (data.error) throw new Error(data.error);
 
-        if (data.goal) {
-            $('rg-label').value = data.goal.label || '';
-            $('rg-target').value = data.goal.target || '';
-            $('rg-deadline').value = data.goal.deadline || '';
+        $('rg-window').value = String(data.windowDays || 14);
+
+        const goalList = $('rg-goal-list');
+        if (!data.goals || !data.goals.length) {
+            goalList.innerHTML = '<p style="color:var(--muted);font-size:13px;">No goals set yet.</p>';
+        } else {
+            goalList.innerHTML = [...data.goals].reverse().map(g => `
+                <div style="display:flex;align-items:center;gap:10px;padding:6px 0;border-top:1px solid var(--line);">
+                    <span style="flex:1;">${esc(g.label)} <span style="color:var(--muted);font-size:12px;">target ${Number(g.target).toLocaleString()}${g.deadline ? ` · by ${esc(g.deadline)}` : ''}</span></span>
+                    <button class="ghost small rg-goal-remove" data-id="${esc(g.id)}">Remove</button>
+                </div>`).join('');
+            goalList.querySelectorAll('.rg-goal-remove').forEach(btn => {
+                btn.addEventListener('click', async () => {
+                    await respectFetch({ action: 'remove-goal', id: btn.dataset.id });
+                    loadRespectEditor();
+                });
+            });
         }
 
         const warList = $('rg-war-list');
@@ -236,30 +245,30 @@ function respectRangeSummary(daily, fromDate, toDate) {
     return { totalGain, oc, chains, hits, war, days: inRange.length };
 }
 
+$('rg-window').addEventListener('change', async () => {
+    const result = await respectFetch({ action: 'set-window', windowDays: Number($('rg-window').value) });
+    if (!result.error) { toast('Pace window updated'); loadRespectGoalPanel(); }
+});
+
 $('rg-save').addEventListener('click', async () => {
     const btn = $('rg-save');
     const st = $('rg-status');
     const target = $('rg-target').value.trim();
     if (!target) { st.className = 'status err'; st.textContent = 'A target respect value is required.'; return; }
-    btn.disabled = true; btn.textContent = 'Saving…';
+    btn.disabled = true; btn.textContent = 'Adding…';
     try {
         const result = await respectFetch({
             action: 'set-goal', target, deadline: $('rg-deadline').value || null, label: $('rg-label').value.trim() || 'Respect goal',
         });
         if (result.error) throw new Error(result.error);
-        st.className = 'status ok'; st.textContent = 'Saved — live on everyone\'s dashboard now.';
+        $('rg-label').value = ''; $('rg-target').value = ''; $('rg-deadline').value = '';
+        st.className = 'status ok'; st.textContent = 'Added — live on everyone\'s dashboard now.';
+        loadRespectEditor();
     } catch (e) {
         st.className = 'status err'; st.textContent = e.message;
     } finally {
-        btn.disabled = false; btn.textContent = 'Save goal';
+        btn.disabled = false; btn.textContent = 'Add goal';
     }
-});
-
-$('rg-clear').addEventListener('click', async () => {
-    if (!confirm('Clear the current respect goal for everyone?')) return;
-    await respectFetch({ action: 'clear-goal' });
-    $('rg-label').value = ''; $('rg-target').value = ''; $('rg-deadline').value = '';
-    toast('Goal cleared');
 });
 
 $('rg-war-add').addEventListener('click', async () => {
@@ -435,3 +444,4 @@ $('rg-reset-war-bonus').addEventListener('click', async () => {
         btn.disabled = false; btn.textContent = 'Reset war bonus tracking';
     }
 });
+
