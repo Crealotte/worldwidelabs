@@ -83,6 +83,22 @@ const warBonusSeenKey = (factionId) => `wwl:war-bonus-seen:${factionId}`;
 const goalKey = (factionId) => `wwl:respect-goal:${factionId}`;
 const windowKey = (factionId) => `wwl:respect-window:${factionId}`; // pace calculation window in days (14/21/28)
 
+// Goals used to be stored as a single object ({target, deadline, label}) before multiple goals
+// were supported. Any faction that set a goal before that migration still has that old shape
+// sitting in Redis — parsing it and calling .push()/.filter() on it throws, since it's a plain
+// object, not an array. This migrates it into the new array format transparently.
+function normalizeGoals(raw) {
+    if (!raw) return [];
+    let parsed;
+    try { parsed = JSON.parse(raw); } catch (e) { return []; }
+    if (Array.isArray(parsed)) return parsed;
+    if (parsed && typeof parsed === 'object' && parsed.target != null) {
+        return [{ id: Math.random().toString(36).slice(2, 10), ...parsed }];
+    }
+    return [];
+}
+
+
 function todayKey() { return new Date().toISOString().slice(0, 10); }
 
 function normScenario(name) {
@@ -485,7 +501,7 @@ module.exports = async function handler(req, res) {
                 hitsDaily: hitsDailyRaw ? JSON.parse(hitsDailyRaw) : {},
                 warBonusDaily: warBonusDailyRaw ? JSON.parse(warBonusDailyRaw) : {},
                 warEntries: warRaw ? JSON.parse(warRaw) : [],
-                goals: goalRaw ? JSON.parse(goalRaw) : [],
+                goals: normalizeGoals(goalRaw),
                 windowDays: windowRaw ? Number(windowRaw) : 14,
             });
         }
@@ -610,7 +626,7 @@ module.exports = async function handler(req, res) {
             const { target, deadline, label } = req.body;
             if (!target) return res.status(400).json({ error: 'Missing target' });
             const raw = await redis(['GET', goalKey(factionId)]);
-            const goals = raw ? JSON.parse(raw) : [];
+            const goals = normalizeGoals(raw);
             const id = Math.random().toString(36).slice(2, 10);
             goals.push({ id, target: Number(target), deadline: deadline || null, label: label || 'Respect goal', setAt: Date.now() });
             await redis(['SET', goalKey(factionId), JSON.stringify(goals)]);
@@ -621,7 +637,7 @@ module.exports = async function handler(req, res) {
             const { id } = req.body;
             if (!id) return res.status(400).json({ error: 'Missing id' });
             const raw = await redis(['GET', goalKey(factionId)]);
-            const goals = raw ? JSON.parse(raw) : [];
+            const goals = normalizeGoals(raw);
             const filtered = goals.filter(g => g.id !== id);
             await redis(['SET', goalKey(factionId), JSON.stringify(filtered)]);
             return res.status(200).json({ ok: true });
