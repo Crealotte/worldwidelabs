@@ -19,14 +19,15 @@
 //
 // A war hit and an overflow hit can never be the same hit (chainreport's own total-minus-war
 // already excludes war hits), so summing the two sources never double-counts.
+//
+// The actual war-hit fetching lives in lib/warHits.js — a separate, self-contained piece, since
+// it's a genuinely different concern (talking to Torn's raw attack log) from the chain-report
+// handling and payout math below.
+
+const { fetchWarHits, sleep } = require('../lib/warHits');
 
 const REDIS_URL = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL;
 const REDIS_TOKEN = process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN;
-
-function sleep(ms) { return new Promise(resolve => setTimeout(resolve, ms)); }
-function isRateLimited(data) {
-    return data?.error?.code === 5 || /too many requests/i.test(data?.error?.error || '');
-}
 
 async function redis(command) {
     const res = await fetch(REDIS_URL, {
@@ -37,50 +38,6 @@ async function redis(command) {
     const data = await res.json();
     if (data.error) throw new Error(data.error);
     return data.result;
-}
-
-// Walks /v2/faction/attacks forward from the war's start to its end using a timestamp cursor
-// (same paging style api/respect.js already uses for attacksfull, just forward instead of
-// backward) and tallies, per attacker, how many of THEIR OWN outgoing attacks in that window
-// Torn itself flagged as counting toward the ranked war. Bounded to the war's own window, so
-// even a long war stays a handful of pages — capped generously as a safety net, not because it's
-// expected to be hit.
-async function fetchWarHits(key, factionId, warStart, warEnd) {
-    const perAttacker = {}; // attackerId -> { count, name }
-    let from = warStart;
-    let page = 0, scanned = 0, ownAttacks = 0, rateLimited = false;
-    const MAX_PAGES = 30;
-    while (from <= warEnd && page < MAX_PAGES) {
-        if (page > 0) await sleep(1100); // stay well clear of Torn's rate limit across a multi-page war
-        const r = await fetch(`https://api.torn.com/v2/faction/attacks?from=${from}&to=${warEnd}&sort=ASC&key=${encodeURIComponent(key)}`,
-            { headers: { accept: 'application/json' } });
-        const data = await r.json();
-        if (data.error) {
-            if (isRateLimited(data)) { rateLimited = true; break; }
-            throw new Error(`War attacks: ${data.error.error}`);
-        }
-        const list = Array.isArray(data.attacks) ? data.attacks : Object.values(data.attacks || {});
-        if (!list.length) break;
-        page++;
-
-        let newestTs = from;
-        for (const att of list) {
-            const ts = att.ended ?? att.timestamp_ended ?? att.started ?? att.timestamp_started ?? from;
-            if (ts > newestTs) newestTs = ts;
-            scanned++;
-            const attackerFaction = String(att.attacker?.faction?.id ?? att.attacker_faction ?? '');
-            if (attackerFaction !== factionId) continue; // not one of our own outgoing attacks
-            const isWarHit = att.is_ranked_war ?? att.ranked_war ?? false;
-            if (!isWarHit) continue;
-            ownAttacks++;
-            const id = String(att.attacker?.id ?? att.attacker_id ?? '');
-            if (!id) continue;
-            perAttacker[id] = (perAttacker[id] || 0) + 1;
-        }
-        if (newestTs <= from) break; // no progress — avoid looping forever on a stuck cursor
-        from = newestTs + 1;
-    }
-    return { perAttacker, scanned, ownAttacks, rateLimited, pagesFetched: page };
 }
 
 async function getFactionId(key) {
@@ -153,6 +110,14 @@ module.exports = async function handler(req, res) {
                 if (!membersByAttacker[id]) membersByAttacker[id] = { warHits: 0, overflowHits: 0, perChain: {} };
                 membersByAttacker[id].warHits += count;
             }
+            // Did the direct war-hit fetch actually find anything? If it scanned real attacks but
+            // matched none as war hits, that's a strong signal Torn's ranked-war flag isn't the
+            // field name assumed here — rather than confidently reporting 0 war hits for everyone,
+            // fall back to summing chainreport's own (proven, already-used-elsewhere) war field
+            // for whatever chains get added below. That fallback still misses hits outside any
+            // added chain — same gap as before this fix — but it's real Torn data either way.
+            const warHitsLookedBroken = warHitsResult.scanned > 0 && warHitsResult.ownAttacks === 0;
+            const chainReportWarByAttacker = {}; // only populated/used if the fallback kicks in
 
             // Chain (overflow) hits: only from chains the leader explicitly adds — these are the
             // hits Torn itself did NOT count toward the war (almost always post-war chain
@@ -175,6 +140,15 @@ module.exports = async function handler(req, res) {
                     if (!membersByAttacker[id]) membersByAttacker[id] = { warHits: 0, overflowHits: 0, perChain: {} };
                     membersByAttacker[id].overflowHits += nonWar;
                     membersByAttacker[id].perChain[chainId] = (membersByAttacker[id].perChain[chainId] || 0) + total;
+                    chainReportWarByAttacker[id] = (chainReportWarByAttacker[id] || 0) + war;
+                }
+            }
+
+            let usedFallback = false;
+            if (warHitsLookedBroken && chains.length) {
+                usedFallback = true;
+                for (const [id, war] of Object.entries(chainReportWarByAttacker)) {
+                    membersByAttacker[id].warHits = war; // replace the (broken) direct fetch's 0 with chainreport's own war count
                 }
             }
 
@@ -192,11 +166,12 @@ module.exports = async function handler(req, res) {
                 perChain: counts.perChain,
             })).sort((a, b) => b.totalHits - a.totalHits);
 
-            // Lets the UI flag a suspicious result (attacks were scanned but none matched our
-            // faction's is_ranked_war attacks) rather than silently showing 0 war hits for everyone.
+            // Lets the UI flag a suspicious result, or tell the leader the fallback kicked in
+            // (meaning: only chain-covered hits are counted this time, same limits as before).
             const warHitsMeta = {
                 scanned: warHitsResult.scanned, matched: warHitsResult.ownAttacks,
                 rateLimited: warHitsResult.rateLimited, pagesFetched: warHitsResult.pagesFetched,
+                usedFallback, brokenWithNoChains: warHitsLookedBroken && !chains.length,
             };
 
             return res.status(200).json({ members, chains: perChainMeta, warHitsMeta });

@@ -139,9 +139,12 @@ $('wp-calculate').addEventListener('click', async () => {
             renderChainChips();
         }
         const meta = result.warHitsMeta;
-        if (meta && meta.scanned > 0 && meta.matched === 0) {
+        if (meta?.brokenWithNoChains) {
             st.className = 'status err';
-            st.textContent = `Scanned ${meta.scanned} attack(s) in the war window but none matched as war hits — this looks wrong, double-check the war before paying out.`;
+            st.textContent = `Scanned ${meta.scanned} attack(s) in the war window but none matched as war hits, and no chain IDs were added to fall back on — add the chain(s) that ran during this war below, or flag this to WWL before paying out.`;
+        } else if (meta?.usedFallback) {
+            st.className = 'status err';
+            st.textContent = `Couldn't confirm war hits directly from Torn, so war hits below are from the chain report(s) added instead — same as the old calculator, this only counts hits inside an added chain. Add every chain that ran during the war, and flag this to WWL.`;
         } else {
             st.className = 'status ok';
             st.textContent = `${result.members.length} hitter(s) found`
