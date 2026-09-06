@@ -100,7 +100,9 @@ module.exports = async function handler(req, res) {
         if (!(await isLeader(key))) return res.status(403).json({ error: 'Leaders only' });
 
         if (action === 'current-loans') {
-            const armorRes = await fetch(`https://api.torn.com/v2/faction/armor?key=${encodeURIComponent(key)}`,
+            // v1 only — Torn returns "This selection is only available in API v1" if called as
+            // /v2/faction/armor, confirmed live.
+            const armorRes = await fetch(`https://api.torn.com/faction/?selections=armor&key=${encodeURIComponent(key)}`,
                 { headers: { accept: 'application/json' } });
             const armorData = await armorRes.json();
             if (armorData.error) return res.status(403).json({ error: armorData.error.error });
