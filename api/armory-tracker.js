@@ -3,12 +3,14 @@
 // this, only human-readable sentences, same situation as api/respect.js's attacknews parsing) into
 // a running per-faction log, using lib/armoryNewsParser.js for the actual text-to-event work.
 //
-// Endpoint risk worth flagging: "armorynews" is used here as a v1 selection (faction/?selections=
-// armorynews), matching the naming convention of the already-proven attacknews/attacksfull calls
-// in api/respect.js. This has NOT been verified against a live key — if it 404s/errors, or if real
-// entries don't match lib/armoryNewsParser.js's patterns, `sync` surfaces that as unparsed/error
-// counts rather than silently losing data, so a leader running this for the first time can tell
-// something needs adjusting and report back what a real entry looks like.
+// Endpoint confirmed against real (currently-disabled, but genuine) source from Jimidy's Faction
+// Tools' own consumption tracker: /v2/faction/news?cat=armoryAction, with striptags=false so the
+// player-ID link survives for lib/armoryNewsParser.js to pull a reliable XID out of, and both
+// from+to required together for pagination (Torn's news-family endpoints, unlike /v2/faction/
+// attacks, don't page usefully off `to` alone). What's NOT confirmed: the wording for anything
+// other than "used" events (deposited/loaned/retrieved/returned/filled/opened are educated
+// guesses — that reference tool never tracked those) — `sync` surfaces unparsed entries as a
+// count rather than silently losing them, so a leader can report back what a real one looks like.
 //
 // POST { key, action: 'sync' }                          -> leader-only: pulls recent armory news,
 //                                                            parses, dedupes, appends to the log
@@ -62,15 +64,25 @@ async function isLeader(key) {
     return !d.error;
 }
 
-// One page of armorynews -> parsed, deduped, appended to the stored log. Shared by sync/deep-sync.
-async function syncPage(factionId, newsEntries) {
+// One page of /v2/faction/news (an array of {id, text, timestamp}) -> fetched, parsed, deduped,
+// appended to the stored log. Shared by sync/deep-sync.
+async function fetchArmoryNewsPage(key, from, to) {
+    const r = await fetch(`https://api.torn.com/v2/faction/news?striptags=false&limit=100&sort=DESC&from=${from}&to=${to}&cat=armoryAction&key=${encodeURIComponent(key)}`,
+        { headers: { accept: 'application/json' } });
+    const data = await r.json();
+    if (data.error) throw Object.assign(new Error(data.error.error), { tornError: data.error });
+    return Array.isArray(data.news) ? data.news : Object.values(data.news || {});
+}
+
+async function syncPage(factionId, newsList) {
     const eventsRaw = await redis(['GET', eventsKey(factionId)]);
     const events = eventsRaw ? JSON.parse(eventsRaw) : [];
     const unparsedRaw = await redis(['GET', unparsedKey(factionId)]);
     const unparsed = unparsedRaw ? JSON.parse(unparsedRaw) : [];
 
     let synced = 0, unparsedCount = 0, oldestSeen = null;
-    for (const [id, entry] of Object.entries(newsEntries)) {
+    for (const entry of newsList) {
+        const id = String(entry.id);
         const ts = entry.timestamp;
         if (ts && (oldestSeen === null || ts < oldestSeen)) oldestSeen = ts;
         const added = await redis(['SADD', seenKey(factionId), id]);
@@ -88,7 +100,7 @@ async function syncPage(factionId, newsEntries) {
     const trimmed = events.slice(0, MAX_STORED_EVENTS);
     await redis(['SET', eventsKey(factionId), JSON.stringify(trimmed)]);
     if (unparsed.length) await redis(['SET', unparsedKey(factionId), JSON.stringify(unparsed)]);
-    return { synced, unparsedCount, oldestSeen, totalAvailable: Object.keys(newsEntries).length };
+    return { synced, unparsedCount, oldestSeen, totalAvailable: newsList.length };
 }
 
 module.exports = async function handler(req, res) {
@@ -106,34 +118,37 @@ module.exports = async function handler(req, res) {
 
         if (action === 'sync') {
             const now = Math.floor(Date.now() / 1000);
-            const r = await fetch(`https://api.torn.com/faction/?selections=armorynews&from=0&to=${now}&key=${encodeURIComponent(key)}`);
-            const data = await r.json();
-            if (data.error) return res.status(403).json({ error: data.error.error });
-            const result = await syncPage(factionId, data.armorynews || {});
-            return res.status(200).json(result);
+            const thirtyDaysAgo = now - 30 * 24 * 3600; // most recent window — deep-sync below goes further back
+            try {
+                const newsList = await fetchArmoryNewsPage(key, thirtyDaysAgo, now);
+                const result = await syncPage(factionId, newsList);
+                return res.status(200).json(result);
+            } catch (e) {
+                return res.status(403).json({ error: e.tornError?.error || e.message });
+            }
         }
 
         if (action === 'deep-sync') {
             const cursorRaw = await redis(['GET', deepCursorKey(factionId)]);
-            let to = cursorRaw ? Number(cursorRaw) : Math.floor(Date.now() / 1000);
+            let to = cursorRaw ? Number(cursorRaw) : Math.floor(Date.now() / 1000) - 30 * 24 * 3600; // continue before sync's own 30-day window
             const maxPages = 10;
             let totalSynced = 0, totalUnparsed = 0, pagesFetched = 0, rateLimited = false, stopReason = 'max-pages';
             for (let page = 0; page < maxPages; page++) {
                 if (page > 0) await sleep(1100);
-                const r = await fetch(`https://api.torn.com/faction/?selections=armorynews&from=0&to=${to}&key=${encodeURIComponent(key)}`);
-                const data = await r.json();
-                if (data.error) {
-                    if (isRateLimited(data)) rateLimited = true;
-                    stopReason = `torn-error: ${data.error.error || data.error.code}`;
+                const from = to - 30 * 24 * 3600; // 30-day window per page — Torn requires both from and to together here
+                let newsList;
+                try {
+                    newsList = await fetchArmoryNewsPage(key, from, to);
+                } catch (e) {
+                    if (isRateLimited(e.tornError)) rateLimited = true;
+                    stopReason = `torn-error: ${e.message}`;
                     break;
                 }
-                const entries = data.armorynews || {};
-                if (!Object.keys(entries).length) { stopReason = 'empty-page'; break; }
+                if (!newsList.length) { stopReason = 'empty-page'; to = from; await redis(['SET', deepCursorKey(factionId), String(to)]); continue; }
                 pagesFetched++;
-                const result = await syncPage(factionId, entries);
+                const result = await syncPage(factionId, newsList);
                 totalSynced += result.synced; totalUnparsed += result.unparsedCount;
-                if (result.oldestSeen === null || result.oldestSeen >= to) { stopReason = 'no-progress'; break; }
-                to = result.oldestSeen - 1;
+                to = (result.oldestSeen ?? from) - 1;
                 await redis(['SET', deepCursorKey(factionId), String(to)]);
             }
             return res.status(200).json({ synced: totalSynced, unparsedCount: totalUnparsed, pagesFetched, rateLimited, stopReason });
@@ -199,26 +214,34 @@ module.exports = async function handler(req, res) {
 
             const eventsRaw = await redis(['GET', eventsKey(factionId)]);
             const events = eventsRaw ? JSON.parse(eventsRaw) : [];
-            const xanaxByName = {};
+            // Keyed by Torn ID (from the XID link in the news entry, see lib/armoryNewsParser.js)
+            // rather than by name — reliable even if a name has odd characters, and matches
+            // fetchWarHits's own perAttacker keys directly, no name cross-referencing needed. A
+            // small number of older/malformed entries may lack an actorId; those fall back to
+            // being keyed by name so they aren't silently dropped, just less certain to merge.
+            const xanaxById = {}, nameById = {};
             for (const e of events) {
                 if (e.action !== 'used') continue;
                 if (!/xanax/i.test(e.item)) continue;
                 if (e.timestamp < warStart || e.timestamp > warEnd) continue;
-                xanaxByName[e.actor] = (xanaxByName[e.actor] || 0) + e.quantity;
+                const id = e.actorId || `name:${e.actor}`;
+                xanaxById[id] = (xanaxById[id] || 0) + e.quantity;
+                nameById[id] = e.actor;
             }
 
             const warHitsResult = await fetchWarHits(key, factionId, warStart, warEnd);
-            const hitsByName = {};
-            for (const entry of Object.values(warHitsResult.perAttacker)) {
-                if (entry.name) hitsByName[entry.name] = (hitsByName[entry.name] || 0) + entry.count;
+            const hitsById = {};
+            for (const [id, entry] of Object.entries(warHitsResult.perAttacker)) {
+                hitsById[id] = entry.count;
+                if (entry.name && !nameById[id]) nameById[id] = entry.name;
             }
 
-            const names = new Set([...Object.keys(xanaxByName), ...Object.keys(hitsByName)]);
-            const rows = [...names].map(name => {
-                const xanaxTaken = xanaxByName[name] || 0;
-                const hits = hitsByName[name] || 0;
+            const ids = new Set([...Object.keys(xanaxById), ...Object.keys(hitsById)]);
+            const rows = [...ids].map(id => {
+                const xanaxTaken = xanaxById[id] || 0;
+                const hits = hitsById[id] || 0;
                 const required = xanaxTaken * 10;
-                return { name, xanaxTaken, hits, required, shortfall: Math.max(0, required - hits) };
+                return { name: nameById[id] || `#${id}`, xanaxTaken, hits, required, shortfall: Math.max(0, required - hits) };
             }).sort((a, b) => b.shortfall - a.shortfall || b.xanaxTaken - a.xanaxTaken);
 
             return res.status(200).json({
