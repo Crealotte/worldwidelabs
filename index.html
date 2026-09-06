@@ -416,6 +416,7 @@
                 <div class="nav-item" data-page="ocfit-team">OC Team Builder</div>
                 <div class="nav-item" data-page="respect-edit">Respect Tracker</div>
                 <div class="nav-item" data-page="war-payout">War Payout</div>
+                <div class="nav-item" data-page="war-badges">War Badges</div>
             </div>
         </div>
 
@@ -919,6 +920,40 @@
             </div>
         </section>
 
+        <section class="page" id="page-war-badges">
+            <div class="lab-label">WWL·11 / leadership tools</div>
+            <h2>War Badges</h2>
+            <p class="pagedesc">
+                A fun, per-war awards ceremony for your own faction — 1st and 2nd place across 8
+                categories, pulled from the same war data the Payout Calculator uses.
+            </p>
+
+            <div class="panel" id="wb-locked" style="display:none;">
+                <h3>🔒 Leaders only</h3>
+                <p style="color:var(--muted);line-height:1.6;margin:0;">War Badges needs the same <b>API Access</b> faction permission as War Payout.</p>
+            </div>
+
+            <div id="wb-editor" style="display:none;">
+                <div class="panel">
+                    <h3>1. Pick a war</h3>
+                    <div class="status" id="wb-war-status"></div>
+                    <div id="wb-war-list" style="margin-top:10px;"></div>
+                </div>
+
+                <div class="panel" id="wb-grid-panel" style="display:none;">
+                    <h3>2. Badges</h3>
+                    <div class="status" id="wb-status" style="margin-bottom:8px;"></div>
+                    <div class="crimes-grid" id="wb-badge-grid"></div>
+                </div>
+
+                <div class="panel" id="wb-detail-panel" style="display:none;">
+                    <h3 id="wb-detail-title"></h3>
+                    <p id="wb-detail-desc" style="color:var(--muted);font-size:13px;margin:0 0 14px;"></p>
+                    <div id="wb-detail-body"></div>
+                </div>
+            </div>
+        </section>
+
         <!-- ========== PAYOUT RECEIPT (shared link, any logged-in member) ========== -->
         <section class="page" id="page-payout-receipt">
             <div class="lab-label">WWL·10 / receipt</div>
@@ -1179,6 +1214,7 @@
 <script src="respect-tracker.js"></script>
 <script src="crimes-guide.js"></script>
 <script src="war-payout-tracker.js"></script>
+<script src="war-badges-tracker.js"></script>
 <script src="app-init.js"></script>
 </body>
 </html>
