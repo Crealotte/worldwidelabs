@@ -55,15 +55,16 @@ module.exports = async function handler(req, res) {
 
             const result = await fetchWarBadgeStats(key, factionId, String(enemyFactionId), warStart, warEnd);
 
-            const membersRes = await fetch(`https://api.torn.com/v2/faction/members?key=${encodeURIComponent(key)}`,
+            const membersRes = await fetch(`https://api.torn.com/v2/faction/members?striptags=true&key=${encodeURIComponent(key)}`,
                 { headers: { accept: 'application/json' } });
             const membersData = await membersRes.json();
             const nameById = {};
             for (const m of (membersData.members || [])) nameById[String(m.id)] = m.name;
 
-            const members = Object.entries(result.perAttacker).map(([id, stats]) => ({
-                id, name: nameById[id] || `Ex-member #${id}`, ...stats,
-            }));
+            const members = Object.entries(result.perAttacker).map(([id, stats]) => {
+                const { name: nameFromAttacks, ...rest } = stats;
+                return { id, name: nameFromAttacks || nameById[id] || `Ex-member #${id}`, ...rest };
+            });
 
             return res.status(200).json({
                 members,

@@ -25,6 +25,7 @@
 // handling and payout math below.
 
 const { fetchWarHits, sleep } = require('../lib/warHits');
+const { fetchWarBadgeStats } = require('../lib/warBadgeStats');
 
 const REDIS_URL = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL;
 const REDIS_TOKEN = process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN;
@@ -75,6 +76,20 @@ module.exports = async function handler(req, res) {
 
         const factionId = await getFactionId(key);
         if (!factionId) return res.status(403).json({ error: 'Could not determine your faction from this key' });
+
+        // Open to any logged-in member of the faction, not leader-gated — this is what lets the
+        // faction dashboard show the latest war's badge winners to everyone, not just leaders.
+        if (action === 'get-latest-badges') {
+            const latestId = await redis(['GET', `wwl:latest-receipt:${factionId}`]);
+            if (!latestId) return res.status(200).json({ receipt: null });
+            const raw = await redis(['GET', `wwl:payout-receipt:${latestId}`]);
+            if (!raw) return res.status(200).json({ receipt: null });
+            const receipt = JSON.parse(raw);
+            return res.status(200).json({
+                receipt: { opponent: receipt.opponent, warEnd: receipt.warEnd, badgeStats: receipt.badgeStats, rows: receipt.rows, receiptId: latestId },
+            });
+        }
+
         if (!(await isLeader(key))) return res.status(403).json({ error: 'Leaders only' });
 
         if (action === 'list-wars') {
@@ -106,9 +121,11 @@ module.exports = async function handler(req, res) {
             // War hits: authoritative, straight from the war itself — covers every member who
             // landed a war hit whether or not it happened inside a chain the leader added below.
             const warHitsResult = await fetchWarHits(key, factionId, warStart, warEnd);
-            for (const [id, count] of Object.entries(warHitsResult.perAttacker)) {
+            const nameFromAttacks = {};
+            for (const [id, entry] of Object.entries(warHitsResult.perAttacker)) {
                 if (!membersByAttacker[id]) membersByAttacker[id] = { warHits: 0, overflowHits: 0, perChain: {} };
-                membersByAttacker[id].warHits += count;
+                membersByAttacker[id].warHits += entry.count;
+                if (entry.name) nameFromAttacks[id] = entry.name;
             }
             // Did the direct war-hit fetch actually find anything? If it scanned real attacks but
             // matched none as war hits, that's a strong signal Torn's ranked-war flag isn't the
@@ -152,15 +169,18 @@ module.exports = async function handler(req, res) {
                 }
             }
 
-            // Resolve attacker names via the current member list — best-effort, ex-members won't resolve.
-            const membersRes = await fetch(`https://api.torn.com/v2/faction/members?key=${encodeURIComponent(key)}`,
+            // Resolve attacker names via the current member list — best-effort, ex-members won't
+            // resolve. The name carried directly off the attack record (nameFromAttacks) is
+            // preferred when available, since it doesn't depend on this separate lookup matching
+            // up by ID at all.
+            const membersRes = await fetch(`https://api.torn.com/v2/faction/members?striptags=true&key=${encodeURIComponent(key)}`,
                 { headers: { accept: 'application/json' } });
             const membersData = await membersRes.json();
             const nameById = {};
             for (const m of (membersData.members || [])) nameById[String(m.id)] = m.name;
 
             const members = Object.entries(membersByAttacker).map(([id, counts]) => ({
-                id, name: nameById[id] || `Ex-member #${id}`,
+                id, name: nameFromAttacks[id] || nameById[id] || `Ex-member #${id}`,
                 warHits: counts.warHits, overflowHits: counts.overflowHits,
                 totalHits: counts.warHits + counts.overflowHits,
                 perChain: counts.perChain,
@@ -180,8 +200,30 @@ module.exports = async function handler(req, res) {
         if (action === 'save-receipt') {
             const { receipt } = req.body;
             if (!receipt) return res.status(400).json({ error: 'Missing receipt' });
+
+            // Bake War Badges into the receipt at save time, so the public receipt page (no API
+            // key, not leader-gated) can show them without ever calling Torn itself. Best-effort:
+            // a badge-computation failure must not block saving the actual payout receipt, which
+            // is the whole point of this action.
+            let badgeStats = null;
+            if (receipt.warStart && receipt.warEnd && receipt.enemyFactionId) {
+                try {
+                    const badgeResult = await fetchWarBadgeStats(key, factionId, String(receipt.enemyFactionId), receipt.warStart, receipt.warEnd);
+                    const membersRes = await fetch(`https://api.torn.com/v2/faction/members?striptags=true&key=${encodeURIComponent(key)}`,
+                        { headers: { accept: 'application/json' } });
+                    const membersData = await membersRes.json();
+                    const nameById = {};
+                    for (const m of (membersData.members || [])) nameById[String(m.id)] = m.name;
+                    badgeStats = Object.entries(badgeResult.perAttacker).map(([id, stats]) => {
+                        const { name: nameFromAttacks, ...rest } = stats;
+                        return { id, name: nameFromAttacks || nameById[id] || `Ex-member #${id}`, ...rest };
+                    });
+                } catch (e) { /* receipt still saves without badges */ }
+            }
+
             const id = Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
-            await redis(['SET', `wwl:payout-receipt:${id}`, JSON.stringify({ ...receipt, factionId, createdAt: Date.now() })]);
+            await redis(['SET', `wwl:payout-receipt:${id}`, JSON.stringify({ ...receipt, badgeStats, factionId, createdAt: Date.now() })]);
+            await redis(['SET', `wwl:latest-receipt:${factionId}`, id]);
             return res.status(200).json({ ok: true, id });
         }
 

@@ -22,8 +22,8 @@ const WB_BADGES = [
     { key: 'catalyst', icon: '🔗', name: 'The Catalyst', tagline: 'Most assists',
         desc: "Made other people's hits land — the most assists provided to teammates in battle.",
         stat: m => m.assists, unit: 'assists' },
-    { key: 'overdose', icon: '💊', name: 'The Overdose', tagline: 'Most enemies hospitalized',
-        desc: 'A dose too strong to walk away from — sent the most enemies to the hospital.',
+    { key: 'detonator', icon: '🧨', name: 'The Detonator', tagline: 'Most enemies hospitalized',
+        desc: 'Blew the most enemies straight to the hospital.',
         stat: m => m.hospitalized, unit: 'enemies hospitalized' },
     { key: 'volatile', icon: '💥', name: 'The Volatile Compound', tagline: 'Big damage dealt, big damage taken',
         desc: 'High-risk, high-reward: landed a lot of war hits while also getting hospitalized a lot themselves.',
@@ -134,13 +134,20 @@ async function selectWbWar(idx) {
     }
 }
 
-function wbTopTwo(badge) {
-    if (badge.special === 'payout') return wbPayoutTopTwo();
-    const withValue = wbMembers
+// Pure ranking, reused by both the live War Badges page (below) and the shared payout receipt
+// viewer (war-payout-tracker.js's loadPayoutReceipt), which has its own static badgeStats array
+// baked into the receipt at save time rather than wbMembers from a live fetch.
+function wbRankByStat(members, badge) {
+    const withValue = members
         .map(m => ({ m, value: badge.stat(m) }))
         .filter(({ m, value }) => value > 0 && (!badge.needsBoth || badge.needsBoth.every(f => m[f] > 0)));
     withValue.sort((a, b) => b.value - a.value);
     return withValue.slice(0, 2);
+}
+
+function wbTopTwo(badge) {
+    if (badge.special === 'payout') return wbPayoutTopTwo();
+    return wbRankByStat(wbMembers, badge);
 }
 
 // Cross-tool integration: if the leader has already calculated a payout for this exact war in
@@ -154,11 +161,61 @@ function wbPayoutTopTwo() {
     return rows.slice(0, 2).map(r => ({ m: { id: r.id, name: r.name }, value: r.net }));
 }
 
+// Badges on a saved/shared payout receipt: same 8 categories, but off the static badgeStats
+// array baked into the receipt at save time (see war-payout-tracker.js's wp-save-receipt
+// handler) instead of a live fetch — the receipt page has no API key and isn't leader-gated.
+function wbTopTwoForReceipt(receipt, badge) {
+    if (badge.special === 'payout') {
+        const rows = (receipt.rows || []).filter(r => r.net > 0);
+        return rows.slice(0, 2).map(r => ({ m: { id: r.id, name: r.name }, value: r.net }));
+    }
+    if (!receipt.badgeStats) return undefined; // older receipt, saved before badges existed
+    return wbRankByStat(receipt.badgeStats, badge);
+}
+
 function wbFormatValue(badge, value, m) {
     if (badge.display) return badge.display(m);
     if (badge.special === 'payout') return `$${Math.round(value).toLocaleString()}`;
     if (badge.round) return `${Math.round(value).toLocaleString()} ${badge.unit}`;
     return `${value.toLocaleString()} ${badge.unit}`;
+}
+
+// Dashboard widget, visible to every logged-in member (not leader-gated) — shows the latest
+// saved war's badge winners. Backed by api/war-payout.js's get-latest-badges action (receipts —
+// and the "latest one" pointer — live in that file's Redis storage, not here), which reads
+// whatever the most recently saved payout receipt for this faction baked in; nothing to compute
+// here, no API key privilege needed beyond being a faction member. Note: wpFetch, not wbFetch —
+// this hits /api/war-payout, where the receipt storage actually lives.
+async function loadDashboardWarBadges() {
+    try {
+        const result = await wpFetch({ action: 'get-latest-badges' });
+        if (result.error || !result.receipt) { $('dash-war-badges-panel').style.display = 'none'; return; }
+        const html = renderReceiptBadgesHtml(result.receipt);
+        if (!html) { $('dash-war-badges-panel').style.display = 'none'; return; }
+        $('dash-war-badges-title').textContent = `🏆 War Badges — vs ${result.receipt.opponent || 'last war'}`;
+        $('dash-war-badges-body').innerHTML = html;
+        $('dash-war-badges-panel').style.display = 'block';
+    } catch (e) { $('dash-war-badges-panel').style.display = 'none'; }
+}
+
+// Compact, read-only badges grid — reused by the shared payout receipt (war-payout-tracker.js's
+// loadPayoutReceipt) and the dashboard widget below. No click-to-drill-down needed on a static
+// display, just the 🥇 per category. Returns '' (no wrapper markup) if nothing qualified, so
+// callers can hide their own panel/heading entirely rather than show an empty box.
+function renderReceiptBadgesHtml(receipt) {
+    const cards = WB_BADGES.map(badge => {
+        const top = wbTopTwoForReceipt(receipt, badge);
+        if (!top || !top.length) return null;
+        const winner = top[0];
+        return `
+            <div class="crimes-tile" style="cursor:default;">
+                <div class="crimes-tile-icon">${badge.icon}</div>
+                <div class="crimes-tile-name">${badge.name}</div>
+                <div class="crimes-tile-status">🥇 ${esc(winner.m.name)} — ${esc(wbFormatValue(badge, winner.value, winner.m))}</div>
+            </div>`;
+    }).filter(Boolean);
+    if (!cards.length) return '';
+    return `<div class="crimes-grid">${cards.join('')}</div>`;
 }
 
 function renderWbGrid() {

@@ -268,7 +268,7 @@ module.exports = async function handler(req, res) {
             const liveByKey = buildLiveRoleSkeleton(crimesList);
 
             // ---- Aggregate every member's own cached fit catalog into one faction-wide view ----
-            const membersRes = await fetch(`https://api.torn.com/v2/faction/members?key=${encodeURIComponent(key)}`,
+            const membersRes = await fetch(`https://api.torn.com/v2/faction/members?striptags=true&key=${encodeURIComponent(key)}`,
                 { headers: { accept: 'application/json' } });
             const membersData = await membersRes.json();
             const members = membersData.members || [];

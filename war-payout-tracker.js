@@ -404,10 +404,11 @@ $('wp-save-receipt').addEventListener('click', async () => {
         const computed = wpCompute();
         const receipt = {
             opponent: wpSelectedWar?.them?.name || 'Not specified', warEnd: wpSelectedWar?.end || Math.floor(Date.now() / 1000),
+            warStart: wpSelectedWar?.start, enemyFactionId: wpSelectedWar?.them?.id, // used server-side to also bake War Badges into this receipt
             costs: wpCosts, netPool: computed.netPool, retained: computed.retained, payoutPool: computed.payoutPool,
             retainPct: computed.cfg.retainPct, mode: computed.cfg.mode, subSplit: computed.subSplit,
             warRate: computed.warRate, overflowRate: computed.overflowRate,
-            rows: computed.rows.map(r => ({ name: r.name, warHits: r.warHits, overflowHits: r.overflowHits, warPay: r.warPay, overflowPay: r.overflowPay, gross: r.gross, penalty: r.penalty, net: r.net })),
+            rows: computed.rows.map(r => ({ id: r.id, name: r.name, warHits: r.warHits, overflowHits: r.overflowHits, warPay: r.warPay, overflowPay: r.overflowPay, gross: r.gross, penalty: r.penalty, net: r.net })),
         };
         const result = await wpFetch({ action: 'save-receipt', receipt });
         if (result.error) throw new Error(result.error);
@@ -460,7 +461,8 @@ async function loadPayoutReceipt(id) {
                         <td style="padding:4px 8px;font-family:var(--mono);font-weight:700;color:var(--reagent);">$${Math.round(row.net).toLocaleString()}</td>
                     </tr>`).join('')}
                 </tbody>
-            </table>`;
+            </table>
+            ${(() => { const badgesHtml = renderReceiptBadgesHtml(r); return badgesHtml ? `<div style="margin-top:24px;"><h3 style="margin-bottom:10px;">🏆 War Badges</h3>${badgesHtml}</div>` : ''; })()}`;
     } catch (e) {
         el.innerHTML = `<p style="color:var(--danger);">${esc(e.message)}</p>`;
     }
