@@ -417,6 +417,7 @@
                 <div class="nav-item" data-page="respect-edit">Respect Tracker</div>
                 <div class="nav-item" data-page="war-payout">War Payout</div>
                 <div class="nav-item" data-page="war-badges">War Badges</div>
+                <div class="nav-item" data-page="armory-tracker">Consumption Tracker</div>
             </div>
         </div>
 
@@ -959,6 +960,74 @@
             </div>
         </section>
 
+        <section class="page" id="page-armory-tracker">
+            <div class="lab-label">WWL·12 / leadership tools</div>
+            <h2>Consumption Tracker</h2>
+            <p class="pagedesc">
+                Who took what out of the armory, a live view of outstanding temp-weapon loans,
+                a 10-hits-per-xanax check tied to a war, and a restock shopping list.
+            </p>
+
+            <div class="panel" id="at-locked" style="display:none;">
+                <h3>🔒 Leaders only</h3>
+                <p style="color:var(--muted);line-height:1.6;margin:0;">The Consumption Tracker needs the same <b>API Access</b> faction permission as the other leadership tools.</p>
+            </div>
+
+            <div id="at-editor" style="display:none;">
+                <div class="panel">
+                    <h3>Sync armory activity</h3>
+                    <p style="color:var(--muted);font-size:12px;margin:0 0 10px;">Pulls recent deposits/uses/loans/returns from your faction's news feed. Run "Dig deeper" a few times the first time to backfill older history.</p>
+                    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                        <button id="at-sync">Sync now</button>
+                        <button class="ghost small" id="at-deep-sync">Dig deeper</button>
+                    </div>
+                    <div class="status" id="at-sync-status" style="margin-top:8px;"></div>
+                </div>
+
+                <div class="panel" id="at-log-panel">
+                    <h3>Who took out what</h3>
+                    <input id="at-log-search" type="text" placeholder="Filter by member or item…" style="margin-bottom:10px;">
+                    <div class="table-scroll" style="max-height:420px;overflow-y:auto;">
+                        <table>
+                            <thead><tr><th>Date</th><th>Member</th><th>Action</th><th>Item</th><th class="num">Qty</th><th>Other party</th></tr></thead>
+                            <tbody id="at-log-body"></tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div class="panel" id="at-loans-panel">
+                    <h3>Outstanding temp-weapon loans</h3>
+                    <div class="status" id="at-loans-status"></div>
+                    <div id="at-loans-body" style="margin-top:10px;"></div>
+                </div>
+
+                <div class="panel" id="at-xanax-panel">
+                    <h3>Xanax check — 10 hits per xanax</h3>
+                    <p style="color:var(--muted);font-size:12px;margin:0 0 10px;">Pick a war — rows in red took xanax without landing the hits to justify it.</p>
+                    <div class="status" id="at-xanax-war-status"></div>
+                    <div id="at-xanax-war-list" style="margin-top:10px;"></div>
+                    <div id="at-xanax-body" style="margin-top:14px;"></div>
+                </div>
+
+                <div class="panel" id="at-shopping-panel">
+                    <h3>Restock shopping list</h3>
+                    <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:flex-end;">
+                        <div class="field" style="margin:0;">
+                            <label for="at-shop-from">From</label>
+                            <input id="at-shop-from" type="date">
+                        </div>
+                        <div class="field" style="margin:0;">
+                            <label for="at-shop-to">To</label>
+                            <input id="at-shop-to" type="date">
+                        </div>
+                        <button id="at-shop-calc">Calculate</button>
+                    </div>
+                    <div class="status" id="at-shop-status" style="margin-top:8px;"></div>
+                    <div id="at-shop-body" style="margin-top:10px;"></div>
+                </div>
+            </div>
+        </section>
+
         <!-- ========== PAYOUT RECEIPT (shared link, any logged-in member) ========== -->
         <section class="page" id="page-payout-receipt">
             <div class="lab-label">WWL·10 / receipt</div>
@@ -1220,6 +1289,7 @@
 <script src="crimes-guide.js"></script>
 <script src="war-payout-tracker.js"></script>
 <script src="war-badges-tracker.js"></script>
+<script src="armory-tracker.js"></script>
 <script src="app-init.js"></script>
 </body>
 </html>

@@ -154,6 +154,7 @@
             setNavLock('respect-edit', false);
             setNavLock('war-payout', false);
             setNavLock('war-badges', false);
+            setNavLock('armory-tracker', false);
             loadAdoption();
             loadFactionSharing();
             loadRespectGoalPanel();
@@ -165,6 +166,7 @@
             setNavLock('respect-edit', true);
             setNavLock('war-payout', true);
             setNavLock('war-badges', true);
+            setNavLock('armory-tracker', true);
         }
         if (document.querySelector('.nav-item[data-page="announce-edit"]').classList.contains('active')) {
             $('announce-locked').style.display = isLeaderCached ? 'none' : 'block';
@@ -187,6 +189,9 @@
         }
         if (document.querySelector('.nav-item[data-page="war-badges"]').classList.contains('active')) {
             loadWarBadges();
+        }
+        if (document.querySelector('.nav-item[data-page="armory-tracker"]').classList.contains('active')) {
+            loadArmoryTracker();
         }
     }
 
@@ -268,6 +273,7 @@
         if (page === 'respect-edit') loadRespectEditor();
         if (page === 'war-payout') loadWarPayout();
         if (page === 'war-badges') loadWarBadges();
+        if (page === 'armory-tracker') loadArmoryTracker();
         if (page === 'foreign-stock' && !foreignStockLoaded) { foreignStockLoaded = true; loadForeignStock(); }
         if (page === 'crimes-guide' && !crimesGuideLoaded) { crimesGuideLoaded = true; loadCrimesGuide(); }
         if (page === 'feedback-edit') {
