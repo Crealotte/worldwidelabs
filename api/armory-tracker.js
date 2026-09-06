@@ -15,12 +15,14 @@
 // POST { key, action: 'sync' }                          -> leader-only: pulls recent armory news,
 //                                                            parses, dedupes, appends to the log
 // POST { key, action: 'deep-sync' }                      -> leader-only: walks further back in time
-// POST { key, action: 'get-log' }                        -> leader-only: full stored event log
+// POST { key, action: 'get-log' }                        -> leader-only: full stored event log (raw,
+//                                                            not used by the current UI — kept for debugging)
 // POST { key, action: 'current-loans' }                  -> leader-only: live faction/armor snapshot
 //                                                            of outstanding temp-weapon loans + $ value
 // POST { key, action: 'list-wars' }                      -> leader-only: past ranked wars (for xanax-check)
 // POST { key, action: 'xanax-check', warStart, warEnd }  -> leader-only: xanax taken vs war hits landed
-// POST { key, action: 'shopping-list', from, to }        -> leader-only: items consumed in a date range
+// POST { key, action: 'consumption-report', from, to }   -> leader-only: everything consumed in a date
+//                                                            range, grouped by category -> item -> player
 
 const { parseArmoryNewsEntry } = require('../lib/armoryNewsParser');
 const { fetchWarHits } = require('../lib/warHits');
@@ -250,19 +252,62 @@ module.exports = async function handler(req, res) {
             });
         }
 
-        if (action === 'shopping-list') {
+        // The one report the whole page is built around: everything consumed in a date range,
+        // grouped the way Jimidy's own consumption tracker does it — by category (Torn's own
+        // item `type` field, not a hardcoded list, so a new item type just works), each category
+        // totaled in $, each item under it totaled with a per-player breakdown. The frontend
+        // derives BOTH the detailed report view and the cleaner restock shopping list from this
+        // one payload — no separate endpoint needed for the shopping list.
+        //
+        // "Used" (drugs, medical, candy, alcohol, boosters, etc.) counts as consumption directly.
+        // "Temporary" (weapons/armor) don't get "used" — they get loaned — so for that one
+        // category, a `loaned` event counts instead; how many are still actually out right now
+        // is a separate, live question answered by the current-loans action above, not this one.
+        if (action === 'consumption-report') {
             const { from, to } = req.body;
             if (!from || !to) return res.status(400).json({ error: 'Pick a date range first.' });
-            const eventsRaw = await redis(['GET', eventsKey(factionId)]);
+
+            const [eventsRaw, itemsRes] = await Promise.all([
+                redis(['GET', eventsKey(factionId)]),
+                fetch(`https://api.torn.com/torn/?selections=items&key=${encodeURIComponent(key)}`),
+            ]);
             const events = eventsRaw ? JSON.parse(eventsRaw) : [];
-            const byItem = {};
-            for (const e of events) {
-                if (e.action !== 'used') continue;
-                if (e.timestamp < from || e.timestamp > to) continue;
-                byItem[e.item] = (byItem[e.item] || 0) + e.quantity;
+            const itemsData = await itemsRes.json();
+            const catalog = {}; // lowercased item name -> { type, price }
+            for (const it of Object.values(itemsData.items || {})) {
+                catalog[String(it.name).toLowerCase()] = { type: it.type || 'Other', price: it.market_value ?? null };
             }
-            const items = Object.entries(byItem).map(([item, quantity]) => ({ item, quantity })).sort((a, b) => b.quantity - a.quantity);
-            return res.status(200).json({ items });
+
+            const byItem = {}; // item name -> { item, category, quantity, value, hasPrice, players: { name -> {quantity, value} } }
+            for (const e of events) {
+                if (e.timestamp < from || e.timestamp > to) continue;
+                const meta = catalog[e.item.toLowerCase()];
+                const category = meta?.type || 'Other';
+                const relevant = category === 'Temporary' ? e.action === 'loaned' : e.action === 'used';
+                if (!relevant) continue;
+                const price = meta?.price ?? null;
+
+                const entry = byItem[e.item] || (byItem[e.item] = { item: e.item, category, quantity: 0, value: 0, hasPrice: price != null, players: {} });
+                entry.quantity += e.quantity;
+                if (price != null) entry.value += price * e.quantity;
+                const p = entry.players[e.actor] || (entry.players[e.actor] = { name: e.actor, quantity: 0, value: 0 });
+                p.quantity += e.quantity;
+                if (price != null) p.value += price * e.quantity;
+            }
+
+            const categoriesMap = {};
+            for (const it of Object.values(byItem)) {
+                const cat = categoriesMap[it.category] || (categoriesMap[it.category] = { category: it.category, quantity: 0, value: 0, items: [] });
+                cat.quantity += it.quantity;
+                cat.value += it.value;
+                cat.items.push({ ...it, players: Object.values(it.players).sort((a, b) => b.quantity - a.quantity) });
+            }
+            const categories = Object.values(categoriesMap);
+            for (const c of categories) c.items.sort((a, b) => b.value - a.value);
+            categories.sort((a, b) => b.value - a.value);
+            const grandTotal = categories.reduce((s, c) => s + c.value, 0);
+
+            return res.status(200).json({ categories, grandTotal });
         }
 
         return res.status(400).json({ error: 'Unknown action' });

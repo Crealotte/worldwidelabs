@@ -2,9 +2,9 @@
 'use strict';
 
 let atLoaded = false;
-let atEvents = [];
 let atWars = [];
 let atSelectedWar = null;
+let atReport = null; // last consumption-report result, shared by the detail view + shopping list
 
 async function atFetch(body) {
     const res = await fetch('/api/armory-tracker', {
@@ -17,9 +17,12 @@ async function atFetch(body) {
 function atFmtDate(ts) {
     return new Date(ts * 1000).toLocaleDateString(undefined, { day: '2-digit', month: 'short', year: 'numeric' });
 }
-function atFmtDateTime(ts) {
-    return new Date(ts * 1000).toLocaleString(undefined, { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
-}
+// A category's icon, purely cosmetic — falls back to a generic box for anything not listed
+// (Torn's own item `type` field drives the actual grouping, so a new category still works fine,
+// just without a matching icon).
+const AT_CATEGORY_ICONS = {
+    Drug: '💊', Medical: '🩹', Alcohol: '🍺', Candy: '🍬', Temporary: '🔫', Booster: '⚡', Other: '📦',
+};
 
 async function loadArmoryTracker() {
     $('at-locked').style.display = isLeaderCached ? 'none' : 'block';
@@ -40,8 +43,7 @@ async function atSync() {
         if (result.error) throw new Error(result.error);
         st.className = 'status ok';
         st.textContent = `Synced ${result.synced} new event(s) from ${result.totalAvailable} in range.`
-            + (result.unparsedCount ? ` ${result.unparsedCount} entr${result.unparsedCount === 1 ? 'y' : 'ies'} didn't match a known pattern — tell WWL if the log looks incomplete.` : '');
-        await atLoadLog();
+            + (result.unparsedCount ? ` ${result.unparsedCount} entr${result.unparsedCount === 1 ? 'y' : 'ies'} didn't match a known pattern — tell WWL if a report looks incomplete.` : '');
     } catch (e) {
         st.className = 'status err'; st.textContent = e.message;
     }
@@ -56,7 +58,6 @@ async function atDeepSync() {
         if (result.error) throw new Error(result.error);
         st.className = 'status ok';
         st.textContent = `Dug through ${result.pagesFetched} page(s), found ${result.synced} more event(s). ${result.rateLimited ? 'Torn rate-limited this — try again in a minute for more.' : 'Click again to keep going further back.'}`;
-        await atLoadLog();
     } catch (e) {
         st.className = 'status err'; st.textContent = e.message;
     } finally {
@@ -64,27 +65,6 @@ async function atDeepSync() {
     }
 }
 
-async function atLoadLog() {
-    const result = await atFetch({ action: 'get-log' });
-    if (result.error) return;
-    atEvents = result.events || [];
-    renderAtLog();
-}
-
-function renderAtLog() {
-    const q = ($('at-log-search').value || '').toLowerCase();
-    const rows = atEvents.filter(e => !q || e.actor.toLowerCase().includes(q) || e.item.toLowerCase().includes(q));
-    $('at-log-body').innerHTML = rows.slice(0, 500).map(e => `
-        <tr>
-            <td style="white-space:nowrap;">${esc(atFmtDateTime(e.timestamp))}</td>
-            <td>${esc(e.actor)}</td>
-            <td style="text-transform:capitalize;">${esc(e.action)}</td>
-            <td>${esc(e.item)}</td>
-            <td class="num">${e.quantity}</td>
-            <td>${e.otherParty ? esc(e.otherParty) : '—'}</td>
-        </tr>`).join('') || '<tr><td colspan="6" style="color:var(--muted);">No events yet — hit Sync, then Dig deeper for older history.</td></tr>';
-}
-$('at-log-search').addEventListener('input', renderAtLog);
 $('at-sync').addEventListener('click', atSync);
 $('at-deep-sync').addEventListener('click', atDeepSync);
 
@@ -230,42 +210,144 @@ function renderAtXanax(rows) {
         </table>`;
 }
 
-$('at-shop-calc').addEventListener('click', async () => {
-    const st = $('at-shop-status');
-    const fromVal = $('at-shop-from').value, toVal = $('at-shop-to').value;
-    if (!fromVal || !toVal) { st.className = 'status err'; st.textContent = 'Pick both dates.'; return; }
-    const from = Math.floor(new Date(fromVal).getTime() / 1000);
-    const to = Math.floor(new Date(toVal).getTime() / 1000) + 86399; // include the whole "to" day
+// ---- Consumption report: the main event. One date range, grouped category -> item -> player,
+// shared between the detailed report view and the derived (cleaner, no-players) shopping list. ----
+
+function atDateInputToTs(val, endOfDay) {
+    if (!val) return null;
+    const ts = Math.floor(new Date(val).getTime() / 1000);
+    return endOfDay ? ts + 86399 : ts; // include the whole "to" day
+}
+
+$('at-report-calc').addEventListener('click', async () => {
+    const st = $('at-report-status');
+    const from = atDateInputToTs($('at-report-from').value, false);
+    const to = atDateInputToTs($('at-report-to').value, true);
+    if (!from || !to) { st.className = 'status err'; st.textContent = 'Pick both dates.'; return; }
     st.className = 'status ok'; st.textContent = 'Calculating…';
     try {
-        const result = await atFetch({ action: 'shopping-list', from, to });
+        const result = await atFetch({ action: 'consumption-report', from, to });
         if (result.error) throw new Error(result.error);
         st.className = 'status'; st.textContent = '';
-        renderAtShoppingList(result.items || []);
+        atReport = result;
+        renderAtReportDetail(result);
+        renderAtShoppingList(result);
     } catch (e) {
         st.className = 'status err'; st.textContent = e.message;
     }
 });
 
-function renderAtShoppingList(items) {
+function renderAtReportDetail(report) {
+    const el = $('at-report-body');
+    if (!report.categories.length) {
+        el.innerHTML = '<p style="color:var(--muted);font-size:13px;">Nothing consumed in this range — try a wider date range, or hit Sync above first.</p>';
+        return;
+    }
+    el.innerHTML = `
+        <div style="font-size:13px;margin-bottom:12px;">Grand total: <span style="font-weight:700;color:var(--reagent);font-family:var(--mono);">$${Math.round(report.grandTotal).toLocaleString()}</span></div>
+        ${report.categories.map((cat, ci) => `
+        <div class="ocfit-scenario collapsed" style="margin-bottom:8px;">
+            <div class="ocfit-scenario-header">
+                <span>${AT_CATEGORY_ICONS[cat.category] || '📦'} ${esc(cat.category)} — ${cat.quantity}x — $${Math.round(cat.value).toLocaleString()}</span>
+                <span class="chev">▾</span>
+            </div>
+            <div class="ocfit-scenario-body">
+                ${cat.items.map((it, ii) => `
+                <div style="padding:6px 0;${ii ? 'border-top:1px solid var(--line);' : ''}">
+                    <div style="display:flex;align-items:center;gap:8px;">
+                        <span style="flex:1;">${esc(it.item)} — ${it.quantity}x</span>
+                        <span style="font-family:var(--mono);${it.hasPrice ? '' : 'color:var(--muted);'}">${it.hasPrice ? `$${Math.round(it.value).toLocaleString()}` : 'no price data'}</span>
+                        <button class="ghost small at-players-toggle" data-cat="${ci}" data-item="${ii}">Players ▾ (${it.players.length})</button>
+                    </div>
+                    <div class="at-players-list" data-cat="${ci}" data-item="${ii}" hidden style="margin-top:6px;padding-left:12px;font-size:12px;color:var(--muted);">
+                        ${it.players.map(p => `<div>${esc(p.name)} — ${p.quantity}x${it.hasPrice ? ` — $${Math.round(p.value).toLocaleString()}` : ''}</div>`).join('')}
+                    </div>
+                </div>`).join('')}
+            </div>
+        </div>`).join('')}`;
+
+    el.querySelectorAll('.ocfit-scenario-header').forEach(h => {
+        h.addEventListener('click', () => h.closest('.ocfit-scenario').classList.toggle('collapsed'));
+    });
+    el.querySelectorAll('.at-players-toggle').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const list = el.querySelector(`.at-players-list[data-cat="${btn.dataset.cat}"][data-item="${btn.dataset.item}"]`);
+            list.hidden = !list.hidden;
+            btn.textContent = `Players ${list.hidden ? '▾' : '▴'} (${list.children.length})`;
+        });
+    });
+}
+
+function renderAtShoppingList(report) {
     const el = $('at-shop-body');
-    if (!items.length) {
-        el.innerHTML = '<p style="color:var(--muted);font-size:13px;">Nothing used in this range.</p>';
+    if (!report.categories.length) {
+        el.innerHTML = '<p style="color:var(--muted);font-size:13px;">Nothing to restock for this range.</p>';
         return;
     }
     el.innerHTML = `
         <table style="width:100%;font-size:13px;border-collapse:collapse;">
-            <thead><tr style="color:var(--muted);text-align:left;"><th style="padding:4px 8px;">Item</th><th style="padding:4px 8px;">Buy back</th></tr></thead>
-            <tbody>${items.map(i => `
+            <thead><tr style="color:var(--muted);text-align:left;"><th style="padding:4px 8px;">Item</th><th style="padding:4px 8px;">Buy back</th><th style="padding:4px 8px;">Cost</th></tr></thead>
+            ${report.categories.map(cat => `
+            <tbody>
+                <tr><td colspan="3" style="padding:8px 8px 2px;font-weight:700;">${AT_CATEGORY_ICONS[cat.category] || '📦'} ${esc(cat.category)}</td></tr>
+                ${cat.items.map(it => `
                 <tr style="border-top:1px solid var(--line);">
-                    <td style="padding:4px 8px;">${esc(i.item)}</td>
-                    <td style="padding:4px 8px;font-family:var(--mono);font-weight:700;">${i.quantity}x</td>
+                    <td style="padding:4px 8px;">${esc(it.item)}</td>
+                    <td style="padding:4px 8px;font-family:var(--mono);">${it.quantity}x</td>
+                    <td style="padding:4px 8px;font-family:var(--mono);${it.hasPrice ? '' : 'color:var(--muted);'}">${it.hasPrice ? `$${Math.round(it.value).toLocaleString()}` : '—'}</td>
                 </tr>`).join('')}
-            </tbody>
+                <tr><td colspan="2" style="padding:2px 8px;text-align:right;color:var(--muted);">Subtotal</td><td style="padding:2px 8px;font-family:var(--mono);font-weight:700;">$${Math.round(cat.value).toLocaleString()}</td></tr>
+            </tbody>`).join('')}
+            <tfoot><tr><td colspan="2" style="padding:8px;font-weight:700;">Grand total</td><td style="padding:8px;font-weight:700;font-family:var(--mono);color:var(--reagent);">$${Math.round(report.grandTotal).toLocaleString()}</td></tr></tfoot>
         </table>
-        <button class="ghost small" id="at-shop-copy" style="margin-top:10px;">Copy as text</button>`;
+        <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;">
+            <button class="ghost small" id="at-shop-copy">Copy as text</button>
+            <button class="ghost small" id="at-shop-add-total">+ War cost (grand total)</button>
+        </div>`;
     $('at-shop-copy').addEventListener('click', () => {
-        const text = 'Restock shopping list:\n' + items.map(i => `${i.quantity}x ${i.item}`).join('\n');
+        const text = 'Restock shopping list:\n' + report.categories.map(cat =>
+            `\n${cat.category}:\n` + cat.items.map(it => `  ${it.quantity}x ${it.item}${it.hasPrice ? ` — $${Math.round(it.value).toLocaleString()}` : ''}`).join('\n')
+        ).join('') + `\n\nGrand total: $${Math.round(report.grandTotal).toLocaleString()}`;
         navigator.clipboard.writeText(text).then(() => toast('Shopping list copied'));
     });
+    $('at-shop-add-total').addEventListener('click', () => atAddCostToPayout('Armory restock', report.grandTotal));
+}
+
+// ---- War Payout page integration: pull the same consumption report for the selected war's own
+// dates, right there on that page, so armory costs can be added to the payout without switching
+// tabs (wpSelectedWar is a global from war-payout-tracker.js). ----
+$('wp-armory-calc').addEventListener('click', async () => {
+    const st = $('wp-armory-status');
+    if (typeof wpSelectedWar === 'undefined' || !wpSelectedWar) {
+        st.className = 'status err'; st.textContent = 'Pick a war above first.';
+        return;
+    }
+    st.className = 'status ok'; st.textContent = 'Pulling consumption for this war…';
+    try {
+        const result = await atFetch({ action: 'consumption-report', from: wpSelectedWar.start, to: wpSelectedWar.end });
+        if (result.error) throw new Error(result.error);
+        st.className = 'status'; st.textContent = '';
+        renderWpArmoryBody(result);
+    } catch (e) {
+        st.className = 'status err'; st.textContent = e.message;
+    }
+});
+
+function renderWpArmoryBody(report) {
+    const el = $('wp-armory-body');
+    if (!report.categories.length) {
+        el.innerHTML = '<p style="color:var(--muted);font-size:12px;">Nothing consumed during this war\'s dates.</p>';
+        return;
+    }
+    el.innerHTML = report.categories.map(cat => `
+        <div style="display:flex;align-items:center;gap:8px;padding:3px 0;font-size:13px;">
+            <span style="flex:1;">${AT_CATEGORY_ICONS[cat.category] || '📦'} ${esc(cat.category)} — ${cat.quantity}x</span>
+            <span style="font-family:var(--mono);">$${Math.round(cat.value).toLocaleString()}</span>
+            <button class="ghost small" data-wp-armory-cat="${esc(cat.category)}" data-wp-armory-value="${cat.value}">+ Add</button>
+        </div>`).join('')
+        + `<div style="display:flex;justify-content:flex-end;margin-top:8px;"><button class="ghost small" id="wp-armory-add-total">+ Add all ($${Math.round(report.grandTotal).toLocaleString()})</button></div>`;
+    el.querySelectorAll('[data-wp-armory-cat]').forEach(btn => {
+        btn.addEventListener('click', () => atAddCostToPayout(btn.dataset.wpArmoryCat, Number(btn.dataset.wpArmoryValue)));
+    });
+    $('wp-armory-add-total').addEventListener('click', () => atAddCostToPayout('Armory (this war)', report.grandTotal));
 }

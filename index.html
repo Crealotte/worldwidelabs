@@ -877,6 +877,13 @@
                         </div>
                     </div>
 
+                    <div style="margin-top:14px;padding:10px 12px;background:var(--bench-2);border-radius:var(--radius);">
+                        <div style="font-size:13px;margin-bottom:6px;">Armory costs for this war <span style="color:var(--muted);font-weight:400;">(from the Consumption Tracker)</span></div>
+                        <button class="ghost small" id="wp-armory-calc">Pull consumption for this war's dates</button>
+                        <div class="status" id="wp-armory-status" style="margin-top:8px;"></div>
+                        <div id="wp-armory-body" style="margin-top:10px;"></div>
+                    </div>
+
                     <div style="margin-top:14px;">
                         <div style="font-size:13px;color:var(--muted);margin-bottom:6px;">Costs to deduct</div>
                         <div id="wp-cost-items"></div>
@@ -964,8 +971,9 @@
             <div class="lab-label">WWL·12 / leadership tools</div>
             <h2>Consumption Tracker</h2>
             <p class="pagedesc">
-                Who took what out of the armory, a live view of outstanding temp-weapon loans,
-                a 10-hits-per-xanax check tied to a war, and a restock shopping list.
+                Pick a date range to see what was consumed — by category, then item, then who took
+                it — plus a live view of outstanding temp-weapon loans, a 10-hits-per-xanax check
+                tied to a war, and a clean restock shopping list for the same period.
             </p>
 
             <div class="panel" id="at-locked" style="display:none;">
@@ -984,15 +992,21 @@
                     <div class="status" id="at-sync-status" style="margin-top:8px;"></div>
                 </div>
 
-                <div class="panel" id="at-log-panel">
-                    <h3>Who took out what</h3>
-                    <input id="at-log-search" type="text" placeholder="Filter by member or item…" style="margin-bottom:10px;">
-                    <div class="table-scroll" style="max-height:420px;overflow-y:auto;">
-                        <table>
-                            <thead><tr><th>Date</th><th>Member</th><th>Action</th><th>Item</th><th class="num">Qty</th><th>Other party</th></tr></thead>
-                            <tbody id="at-log-body"></tbody>
-                        </table>
+                <div class="panel" id="at-report-panel">
+                    <h3>Consumption report</h3>
+                    <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:flex-end;">
+                        <div class="field" style="margin:0;">
+                            <label for="at-report-from">From</label>
+                            <input id="at-report-from" type="date">
+                        </div>
+                        <div class="field" style="margin:0;">
+                            <label for="at-report-to">To</label>
+                            <input id="at-report-to" type="date">
+                        </div>
+                        <button id="at-report-calc">Calculate</button>
                     </div>
+                    <div class="status" id="at-report-status" style="margin-top:8px;"></div>
+                    <div id="at-report-body" style="margin-top:14px;"></div>
                 </div>
 
                 <div class="panel" id="at-loans-panel">
@@ -1011,19 +1025,8 @@
 
                 <div class="panel" id="at-shopping-panel">
                     <h3>Restock shopping list</h3>
-                    <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:flex-end;">
-                        <div class="field" style="margin:0;">
-                            <label for="at-shop-from">From</label>
-                            <input id="at-shop-from" type="date">
-                        </div>
-                        <div class="field" style="margin:0;">
-                            <label for="at-shop-to">To</label>
-                            <input id="at-shop-to" type="date">
-                        </div>
-                        <button id="at-shop-calc">Calculate</button>
-                    </div>
-                    <div class="status" id="at-shop-status" style="margin-top:8px;"></div>
-                    <div id="at-shop-body" style="margin-top:10px;"></div>
+                    <p style="color:var(--muted);font-size:12px;margin:0 0 10px;">Same period as the report above — just the totals you need to go buy back.</p>
+                    <div id="at-shop-body"></div>
                 </div>
             </div>
         </section>
