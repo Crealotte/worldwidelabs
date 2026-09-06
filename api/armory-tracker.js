@@ -1,57 +1,40 @@
 // api/armory-tracker.js — WorldWideLabs Consumption Tracker.
-// Parses Torn's faction armory news feed (deposits/uses/loans/returns — no structured JSON for
-// this, only human-readable sentences, same situation as api/respect.js's attacknews parsing) into
-// a running per-faction log, using lib/armoryNewsParser.js for the actual text-to-event work.
+// Parses Torn's faction armory news feed (uses/loans — no structured JSON for this, only
+// human-readable sentences, same situation api/respect.js handles for attacknews) into a
+// category -> item -> player consumption report for a picked date range.
 //
-// Endpoint confirmed against real (currently-disabled, but genuine) source from Jimidy's Faction
-// Tools' own consumption tracker: /v2/faction/news?cat=armoryAction, with striptags=false so the
-// player-ID link survives for lib/armoryNewsParser.js to pull a reliable XID out of, and both
-// from+to required together for pagination (Torn's news-family endpoints, unlike /v2/faction/
-// attacks, don't page usefully off `to` alone). What's NOT confirmed: the wording for anything
-// other than "used" events (deposited/loaned/retrieved/returned/filled/opened are educated
-// guesses — that reference tool never tracked those) — `sync` surfaces unparsed entries as a
-// count rather than silently losing them, so a leader can report back what a real one looks like.
+// Rewritten to fetch live, per request, for the exact range asked for — no pre-synced cache.
+// The first version cached recent news into Redis via separate Sync/Dig-deeper steps, and the
+// report only ever read from that cache; picking a date range that hadn't been synced correctly
+// found nothing. Confirmed against Jimidy's Faction Tools' own (currently-disabled, but genuine)
+// consumption tracker source, which does exactly this: for a chosen [from, to], page backward
+// through /v2/faction/news?cat=armoryAction with `from` held fixed at the range start and only
+// `to` shrinking, no caching layer at all. Adopted that directly rather than re-guessing.
 //
-// POST { key, action: 'sync' }                          -> leader-only: pulls recent armory news,
-//                                                            parses, dedupes, appends to the log
-// POST { key, action: 'deep-sync' }                      -> leader-only: walks further back in time
-// POST { key, action: 'get-log' }                        -> leader-only: full stored event log (raw,
-//                                                            not used by the current UI — kept for debugging)
-// POST { key, action: 'current-loans' }                  -> leader-only: live faction/armor snapshot
-//                                                            of outstanding temp-weapon loans + $ value
-// POST { key, action: 'list-wars' }                      -> leader-only: past ranked wars (for xanax-check)
-// POST { key, action: 'xanax-check', warStart, warEnd }  -> leader-only: xanax taken vs war hits landed
-// POST { key, action: 'consumption-report', from, to }   -> leader-only: everything consumed in a date
-//                                                            range, grouped by category -> item -> player
+// Endpoint/response shape confirmed the same way: /v2/faction/news?cat=armoryAction,
+// striptags=false (so the player-ID link survives for lib/armoryNewsParser.js's XID extraction),
+// both from+to required together, response is { news: [{id, text, timestamp}] }. What's NOT
+// confirmed: wording for anything other than "used" events (that reference tool only ever
+// tracked consumption, never loans — loaned/retrieved/returned/filled/opened here are still
+// educated guesses) — unparsed entries are counted and sampled in the response rather than
+// silently dropped, so a leader can report back what a real one looks like.
+//
+// POST { key, action: 'current-loans' }                -> leader-only: live faction/armor snapshot
+//                                                          of outstanding temp-weapon loans + $ value
+// POST { key, action: 'consumption-report', from, to }  -> leader-only: everything consumed in a
+//                                                          date range, grouped category -> item ->
+//                                                          player; Xanax's players additionally
+//                                                          carry hits/required/shortfall for the
+//                                                          10-hits-per-xanax check, from the same
+//                                                          [from, to] window (not tied to a war)
 
 const { parseArmoryNewsEntry } = require('../lib/armoryNewsParser');
 const { fetchWarHits } = require('../lib/warHits');
-
-const REDIS_URL = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL;
-const REDIS_TOKEN = process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN;
 
 function sleep(ms) { return new Promise(resolve => setTimeout(resolve, ms)); }
 function isRateLimited(data) {
     return data?.error?.code === 5 || /too many requests/i.test(data?.error?.error || '');
 }
-
-async function redis(command) {
-    const res = await fetch(REDIS_URL, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${REDIS_TOKEN}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify(command),
-    });
-    const data = await res.json();
-    if (data.error) throw new Error(data.error);
-    return data.result;
-}
-
-const eventsKey = (factionId) => `wwl:armory-events:${factionId}`;
-const seenKey = (factionId) => `wwl:armory-seen:${factionId}`;
-const unparsedKey = (factionId) => `wwl:armory-unparsed:${factionId}`;
-const deepCursorKey = (factionId) => `wwl:armory-deep-cursor:${factionId}`;
-const MAX_STORED_EVENTS = 3000; // keep the log bounded — oldest entries drop off, newest always kept
-const MAX_STORED_UNPARSED = 30; // just enough of a sample to diagnose a bad pattern
 
 async function getFactionId(key) {
     const r = await fetch(`https://api.torn.com/user/?selections=profile&key=${encodeURIComponent(key)}`);
@@ -66,50 +49,48 @@ async function isLeader(key) {
     return !d.error;
 }
 
-// One page of /v2/faction/news (an array of {id, text, timestamp}) -> fetched, parsed, deduped,
-// appended to the stored log. Shared by sync/deep-sync.
-async function fetchArmoryNewsPage(key, from, to) {
-    const r = await fetch(`https://api.torn.com/v2/faction/news?striptags=false&limit=100&sort=DESC&from=${from}&to=${to}&cat=armoryAction&key=${encodeURIComponent(key)}`,
-        { headers: { accept: 'application/json' } });
-    const data = await r.json();
-    if (data.error) throw Object.assign(new Error(data.error.error), { tornError: data.error });
-    return Array.isArray(data.news) ? data.news : Object.values(data.news || {});
-}
-
-async function syncPage(factionId, newsList) {
-    const eventsRaw = await redis(['GET', eventsKey(factionId)]);
-    const events = eventsRaw ? JSON.parse(eventsRaw) : [];
-    const unparsedRaw = await redis(['GET', unparsedKey(factionId)]);
-    const unparsed = unparsedRaw ? JSON.parse(unparsedRaw) : [];
-
-    let synced = 0, unparsedCount = 0, oldestSeen = null;
-    for (const entry of newsList) {
-        const id = String(entry.id);
-        const ts = entry.timestamp;
-        if (ts && (oldestSeen === null || ts < oldestSeen)) oldestSeen = ts;
-        const added = await redis(['SADD', seenKey(factionId), id]);
-        if (added !== 1) continue; // already processed
-        const parsed = parseArmoryNewsEntry(id, entry);
-        if (parsed.unparsed) {
-            unparsedCount++;
-            if (unparsed.length < MAX_STORED_UNPARSED) unparsed.push(parsed);
-            continue;
+// Pages backward through armory news for the exact [from, to] window — `from` stays fixed at the
+// caller's requested range start, only the `to` cursor shrinks, matching the reference tool.
+// Capped well below its 100-page allowance since this runs inside a serverless function with a
+// real time budget, not a browser tab with no such limit — should still comfortably cover months
+// of activity for a normal-sized faction.
+async function fetchAllArmoryNews(key, from, to) {
+    const all = [];
+    const seenIds = new Set();
+    let cursor = to;
+    let page = 0, rateLimited = false;
+    const MAX_PAGES = 40;
+    while (page < MAX_PAGES) {
+        if (page > 0) await sleep(900);
+        const r = await fetch(`https://api.torn.com/v2/faction/news?striptags=false&limit=100&sort=DESC&to=${cursor}&from=${from}&cat=armoryAction&key=${encodeURIComponent(key)}`,
+            { headers: { accept: 'application/json' } });
+        const data = await r.json();
+        if (data.error) {
+            if (isRateLimited(data)) { rateLimited = true; break; }
+            throw new Error(data.error.error);
         }
-        events.push(parsed);
-        synced++;
+        const news = Array.isArray(data.news) ? data.news : Object.values(data.news || {});
+        page++;
+        if (!news.length) break;
+
+        let addedAny = false;
+        for (const entry of news) {
+            if (entry.timestamp < from || entry.timestamp > to) continue;
+            if (seenIds.has(entry.id)) continue;
+            seenIds.add(entry.id);
+            all.push(entry);
+            addedAny = true;
+        }
+        if (!addedAny) break;
+        const oldest = Math.min(...news.map(e => e.timestamp));
+        if (oldest < from) break; // paged past the start of the requested range
+        cursor = oldest - 1;
     }
-    events.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
-    const trimmed = events.slice(0, MAX_STORED_EVENTS);
-    await redis(['SET', eventsKey(factionId), JSON.stringify(trimmed)]);
-    if (unparsed.length) await redis(['SET', unparsedKey(factionId), JSON.stringify(unparsed)]);
-    return { synced, unparsedCount, oldestSeen, totalAvailable: newsList.length };
+    return { entries: all, pagesFetched: page, rateLimited };
 }
 
 module.exports = async function handler(req, res) {
     try {
-        if (!REDIS_URL || !REDIS_TOKEN) {
-            return res.status(500).json({ error: 'Database not connected. In Vercel: Storage -> Create Database -> Upstash Redis, and connect it to this project.' });
-        }
         if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
         const { key, action } = req.body || {};
         if (!key) return res.status(400).json({ error: 'Missing key' });
@@ -117,53 +98,6 @@ module.exports = async function handler(req, res) {
         const factionId = await getFactionId(key);
         if (!factionId) return res.status(403).json({ error: 'Could not determine your faction from this key' });
         if (!(await isLeader(key))) return res.status(403).json({ error: 'Leaders only' });
-
-        if (action === 'sync') {
-            const now = Math.floor(Date.now() / 1000);
-            const thirtyDaysAgo = now - 30 * 24 * 3600; // most recent window — deep-sync below goes further back
-            try {
-                const newsList = await fetchArmoryNewsPage(key, thirtyDaysAgo, now);
-                const result = await syncPage(factionId, newsList);
-                return res.status(200).json(result);
-            } catch (e) {
-                return res.status(403).json({ error: e.tornError?.error || e.message });
-            }
-        }
-
-        if (action === 'deep-sync') {
-            const cursorRaw = await redis(['GET', deepCursorKey(factionId)]);
-            let to = cursorRaw ? Number(cursorRaw) : Math.floor(Date.now() / 1000) - 30 * 24 * 3600; // continue before sync's own 30-day window
-            const maxPages = 10;
-            let totalSynced = 0, totalUnparsed = 0, pagesFetched = 0, rateLimited = false, stopReason = 'max-pages';
-            for (let page = 0; page < maxPages; page++) {
-                if (page > 0) await sleep(1100);
-                const from = to - 30 * 24 * 3600; // 30-day window per page — Torn requires both from and to together here
-                let newsList;
-                try {
-                    newsList = await fetchArmoryNewsPage(key, from, to);
-                } catch (e) {
-                    if (isRateLimited(e.tornError)) rateLimited = true;
-                    stopReason = `torn-error: ${e.message}`;
-                    break;
-                }
-                if (!newsList.length) { stopReason = 'empty-page'; to = from; await redis(['SET', deepCursorKey(factionId), String(to)]); continue; }
-                pagesFetched++;
-                const result = await syncPage(factionId, newsList);
-                totalSynced += result.synced; totalUnparsed += result.unparsedCount;
-                to = (result.oldestSeen ?? from) - 1;
-                await redis(['SET', deepCursorKey(factionId), String(to)]);
-            }
-            return res.status(200).json({ synced: totalSynced, unparsedCount: totalUnparsed, pagesFetched, rateLimited, stopReason });
-        }
-
-        if (action === 'get-log') {
-            const eventsRaw = await redis(['GET', eventsKey(factionId)]);
-            const unparsedRaw = await redis(['GET', unparsedKey(factionId)]);
-            return res.status(200).json({
-                events: eventsRaw ? JSON.parse(eventsRaw) : [],
-                unparsedSample: unparsedRaw ? JSON.parse(unparsedRaw) : [],
-            });
-        }
 
         if (action === 'current-loans') {
             const armorRes = await fetch(`https://api.torn.com/v2/faction/armor?key=${encodeURIComponent(key)}`,
@@ -196,103 +130,61 @@ module.exports = async function handler(req, res) {
             return res.status(200).json({ loans });
         }
 
-        if (action === 'list-wars') {
-            const r = await fetch(`https://api.torn.com/v2/faction?selections=rankedwars&key=${encodeURIComponent(key)}`,
-                { headers: { accept: 'application/json' } });
-            const data = await r.json();
-            if (data.error) return res.status(403).json({ error: data.error.error });
-            const wars = Object.values(data.rankedwars || {});
-            const list = wars.filter(w => w.end).map(w => {
-                const us = (w.factions || []).find(f => String(f.id) === factionId);
-                const them = (w.factions || []).find(f => String(f.id) !== factionId);
-                return { id: w.id, start: w.start, end: w.end, them: them ? { name: them.name } : null, winner: w.winner, usId: us?.id };
-            }).sort((a, b) => b.end - a.end);
-            return res.status(200).json({ wars: list });
-        }
-
-        if (action === 'xanax-check') {
-            const { warStart, warEnd } = req.body;
-            if (!warStart || !warEnd) return res.status(400).json({ error: 'Pick a war first.' });
-
-            const eventsRaw = await redis(['GET', eventsKey(factionId)]);
-            const events = eventsRaw ? JSON.parse(eventsRaw) : [];
-            // Keyed by Torn ID (from the XID link in the news entry, see lib/armoryNewsParser.js)
-            // rather than by name — reliable even if a name has odd characters, and matches
-            // fetchWarHits's own perAttacker keys directly, no name cross-referencing needed. A
-            // small number of older/malformed entries may lack an actorId; those fall back to
-            // being keyed by name so they aren't silently dropped, just less certain to merge.
-            const xanaxById = {}, nameById = {};
-            for (const e of events) {
-                if (e.action !== 'used') continue;
-                if (!/xanax/i.test(e.item)) continue;
-                if (e.timestamp < warStart || e.timestamp > warEnd) continue;
-                const id = e.actorId || `name:${e.actor}`;
-                xanaxById[id] = (xanaxById[id] || 0) + e.quantity;
-                nameById[id] = e.actor;
-            }
-
-            const warHitsResult = await fetchWarHits(key, factionId, warStart, warEnd);
-            const hitsById = {};
-            for (const [id, entry] of Object.entries(warHitsResult.perAttacker)) {
-                hitsById[id] = entry.count;
-                if (entry.name && !nameById[id]) nameById[id] = entry.name;
-            }
-
-            const ids = new Set([...Object.keys(xanaxById), ...Object.keys(hitsById)]);
-            const rows = [...ids].map(id => {
-                const xanaxTaken = xanaxById[id] || 0;
-                const hits = hitsById[id] || 0;
-                const required = xanaxTaken * 10;
-                return { name: nameById[id] || `#${id}`, xanaxTaken, hits, required, shortfall: Math.max(0, required - hits) };
-            }).sort((a, b) => b.shortfall - a.shortfall || b.xanaxTaken - a.xanaxTaken);
-
-            return res.status(200).json({
-                rows,
-                meta: { warHitsScanned: warHitsResult.scanned, warHitsMatched: warHitsResult.ownAttacks, eventsScanned: events.length },
-            });
-        }
-
-        // The one report the whole page is built around: everything consumed in a date range,
-        // grouped the way Jimidy's own consumption tracker does it — by category (Torn's own
-        // item `type` field, not a hardcoded list, so a new item type just works), each category
-        // totaled in $, each item under it totaled with a per-player breakdown. The frontend
-        // derives BOTH the detailed report view and the cleaner restock shopping list from this
-        // one payload — no separate endpoint needed for the shopping list.
-        //
-        // "Used" (drugs, medical, candy, alcohol, boosters, etc.) counts as consumption directly.
-        // "Temporary" (weapons/armor) don't get "used" — they get loaned — so for that one
-        // category, a `loaned` event counts instead; how many are still actually out right now
-        // is a separate, live question answered by the current-loans action above, not this one.
         if (action === 'consumption-report') {
             const { from, to } = req.body;
             if (!from || !to) return res.status(400).json({ error: 'Pick a date range first.' });
 
-            const [eventsRaw, itemsRes] = await Promise.all([
-                redis(['GET', eventsKey(factionId)]),
+            const [newsResult, itemsRes] = await Promise.all([
+                fetchAllArmoryNews(key, from, to),
                 fetch(`https://api.torn.com/torn/?selections=items&key=${encodeURIComponent(key)}`),
             ]);
-            const events = eventsRaw ? JSON.parse(eventsRaw) : [];
             const itemsData = await itemsRes.json();
             const catalog = {}; // lowercased item name -> { type, price }
             for (const it of Object.values(itemsData.items || {})) {
                 catalog[String(it.name).toLowerCase()] = { type: it.type || 'Other', price: it.market_value ?? null };
             }
 
+            let unparsedCount = 0;
+            const unparsedSample = [];
             const byItem = {}; // item name -> { item, category, quantity, value, hasPrice, players: { name -> {quantity, value} } }
-            for (const e of events) {
-                if (e.timestamp < from || e.timestamp > to) continue;
-                const meta = catalog[e.item.toLowerCase()];
+            for (const entry of newsResult.entries) {
+                const parsed = parseArmoryNewsEntry(String(entry.id), entry);
+                if (parsed.unparsed) {
+                    unparsedCount++;
+                    if (unparsedSample.length < 10) unparsedSample.push(parsed.text);
+                    continue;
+                }
+                const meta = catalog[parsed.item.toLowerCase()];
                 const category = meta?.type || 'Other';
-                const relevant = category === 'Temporary' ? e.action === 'loaned' : e.action === 'used';
+                const relevant = category === 'Temporary' ? parsed.action === 'loaned' : parsed.action === 'used';
                 if (!relevant) continue;
                 const price = meta?.price ?? null;
 
-                const entry = byItem[e.item] || (byItem[e.item] = { item: e.item, category, quantity: 0, value: 0, hasPrice: price != null, players: {} });
-                entry.quantity += e.quantity;
-                if (price != null) entry.value += price * e.quantity;
-                const p = entry.players[e.actor] || (entry.players[e.actor] = { name: e.actor, quantity: 0, value: 0 });
-                p.quantity += e.quantity;
-                if (price != null) p.value += price * e.quantity;
+                const item = byItem[parsed.item] || (byItem[parsed.item] = { item: parsed.item, category, quantity: 0, value: 0, hasPrice: price != null, players: {} });
+                item.quantity += parsed.quantity;
+                if (price != null) item.value += price * parsed.quantity;
+                const p = item.players[parsed.actor] || (item.players[parsed.actor] = { name: parsed.actor, quantity: 0, value: 0 });
+                p.quantity += parsed.quantity;
+                if (price != null) p.value += price * parsed.quantity;
+            }
+
+            // Fold the 10-hits-per-xanax check directly into Xanax's own player list, over this
+            // same [from, to] window (not tied to picking a specific war) — one less panel to
+            // hunt down, per the leader's own feedback that Jimidy's tool shows it this way.
+            const xanaxItem = Object.values(byItem).find(it => /^xanax$/i.test(it.item));
+            let warHitsMeta = null;
+            if (xanaxItem) {
+                const warHitsResult = await fetchWarHits(key, factionId, from, to);
+                warHitsMeta = { scanned: warHitsResult.scanned, matched: warHitsResult.ownAttacks };
+                const hitsByName = {};
+                for (const entry of Object.values(warHitsResult.perAttacker)) {
+                    if (entry.name) hitsByName[entry.name] = (hitsByName[entry.name] || 0) + entry.count;
+                }
+                for (const p of Object.values(xanaxItem.players)) {
+                    p.hits = hitsByName[p.name] || 0;
+                    p.required = p.quantity * 10;
+                    p.shortfall = Math.max(0, p.required - p.hits);
+                }
             }
 
             const categoriesMap = {};
@@ -307,7 +199,10 @@ module.exports = async function handler(req, res) {
             categories.sort((a, b) => b.value - a.value);
             const grandTotal = categories.reduce((s, c) => s + c.value, 0);
 
-            return res.status(200).json({ categories, grandTotal });
+            return res.status(200).json({
+                categories, grandTotal, warHitsMeta,
+                meta: { entriesScanned: newsResult.entries.length, pagesFetched: newsResult.pagesFetched, rateLimited: newsResult.rateLimited, unparsedCount, unparsedSample },
+            });
         }
 
         return res.status(400).json({ error: 'Unknown action' });

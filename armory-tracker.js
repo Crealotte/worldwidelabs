@@ -1,9 +1,6 @@
 // armory-tracker.js — WorldWideLabs Consumption Tracker (frontend).
 'use strict';
 
-let atLoaded = false;
-let atWars = [];
-let atSelectedWar = null;
 let atReport = null; // last consumption-report result, shared by the detail view + shopping list
 
 async function atFetch(body) {
@@ -14,9 +11,6 @@ async function atFetch(body) {
     return res.json();
 }
 
-function atFmtDate(ts) {
-    return new Date(ts * 1000).toLocaleDateString(undefined, { day: '2-digit', month: 'short', year: 'numeric' });
-}
 // A category's icon, purely cosmetic — falls back to a generic box for anything not listed
 // (Torn's own item `type` field drives the actual grouping, so a new category still works fine,
 // just without a matching icon).
@@ -24,49 +18,12 @@ const AT_CATEGORY_ICONS = {
     Drug: '💊', Medical: '🩹', Alcohol: '🍺', Candy: '🍬', Temporary: '🔫', Booster: '⚡', Other: '📦',
 };
 
-async function loadArmoryTracker() {
+function loadArmoryTracker() {
     $('at-locked').style.display = isLeaderCached ? 'none' : 'block';
     $('at-editor').style.display = isLeaderCached ? 'block' : 'none';
     if (!isLeaderCached) return;
-    if (atLoaded) return; // only auto-run once per session — use the buttons to refresh
-    atLoaded = true;
-    await atSync();
     loadAtLoans();
-    loadAtXanaxWars();
 }
-
-async function atSync() {
-    const st = $('at-sync-status');
-    st.className = 'status ok'; st.textContent = 'Syncing…';
-    try {
-        const result = await atFetch({ action: 'sync' });
-        if (result.error) throw new Error(result.error);
-        st.className = 'status ok';
-        st.textContent = `Synced ${result.synced} new event(s) from ${result.totalAvailable} in range.`
-            + (result.unparsedCount ? ` ${result.unparsedCount} entr${result.unparsedCount === 1 ? 'y' : 'ies'} didn't match a known pattern — tell WWL if a report looks incomplete.` : '');
-    } catch (e) {
-        st.className = 'status err'; st.textContent = e.message;
-    }
-}
-
-async function atDeepSync() {
-    const btn = $('at-deep-sync');
-    const st = $('at-sync-status');
-    btn.disabled = true; btn.textContent = 'Digging…';
-    try {
-        const result = await atFetch({ action: 'deep-sync' });
-        if (result.error) throw new Error(result.error);
-        st.className = 'status ok';
-        st.textContent = `Dug through ${result.pagesFetched} page(s), found ${result.synced} more event(s). ${result.rateLimited ? 'Torn rate-limited this — try again in a minute for more.' : 'Click again to keep going further back.'}`;
-    } catch (e) {
-        st.className = 'status err'; st.textContent = e.message;
-    } finally {
-        btn.disabled = false; btn.textContent = 'Dig deeper';
-    }
-}
-
-$('at-sync').addEventListener('click', atSync);
-$('at-deep-sync').addEventListener('click', atDeepSync);
 
 async function loadAtLoans() {
     const st = $('at-loans-status');
@@ -129,94 +86,22 @@ function atAddCostToPayout(label, amount) {
     toast(`Added "${label}" ($${Math.round(amount).toLocaleString()}) to War Payout costs`);
 }
 
-async function loadAtXanaxWars() {
-    const st = $('at-xanax-war-status');
-    st.className = 'status ok'; st.textContent = 'Loading past wars…';
-    try {
-        const result = await atFetch({ action: 'list-wars' });
-        if (result.error) throw new Error(result.error);
-        atWars = result.wars || [];
-        renderAtWarList();
-        st.textContent = ''; st.className = 'status';
-    } catch (e) {
-        st.className = 'status err'; st.textContent = e.message;
-    }
-}
-
-function renderAtWarList() {
-    const el = $('at-xanax-war-list');
-    if (!atWars.length) {
-        el.innerHTML = '<p style="color:var(--muted);font-size:13px;">No past wars found on this key.</p>';
-        return;
-    }
-    el.innerHTML = `
-        <div class="ocfit-scenario collapsed" data-collapse="at-wars">
-            <div class="ocfit-scenario-header">
-                <span>Past wars (${atWars.length})</span>
-                <span class="chev">▾</span>
-            </div>
-            <div class="ocfit-scenario-body">${atWars.map((w, i) => `
-                <div class="ocfit-role-row" data-war-idx="${i}" style="cursor:pointer;">
-                    <span class="ocfit-role-name">${esc(w.them?.name || 'Unknown opponent')}</span>
-                    <span style="font-size:12px;color:var(--muted);">${esc(atFmtDate(w.end))}</span>
-                </div>`).join('')}
-            </div>
-        </div>`;
-    el.querySelector('.ocfit-scenario-header').addEventListener('click', () => {
-        el.querySelector('.ocfit-scenario').classList.toggle('collapsed');
-    });
-    el.querySelectorAll('[data-war-idx]').forEach(row => {
-        row.addEventListener('click', () => selectAtWar(Number(row.dataset.warIdx)));
-    });
-}
-
-async function selectAtWar(idx) {
-    atSelectedWar = atWars[idx];
-    $('at-xanax-war-list').querySelectorAll('[data-war-idx]').forEach((row, i) => {
-        row.style.background = i === idx ? 'var(--bench-2)' : '';
-    });
-    const el = $('at-xanax-body');
-    el.innerHTML = '<p style="color:var(--muted);">Checking…</p>';
-    try {
-        const result = await atFetch({ action: 'xanax-check', warStart: atSelectedWar.start, warEnd: atSelectedWar.end });
-        if (result.error) throw new Error(result.error);
-        renderAtXanax(result.rows || []);
-    } catch (e) {
-        el.innerHTML = `<p style="color:var(--danger);">${esc(e.message)}</p>`;
-    }
-}
-
-function renderAtXanax(rows) {
-    const el = $('at-xanax-body');
-    if (!rows.length) {
-        el.innerHTML = '<p style="color:var(--muted);font-size:13px;">No xanax use or war hits found for this war.</p>';
-        return;
-    }
-    el.innerHTML = `
-        <table style="width:100%;font-size:13px;border-collapse:collapse;">
-            <thead><tr style="color:var(--muted);text-align:left;">
-                <th style="padding:4px 8px;">Member</th><th style="padding:4px 8px;">Xanax taken</th>
-                <th style="padding:4px 8px;">Hits landed</th><th style="padding:4px 8px;">Required (×10)</th><th style="padding:4px 8px;">Short by</th>
-            </tr></thead>
-            <tbody>${rows.map(r => `
-                <tr style="border-top:1px solid var(--line);${r.shortfall > 0 ? 'background:rgba(220,80,80,.12);' : ''}">
-                    <td style="padding:4px 8px;${r.shortfall > 0 ? 'color:var(--danger);font-weight:700;' : ''}">${esc(r.name)}</td>
-                    <td style="padding:4px 8px;font-family:var(--mono);">${r.xanaxTaken}</td>
-                    <td style="padding:4px 8px;font-family:var(--mono);">${r.hits}</td>
-                    <td style="padding:4px 8px;font-family:var(--mono);color:var(--muted);">${r.required}</td>
-                    <td style="padding:4px 8px;font-family:var(--mono);${r.shortfall > 0 ? 'color:var(--danger);font-weight:700;' : 'color:var(--muted);'}">${r.shortfall > 0 ? r.shortfall : '—'}</td>
-                </tr>`).join('')}
-            </tbody>
-        </table>`;
-}
-
 // ---- Consumption report: the main event. One date range, grouped category -> item -> player,
-// shared between the detailed report view and the derived (cleaner, no-players) shopping list. ----
+// fetched live for that exact range every time (no pre-synced cache — see api/armory-tracker.js
+// for why). Shared between the detailed report view and the derived (cleaner, no-players)
+// shopping list. Xanax's players additionally carry hits/required/shortfall inline. ----
 
 function atDateInputToTs(val, endOfDay) {
     if (!val) return null;
     const ts = Math.floor(new Date(val).getTime() / 1000);
     return endOfDay ? ts + 86399 : ts; // include the whole "to" day
+}
+
+async function atCalculateReport(from, to) {
+    const result = await atFetch({ action: 'consumption-report', from, to });
+    if (result.error) throw new Error(result.error);
+    atReport = result;
+    return result;
 }
 
 $('at-report-calc').addEventListener('click', async () => {
@@ -226,10 +111,17 @@ $('at-report-calc').addEventListener('click', async () => {
     if (!from || !to) { st.className = 'status err'; st.textContent = 'Pick both dates.'; return; }
     st.className = 'status ok'; st.textContent = 'Calculating…';
     try {
-        const result = await atFetch({ action: 'consumption-report', from, to });
-        if (result.error) throw new Error(result.error);
-        st.className = 'status'; st.textContent = '';
-        atReport = result;
+        const result = await atCalculateReport(from, to);
+        const m = result.meta;
+        if (!result.categories.length && m.entriesScanned === 0) {
+            st.className = 'status err';
+            st.textContent = 'No armory activity found for this range on this key — double check the dates, or that this faction actually used the armory then.';
+        } else {
+            st.className = 'status ok';
+            st.textContent = `Scanned ${m.entriesScanned} armory event(s) over ${m.pagesFetched} page(s).`
+                + (m.unparsedCount ? ` ${m.unparsedCount} didn't match a known pattern — tell WWL if something looks missing.` : '')
+                + (m.rateLimited ? ' Torn rate-limited this partway through — numbers may be incomplete, try again shortly.' : '');
+        }
         renderAtReportDetail(result);
         renderAtShoppingList(result);
     } catch (e) {
@@ -237,10 +129,19 @@ $('at-report-calc').addEventListener('click', async () => {
     }
 });
 
+function atPlayerLine(p, hasPrice) {
+    let line = `${esc(p.name)} — ${p.quantity}x${hasPrice ? ` — $${Math.round(p.value).toLocaleString()}` : ''}`;
+    if (p.hits == null) return `<div>${line}</div>`;
+    const short = p.shortfall > 0;
+    return `<div${short ? ' style="color:var(--danger);font-weight:700;"' : ''}>${line} — ${p.hits} hit(s) landed (needs ${p.required})${short ? ` ⚠ short by ${p.shortfall}` : ''}</div>`;
+}
+
 function renderAtReportDetail(report) {
     const el = $('at-report-body');
     if (!report.categories.length) {
-        el.innerHTML = '<p style="color:var(--muted);font-size:13px;">Nothing consumed in this range — try a wider date range, or hit Sync above first.</p>';
+        el.innerHTML = report.meta.entriesScanned > 0
+            ? '<p style="color:var(--muted);font-size:13px;">Found armory activity in this range, but none of it was consumption (uses/temp loans) — only deposits, retrieves, etc.</p>'
+            : '';
         return;
     }
     el.innerHTML = `
@@ -260,7 +161,7 @@ function renderAtReportDetail(report) {
                         <button class="ghost small at-players-toggle" data-cat="${ci}" data-item="${ii}">Players ▾ (${it.players.length})</button>
                     </div>
                     <div class="at-players-list" data-cat="${ci}" data-item="${ii}" hidden style="margin-top:6px;padding-left:12px;font-size:12px;color:var(--muted);">
-                        ${it.players.map(p => `<div>${esc(p.name)} — ${p.quantity}x${it.hasPrice ? ` — $${Math.round(p.value).toLocaleString()}` : ''}</div>`).join('')}
+                        ${it.players.map(p => atPlayerLine(p, it.hasPrice)).join('')}
                     </div>
                 </div>`).join('')}
             </div>
@@ -324,8 +225,7 @@ $('wp-armory-calc').addEventListener('click', async () => {
     }
     st.className = 'status ok'; st.textContent = 'Pulling consumption for this war…';
     try {
-        const result = await atFetch({ action: 'consumption-report', from: wpSelectedWar.start, to: wpSelectedWar.end });
-        if (result.error) throw new Error(result.error);
+        const result = await atCalculateReport(wpSelectedWar.start, wpSelectedWar.end);
         st.className = 'status'; st.textContent = '';
         renderWpArmoryBody(result);
     } catch (e) {

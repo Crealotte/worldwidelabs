@@ -1,0 +1,6 @@
+{
+  "functions": {
+    "api/war-payout.js": { "maxDuration": 60 },
+    "api/armory-tracker.js": { "maxDuration": 60 }
+  }
+}

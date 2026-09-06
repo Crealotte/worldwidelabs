@@ -972,8 +972,8 @@
             <h2>Consumption Tracker</h2>
             <p class="pagedesc">
                 Pick a date range to see what was consumed — by category, then item, then who took
-                it — plus a live view of outstanding temp-weapon loans, a 10-hits-per-xanax check
-                tied to a war, and a clean restock shopping list for the same period.
+                it, with the 10-hits-per-xanax check built right into Xanax's own breakdown — plus
+                a live view of outstanding temp-weapon loans and a clean restock shopping list.
             </p>
 
             <div class="panel" id="at-locked" style="display:none;">
@@ -982,16 +982,6 @@
             </div>
 
             <div id="at-editor" style="display:none;">
-                <div class="panel">
-                    <h3>Sync armory activity</h3>
-                    <p style="color:var(--muted);font-size:12px;margin:0 0 10px;">Pulls recent deposits/uses/loans/returns from your faction's news feed. Run "Dig deeper" a few times the first time to backfill older history.</p>
-                    <div style="display:flex;gap:8px;flex-wrap:wrap;">
-                        <button id="at-sync">Sync now</button>
-                        <button class="ghost small" id="at-deep-sync">Dig deeper</button>
-                    </div>
-                    <div class="status" id="at-sync-status" style="margin-top:8px;"></div>
-                </div>
-
                 <div class="panel" id="at-report-panel">
                     <h3>Consumption report</h3>
                     <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:flex-end;">
@@ -1013,14 +1003,6 @@
                     <h3>Outstanding temp-weapon loans</h3>
                     <div class="status" id="at-loans-status"></div>
                     <div id="at-loans-body" style="margin-top:10px;"></div>
-                </div>
-
-                <div class="panel" id="at-xanax-panel">
-                    <h3>Xanax check — 10 hits per xanax</h3>
-                    <p style="color:var(--muted);font-size:12px;margin:0 0 10px;">Pick a war — rows in red took xanax without landing the hits to justify it.</p>
-                    <div class="status" id="at-xanax-war-status"></div>
-                    <div id="at-xanax-war-list" style="margin-top:10px;"></div>
-                    <div id="at-xanax-body" style="margin-top:14px;"></div>
                 </div>
 
                 <div class="panel" id="at-shopping-panel">
