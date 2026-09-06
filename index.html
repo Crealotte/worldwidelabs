@@ -821,8 +821,9 @@
             <div class="lab-label">WWL·10 / leadership tools</div>
             <h2>War Payout Calculator</h2>
             <p class="pagedesc">
-                Hit-count based, and picks up chain hits that spill outside the war's official time window
-                — pick a wider date range below to capture the whole chain, not just the war-bounded portion.
+                Hit-count based. War hits are pulled straight from the war itself, so hits outside any chain
+                still count — chain IDs are only needed on top of that to catch hits thrown after the war
+                already ended, paid at a flat rate instead of a pool share.
             </p>
 
             <div class="panel" id="wp-locked" style="display:none;">
@@ -833,14 +834,14 @@
             <div id="wp-editor" style="display:none;">
                 <div class="panel">
                     <h3>1. Pick a war</h3>
-                    <p style="color:var(--muted);font-size:12px;margin:0 0 10px;">Optional — just sets the opponent's name for the receipt. The chain IDs below do the actual counting.</p>
+                    <p style="color:var(--muted);font-size:12px;margin:0 0 10px;">Required — war hits are pulled directly from this war, so every war hit counts even if it wasn't part of any chain.</p>
                     <div class="status" id="wp-war-status"></div>
                     <div id="wp-war-list" style="margin-top:10px;"></div>
                 </div>
 
                 <div class="panel" id="wp-chains-panel">
-                    <h3>2. Add chain IDs</h3>
-                    <p id="wp-chains-note" style="color:var(--muted);font-size:12px;margin:0 0 10px;">Add every chain that ran during (or spilled outside) the war — a chain ID or a pasted chain report URL both work.</p>
+                    <h3>2. Add chain IDs (optional)</h3>
+                    <p id="wp-chains-note" style="color:var(--muted);font-size:12px;margin:0 0 10px;">Only needed if hitters kept a chain going after the war ended — those extra hits don't count toward the war, but you still want to pay them something (a chain ID or a pasted chain report URL both work).</p>
                     <div style="display:flex;gap:8px;">
                         <input id="wp-chain-input" type="text" placeholder="Chain ID or report URL" style="flex:1;">
                         <button id="wp-add-chain">Add</button>
@@ -890,15 +891,15 @@
                             <input type="radio" name="wp-mode" id="wp-mode-equal" value="equal" checked style="width:auto;"> Equal — pool split across ALL hits, war and overflow treated the same
                         </label>
                         <label style="display:block;margin-bottom:4px;cursor:pointer;font-size:13px;">
-                            <input type="radio" name="wp-mode" id="wp-mode-split" value="split" style="width:auto;"> Split — war hits paid from the pool, overflow hits paid a separate fixed rate
+                            <input type="radio" name="wp-mode" id="wp-mode-split" value="split" style="width:auto;"> Split — war hits paid from the pool, post-war chain hits paid a flat rate (Recommended — typically $20,000/hit)
                         </label>
                         <label style="display:block;cursor:pointer;font-size:13px;">
                             <input type="radio" name="wp-mode" id="wp-mode-weighted" value="weighted" style="width:auto;"> Weighted — whole pool split proportionally, overflow hits worth a fraction of a war hit
                         </label>
                     </div>
                     <div class="field" id="wp-fixed-rate-field" style="display:none;margin-top:10px;max-width:220px;">
-                        <label for="wp-fixed-rate">Fixed $ per overflow hit</label>
-                        <input id="wp-fixed-rate" type="text" inputmode="decimal" placeholder="500">
+                        <label for="wp-fixed-rate">Fixed $ per post-war chain hit</label>
+                        <input id="wp-fixed-rate" type="text" inputmode="decimal" placeholder="20000" value="20000">
                     </div>
                     <div class="field" id="wp-weight-field" style="display:none;margin-top:10px;max-width:220px;">
                         <label for="wp-weight">Overflow hit value (% of a war hit)</label>

@@ -84,7 +84,7 @@ function selectWar(idx) {
         row.style.background = i === idx ? 'var(--bench-2)' : '';
     });
     $('wp-chains-panel').style.display = 'block';
-    $('wp-chains-note').textContent = `vs ${wpSelectedWar.them?.name || 'unknown'} — add every chain ID that ran during (or spilled outside) this war below.`;
+    $('wp-chains-note').textContent = `vs ${wpSelectedWar.them?.name || 'unknown'} — war hits are pulled automatically. Only add a chain ID here if hitters kept chaining after the war ended, so those extra hits get paid the flat rate instead of nothing.`;
 }
 
 function renderChainChips() {
@@ -113,16 +113,20 @@ $('wp-add-chain').addEventListener('click', () => {
 $('wp-chain-input').addEventListener('keydown', e => { if (e.key === 'Enter') $('wp-add-chain').click(); });
 
 $('wp-calculate').addEventListener('click', async () => {
-    if (!wpChains.length) {
+    if (!wpSelectedWar) {
         $('wp-calc-status').className = 'status err';
-        $('wp-calc-status').textContent = 'Add at least one chain ID first.';
+        $('wp-calc-status').textContent = 'Pick a war above first — war hits are counted directly from it.';
         return;
     }
     const btn = $('wp-calculate');
     const st = $('wp-calc-status');
-    btn.disabled = true; btn.textContent = 'Fetching chain reports…';
+    btn.disabled = true; btn.textContent = 'Fetching war + chain data…';
     try {
-        const result = await wpFetch({ action: 'calculate', chainIds: wpChains.map(c => c.id) });
+        const result = await wpFetch({
+            action: 'calculate',
+            warStart: wpSelectedWar.start, warEnd: wpSelectedWar.end,
+            chainIds: wpChains.map(c => c.id),
+        });
         if (result.error) throw new Error(result.error);
         wpCalcResult = result;
         wpPenalties = {};
@@ -134,8 +138,15 @@ $('wp-calculate').addEventListener('click', async () => {
             }
             renderChainChips();
         }
-        st.className = 'status ok';
-        st.textContent = `Loaded ${wpChains.length} chain report(s), ${result.members.length} hitter(s).`;
+        const meta = result.warHitsMeta;
+        if (meta && meta.scanned > 0 && meta.matched === 0) {
+            st.className = 'status err';
+            st.textContent = `Scanned ${meta.scanned} attack(s) in the war window but none matched as war hits — this looks wrong, double-check the war before paying out.`;
+        } else {
+            st.className = 'status ok';
+            st.textContent = `${result.members.length} hitter(s) found`
+                + (meta?.rateLimited ? ' (Torn rate-limited the war attack fetch partway through — counts may be incomplete, try again in a minute).' : '.');
+        }
         $('wp-results-panel').style.display = 'block';
         $('wp-config-panel').style.display = 'block';
         renderWpResultsPreview();
@@ -162,7 +173,7 @@ function renderWpResultsPreview() {
                 <th style="padding:4px 8px;">Member</th>
                 ${multi ? wpChains.map(c => `<th style="padding:4px 8px;">#${esc(c.id)}</th>`).join('') : ''}
                 <th style="padding:4px 8px;">War hits</th>
-                <th style="padding:4px 8px;">Overflow hits</th><th style="padding:4px 8px;">Total</th>
+                <th style="padding:4px 8px;">Chain-only hits</th><th style="padding:4px 8px;">Total</th>
             </tr></thead>
             <tbody>${visible.map(m => `
                 <tr style="border-top:1px solid var(--line);${m.totalHits === 0 ? 'opacity:.45;' : ''}">
@@ -298,7 +309,7 @@ function renderWpPayout() {
             <div><div style="color:var(--muted);font-size:11px;">Retained (${computed.cfg.retainPct}%)</div><div style="font-weight:700;">$${Math.round(computed.retained).toLocaleString()}</div></div>
             <div><div style="color:var(--muted);font-size:11px;">Payout pool</div><div style="font-weight:700;color:var(--reagent);">$${Math.round(computed.payoutPool).toLocaleString()}</div></div>
             <div><div style="color:var(--muted);font-size:11px;">$ / war hit</div><div style="font-weight:700;">$${Math.round(computed.warRate).toLocaleString()}</div></div>
-            <div><div style="color:var(--muted);font-size:11px;">$ / overflow hit</div><div style="font-weight:700;">$${Math.round(computed.overflowRate).toLocaleString()}</div></div>
+            <div><div style="color:var(--muted);font-size:11px;">$ / chain-only hit</div><div style="font-weight:700;">$${Math.round(computed.overflowRate).toLocaleString()}</div></div>
         </div>
         ${subSplitHtml}
         ${exceededHtml}
