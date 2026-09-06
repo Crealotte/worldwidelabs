@@ -1,6 +1,6 @@
 // war-badges-tracker.js — WorldWideLabs War Badges (frontend).
 // Per-war "awards ceremony": 8 categories, 1st and 2nd place, for your own faction's own war.
-// The backend (api/war-badges.js) hands over raw per-member counts; ranking/labeling for each
+// The backend (api/war-payout.js's 'badge-stats' action) hands over raw per-member counts; ranking/labeling for each
 // badge happens here — same split of responsibility as war-payout-tracker.js's wpCompute.
 'use strict';
 
@@ -36,8 +36,10 @@ const WB_BADGES = [
         desc: "The most valuable contributor, dollar for dollar — this war's biggest payout.", special: 'payout' },
 ];
 
+// Posts to /api/war-payout, not a dedicated /api/war-badges — merged in to stay under Vercel
+// Hobby's 12-Serverless-Function-per-deployment limit (see that file's 'badge-stats' action).
 async function wbFetch(body) {
-    const res = await fetch('/api/war-badges', {
+    const res = await fetch('/api/war-payout', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ key: apiKey, ...body }),
     });
@@ -115,7 +117,7 @@ async function selectWbWar(idx) {
     st.className = 'status ok'; st.textContent = `Fetching war data vs ${wbSelectedWar.them?.name || 'unknown'}…`;
     try {
         const result = await wbFetch({
-            action: 'calculate', warStart: wbSelectedWar.start, warEnd: wbSelectedWar.end,
+            action: 'badge-stats', warStart: wbSelectedWar.start, warEnd: wbSelectedWar.end,
             enemyFactionId: wbSelectedWar.them.id,
         });
         if (result.error) throw new Error(result.error);

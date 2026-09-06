@@ -197,6 +197,35 @@ module.exports = async function handler(req, res) {
             return res.status(200).json({ members, chains: perChainMeta, warHitsMeta });
         }
 
+        // War Badges' own per-member stats (see lib/warBadgeStats.js / war-badges-tracker.js).
+        // Lives here rather than its own api/war-badges.js file — merged in to stay under
+        // Vercel Hobby's 12-Serverless-Function-per-deployment limit, which a separate file
+        // pushed this project over. The two tools already shared list-wars/getFactionId/isLeader
+        // verbatim, so this isn't a stretch: it's the same "war data" endpoint answering one more
+        // kind of question.
+        if (action === 'badge-stats') {
+            const { warStart, warEnd, enemyFactionId } = req.body;
+            if (!warStart || !warEnd || !enemyFactionId) return res.status(400).json({ error: 'Pick a war first.' });
+
+            const result = await fetchWarBadgeStats(key, factionId, String(enemyFactionId), warStart, warEnd);
+
+            const membersRes = await fetch(`https://api.torn.com/v2/faction/members?striptags=true&key=${encodeURIComponent(key)}`,
+                { headers: { accept: 'application/json' } });
+            const membersData = await membersRes.json();
+            const nameById = {};
+            for (const m of (membersData.members || [])) nameById[String(m.id)] = m.name;
+
+            const members = Object.entries(result.perAttacker).map(([id, stats]) => {
+                const { name: nameFromAttacks, ...rest } = stats;
+                return { id, name: nameFromAttacks || nameById[id] || `Ex-member #${id}`, ...rest };
+            });
+
+            return res.status(200).json({
+                members,
+                meta: { scanned: result.scanned, matched: result.ownOutgoing, rateLimited: result.rateLimited, pagesFetched: result.pagesFetched },
+            });
+        }
+
         if (action === 'save-receipt') {
             const { receipt } = req.body;
             if (!receipt) return res.status(400).json({ error: 'Missing receipt' });
