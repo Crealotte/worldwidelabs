@@ -271,6 +271,7 @@
         if (page === 'respect-edit') loadRespectEditor();
         if (page === 'war-payout') loadWarPayout();
         if (page === 'war-badges') loadWarBadges();
+        if (page === 'availability') loadAvailability();
         if (page === 'armory-tracker') loadArmoryTracker();
         if (page === 'foreign-stock' && !foreignStockLoaded) { foreignStockLoaded = true; loadForeignStock(); }
         if (page === 'crimes-guide' && !crimesGuideLoaded) { crimesGuideLoaded = true; loadCrimesGuide(); }

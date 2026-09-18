@@ -42,12 +42,15 @@ async function redis(command) {
 }
 
 const restockedKey = (factionId) => `wwl:restocked-wars:${factionId}`;
+const availabilityKey = (factionId) => `wwl:availability:${factionId}`;
 
-async function getFactionId(key) {
+// Resolves faction + the caller's own identity in one profile fetch — the availability tracker
+// (any member, not just leaders) needs to know who's actually recording their own slots.
+async function getProfile(key) {
     const r = await fetch(`https://api.torn.com/user/?selections=profile&key=${encodeURIComponent(key)}`);
     const profile = await r.json();
     if (profile.error || !profile.faction?.faction_id) return null;
-    return String(profile.faction.faction_id);
+    return { factionId: String(profile.faction.faction_id), playerId: String(profile.player_id), name: profile.name };
 }
 async function isLeader(key) {
     const r = await fetch(`https://api.torn.com/v2/faction/balance?key=${encodeURIComponent(key)}`,
@@ -76,8 +79,9 @@ module.exports = async function handler(req, res) {
 
         if (!key) return res.status(400).json({ error: 'Missing key' });
 
-        const factionId = await getFactionId(key);
-        if (!factionId) return res.status(403).json({ error: 'Could not determine your faction from this key' });
+        const profile = await getProfile(key);
+        if (!profile) return res.status(403).json({ error: 'Could not determine your faction from this key' });
+        const { factionId, playerId, name: playerName } = profile;
 
         // Open to any logged-in member of the faction, not leader-gated — this is what lets the
         // faction dashboard show the latest war's badge winners to everyone, not just leaders.
@@ -102,7 +106,65 @@ module.exports = async function handler(req, res) {
             return res.status(200).json({ receipts: index });
         }
 
+        // ---- War Availability Tracker: for the window after being matched, before the war
+        // starts. Every member marks the day/hour slots (Torn City Time = UTC) they expect to be
+        // around; leaders/council see it all added up per slot ("Saturday 18 TCT: 5") so they
+        // know when the faction can actually mobilize. Grid shape (which dates, how many days) is
+        // whatever the leader set with 'availability-start' for the current war — open-ended
+        // rather than hardcoded to a specific day count, since a war can drag a day past its
+        // normal length. Slots are keyed "day-hour" (day = 0-indexed offset from the tracker's
+        // start date), one flat object per member for O(1) toggling.
+        if (action === 'availability-get') {
+            const raw = await redis(['GET', availabilityKey(factionId)]);
+            const data = raw ? JSON.parse(raw) : null;
+            const mine = data?.entries?.[playerId]?.slots || {};
+            const result = {
+                config: data ? { startDate: data.startDate, days: data.days } : null,
+                mine,
+            };
+            if (await isLeader(key)) {
+                // Aggregate per slot: how many, and who — leaders want to actually act on this,
+                // not just see a number.
+                const summary = {};
+                for (const [id, entry] of Object.entries(data?.entries || {})) {
+                    for (const slot of Object.keys(entry.slots || {})) {
+                        const s = summary[slot] || (summary[slot] = { count: 0, names: [] });
+                        s.count++;
+                        s.names.push(entry.name || `#${id}`);
+                    }
+                }
+                result.summary = summary;
+            }
+            return res.status(200).json(result);
+        }
+
+        if (action === 'availability-set') {
+            const { day, hour, available } = req.body;
+            if (day == null || hour == null) return res.status(400).json({ error: 'Missing day/hour' });
+            const raw = await redis(['GET', availabilityKey(factionId)]);
+            const data = raw ? JSON.parse(raw) : null;
+            if (!data) return res.status(400).json({ error: 'No availability tracker is active for this faction right now — ask a leader to start one.' });
+            const entry = data.entries[playerId] || (data.entries[playerId] = { name: playerName, slots: {} });
+            entry.name = playerName; // keep it current in case of a name change
+            const slotKey = `${day}-${hour}`;
+            if (available) entry.slots[slotKey] = true; else delete entry.slots[slotKey];
+            await redis(['SET', availabilityKey(factionId), JSON.stringify(data)]);
+            return res.status(200).json({ ok: true });
+        }
+
         if (!(await isLeader(key))) return res.status(403).json({ error: 'Leaders only' });
+
+        // Starts a fresh tracker for the newly-matched war — wipes any previous entries, since
+        // this is meant to answer "who's around for THIS war", not accumulate forever. days is
+        // capped generously (a war dragging a day or two past a normal weekend is expected; this
+        // just guards against a fat-fingered huge number blowing up the grid).
+        if (action === 'availability-start') {
+            const { startDate, days } = req.body;
+            const dayCount = Math.min(14, Math.max(1, Number(days) || 5));
+            if (!startDate) return res.status(400).json({ error: 'Missing startDate' });
+            await redis(['SET', availabilityKey(factionId), JSON.stringify({ startDate, days: dayCount, entries: {} })]);
+            return res.status(200).json({ ok: true });
+        }
 
         if (action === 'list-wars') {
             const [r, restockedRaw] = await Promise.all([
@@ -230,7 +292,7 @@ module.exports = async function handler(req, res) {
         // War Badges' own per-member stats (see lib/warBadgeStats.js / war-badges-tracker.js).
         // Lives here rather than its own api/war-badges.js file — merged in to stay under
         // Vercel Hobby's 12-Serverless-Function-per-deployment limit, which a separate file
-        // pushed this project over. The two tools already shared list-wars/getFactionId/isLeader
+        // pushed this project over. The two tools already shared list-wars/getProfile/isLeader
         // verbatim, so this isn't a stretch: it's the same "war data" endpoint answering one more
         // kind of question.
         if (action === 'badge-stats') {

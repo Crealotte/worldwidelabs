@@ -298,6 +298,26 @@
     .chip button { background: none; color: var(--muted); padding: 0 4px; }
     .chip button:hover { color: var(--danger); filter: none; }
 
+    /* ---------- War Availability grid ---------- */
+    .av-table { border-collapse: collapse; font-size: 11px; white-space: nowrap; }
+    .av-table th {
+        color: var(--muted); font-weight: 600; padding: 4px 6px; text-align: center;
+        position: sticky; top: 0; background: var(--bench); font-size: 10px;
+    }
+    .av-hour-label {
+        color: var(--muted); font-family: var(--mono); padding: 2px 8px 2px 2px; text-align: right;
+        position: sticky; left: 0; background: var(--bench);
+    }
+    .av-cell {
+        width: 34px; height: 18px; border: 1px solid var(--line); cursor: pointer;
+        text-align: center; vertical-align: middle; color: var(--ink); font-weight: 700;
+        transition: background .1s;
+    }
+    .av-cell:hover { border-color: var(--reagent); }
+    .av-cell-mine { background: var(--reagent); }
+    .av-summary-cell { cursor: default; color: var(--text); }
+    .av-summary-cell:hover { border-color: var(--reagent); }
+
     .status { font-size: 13px; margin-top: 12px; display: none; }
     .status.err { color: var(--danger); display: block; }
     .status.ok { color: var(--muted); display: block; }
@@ -423,6 +443,7 @@
         <div class="nav-item" data-page="links">Tools &amp; links</div>
         <div class="nav-item" data-page="feedback">Feedback</div>
         <div class="nav-item" data-page="war-badges">War Badges</div>
+        <div class="nav-item" data-page="availability">War Availability</div>
         <div class="nav-item" data-page="ocfit">OC Fit Tracker</div>
         <div class="nav-item" data-page="foreign-stock">Overseas Stock</div>
         <div class="nav-item" data-page="crimes-guide">Crimes Guide</div>
@@ -975,6 +996,56 @@
             </div>
         </section>
 
+        <section class="page" id="page-availability">
+            <div class="lab-label">WWL·13 / for everyone</div>
+            <h2>War Availability</h2>
+            <p class="pagedesc">
+                For the window after we're matched, before the war starts — click every hour
+                (Torn City Time) you expect to be around. Leaders see it all added up so we know
+                when the faction can actually mobilize.
+            </p>
+
+            <div class="status" id="av-status"></div>
+
+            <div class="panel" id="av-none-msg" style="display:none;">
+                <p style="color:var(--muted);margin:0;">No availability tracker is active right now — it gets started once a war is matched.</p>
+            </div>
+
+            <div class="panel" id="av-start-panel" style="display:none;">
+                <h3>Leader: start / reset tracker</h3>
+                <p style="color:var(--muted);font-size:12px;margin:0 0 10px;">Starting a new one wipes everyone's previous entries — only do this for a new war.</p>
+                <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;">
+                    <div class="field" style="margin:0;">
+                        <label for="av-start-date">Start date (first column, e.g. the Friday)</label>
+                        <input id="av-start-date" type="date">
+                    </div>
+                    <div class="field" style="margin:0;max-width:140px;">
+                        <label for="av-days">Days to show</label>
+                        <input id="av-days" type="number" value="5" min="1" max="14">
+                    </div>
+                    <button class="ghost small" id="av-start-btn">Start tracker</button>
+                </div>
+            </div>
+
+            <div id="av-grid-panel" style="display:none;">
+                <div class="panel">
+                    <h3>Your availability</h3>
+                    <p style="color:var(--muted);font-size:12px;margin:0 0 10px;">Click a box to mark yourself available that hour — click again to unmark. Saves instantly.</p>
+                    <div class="table-scroll" style="overflow-x:auto;">
+                        <div id="av-grid-body"></div>
+                    </div>
+                </div>
+
+                <div class="panel" id="av-summary-panel" style="display:none;">
+                    <h3>Faction availability</h3>
+                    <p style="color:var(--muted);font-size:12px;margin:0 0 10px;">Hover a box to see who — leaders/council only.</p>
+                    <div class="table-scroll" style="overflow-x:auto;">
+                        <div id="av-summary-body"></div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
         <section class="page" id="page-armory-tracker">
             <div class="lab-label">WWL·12 / leadership tools</div>
             <h2>Consumption Tracker</h2>
@@ -1277,6 +1348,7 @@
 <script src="crimes-guide.js"></script>
 <script src="war-payout-tracker.js"></script>
 <script src="war-badges-tracker.js"></script>
+<script src="availability-tracker.js"></script>
 <script src="armory-tracker.js"></script>
 <script src="app-init.js"></script>
 </body>
