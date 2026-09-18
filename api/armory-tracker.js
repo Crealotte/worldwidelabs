@@ -19,6 +19,12 @@
 // educated guesses) — unparsed entries are counted and sampled in the response rather than
 // silently dropped, so a leader can report back what a real one looks like.
 //
+// Only "used" events count as consumption — loans/deposits/retrieves/returns don't, since a
+// loaned weapon/armor piece is still faction property until it isn't returned (that's the
+// separate, live current-loans view below). On top of that, Weapon/Armor/Temporary/Special item
+// types are excluded outright even if somehow parsed as "used" — same exclusion list Jimidy's own
+// tracker uses, confirmed directly from its source, not guessed.
+//
 // POST { key, action: 'current-loans' }                -> leader-only: live faction/armor snapshot
 //                                                          of outstanding temp-weapon loans + $ value
 // POST { key, action: 'consumption-report', from, to }  -> leader-only: everything consumed in a
@@ -30,6 +36,10 @@
 
 const { parseArmoryNewsEntry } = require('../lib/armoryNewsParser');
 const { fetchWarHits } = require('../lib/warHits');
+
+// Weapon/Armor/Temporary (loaned, not consumed) and Special (Torn's grab-bag of non-tradeable
+// oddities) — matches Jimidy's own consumption tracker's exclusion list exactly.
+const EXCLUDED_TYPES = new Set(['Weapon', 'Armor', 'Temporary', 'Special']);
 
 function sleep(ms) { return new Promise(resolve => setTimeout(resolve, ms)); }
 function isRateLimited(data) {
@@ -156,10 +166,14 @@ module.exports = async function handler(req, res) {
                     if (unparsedSample.length < 10) unparsedSample.push(parsed.text);
                     continue;
                 }
+                if (parsed.action !== 'used') continue; // loans/deposits/retrieves/returns aren't consumption
                 const meta = catalog[parsed.item.toLowerCase()];
                 const category = meta?.type || 'Other';
-                const relevant = category === 'Temporary' ? parsed.action === 'loaned' : parsed.action === 'used';
-                if (!relevant) continue;
+                // Weapon/Armor/Temporary/Special items get equipped or loaned, not consumed — they
+                // go back into the armory, so they were never really "used up". Confirmed by this
+                // exact exclusion list in Jimidy's own (real, if currently disabled) consumption
+                // tracker source — this isn't a guess.
+                if (EXCLUDED_TYPES.has(category)) continue;
                 const price = meta?.price ?? null;
 
                 const item = byItem[parsed.item] || (byItem[parsed.item] = { item: parsed.item, category, quantity: 0, value: 0, hasPrice: price != null, players: {} });

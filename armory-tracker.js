@@ -140,7 +140,7 @@ function renderAtReportDetail(report) {
     const el = $('at-report-body');
     if (!report.categories.length) {
         el.innerHTML = report.meta.entriesScanned > 0
-            ? '<p style="color:var(--muted);font-size:13px;">Found armory activity in this range, but none of it was consumption (uses/temp loans) — only deposits, retrieves, etc.</p>'
+            ? '<p style="color:var(--muted);font-size:13px;">Found armory activity in this range, but none of it was actual consumption — only deposits, loans, retrieves, returns, or weapon/armor activity (which don\'t count as "used up").</p>'
             : '';
         return;
     }
