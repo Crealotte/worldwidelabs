@@ -62,6 +62,7 @@ $('at-report-calc').addEventListener('click', async () => {
     const to = atDateInputToTs($('at-report-to').value, true);
     if (!from || !to) { st.className = 'status err'; st.textContent = 'Pick both dates.'; return; }
     st.className = 'status ok'; st.textContent = 'Calculating…';
+    $('at-unparsed-body').innerHTML = '';
     try {
         const result = await atCalculateReport(from, to);
         const m = result.meta;
@@ -71,15 +72,37 @@ $('at-report-calc').addEventListener('click', async () => {
         } else {
             st.className = 'status ok';
             st.textContent = `Scanned ${m.entriesScanned} armory event(s) over ${m.pagesFetched} page(s).`
-                + (m.unparsedCount ? ` ${m.unparsedCount} didn't match a known pattern — tell WWL if something looks missing.` : '')
+                + (m.unparsedCount ? ` ${m.unparsedCount} didn't match a known pattern.` : '')
                 + (m.rateLimited ? ' Torn rate-limited this partway through — numbers may be incomplete, try again shortly.' : '');
         }
+        renderAtUnparsed(m.unparsedSample || []);
         renderAtReportDetail(result);
         renderAtShoppingList(result);
     } catch (e) {
         st.className = 'status err'; st.textContent = e.message;
     }
 });
+
+// Shows the raw text of a few entries the parser couldn't match — so if something's missing
+// (like the temporary throwables) or the numbers look wrong, the leader can read Torn's actual
+// wording directly and paste it back, instead of us both guessing at patterns blind.
+function renderAtUnparsed(sample) {
+    const el = $('at-unparsed-body');
+    if (!sample.length) { el.innerHTML = ''; return; }
+    el.innerHTML = `
+        <div class="ocfit-scenario collapsed">
+            <div class="ocfit-scenario-header">
+                <span>⚠ ${sample.length} unrecognized armory event${sample.length === 1 ? '' : 's'} — click to see the raw text</span>
+                <span class="chev">▾</span>
+            </div>
+            <div class="ocfit-scenario-body" style="font-family:var(--mono);font-size:11px;color:var(--muted);word-break:break-word;">
+                ${sample.map(t => `<div style="padding:4px 0;border-top:1px solid var(--line);">${esc(t)}</div>`).join('')}
+            </div>
+        </div>`;
+    el.querySelector('.ocfit-scenario-header').addEventListener('click', () => {
+        el.querySelector('.ocfit-scenario').classList.toggle('collapsed');
+    });
+}
 
 function atPlayerLine(p, hasPrice) {
     let line = `${esc(p.name)} — ${p.quantity}x${hasPrice ? ` — $${Math.round(p.value).toLocaleString()}` : ''}`;
