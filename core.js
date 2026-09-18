@@ -106,7 +106,11 @@
         await pingTracker();
         checkFactionAccess();
 
-        const lastPage = sessionStorage.getItem(CURRENT_PAGE_KEY) || 'dashboard';
+        // A direct link like worldwidelabs.vercel.app/availability (for newsletters etc.) wins
+        // over whatever page was last open in this session — that's the whole point of sharing
+        // a specific link. Falls through to the remembered page, then dashboard, same as before.
+        const pathPage = window.location.pathname.replace(/^\/+|\/+$/g, '');
+        const lastPage = (pathPage && $('page-' + pathPage)) ? pathPage : (sessionStorage.getItem(CURRENT_PAGE_KEY) || 'dashboard');
         const navItem = document.querySelector(`.nav-item[data-page="${lastPage}"]`);
         const parentGroup = navItem?.closest('.nav-group');
         if (parentGroup) parentGroup.classList.remove('collapsed'); // reveal it even if its group was left collapsed
@@ -259,6 +263,14 @@
         document.querySelectorAll('.nav-item').forEach(i => i.classList.toggle('active', i.dataset.page === page));
         document.querySelectorAll('section.page').forEach(p => p.classList.remove('visible'));
         target.classList.add('visible');
+        // Keeps the address bar matching wherever you actually are — worldwidelabs.vercel.app/<page>
+        // — so copying the link from any page (not just ones with an explicit "share" button)
+        // gives a direct link back to it, e.g. for a newsletter. replaceState (not pushState): one
+        // tab navigating around shouldn't pile up back-button history for every click. Skips
+        // 'payout-receipt', which carries its own ?receipt=ID query string that this would wipe.
+        if (page !== 'payout-receipt' && window.location.pathname.replace(/^\/+|\/+$/g, '') !== page) {
+            history.replaceState(null, '', '/' + page);
+        }
         sessionStorage.setItem(CURRENT_PAGE_KEY, page);
         if (page === 'targets') loadBaldrLists();
         if (page === 'targetfinder') initTargetFinder();
