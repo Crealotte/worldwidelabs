@@ -878,8 +878,19 @@
                     </div>
 
                     <div style="margin-top:14px;padding:10px 12px;background:var(--bench-2);border-radius:var(--radius);">
-                        <div style="font-size:13px;margin-bottom:6px;">Armory costs for this war <span style="color:var(--muted);font-weight:400;">(from the Consumption Tracker)</span></div>
-                        <button class="ghost small" id="wp-armory-calc">Pull consumption for this war's dates</button>
+                        <div style="font-size:13px;margin-bottom:2px;">Armory costs <span style="color:var(--muted);font-weight:400;">(from the Consumption Tracker)</span></div>
+                        <p style="color:var(--muted);font-size:12px;margin:0 0 8px;">Defaults to the day after your previous war ended through this war's end — edit if that's not right.</p>
+                        <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;">
+                            <div class="field" style="margin:0;">
+                                <label for="wp-armory-from">From</label>
+                                <input id="wp-armory-from" type="date">
+                            </div>
+                            <div class="field" style="margin:0;">
+                                <label for="wp-armory-to">To</label>
+                                <input id="wp-armory-to" type="date">
+                            </div>
+                            <button class="ghost small" id="wp-armory-calc">Pull consumption</button>
+                        </div>
                         <div class="status" id="wp-armory-status" style="margin-top:8px;"></div>
                         <div id="wp-armory-body" style="margin-top:10px;"></div>
                     </div>
@@ -994,12 +1005,6 @@
                     </div>
                     <div class="status" id="at-report-status" style="margin-top:8px;"></div>
                     <div id="at-report-body" style="margin-top:14px;"></div>
-                </div>
-
-                <div class="panel" id="at-loans-panel">
-                    <h3>Outstanding temp-weapon loans</h3>
-                    <div class="status" id="at-loans-status"></div>
-                    <div id="at-loans-body" style="margin-top:10px;"></div>
                 </div>
 
                 <div class="panel" id="at-shopping-panel">

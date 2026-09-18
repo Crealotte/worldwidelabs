@@ -20,14 +20,13 @@
 // silently dropped, so a leader can report back what a real one looks like.
 //
 // Only "used" events count as consumption — loans/deposits/retrieves/returns don't, since a
-// loaned weapon/armor piece is still faction property until it isn't returned (that's the
-// separate, live current-loans view below). On top of that, only items in lib/trackedItems.js's
-// curated allowlist are counted at all — a hand-picked list (based on Jimidy's own tracker, plus
-// the leader's own additions), not "every item Torn types as Drug/Medical/etc." — that broader
-// version turned out too noisy in practice.
+// loaned weapon/armor piece is still faction property until it isn't returned. (There used to be
+// a separate "current outstanding loans" live view here too, but the leader doesn't want loaned
+// weapons/armor tracked here at all, so it was removed rather than fixed.) On top of that, only
+// items in lib/trackedItems.js's curated allowlist are counted at all — a hand-picked list (based
+// on Jimidy's own tracker, plus the leader's own additions), not "every item Torn types as
+// Drug/Medical/etc." — that broader version turned out too noisy in practice.
 //
-// POST { key, action: 'current-loans' }                -> leader-only: live faction/armor snapshot
-//                                                          of outstanding temp-weapon loans + $ value
 // POST { key, action: 'consumption-report', from, to }  -> leader-only: everything consumed in a
 //                                                          date range, grouped category -> item ->
 //                                                          player; Xanax's players additionally
@@ -37,7 +36,7 @@
 
 const { parseArmoryNewsEntry } = require('../lib/armoryNewsParser');
 const { fetchWarHits } = require('../lib/warHits');
-const { TRACKED_ITEMS } = require('../lib/trackedItems');
+const { TRACKED_ITEMS, BLOOD_BAG_RE } = require('../lib/trackedItems');
 
 function sleep(ms) { return new Promise(resolve => setTimeout(resolve, ms)); }
 function isRateLimited(data) {
@@ -106,39 +105,6 @@ module.exports = async function handler(req, res) {
         const factionId = await getFactionId(key);
         if (!factionId) return res.status(403).json({ error: 'Could not determine your faction from this key' });
         if (!(await isLeader(key))) return res.status(403).json({ error: 'Leaders only' });
-
-        if (action === 'current-loans') {
-            // v1 only — Torn returns "This selection is only available in API v1" if called as
-            // /v2/faction/armor, confirmed live.
-            const armorRes = await fetch(`https://api.torn.com/faction/?selections=armor&key=${encodeURIComponent(key)}`,
-                { headers: { accept: 'application/json' } });
-            const armorData = await armorRes.json();
-            if (armorData.error) return res.status(403).json({ error: armorData.error.error });
-            const items = (armorData.armor || []).filter(i => Number(i.loaned) > 0);
-            if (!items.length) return res.status(200).json({ loans: [] });
-
-            const [membersRes, itemsRes] = await Promise.all([
-                fetch(`https://api.torn.com/v2/faction/members?striptags=true&key=${encodeURIComponent(key)}`, { headers: { accept: 'application/json' } }),
-                fetch(`https://api.torn.com/torn/?selections=items&key=${encodeURIComponent(key)}`),
-            ]);
-            const membersData = await membersRes.json();
-            const itemsData = await itemsRes.json();
-            const nameById = {};
-            for (const m of (membersData.members || [])) nameById[String(m.id)] = m.name;
-            const priceById = {};
-            for (const [id, it] of Object.entries(itemsData.items || {})) priceById[id] = it.market_value ?? null;
-
-            const loans = items.map(i => {
-                const holderIds = String(i.loaned_to || '').split(',').map(s => s.trim()).filter(Boolean);
-                const holders = holderIds.map(id => nameById[id] || `#${id}`);
-                const price = priceById[String(i.ID)] ?? null;
-                return {
-                    id: i.ID, name: i.name, type: i.type, loaned: Number(i.loaned),
-                    holders, unitValue: price, totalValue: price != null ? price * Number(i.loaned) : null,
-                };
-            });
-            return res.status(200).json({ loans });
-        }
 
         if (action === 'consumption-report') {
             const { from, to } = req.body;
@@ -209,8 +175,22 @@ module.exports = async function handler(req, res) {
             categories.sort((a, b) => b.value - a.value);
             const grandTotal = categories.reduce((s, c) => s + c.value, 0);
 
+            // Shopping-list-only derived lines — things that don't themselves get "used" as
+            // consumption, but are what actually needs restocking as a result of it. Right now
+            // just the one: every type-specific full blood bag used started life as one plain
+            // "Empty Blood Bag" a member filled, so that's the real restock number, not the
+            // (untracked) empty bag's own usage.
+            const shoppingExtras = [];
+            const bloodBagQty = Object.values(byItem)
+                .filter(it => BLOOD_BAG_RE.test(it.item))
+                .reduce((s, it) => s + it.quantity, 0);
+            if (bloodBagQty > 0) {
+                const price = catalog['empty blood bag']?.price ?? null;
+                shoppingExtras.push({ category: 'Medical', item: 'Empty Blood Bag', quantity: bloodBagQty, value: price != null ? price * bloodBagQty : 0, hasPrice: price != null });
+            }
+
             return res.status(200).json({
-                categories, grandTotal, warHitsMeta,
+                categories, grandTotal, shoppingExtras, warHitsMeta,
                 meta: { entriesScanned: newsResult.entries.length, pagesFetched: newsResult.pagesFetched, rateLimited: newsResult.rateLimited, unparsedCount, unparsedSample },
             });
         }

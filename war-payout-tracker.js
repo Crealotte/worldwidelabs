@@ -85,6 +85,7 @@ function selectWar(idx) {
     });
     $('wp-chains-panel').style.display = 'block';
     $('wp-chains-note').textContent = `vs ${wpSelectedWar.them?.name || 'unknown'} — war hits are pulled automatically. Only add a chain ID here if hitters kept chaining after the war ended, so those extra hits get paid the flat rate instead of nothing.`;
+    if (typeof wpArmoryDefaultDates === 'function') wpArmoryDefaultDates(); // armory-tracker.js — prefill the armory-costs date range for this war
 }
 
 function renderChainChips() {

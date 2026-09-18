@@ -11,9 +11,10 @@ async function atFetch(body) {
     return res.json();
 }
 
-// A category's icon, purely cosmetic — falls back to a generic box for anything not listed
-// (Torn's own item `type` field drives the actual grouping, so a new category still works fine,
-// just without a matching icon).
+// A category's icon, purely cosmetic — falls back to a generic box for anything not listed. The
+// category names themselves come from lib/trackedItems.js's curated list (server-side), not from
+// Torn's own item type field directly, so adding a new category there needs a matching entry here
+// too for it to get a proper icon (harmless without one, just shows the generic box).
 const AT_CATEGORY_ICONS = {
     Drug: '💊', Medical: '🩹', Alcohol: '🍺', Candy: '🍬', Temporary: '🔫', Booster: '⚡', Other: '📦',
 };
@@ -21,55 +22,6 @@ const AT_CATEGORY_ICONS = {
 function loadArmoryTracker() {
     $('at-locked').style.display = isLeaderCached ? 'none' : 'block';
     $('at-editor').style.display = isLeaderCached ? 'block' : 'none';
-    if (!isLeaderCached) return;
-    loadAtLoans();
-}
-
-async function loadAtLoans() {
-    const st = $('at-loans-status');
-    st.className = 'status ok'; st.textContent = 'Loading current loans…';
-    try {
-        const result = await atFetch({ action: 'current-loans' });
-        if (result.error) throw new Error(result.error);
-        st.className = 'status'; st.textContent = '';
-        renderAtLoans(result.loans || []);
-    } catch (e) {
-        st.className = 'status err'; st.textContent = e.message;
-    }
-}
-
-function renderAtLoans(loans) {
-    const el = $('at-loans-body');
-    if (!loans.length) {
-        el.innerHTML = '<p style="color:var(--muted);font-size:13px;">Nothing currently on loan.</p>';
-        return;
-    }
-    const total = loans.reduce((s, l) => s + (l.totalValue || 0), 0);
-    el.innerHTML = `
-        <table style="width:100%;font-size:13px;border-collapse:collapse;">
-            <thead><tr style="color:var(--muted);text-align:left;">
-                <th style="padding:4px 8px;">Item</th><th style="padding:4px 8px;">Qty out</th>
-                <th style="padding:4px 8px;">Held by</th><th style="padding:4px 8px;">Value</th><th style="padding:4px 8px;"></th>
-            </tr></thead>
-            <tbody>${loans.map((l, i) => `
-                <tr style="border-top:1px solid var(--line);">
-                    <td style="padding:4px 8px;">${esc(l.name)}</td>
-                    <td style="padding:4px 8px;font-family:var(--mono);">${l.loaned}</td>
-                    <td style="padding:4px 8px;">${esc(l.holders.join(', '))}</td>
-                    <td style="padding:4px 8px;font-family:var(--mono);">${l.totalValue != null ? `$${Math.round(l.totalValue).toLocaleString()}` : '—'}</td>
-                    <td style="padding:4px 8px;">${l.totalValue ? `<button class="ghost small" data-loan-idx="${i}">+ War cost</button>` : ''}</td>
-                </tr>`).join('')}
-            </tbody>
-            <tfoot><tr><td colspan="3" style="padding:4px 8px;font-weight:700;">Total outstanding</td><td style="padding:4px 8px;font-weight:700;font-family:var(--mono);">$${Math.round(total).toLocaleString()}</td>
-                <td style="padding:4px 8px;">${total ? '<button class="ghost small" id="at-loans-add-total">+ War cost (all)</button>' : ''}</td></tr></tfoot>
-        </table>`;
-    el.querySelectorAll('[data-loan-idx]').forEach(btn => {
-        btn.addEventListener('click', () => {
-            const l = loans[Number(btn.dataset.loanIdx)];
-            atAddCostToPayout(`${l.name} (on loan, not yet returned)`, l.totalValue);
-        });
-    });
-    $('at-loans-add-total')?.addEventListener('click', () => atAddCostToPayout('Outstanding temp-weapon loans', total));
 }
 
 // Cross-tool integration: push a cost line straight into the War Payout Calculator (its wpCosts
@@ -179,53 +131,84 @@ function renderAtReportDetail(report) {
     });
 }
 
+// Shopping-list items for one category: the real consumed items plus any derived "extras" for
+// that category (e.g. Empty Blood Bag, restocked based on how many full ones got used — see
+// api/armory-tracker.js's consumption-report). Extras aren't in the main report at all, only here.
+function atShoppingItemsForCategory(report, cat) {
+    const extras = (report.shoppingExtras || []).filter(e => e.category === cat.category);
+    return [...cat.items, ...extras];
+}
+
 function renderAtShoppingList(report) {
     const el = $('at-shop-body');
-    if (!report.categories.length) {
+    const extraTotal = (report.shoppingExtras || []).reduce((s, e) => s + e.value, 0);
+    const grandTotal = report.grandTotal + extraTotal;
+    if (!report.categories.length && !report.shoppingExtras?.length) {
         el.innerHTML = '<p style="color:var(--muted);font-size:13px;">Nothing to restock for this range.</p>';
         return;
     }
     el.innerHTML = `
         <table style="width:100%;font-size:13px;border-collapse:collapse;">
             <thead><tr style="color:var(--muted);text-align:left;"><th style="padding:4px 8px;">Item</th><th style="padding:4px 8px;">Buy back</th><th style="padding:4px 8px;">Cost</th></tr></thead>
-            ${report.categories.map(cat => `
+            ${report.categories.map(cat => {
+                const items = atShoppingItemsForCategory(report, cat);
+                const subtotal = items.reduce((s, it) => s + it.value, 0);
+                return `
             <tbody>
                 <tr><td colspan="3" style="padding:8px 8px 2px;font-weight:700;">${AT_CATEGORY_ICONS[cat.category] || '📦'} ${esc(cat.category)}</td></tr>
-                ${cat.items.map(it => `
+                ${items.map(it => `
                 <tr style="border-top:1px solid var(--line);">
                     <td style="padding:4px 8px;">${esc(it.item)}</td>
                     <td style="padding:4px 8px;font-family:var(--mono);">${it.quantity}x</td>
                     <td style="padding:4px 8px;font-family:var(--mono);${it.hasPrice ? '' : 'color:var(--muted);'}">${it.hasPrice ? `$${Math.round(it.value).toLocaleString()}` : '—'}</td>
                 </tr>`).join('')}
-                <tr><td colspan="2" style="padding:2px 8px;text-align:right;color:var(--muted);">Subtotal</td><td style="padding:2px 8px;font-family:var(--mono);font-weight:700;">$${Math.round(cat.value).toLocaleString()}</td></tr>
-            </tbody>`).join('')}
-            <tfoot><tr><td colspan="2" style="padding:8px;font-weight:700;">Grand total</td><td style="padding:8px;font-weight:700;font-family:var(--mono);color:var(--reagent);">$${Math.round(report.grandTotal).toLocaleString()}</td></tr></tfoot>
+                <tr><td colspan="2" style="padding:2px 8px;text-align:right;color:var(--muted);">Subtotal</td><td style="padding:2px 8px;font-family:var(--mono);font-weight:700;">$${Math.round(subtotal).toLocaleString()}</td></tr>
+            </tbody>`;
+            }).join('')}
+            <tfoot><tr><td colspan="2" style="padding:8px;font-weight:700;">Grand total</td><td style="padding:8px;font-weight:700;font-family:var(--mono);color:var(--reagent);">$${Math.round(grandTotal).toLocaleString()}</td></tr></tfoot>
         </table>
         <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;">
             <button class="ghost small" id="at-shop-copy">Copy as text</button>
             <button class="ghost small" id="at-shop-add-total">+ War cost (grand total)</button>
         </div>`;
     $('at-shop-copy').addEventListener('click', () => {
-        const text = 'Restock shopping list:\n' + report.categories.map(cat =>
-            `\n${cat.category}:\n` + cat.items.map(it => `  ${it.quantity}x ${it.item}${it.hasPrice ? ` — $${Math.round(it.value).toLocaleString()}` : ''}`).join('\n')
-        ).join('') + `\n\nGrand total: $${Math.round(report.grandTotal).toLocaleString()}`;
+        const text = 'Restock shopping list:\n' + report.categories.map(cat => {
+            const items = atShoppingItemsForCategory(report, cat);
+            return `\n${cat.category}:\n` + items.map(it => `  ${it.quantity}x ${it.item}${it.hasPrice ? ` — $${Math.round(it.value).toLocaleString()}` : ''}`).join('\n');
+        }).join('') + `\n\nGrand total: $${Math.round(grandTotal).toLocaleString()}`;
         navigator.clipboard.writeText(text).then(() => toast('Shopping list copied'));
     });
-    $('at-shop-add-total').addEventListener('click', () => atAddCostToPayout('Armory restock', report.grandTotal));
+    $('at-shop-add-total').addEventListener('click', () => atAddCostToPayout('Armory restock', grandTotal));
 }
 
-// ---- War Payout page integration: pull the same consumption report for the selected war's own
-// dates, right there on that page, so armory costs can be added to the payout without switching
-// tabs (wpSelectedWar is a global from war-payout-tracker.js). ----
+// ---- War Payout page integration: pull the same consumption report for a calendar date range,
+// right there on that page, so armory costs can be added to the payout without switching tabs.
+// Deliberately NOT locked to the war's own start/end — the leader's actual accounting period runs
+// from the day after the previous war ended through this war's end (covers restocking between
+// wars too, not just the war itself), so the dates default to that but stay fully editable. ----
+
+// Called from war-payout-tracker.js's selectWar (via a typeof-guarded hook) when a war is picked.
+// Only fills in blank fields — never overwrites dates the leader already edited.
+function wpArmoryDefaultDates() {
+    if (typeof wpSelectedWar === 'undefined' || !wpSelectedWar) return;
+    let fromTs = wpSelectedWar.start; // fallback if no earlier war is found below
+    if (typeof wpWars !== 'undefined' && Array.isArray(wpWars)) {
+        const idx = wpWars.findIndex(w => String(w.id) === String(wpSelectedWar.id));
+        const prevWar = idx >= 0 ? wpWars[idx + 1] : null; // wpWars is sorted newest-end-first
+        if (prevWar) fromTs = prevWar.end + 86400; // the day after the previous war ended
+    }
+    if (!$('wp-armory-from').value) $('wp-armory-from').value = new Date(fromTs * 1000).toISOString().slice(0, 10);
+    if (!$('wp-armory-to').value) $('wp-armory-to').value = new Date(wpSelectedWar.end * 1000).toISOString().slice(0, 10);
+}
+
 $('wp-armory-calc').addEventListener('click', async () => {
     const st = $('wp-armory-status');
-    if (typeof wpSelectedWar === 'undefined' || !wpSelectedWar) {
-        st.className = 'status err'; st.textContent = 'Pick a war above first.';
-        return;
-    }
-    st.className = 'status ok'; st.textContent = 'Pulling consumption for this war…';
+    const from = atDateInputToTs($('wp-armory-from').value, false);
+    const to = atDateInputToTs($('wp-armory-to').value, true);
+    if (!from || !to) { st.className = 'status err'; st.textContent = 'Pick both dates.'; return; }
+    st.className = 'status ok'; st.textContent = 'Pulling consumption…';
     try {
-        const result = await atCalculateReport(wpSelectedWar.start, wpSelectedWar.end);
+        const result = await atCalculateReport(from, to);
         st.className = 'status'; st.textContent = '';
         renderWpArmoryBody(result);
     } catch (e) {
@@ -236,7 +219,7 @@ $('wp-armory-calc').addEventListener('click', async () => {
 function renderWpArmoryBody(report) {
     const el = $('wp-armory-body');
     if (!report.categories.length) {
-        el.innerHTML = '<p style="color:var(--muted);font-size:12px;">Nothing consumed during this war\'s dates.</p>';
+        el.innerHTML = '<p style="color:var(--muted);font-size:12px;">Nothing consumed in this date range.</p>';
         return;
     }
     el.innerHTML = report.categories.map(cat => `
@@ -249,5 +232,5 @@ function renderWpArmoryBody(report) {
     el.querySelectorAll('[data-wp-armory-cat]').forEach(btn => {
         btn.addEventListener('click', () => atAddCostToPayout(btn.dataset.wpArmoryCat, Number(btn.dataset.wpArmoryValue)));
     });
-    $('wp-armory-add-total').addEventListener('click', () => atAddCostToPayout('Armory (this war)', report.grandTotal));
+    $('wp-armory-add-total').addEventListener('click', () => atAddCostToPayout('Armory costs', report.grandTotal));
 }
