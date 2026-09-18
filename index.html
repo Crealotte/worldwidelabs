@@ -299,21 +299,21 @@
     .chip button:hover { color: var(--danger); filter: none; }
 
     /* ---------- War Availability grid ---------- */
-    .av-table { border-collapse: collapse; font-size: 11px; white-space: nowrap; }
+    .av-table { border-collapse: collapse; font-size: 14px; white-space: nowrap; }
     .av-table th {
-        color: var(--muted); font-weight: 600; padding: 4px 6px; text-align: center;
-        position: sticky; top: 0; background: var(--bench); font-size: 10px;
+        color: var(--muted); font-weight: 700; padding: 8px 10px; text-align: center;
+        position: sticky; top: 0; background: var(--bench); font-size: 13px;
     }
     .av-hour-label {
-        color: var(--muted); font-family: var(--mono); padding: 2px 8px 2px 2px; text-align: right;
+        color: var(--muted); font-family: var(--mono); font-size: 13px; padding: 0 12px 0 4px; text-align: right;
         position: sticky; left: 0; background: var(--bench);
     }
     .av-cell {
-        width: 34px; height: 18px; border: 1px solid var(--line); cursor: pointer;
-        text-align: center; vertical-align: middle; color: var(--ink); font-weight: 700;
+        width: 64px; height: 34px; border: 1px solid var(--line); cursor: pointer;
+        text-align: center; vertical-align: middle; color: var(--ink); font-weight: 700; font-size: 15px;
         transition: background .1s;
     }
-    .av-cell:hover { border-color: var(--reagent); }
+    .av-cell:hover { border-color: var(--reagent); border-width: 2px; }
     .av-cell-mine { background: var(--reagent); }
     .av-summary-cell { cursor: default; color: var(--text); }
     .av-summary-cell:hover { border-color: var(--reagent); }

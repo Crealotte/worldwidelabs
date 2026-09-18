@@ -65,11 +65,17 @@ function avGridHeader(days) {
     return html + '</tr></thead>';
 }
 
+// "00:00 - 01:00" rather than a bare hour — wraps midnight -> "23:00 - 00:00" correctly.
+function avHourLabel(h) {
+    const pad = n => String(n).padStart(2, '0');
+    return `${pad(h)}:00 - ${pad((h + 1) % 24)}:00`;
+}
+
 function renderAvGrid() {
     const days = avConfig.days;
     let html = `<table class="av-table">${avGridHeader(days)}<tbody>`;
     for (let h = 0; h < 24; h++) {
-        html += `<tr><td class="av-hour-label">${h}:00</td>`;
+        html += `<tr><td class="av-hour-label">${avHourLabel(h)}</td>`;
         for (let d = 0; d < days; d++) {
             const mine = !!avMine[`${d}-${h}`];
             html += `<td class="av-cell${mine ? ' av-cell-mine' : ''}" data-day="${d}" data-hour="${h}"></td>`;
@@ -104,7 +110,7 @@ function renderAvSummaryGrid() {
     const maxCount = Math.max(1, ...Object.values(avSummary).map(s => s.count));
     let html = `<table class="av-table">${avGridHeader(days)}<tbody>`;
     for (let h = 0; h < 24; h++) {
-        html += `<tr><td class="av-hour-label">${h}:00</td>`;
+        html += `<tr><td class="av-hour-label">${avHourLabel(h)}</td>`;
         for (let d = 0; d < days; d++) {
             const s = avSummary[`${d}-${h}`];
             const count = s ? s.count : 0;
