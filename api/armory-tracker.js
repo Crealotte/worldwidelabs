@@ -59,8 +59,10 @@ async function isLeader(key) {
 // Pages backward through armory news for the exact [from, to] window — `from` stays fixed at the
 // caller's requested range start, only the `to` cursor shrinks, matching the reference tool.
 // Capped well below its 100-page allowance since this runs inside a serverless function with a
-// real time budget, not a browser tab with no such limit — should still comfortably cover months
-// of activity for a normal-sized faction.
+// real time budget, not a browser tab with no such limit. `hitPageCap` tells the caller whether
+// the loop ran out of page budget with (as far as we can tell) more data still further back —
+// silently truncating a long/busy date range was a real undercounting risk, now at least surfaced
+// rather than hidden.
 async function fetchAllArmoryNews(key, from, to) {
     const all = [];
     const seenIds = new Set();
@@ -83,8 +85,8 @@ async function fetchAllArmoryNews(key, from, to) {
         let addedAny = false;
         for (const entry of news) {
             if (entry.timestamp < from || entry.timestamp > to) continue;
-            if (seenIds.has(entry.id)) continue;
-            seenIds.add(entry.id);
+            if (entry.id != null && seenIds.has(entry.id)) continue; // an entry with no id can never be a confirmed dupe
+            if (entry.id != null) seenIds.add(entry.id);
             all.push(entry);
             addedAny = true;
         }
@@ -93,7 +95,8 @@ async function fetchAllArmoryNews(key, from, to) {
         if (oldest < from) break; // paged past the start of the requested range
         cursor = oldest - 1;
     }
-    return { entries: all, pagesFetched: page, rateLimited };
+    const hitPageCap = page >= MAX_PAGES; // loop only ends this way without having hit any natural break condition
+    return { entries: all, pagesFetched: page, rateLimited, hitPageCap };
 }
 
 module.exports = async function handler(req, res) {
@@ -191,7 +194,10 @@ module.exports = async function handler(req, res) {
 
             return res.status(200).json({
                 categories, grandTotal, shoppingExtras, warHitsMeta,
-                meta: { entriesScanned: newsResult.entries.length, pagesFetched: newsResult.pagesFetched, rateLimited: newsResult.rateLimited, unparsedCount, unparsedSample },
+                meta: {
+                    entriesScanned: newsResult.entries.length, pagesFetched: newsResult.pagesFetched,
+                    rateLimited: newsResult.rateLimited, hitPageCap: newsResult.hitPageCap, unparsedCount, unparsedSample,
+                },
             });
         }
 

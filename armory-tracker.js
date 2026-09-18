@@ -70,10 +70,11 @@ $('at-report-calc').addEventListener('click', async () => {
             st.className = 'status err';
             st.textContent = 'No armory activity found for this range on this key — double check the dates, or that this faction actually used the armory then.';
         } else {
-            st.className = 'status ok';
+            st.className = m.hitPageCap ? 'status err' : 'status ok';
             st.textContent = `Scanned ${m.entriesScanned} armory event(s) over ${m.pagesFetched} page(s).`
                 + (m.unparsedCount ? ` ${m.unparsedCount} didn't match a known pattern.` : '')
-                + (m.rateLimited ? ' Torn rate-limited this partway through — numbers may be incomplete, try again shortly.' : '');
+                + (m.rateLimited ? ' Torn rate-limited this partway through — numbers may be incomplete, try again shortly.' : '')
+                + (m.hitPageCap ? ' ⚠ Hit the page limit for this range — there may be MORE activity further back that never got counted. Try a shorter date range (e.g. split it into two halves).' : '');
         }
         renderAtUnparsed(m.unparsedSample || []);
         renderAtReportDetail(result);
