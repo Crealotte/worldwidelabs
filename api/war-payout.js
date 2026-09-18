@@ -41,6 +41,8 @@ async function redis(command) {
     return data.result;
 }
 
+const restockedKey = (factionId) => `wwl:restocked-wars:${factionId}`;
+
 async function getFactionId(key) {
     const r = await fetch(`https://api.torn.com/user/?selections=profile&key=${encodeURIComponent(key)}`);
     const profile = await r.json();
@@ -103,10 +105,13 @@ module.exports = async function handler(req, res) {
         if (!(await isLeader(key))) return res.status(403).json({ error: 'Leaders only' });
 
         if (action === 'list-wars') {
-            const r = await fetch(`https://api.torn.com/v2/faction?selections=rankedwars&key=${encodeURIComponent(key)}`,
-                { headers: { accept: 'application/json' } });
+            const [r, restockedRaw] = await Promise.all([
+                fetch(`https://api.torn.com/v2/faction?selections=rankedwars&key=${encodeURIComponent(key)}`, { headers: { accept: 'application/json' } }),
+                redis(['GET', restockedKey(factionId)]),
+            ]);
             const data = await r.json();
             if (data.error) return res.status(403).json({ error: data.error.error });
+            const restocked = restockedRaw ? JSON.parse(restockedRaw) : {};
             const wars = Object.values(data.rankedwars || {});
             const list = wars.filter(w => w.end).map(w => {
                 const us = (w.factions || []).find(f => String(f.id) === factionId);
@@ -116,9 +121,24 @@ module.exports = async function handler(req, res) {
                     us: us ? { id: us.id, name: us.name, score: us.score } : null,
                     them: them ? { id: them.id, name: them.name, score: them.score } : null,
                     winner: w.winner,
+                    restocked: !!restocked[w.id],
                 };
             }).sort((a, b) => b.end - a.end);
             return res.status(200).json({ wars: list });
+        }
+
+        // Manual "did I restock after this war yet" checkbox, per war, stored per faction — the
+        // leader sometimes skips restocking for a war or two before catching up, and checking
+        // Torn's own history to remember what's already been done was tedious. Deliberately just
+        // a plain marker, not tied to the Consumption Tracker's own numbers at all.
+        if (action === 'set-restocked') {
+            const { warId, restocked: value } = req.body;
+            if (!warId) return res.status(400).json({ error: 'Missing warId' });
+            const raw = await redis(['GET', restockedKey(factionId)]);
+            const map = raw ? JSON.parse(raw) : {};
+            if (value) map[warId] = true; else delete map[warId];
+            await redis(['SET', restockedKey(factionId), JSON.stringify(map)]);
+            return res.status(200).json({ ok: true });
         }
 
         if (action === 'calculate') {

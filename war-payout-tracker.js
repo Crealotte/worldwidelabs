@@ -67,6 +67,9 @@ function renderWarList() {
                     <span class="ocfit-role-name">${esc(w.them?.name || 'Unknown opponent')}</span>
                     <span style="font-size:12px;color:var(--muted);">${esc(wpFmtDate(w.end))}</span>
                     <span style="font-size:12px;color:${String(w.winner) === String(w.us?.id) ? 'var(--reagent)' : 'var(--danger)'};">${String(w.winner) === String(w.us?.id) ? 'Won' : 'Lost'}</span>
+                    <label style="display:flex;align-items:center;gap:4px;font-size:12px;color:var(--muted);cursor:pointer;" title="Have you restocked the armory for this war yet?">
+                        <input type="checkbox" data-restock-idx="${i}" ${w.restocked ? 'checked' : ''} style="width:auto;"> Restocked
+                    </label>
                 </div>`).join('')}
             </div>
         </div>`;
@@ -76,6 +79,26 @@ function renderWarList() {
     el.querySelectorAll('[data-war-idx]').forEach(row => {
         row.addEventListener('click', () => selectWar(Number(row.dataset.warIdx)));
     });
+    el.querySelectorAll('[data-restock-idx]').forEach(cb => {
+        cb.addEventListener('click', e => e.stopPropagation()); // don't also trigger selectWar on the row
+        cb.addEventListener('change', () => toggleWarRestocked(Number(cb.dataset.restockIdx), cb.checked));
+    });
+}
+
+// Plain manual marker, not tied to the Consumption Tracker's own consumption/shopping numbers at
+// all — just a checkbox so a leader who sometimes skips restocking for a war or two can see at a
+// glance which past wars still need it, instead of having to remember or dig through history.
+async function toggleWarRestocked(idx, restocked) {
+    const w = wpWars[idx];
+    w.restocked = restocked; // optimistic — reflect it immediately, no need to wait on the round-trip
+    try {
+        const result = await wpFetch({ action: 'set-restocked', warId: w.id, restocked });
+        if (result.error) throw new Error(result.error);
+    } catch (e) {
+        w.restocked = !restocked; // failed — revert and let the leader know
+        renderWarList();
+        toast(`Couldn't save that: ${e.message}`);
+    }
 }
 
 function selectWar(idx) {
