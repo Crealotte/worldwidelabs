@@ -153,7 +153,6 @@
             setNavLock('ocfit-team', false);
             setNavLock('respect-edit', false);
             setNavLock('war-payout', false);
-            setNavLock('war-badges', false);
             setNavLock('armory-tracker', false);
             loadAdoption();
             loadFactionSharing();
@@ -165,7 +164,6 @@
             setNavLock('ocfit-team', true);
             setNavLock('respect-edit', true);
             setNavLock('war-payout', true);
-            setNavLock('war-badges', true);
             setNavLock('armory-tracker', true);
         }
         if (document.querySelector('.nav-item[data-page="announce-edit"]').classList.contains('active')) {

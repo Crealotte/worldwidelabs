@@ -416,13 +416,13 @@
                 <div class="nav-item" data-page="ocfit-team">OC Team Builder</div>
                 <div class="nav-item" data-page="respect-edit">Respect Tracker</div>
                 <div class="nav-item" data-page="war-payout">War Payout</div>
-                <div class="nav-item" data-page="war-badges">War Badges</div>
                 <div class="nav-item" data-page="armory-tracker">Consumption Tracker</div>
             </div>
         </div>
 
         <div class="nav-item" data-page="links">Tools &amp; links</div>
         <div class="nav-item" data-page="feedback">Feedback</div>
+        <div class="nav-item" data-page="war-badges">War Badges</div>
         <div class="nav-item" data-page="ocfit">OC Fit Tracker</div>
         <div class="nav-item" data-page="foreign-stock">Overseas Stock</div>
         <div class="nav-item" data-page="crimes-guide">Crimes Guide</div>
@@ -934,21 +934,18 @@
         </section>
 
         <section class="page" id="page-war-badges">
-            <div class="lab-label">WWL·11 / leadership tools</div>
+            <div class="lab-label">WWL·11 / for everyone</div>
             <h2>War Badges</h2>
             <p class="pagedesc">
                 A fun, per-war awards ceremony for your own faction — 1st and 2nd place across 8
-                categories, pulled from the same war data the Payout Calculator uses.
+                categories. Open to every member — pulled straight from the saved War Payout
+                receipt for each war, so nothing needs to be recalculated to see them.
             </p>
 
-            <div class="panel" id="wb-locked" style="display:none;">
-                <h3>🔒 Leaders only</h3>
-                <p style="color:var(--muted);line-height:1.6;margin:0;">War Badges needs the same <b>API Access</b> faction permission as War Payout.</p>
-            </div>
-
-            <div id="wb-editor" style="display:none;">
+            <div id="wb-editor">
                 <div class="panel">
-                    <h3>1. Pick a war</h3>
+                    <h3>1. Pick a past war</h3>
+                    <p style="color:var(--muted);font-size:12px;margin:0 0 10px;">Only wars a leader has saved a payout receipt for show up here — badges are read straight from that receipt.</p>
                     <div class="status" id="wb-war-status"></div>
                     <div id="wb-war-list" style="margin-top:10px;"></div>
                 </div>

@@ -90,6 +90,16 @@ module.exports = async function handler(req, res) {
             });
         }
 
+        // Also open to any member — the index of every saved receipt for this faction, newest
+        // first. Backs both the War Badges page's war picker (badges are read from whichever
+        // receipt a war maps to, no live recompute needed) and doubles as "browse past receipts"
+        // — each entry already carries its own shareable link via receiptId.
+        if (action === 'list-receipts') {
+            const indexRaw = await redis(['GET', `wwl:receipts-index:${factionId}`]);
+            const index = indexRaw ? JSON.parse(indexRaw) : [];
+            return res.status(200).json({ receipts: index });
+        }
+
         if (!(await isLeader(key))) return res.status(403).json({ error: 'Leaders only' });
 
         if (action === 'list-wars') {
@@ -253,6 +263,16 @@ module.exports = async function handler(req, res) {
             const id = Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
             await redis(['SET', `wwl:payout-receipt:${id}`, JSON.stringify({ ...receipt, badgeStats, factionId, createdAt: Date.now() })]);
             await redis(['SET', `wwl:latest-receipt:${factionId}`, id]);
+
+            // Keep a running index of every receipt for this faction (newest first, capped) —
+            // read by 'list-receipts' above. A read-modify-write on one small JSON blob, same
+            // pattern the Consumption Tracker's event log already uses elsewhere in this codebase.
+            const indexKey = `wwl:receipts-index:${factionId}`;
+            const indexRaw = await redis(['GET', indexKey]);
+            const index = indexRaw ? JSON.parse(indexRaw) : [];
+            index.unshift({ id, opponent: receipt.opponent, warEnd: receipt.warEnd, hasBadges: !!badgeStats, createdAt: Date.now() });
+            await redis(['SET', indexKey, JSON.stringify(index.slice(0, 200))]);
+
             return res.status(200).json({ ok: true, id });
         }
 

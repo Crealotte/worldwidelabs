@@ -1,13 +1,16 @@
 // war-badges-tracker.js — WorldWideLabs War Badges (frontend).
 // Per-war "awards ceremony": 8 categories, 1st and 2nd place, for your own faction's own war.
-// The backend (api/war-payout.js's 'badge-stats' action) hands over raw per-member counts; ranking/labeling for each
-// badge happens here — same split of responsibility as war-payout-tracker.js's wpCompute.
+// Open to every member, not leader-gated — badges are read from whichever saved War Payout
+// receipt a war maps to (see api/war-payout.js's 'list-receipts'/'get-receipt' actions), never
+// recomputed live here. That's deliberate, not just a permissions workaround: a live recompute
+// needs a leader-tier API key (Torn restricts /v2/faction/attacks that way), so reading from the
+// already-saved receipt is the only way this page can work for a regular member at all — and it
+// also means everyone always sees the exact same numbers the leader already finalized, not a
+// second, possibly-different live calculation.
 'use strict';
 
-let wbWars = [];
-let wbSelectedWar = null;
-let wbMembers = null; // raw per-member stats from the backend, or null before calculating
-let wbMeta = null;
+let wbReceipts = []; // index entries: { id, opponent, warEnd, hasBadges, createdAt }
+let wbSelectedReceipt = null; // full receipt object once picked (see selectWbReceipt)
 
 const WB_BADGES = [
     { key: 'alchemist', icon: '⚗️', name: 'The Alchemist', tagline: 'Most respect gained via war hits',
@@ -37,7 +40,7 @@ const WB_BADGES = [
 ];
 
 // Posts to /api/war-payout, not a dedicated /api/war-badges — merged in to stay under Vercel
-// Hobby's 12-Serverless-Function-per-deployment limit (see that file's 'badge-stats' action).
+// Hobby's 12-Serverless-Function-per-deployment limit.
 async function wbFetch(body) {
     const res = await fetch('/api/war-payout', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -50,18 +53,18 @@ function wbFmtDate(ts) {
     return new Date(ts * 1000).toLocaleDateString(undefined, { day: '2-digit', month: 'short', year: 'numeric' });
 }
 
-async function loadWarBadges() {
-    $('wb-locked').style.display = isLeaderCached ? 'none' : 'block';
-    $('wb-editor').style.display = isLeaderCached ? 'block' : 'none';
-    if (!isLeaderCached) return;
-    if (wbWars.length) return; // already loaded this session
+function wbReceiptLink(id) {
+    return `${window.location.origin}${window.location.pathname}?receipt=${id}`;
+}
 
+async function loadWarBadges() {
+    if (wbReceipts.length) return; // already loaded this session
     const st = $('wb-war-status');
-    st.className = 'status ok'; st.textContent = 'Loading past wars…';
+    st.className = 'status ok'; st.textContent = 'Loading past war receipts…';
     try {
-        const result = await wbFetch({ action: 'list-wars' });
+        const result = await wbFetch({ action: 'list-receipts' });
         if (result.error) throw new Error(result.error);
-        wbWars = result.wars || [];
+        wbReceipts = result.receipts || [];
         renderWbWarList();
         st.textContent = ''; st.className = 'status';
     } catch (e) {
@@ -71,21 +74,21 @@ async function loadWarBadges() {
 
 function renderWbWarList() {
     const el = $('wb-war-list');
-    if (!wbWars.length) {
-        el.innerHTML = '<p style="color:var(--muted);font-size:13px;">No past wars found on this key.</p>';
+    if (!wbReceipts.length) {
+        el.innerHTML = '<p style="color:var(--muted);font-size:13px;">No saved War Payout receipts yet — badges show up here as soon as a leader saves one (War Payout → "Save & get shareable receipt link").</p>';
         return;
     }
     el.innerHTML = `
-        <div class="ocfit-scenario collapsed" data-collapse="wb-wars">
+        <div class="ocfit-scenario" data-collapse="wb-wars">
             <div class="ocfit-scenario-header">
-                <span>Past wars (${wbWars.length})</span>
+                <span>Past wars (${wbReceipts.length})</span>
                 <span class="chev">▾</span>
             </div>
-            <div class="ocfit-scenario-body">${wbWars.map((w, i) => `
+            <div class="ocfit-scenario-body">${wbReceipts.map((r, i) => `
                 <div class="ocfit-role-row" data-war-idx="${i}" style="cursor:pointer;">
-                    <span class="ocfit-role-name">${esc(w.them?.name || 'Unknown opponent')}</span>
-                    <span style="font-size:12px;color:var(--muted);">${esc(wbFmtDate(w.end))}</span>
-                    <span style="font-size:12px;color:${String(w.winner) === String(w.us?.id) ? 'var(--reagent)' : 'var(--danger)'};">${String(w.winner) === String(w.us?.id) ? 'Won' : 'Lost'}</span>
+                    <span class="ocfit-role-name">${esc(r.opponent || 'Unknown opponent')}</span>
+                    <span style="font-size:12px;color:var(--muted);">${esc(wbFmtDate(r.warEnd))}</span>
+                    <a href="${esc(wbReceiptLink(r.id))}" target="_blank" rel="noopener" style="font-size:12px;" onclick="event.stopPropagation();">Full receipt →</a>
                 </div>`).join('')}
             </div>
         </div>`;
@@ -93,52 +96,36 @@ function renderWbWarList() {
         el.querySelector('.ocfit-scenario').classList.toggle('collapsed');
     });
     el.querySelectorAll('[data-war-idx]').forEach(row => {
-        row.addEventListener('click', () => selectWbWar(Number(row.dataset.warIdx)));
+        row.addEventListener('click', () => selectWbReceipt(Number(row.dataset.warIdx)));
     });
 }
 
-async function selectWbWar(idx) {
-    wbSelectedWar = wbWars[idx];
+async function selectWbReceipt(idx) {
+    const entry = wbReceipts[idx];
     $('wb-war-list').querySelectorAll('[data-war-idx]').forEach((row, i) => {
         row.style.background = i === idx ? 'var(--bench-2)' : '';
     });
     $('wb-grid-panel').style.display = 'block';
     $('wb-detail-panel').style.display = 'none';
-    wbMembers = null;
+    wbSelectedReceipt = null;
     renderWbGrid(); // clear out any previous war's results immediately, don't leave stale badges showing
 
-    if (!wbSelectedWar.them?.id) {
-        $('wb-status').className = 'status err';
-        $('wb-status').textContent = "Couldn't identify the enemy faction for this war.";
-        return;
-    }
-
     const st = $('wb-status');
-    st.className = 'status ok'; st.textContent = `Fetching war data vs ${wbSelectedWar.them?.name || 'unknown'}…`;
+    st.className = 'status ok'; st.textContent = `Loading receipt vs ${entry.opponent || 'unknown'}…`;
     try {
-        const result = await wbFetch({
-            action: 'badge-stats', warStart: wbSelectedWar.start, warEnd: wbSelectedWar.end,
-            enemyFactionId: wbSelectedWar.them.id,
-        });
+        const result = await wbFetch({ action: 'get-receipt', id: entry.id });
         if (result.error) throw new Error(result.error);
-        wbMembers = result.members;
-        wbMeta = result.meta;
-        if (wbMeta?.scanned > 0 && wbMeta?.matched === 0) {
-            st.className = 'status err';
-            st.textContent = `Scanned ${wbMeta.scanned} attack(s) but none matched as war hits — The Reactor, The Alchemist and The Volatile Compound may show nothing for this war.`;
-        } else {
-            st.className = 'status ok';
-            st.textContent = `${wbMembers.length} hitter(s) found.`;
-        }
+        wbSelectedReceipt = result.receipt;
+        st.className = wbSelectedReceipt.badgeStats ? 'status ok' : 'status err';
+        st.textContent = wbSelectedReceipt.badgeStats
+            ? '' : "This receipt was saved before War Badges existed, so most categories won't have data — The Reagent (payout) still will.";
         renderWbGrid();
     } catch (e) {
         st.className = 'status err'; st.textContent = e.message;
     }
 }
 
-// Pure ranking, reused by both the live War Badges page (below) and the shared payout receipt
-// viewer (war-payout-tracker.js's loadPayoutReceipt), which has its own static badgeStats array
-// baked into the receipt at save time rather than wbMembers from a live fetch.
+// Pure ranking function, given a plain array of per-member stat objects.
 function wbRankByStat(members, badge) {
     const withValue = members
         .map(m => ({ m, value: badge.stat(m) }))
@@ -147,32 +134,23 @@ function wbRankByStat(members, badge) {
     return withValue.slice(0, 2);
 }
 
-function wbTopTwo(badge) {
-    if (badge.special === 'payout') return wbPayoutTopTwo();
-    return wbRankByStat(wbMembers, badge);
-}
-
-// Cross-tool integration: if the leader has already calculated a payout for this exact war in
-// the War Payout Calculator this session (wpSelectedWar / wpCompute — both globals from
-// war-payout-tracker.js), use those real $ numbers. Otherwise this badge stays locked rather
-// than showing a made-up proxy number — a fake "highest payout" would be misleading.
-function wbPayoutTopTwo() {
-    if (typeof wpCompute !== 'function' || !wpSelectedWar || !wpCalcResult) return null;
-    if (String(wpSelectedWar.id) !== String(wbSelectedWar.id)) return null;
-    const rows = wpCompute().rows.filter(r => r.net > 0);
-    return rows.slice(0, 2).map(r => ({ m: { id: r.id, name: r.name }, value: r.net }));
-}
-
-// Badges on a saved/shared payout receipt: same 8 categories, but off the static badgeStats
-// array baked into the receipt at save time (see war-payout-tracker.js's wp-save-receipt
-// handler) instead of a live fetch — the receipt page has no API key and isn't leader-gated.
+// Badges off a saved receipt's data — used both by this page (wbSelectedReceipt) and the compact
+// read-only display on the shared receipt page / dashboard widget (see renderReceiptBadgesHtml).
+// Returns undefined (not an empty array) specifically when there's no badgeStats to rank at all
+// (an older receipt saved before this feature existed), so callers can tell "nothing qualified"
+// apart from "no data to even check".
 function wbTopTwoForReceipt(receipt, badge) {
+    if (!receipt) return undefined;
     if (badge.special === 'payout') {
         const rows = (receipt.rows || []).filter(r => r.net > 0);
         return rows.slice(0, 2).map(r => ({ m: { id: r.id, name: r.name }, value: r.net }));
     }
-    if (!receipt.badgeStats) return undefined; // older receipt, saved before badges existed
+    if (!receipt.badgeStats) return undefined;
     return wbRankByStat(receipt.badgeStats, badge);
+}
+
+function wbTopTwo(badge) {
+    return wbTopTwoForReceipt(wbSelectedReceipt, badge);
 }
 
 function wbFormatValue(badge, value, m) {
@@ -182,15 +160,12 @@ function wbFormatValue(badge, value, m) {
     return `${value.toLocaleString()} ${badge.unit}`;
 }
 
-// Dashboard widget, visible to every logged-in member (not leader-gated) — shows the latest
-// saved war's badge winners. Backed by api/war-payout.js's get-latest-badges action (receipts —
-// and the "latest one" pointer — live in that file's Redis storage, not here), which reads
-// whatever the most recently saved payout receipt for this faction baked in; nothing to compute
-// here, no API key privilege needed beyond being a faction member. Note: wpFetch, not wbFetch —
-// this hits /api/war-payout, where the receipt storage actually lives.
+// Dashboard widget, visible to every logged-in member — shows the latest saved war's badge
+// winners. Backed by 'get-latest-badges', which reads whatever the most recently saved payout
+// receipt for this faction baked in; nothing to compute here.
 async function loadDashboardWarBadges() {
     try {
-        const result = await wpFetch({ action: 'get-latest-badges' });
+        const result = await wbFetch({ action: 'get-latest-badges' });
         if (result.error || !result.receipt) { $('dash-war-badges-panel').style.display = 'none'; return; }
         const html = renderReceiptBadgesHtml(result.receipt);
         if (!html) { $('dash-war-badges-panel').style.display = 'none'; return; }
@@ -201,7 +176,7 @@ async function loadDashboardWarBadges() {
 }
 
 // Compact, read-only badges grid — reused by the shared payout receipt (war-payout-tracker.js's
-// loadPayoutReceipt) and the dashboard widget below. No click-to-drill-down needed on a static
+// loadPayoutReceipt) and the dashboard widget above. No click-to-drill-down needed on a static
 // display, just the 🥇 per category. Returns '' (no wrapper markup) if nothing qualified, so
 // callers can hide their own panel/heading entirely rather than show an empty box.
 function renderReceiptBadgesHtml(receipt) {
@@ -223,7 +198,7 @@ function renderReceiptBadgesHtml(receipt) {
 function renderWbGrid() {
     const el = $('wb-badge-grid');
     el.innerHTML = WB_BADGES.map(badge => {
-        if (!wbMembers) {
+        if (!wbSelectedReceipt) {
             return `
                 <div class="crimes-tile crimes-tile-pending" data-badge="${badge.key}">
                     <div class="crimes-tile-icon">${badge.icon}</div>
@@ -232,7 +207,7 @@ function renderWbGrid() {
                 </div>`;
         }
         const top = wbTopTwo(badge);
-        const leader = top === null ? '🔒 Run War Payout for this war' : (top.length ? `🥇 ${esc(top[0].m.name)}` : 'No qualifying hits');
+        const leader = top === undefined ? 'No data on this receipt' : (top.length ? `🥇 ${esc(top[0].m.name)}` : 'No qualifying hits');
         return `
             <div class="crimes-tile${top?.length ? '' : ' crimes-tile-pending'}" data-badge="${badge.key}">
                 <div class="crimes-tile-icon">${badge.icon}</div>
@@ -240,7 +215,7 @@ function renderWbGrid() {
                 <div class="crimes-tile-status">${leader}</div>
             </div>`;
     }).join('');
-    if (!wbMembers) return; // nothing to drill into yet
+    if (!wbSelectedReceipt) return; // nothing to drill into yet
     el.querySelectorAll('[data-badge]').forEach(tile => {
         tile.addEventListener('click', () => renderWbDetail(tile.dataset.badge));
     });
@@ -248,15 +223,15 @@ function renderWbGrid() {
 
 function renderWbDetail(key) {
     const badge = WB_BADGES.find(b => b.key === key);
-    if (!wbMembers) return;
+    if (!wbSelectedReceipt) return;
     const top = wbTopTwo(badge);
     $('wb-detail-panel').style.display = 'block';
     $('wb-detail-title').textContent = `${badge.icon} ${badge.name}`;
     $('wb-detail-desc').textContent = badge.desc;
 
     const body = $('wb-detail-body');
-    if (top === null) {
-        body.innerHTML = `<p style="color:var(--muted);font-size:13px;">Calculate this war in the <b>War Payout</b> tool first — this badge shows the real $ leaders once that's done.</p>`;
+    if (top === undefined) {
+        body.innerHTML = `<p style="color:var(--muted);font-size:13px;">This receipt doesn't have the data for this badge (saved before War Badges existed).</p>`;
         return;
     }
     if (!top.length) {
