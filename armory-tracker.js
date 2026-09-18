@@ -49,9 +49,86 @@ function atDateInputToTs(val, endOfDay) {
     return endOfDay ? ts + 86399 : ts; // include the whole "to" day
 }
 
-async function atCalculateReport(from, to) {
-    const result = await atFetch({ action: 'consumption-report', from, to });
-    if (result.error) throw new Error(result.error);
+// The backend caps how far back a single request pages through Torn's armory news (a real time
+// budget inside a serverless function, not the unlimited runtime a browser tab gets — which is
+// exactly why Jimidy's tool, running entirely client-side, never has this problem). A long or
+// busy date range could silently truncate in one shot. Fixed by chunking the range into smaller
+// windows from here in the browser (no server time limit on how many sequential calls we make)
+// and merging the results correctly — including recomputing Xanax's required/shortfall on the
+// MERGED totals afterward, since summing per-chunk shortfalls isn't the same as computing it once
+// on the full total (shortfall = max(0, required - hits) isn't linear).
+const AT_CHUNK_DAYS = 3;
+
+async function atCalculateReport(from, to, onProgress) {
+    const chunkSeconds = AT_CHUNK_DAYS * 86400;
+    const chunks = [];
+    for (let start = from; start <= to; start += chunkSeconds) {
+        chunks.push([start, Math.min(start + chunkSeconds - 1, to)]);
+    }
+
+    const byItem = {}; // item -> { item, category, quantity, value, hasPrice, players: { name -> {quantity, value, hits} } }
+    const shoppingExtrasByKey = {};
+    const meta = { entriesScanned: 0, pagesFetched: 0, unparsedCount: 0, unparsedSample: [], rateLimited: false, hitPageCap: false };
+
+    for (let i = 0; i < chunks.length; i++) {
+        if (onProgress) onProgress(i + 1, chunks.length);
+        const [cFrom, cTo] = chunks[i];
+        const result = await atFetch({ action: 'consumption-report', from: cFrom, to: cTo });
+        if (result.error) throw new Error(result.error);
+
+        for (const cat of result.categories) {
+            for (const it of cat.items) {
+                const m = byItem[it.item] || (byItem[it.item] = { item: it.item, category: it.category, quantity: 0, value: 0, hasPrice: false, players: {} });
+                m.quantity += it.quantity;
+                m.value += it.value;
+                if (it.hasPrice) m.hasPrice = true;
+                for (const p of it.players) {
+                    const mp = m.players[p.name] || (m.players[p.name] = { name: p.name, quantity: 0, value: 0, hits: 0 });
+                    mp.quantity += p.quantity;
+                    mp.value += p.value;
+                    if (p.hits != null) mp.hits += p.hits;
+                }
+            }
+        }
+        for (const extra of (result.shoppingExtras || [])) {
+            const key = extra.category + '|' + extra.item;
+            const m = shoppingExtrasByKey[key] || (shoppingExtrasByKey[key] = { category: extra.category, item: extra.item, quantity: 0, value: 0, hasPrice: false });
+            m.quantity += extra.quantity;
+            m.value += extra.value;
+            if (extra.hasPrice) m.hasPrice = true;
+        }
+        meta.entriesScanned += result.meta.entriesScanned;
+        meta.pagesFetched += result.meta.pagesFetched;
+        meta.unparsedCount += result.meta.unparsedCount;
+        if (meta.unparsedSample.length < 10) meta.unparsedSample.push(...(result.meta.unparsedSample || []).slice(0, 10 - meta.unparsedSample.length));
+        meta.rateLimited = meta.rateLimited || result.meta.rateLimited;
+        meta.hitPageCap = meta.hitPageCap || result.meta.hitPageCap;
+    }
+
+    // Recompute Xanax's required/shortfall once on the merged (whole-range) totals, not summed
+    // per-chunk — see the note above on why that's not the same thing.
+    for (const it of Object.values(byItem)) {
+        if (!/^xanax$/i.test(it.item)) continue;
+        for (const p of Object.values(it.players)) {
+            p.required = p.quantity * 10;
+            p.shortfall = Math.max(0, p.required - p.hits);
+        }
+    }
+
+    const categoriesMap = {};
+    for (const it of Object.values(byItem)) {
+        const cat = categoriesMap[it.category] || (categoriesMap[it.category] = { category: it.category, quantity: 0, value: 0, items: [] });
+        cat.quantity += it.quantity;
+        cat.value += it.value;
+        cat.items.push({ ...it, players: Object.values(it.players).sort((a, b) => b.quantity - a.quantity) });
+    }
+    const categories = Object.values(categoriesMap);
+    for (const c of categories) c.items.sort((a, b) => b.value - a.value);
+    categories.sort((a, b) => b.value - a.value);
+    const grandTotal = categories.reduce((s, c) => s + c.value, 0);
+    const shoppingExtras = Object.values(shoppingExtrasByKey);
+
+    const result = { categories, grandTotal, shoppingExtras, meta };
     atReport = result;
     return result;
 }
@@ -61,10 +138,11 @@ $('at-report-calc').addEventListener('click', async () => {
     const from = atDateInputToTs($('at-report-from').value, false);
     const to = atDateInputToTs($('at-report-to').value, true);
     if (!from || !to) { st.className = 'status err'; st.textContent = 'Pick both dates.'; return; }
-    st.className = 'status ok'; st.textContent = 'Calculating…';
     $('at-unparsed-body').innerHTML = '';
     try {
-        const result = await atCalculateReport(from, to);
+        const result = await atCalculateReport(from, to, (done, total) => {
+            st.className = 'status ok'; st.textContent = `Fetching… (${done}/${total})`;
+        });
         const m = result.meta;
         if (!result.categories.length && m.entriesScanned === 0) {
             st.className = 'status err';
@@ -74,7 +152,7 @@ $('at-report-calc').addEventListener('click', async () => {
             st.textContent = `Scanned ${m.entriesScanned} armory event(s) over ${m.pagesFetched} page(s).`
                 + (m.unparsedCount ? ` ${m.unparsedCount} didn't match a known pattern.` : '')
                 + (m.rateLimited ? ' Torn rate-limited this partway through — numbers may be incomplete, try again shortly.' : '')
-                + (m.hitPageCap ? ' ⚠ Hit the page limit for this range — there may be MORE activity further back that never got counted. Try a shorter date range (e.g. split it into two halves).' : '');
+                + (m.hitPageCap ? ' ⚠ Even a 3-day slice of this range hit the page limit — this faction is unusually active, numbers may still be incomplete.' : '');
         }
         renderAtUnparsed(m.unparsedSample || []);
         renderAtReportDetail(result);
@@ -230,10 +308,12 @@ $('wp-armory-calc').addEventListener('click', async () => {
     const from = atDateInputToTs($('wp-armory-from').value, false);
     const to = atDateInputToTs($('wp-armory-to').value, true);
     if (!from || !to) { st.className = 'status err'; st.textContent = 'Pick both dates.'; return; }
-    st.className = 'status ok'; st.textContent = 'Pulling consumption…';
     try {
-        const result = await atCalculateReport(from, to);
-        st.className = 'status'; st.textContent = '';
+        const result = await atCalculateReport(from, to, (done, total) => {
+            st.className = 'status ok'; st.textContent = `Fetching… (${done}/${total})`;
+        });
+        st.className = result.meta.hitPageCap ? 'status err' : 'status';
+        st.textContent = result.meta.hitPageCap ? '⚠ Hit the page limit even per 3-day slice — numbers may be incomplete for an unusually active period.' : '';
         renderWpArmoryBody(result);
     } catch (e) {
         st.className = 'status err'; st.textContent = e.message;

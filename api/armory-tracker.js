@@ -166,6 +166,39 @@ module.exports = async function handler(req, res) {
                 }
             }
 
+            // Shopping-list-only derived line: every type-specific full blood bag used started
+            // life as one plain "Empty Blood Bag" a member filled, so that's the real restock
+            // number, not the (untracked) empty bag's own usage. Computed from the 8 separate
+            // type entries BEFORE merging them below.
+            const shoppingExtras = [];
+            const bloodBagQty = Object.values(byItem)
+                .filter(it => BLOOD_BAG_RE.test(it.item))
+                .reduce((s, it) => s + it.quantity, 0);
+            if (bloodBagQty > 0) {
+                const price = catalog['empty blood bag']?.price ?? null;
+                shoppingExtras.push({ category: 'Blood Bags', item: 'Empty Blood Bag', quantity: bloodBagQty, value: price != null ? price * bloodBagQty : 0, hasPrice: price != null });
+            }
+
+            // Merge the 8 type-specific full blood bags (Blood Bag : A+, : O-, etc.) into one
+            // "Blood Bag" line — matches Jimidy's own tool, which also merges rather than listing
+            // each type, per the leader's own preference after seeing them listed separately.
+            const bloodBagEntries = Object.values(byItem).filter(it => BLOOD_BAG_RE.test(it.item));
+            if (bloodBagEntries.length) {
+                const merged = { item: 'Blood Bag', category: 'Blood Bags', quantity: 0, value: 0, hasPrice: false, players: {} };
+                for (const it of bloodBagEntries) {
+                    merged.quantity += it.quantity;
+                    merged.value += it.value;
+                    if (it.hasPrice) merged.hasPrice = true;
+                    delete byItem[it.item];
+                    for (const p of Object.values(it.players)) {
+                        const mp = merged.players[p.name] || (merged.players[p.name] = { name: p.name, quantity: 0, value: 0 });
+                        mp.quantity += p.quantity;
+                        mp.value += p.value;
+                    }
+                }
+                byItem['Blood Bag'] = merged;
+            }
+
             const categoriesMap = {};
             for (const it of Object.values(byItem)) {
                 const cat = categoriesMap[it.category] || (categoriesMap[it.category] = { category: it.category, quantity: 0, value: 0, items: [] });
@@ -177,20 +210,6 @@ module.exports = async function handler(req, res) {
             for (const c of categories) c.items.sort((a, b) => b.value - a.value);
             categories.sort((a, b) => b.value - a.value);
             const grandTotal = categories.reduce((s, c) => s + c.value, 0);
-
-            // Shopping-list-only derived lines — things that don't themselves get "used" as
-            // consumption, but are what actually needs restocking as a result of it. Right now
-            // just the one: every type-specific full blood bag used started life as one plain
-            // "Empty Blood Bag" a member filled, so that's the real restock number, not the
-            // (untracked) empty bag's own usage.
-            const shoppingExtras = [];
-            const bloodBagQty = Object.values(byItem)
-                .filter(it => BLOOD_BAG_RE.test(it.item))
-                .reduce((s, it) => s + it.quantity, 0);
-            if (bloodBagQty > 0) {
-                const price = catalog['empty blood bag']?.price ?? null;
-                shoppingExtras.push({ category: 'Blood Bags', item: 'Empty Blood Bag', quantity: bloodBagQty, value: price != null ? price * bloodBagQty : 0, hasPrice: price != null });
-            }
 
             return res.status(200).json({
                 categories, grandTotal, shoppingExtras, warHitsMeta,
