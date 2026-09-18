@@ -176,15 +176,16 @@ module.exports = async function handler(req, res) {
                 .reduce((s, it) => s + it.quantity, 0);
             if (bloodBagQty > 0) {
                 const price = catalog['empty blood bag']?.price ?? null;
-                shoppingExtras.push({ category: 'Blood Bags', item: 'Empty Blood Bag', quantity: bloodBagQty, value: price != null ? price * bloodBagQty : 0, hasPrice: price != null });
+                shoppingExtras.push({ category: 'Medical', item: 'Empty Blood Bag', quantity: bloodBagQty, value: price != null ? price * bloodBagQty : 0, hasPrice: price != null });
             }
 
             // Merge the 8 type-specific full blood bags (Blood Bag : A+, : O-, etc.) into one
             // "Blood Bag" line — matches Jimidy's own tool, which also merges rather than listing
-            // each type, per the leader's own preference after seeing them listed separately.
+            // each type — and group it under Medical alongside First Aid Kit etc. rather than as
+            // its own top-level category, per the leader's preference.
             const bloodBagEntries = Object.values(byItem).filter(it => BLOOD_BAG_RE.test(it.item));
             if (bloodBagEntries.length) {
-                const merged = { item: 'Blood Bag', category: 'Blood Bags', quantity: 0, value: 0, hasPrice: false, players: {} };
+                const merged = { item: 'Blood Bag', category: 'Medical', quantity: 0, value: 0, hasPrice: false, players: {} };
                 for (const it of bloodBagEntries) {
                     merged.quantity += it.quantity;
                     merged.value += it.value;
