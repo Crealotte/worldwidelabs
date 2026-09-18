@@ -186,7 +186,7 @@ module.exports = async function handler(req, res) {
                 .reduce((s, it) => s + it.quantity, 0);
             if (bloodBagQty > 0) {
                 const price = catalog['empty blood bag']?.price ?? null;
-                shoppingExtras.push({ category: 'Medical', item: 'Empty Blood Bag', quantity: bloodBagQty, value: price != null ? price * bloodBagQty : 0, hasPrice: price != null });
+                shoppingExtras.push({ category: 'Blood Bags', item: 'Empty Blood Bag', quantity: bloodBagQty, value: price != null ? price * bloodBagQty : 0, hasPrice: price != null });
             }
 
             return res.status(200).json({

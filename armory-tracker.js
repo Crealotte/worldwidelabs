@@ -16,7 +16,7 @@ async function atFetch(body) {
 // Torn's own item type field directly, so adding a new category there needs a matching entry here
 // too for it to get a proper icon (harmless without one, just shows the generic box).
 const AT_CATEGORY_ICONS = {
-    Drug: '💊', Medical: '🩹', Alcohol: '🍺', Candy: '🍬', Temporary: '🔫', Booster: '⚡', Other: '📦',
+    Drug: '💊', Medical: '🩹', 'Blood Bags': '🩸', Alcohol: '🍺', Candy: '🍬', Temporary: '🔫', Booster: '⚡', Other: '📦',
 };
 
 function loadArmoryTracker() {
