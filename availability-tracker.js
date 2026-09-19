@@ -16,7 +16,10 @@ let avMine = {}; // my own slots: "day-hour" (TCT) -> true
 let avSummary = null; // "day-hour" (TCT) -> { count, names } — present only when the caller is a leader
 let avMyUnavailable = null; // { name, note, at } if I marked myself as unable to make this war
 let avUnavailList = null; // leader-only: everyone who did — [{ id, name, note, at }]
-let avHospital = null; // leader-only: { overdosed: [{id, name, until, detail}], hospitalizedOther, error }
+let avResponded = null; // leader-only: everyone who ticked a slot or said they can't make it
+let avNotResponded = null; // leader-only: roster minus responded (null = roster couldn't be read)
+let avRosterError = null;
+let avWars = null; // leader-only: matched/upcoming ranked wars, for the "link to war" picker
 const AV_TZ_KEY = 'wwl_av_local_tz';
 let avLocal = false; // show/click in my own timezone instead of TCT
 try { avLocal = localStorage.getItem(AV_TZ_KEY) === '1'; } catch (e) { /* storage blocked — just default to TCT */ }
@@ -42,9 +45,12 @@ async function loadAvailability() {
         avSummary = result.summary || null; // only ever present for a leader-tier key
         avMyUnavailable = result.myUnavailable || null;
         avUnavailList = result.unavailable || null;
-        avHospital = result.hospital || null;
+        avResponded = result.responded || null;
+        avNotResponded = result.notResponded === undefined ? null : result.notResponded;
+        avRosterError = result.rosterError || null;
         st.textContent = ''; st.className = 'status';
         renderAvailabilityPage();
+        if (avSummary !== null && avWars === null) loadAvWars(); // leaders only, once — feeds the "link to war" picker
     } catch (e) {
         st.className = 'status err'; st.textContent = e.message;
     }
@@ -84,6 +90,54 @@ function avTctLabel(day, hour) {
     return `${date} ${avPad(hour)}:00 TCT`;
 }
 
+// The war this tracker is linked to (if any): a line saying when it starts, plus the start hour
+// gets highlighted in both grids so everyone can see how the availability lines up with it.
+function avWarStartSlot() {
+    const war = avConfig?.war;
+    if (!war?.start) return null;
+    const [y, m, d] = avStartParts();
+    const rel = war.start - Date.UTC(y, m - 1, d) / 1000;
+    if (rel < 0 || rel >= avConfig.days * 86400) return null;
+    return { day: Math.floor(rel / 86400), hour: Math.floor((rel % 86400) / 3600) };
+}
+function avIsWarSlot(day, hour) {
+    const s = avWarStartSlot();
+    return !!s && s.day === day && s.hour === hour;
+}
+
+function renderAvWarLine() {
+    const el = $('av-war-line');
+    const war = avConfig?.war;
+    if (!war?.start) { el.style.display = 'none'; return; }
+    const at = new Date(war.start * 1000);
+    const tct = at.toLocaleString(undefined, { weekday: 'short', day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'UTC' }) + ' TCT';
+    const local = (avLocal && avOffsetSupported())
+        ? ` (${at.toLocaleString(undefined, { weekday: 'short', hour: '2-digit', minute: '2-digit' })} your time)` : '';
+    el.style.display = 'block';
+    el.innerHTML = `🎯 ${war.opponent ? `War vs <b>${esc(war.opponent)}</b> — s` : 'S'}tarts <b>${esc(tct)}</b>${esc(local)}.${avWarStartSlot() ? ' The gold-outlined box in the grid is the start hour.' : ''}`;
+}
+
+// Matched/upcoming ranked wars for the "link to war" picker in the start form (leaders only).
+async function loadAvWars() {
+    const sel = $('av-war-select');
+    try {
+        const r = await avFetch({ action: 'availability-wars' });
+        if (r.error) throw new Error(r.error);
+        avWars = r.wars || [];
+    } catch (e) { avWars = []; }
+    const fmt = ts => new Date(ts * 1000).toLocaleString(undefined, { weekday: 'short', day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'UTC' }) + ' TCT';
+    sel.innerHTML = avWars.map(w => `<option value="${esc(w.id)}">vs ${esc(w.opponent)} — starts ${esc(fmt(w.start))}</option>`).join('')
+        + `<option value="">${avWars.length ? 'No war / enter the start time manually' : 'No matched war found — enter the start time manually (optional)'}</option>`;
+    avOnWarSelect();
+}
+function avOnWarSelect() {
+    const war = (avWars || []).find(w => w.id === $('av-war-select').value);
+    $('av-war-manual').style.display = war ? 'none' : 'flex';
+    // Weekend wars run from the day before the start — prefill that (still editable).
+    if (war) $('av-start-date').value = new Date((war.start - 86400) * 1000).toISOString().slice(0, 10);
+}
+$('av-war-select').addEventListener('change', avOnWarSelect);
+
 function renderAvailabilityPage() {
     $('av-start-panel').style.display = avSummary !== null ? 'block' : 'none'; // leader-only, inferred from whether summary came back at all
     if (!avConfig) {
@@ -91,10 +145,12 @@ function renderAvailabilityPage() {
         $('av-grid-panel').style.display = 'none';
         $('av-tz-bar').style.display = 'none';
         $('av-unavail-bar').style.display = 'none';
+        $('av-war-line').style.display = 'none';
         return;
     }
     $('av-none-msg').style.display = 'none';
     $('av-grid-panel').style.display = 'block';
+    renderAvWarLine();
     renderAvTzBar();
     renderAvUnavailBar();
     renderAvGrid();
@@ -143,35 +199,135 @@ async function toggleMyUnavailable() {
     }
 }
 
-// Leader view: who said they can't make it, and who's currently in hospital from an overdose.
-function renderAvOut() {
-    const link = (id, name) => `<a class="chip" style="text-decoration:none;" target="_blank" rel="noopener" href="https://www.torn.com/profiles.php?XID=${esc(id)}">${esc(name)}</a>`;
-    const tct = ts => new Date(ts * 1000).toLocaleString(undefined, { weekday: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'UTC' }) + ' TCT';
-    const un = avUnavailList || [];
-    const od = avHospital?.overdosed || [];
-    let html = `<div style="font-weight:700;margin-bottom:6px;">🚫 Not available (${un.length})</div>`;
-    html += un.length
-        ? `<div style="display:flex;flex-direction:column;gap:6px;margin-bottom:16px;">${un.map(u => `
-            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">${link(u.id, u.name)}
-                <span style="color:var(--muted);font-size:12px;">${u.note ? esc(u.note) : 'no reason given'}</span></div>`).join('')}</div>`
-        : '<p style="color:var(--muted);font-size:13px;margin:0 0 16px;">Nobody has said they can\'t make it yet.</p>';
+// Asks Discord (via the backend) to @mention a group — everyone signed up for a slot, or everyone
+// who hasn't filled the tracker in. The backend builds the mention list itself from stored data.
+// If Discord pinging isn't connected yet (no webhook), the ready-made message is copied to the
+// clipboard instead, so it can just be pasted into Discord.
+const AV_PING_PRESETS = {
+    slot: [
+        'War push! Be online and ready.',
+        'Prep now: energy, drugs and meds ready — we push at this time.',
+        'Reminder: you signed up for this hour — please be online.',
+    ],
+    missing: [
+        'Please fill in the war availability tracker so we know when you can fight.',
+        `Last call — fill in the availability tracker, or hit "I can't make this war".`,
+    ],
+};
+const AV_CUSTOM = 'Custom message…';
 
-    html += `<div style="font-weight:700;margin-bottom:6px;">💊 Currently overdosed (${od.length})</div>`;
-    if (avHospital?.error) {
-        html += `<p style="color:var(--danger);font-size:13px;margin:0;">Couldn't check hospital statuses: ${esc(avHospital.error)}</p>`;
-    } else {
-        html += od.length
-            ? `<div style="display:flex;flex-direction:column;gap:6px;">${od.map(o => `
-                <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">${link(o.id, o.name)}
-                    <span style="color:var(--muted);font-size:12px;">${o.until ? `out of hospital ${esc(tct(o.until))}` : 'release time unknown'}${o.detail ? ` — ${esc(o.detail)}` : ''}</span></div>`).join('')}</div>`
-            : '<p style="color:var(--muted);font-size:13px;margin:0;">Nobody is in hospital from an overdose right now.</p>';
-        // Sanity check on the (unverified) overdose matching: if plenty of people are hospitalized
-        // but none are recognized as OD, the reason text may just be worded differently than assumed.
-        if (avHospital && avHospital.hospitalizedOther > 0) {
-            html += `<p style="color:var(--muted);font-size:11px;margin:8px 0 0;">(${avHospital.hospitalizedOther} other member${avHospital.hospitalizedOther === 1 ? ' is' : 's are'} in hospital for something that isn't an overdose. If that looks wrong, tell WWL.)</p>`;
+// A small popup for composing the Discord ping: pick a standard message (or write your own) and
+// optionally set the push time, so the post always says clearly WHAT and WHEN. Resolves to
+// { message, pushAt } (pushAt = unix seconds, 0 if left blank), or null if cancelled. The time is
+// entered as TCT; the backend renders it as both TCT text and a Discord timestamp that shows in
+// each reader's own timezone.
+function avComposePing(kind, defaultPushAt) {
+    return new Promise(resolve => {
+        const presets = AV_PING_PRESETS[kind] || [];
+        const overlay = document.createElement('div');
+        overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.65);display:flex;align-items:center;justify-content:center;z-index:1000;padding:16px;';
+        const iso = defaultPushAt ? new Date(defaultPushAt * 1000).toISOString().slice(0, 16) : '';
+        overlay.innerHTML = `
+            <div class="panel" style="max-width:520px;width:100%;margin:0;">
+                <h3>📣 Ping on Discord</h3>
+                <div class="field"><label for="av-m-preset">Standard message</label>
+                    <select id="av-m-preset">${presets.map((p, i) => `<option value="${i}">${esc(p)}</option>`).join('')}<option value="custom">${AV_CUSTOM}</option></select></div>
+                <div class="field"><label for="av-m-text">Message</label>
+                    <textarea id="av-m-text" rows="3" maxlength="300" style="width:100%;background:var(--ink);color:var(--text);border:1px solid var(--line);border-radius:var(--radius);padding:8px 10px;font:inherit;resize:vertical;">${esc(presets[0] || '')}</textarea></div>
+                <div class="field"><label for="av-m-time">Push time (TCT) — optional</label>
+                    <input id="av-m-time" type="datetime-local" value="${esc(iso)}"></div>
+                <div id="av-m-preview" style="background:var(--bench-2);border-radius:var(--radius);padding:10px 12px;font-size:12px;color:var(--muted);margin:10px 0;white-space:pre-wrap;"></div>
+                <div style="display:flex;gap:8px;justify-content:flex-end;">
+                    <button class="ghost small" id="av-m-cancel">Cancel</button>
+                    <button id="av-m-send">Send to Discord</button>
+                </div>
+            </div>`;
+        document.body.appendChild(overlay);
+        const $$ = id => overlay.querySelector('#' + id);
+        const pushAt = () => { const v = $$('av-m-time').value; return v ? Math.floor(Date.parse(`${v}:00Z`) / 1000) : 0; };
+        const refresh = () => {
+            const t = pushAt();
+            const when = t ? `\n⏰ Push: ${new Date(t * 1000).toLocaleString(undefined, { weekday: 'short', day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'UTC' })} TCT (shown in everyone's own timezone on Discord too)` : '';
+            $$('av-m-preview').textContent = `${$$('av-m-text').value.trim() || '(no message)'}${when}\n@ everyone in the group`;
+        };
+        const close = result => { overlay.remove(); resolve(result); };
+        $$('av-m-preset').addEventListener('change', () => {
+            const v = $$('av-m-preset').value;
+            if (v !== 'custom') $$('av-m-text').value = presets[Number(v)];
+            else { $$('av-m-text').value = ''; $$('av-m-text').focus(); }
+            refresh();
+        });
+        $$('av-m-text').addEventListener('input', () => { $$('av-m-preset').value = 'custom'; refresh(); });
+        $$('av-m-time').addEventListener('input', refresh);
+        $$('av-m-cancel').addEventListener('click', () => close(null));
+        overlay.addEventListener('click', e => { if (e.target === overlay) close(null); });
+        $$('av-m-send').addEventListener('click', () => {
+            const message = $$('av-m-text').value.trim();
+            if (!message && !pushAt()) { toast('Add a message or a push time first.'); return; }
+            close({ message, pushAt: pushAt() });
+        });
+        refresh();
+    });
+}
+
+async function avPingDiscord(kind, defaultPushAt, extra = {}) {
+    const composed = await avComposePing(kind, defaultPushAt);
+    if (!composed) return;
+    try {
+        const result = await avFetch({ action: 'availability-ping', kind, message: composed.message, pushAt: composed.pushAt, ...extra });
+        if (result.error) throw new Error(result.error);
+        const skipped = result.noDiscord?.length ? ` Couldn't @ ${result.noDiscord.length} with no verified Discord: ${result.noDiscord.join(', ')}.` : '';
+        if (result.sent) {
+            toast(`Posted to Discord — ${result.mentioned} @mentioned.${skipped}`);
+        } else if (result.text) {
+            await navigator.clipboard.writeText(result.text).catch(() => {});
+            toast(`${result.configured ? '' : 'Discord pinging isn\'t connected yet — '}message copied instead, paste it into Discord.${skipped}`);
         }
+        if (result.mapError) toast(`Discord lookup problem: ${result.mapError}`);
+    } catch (e) {
+        toast(`Couldn't send that: ${e.message}`);
     }
+}
+
+// Leader view: who has filled the tracker in, who hasn't yet, and who said they can't make it.
+function renderAvOut() {
+    const chip = (name, extra = '') => `<span class="chip" style="cursor:default;">${esc(name)}${extra}</span>`;
+    const responded = avResponded || [];
+    const notResponded = avNotResponded;
+    const un = avUnavailList || [];
+
+    let html = `<div style="font-weight:700;margin-bottom:6px;">✅ Filled in (${responded.length})</div>`;
+    html += responded.length
+        ? `<div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px;">${responded.map(r => chip(r.name, r.out ? ' 🚫' : ` <span style="color:var(--muted);font-size:11px;">${r.slotCount}h</span>`)).join('')}</div>`
+        : '<p style="color:var(--muted);font-size:13px;margin:0 0 16px;">Nobody has filled it in yet.</p>';
+
+    html += `<div style="font-weight:700;margin-bottom:6px;">⏳ Not filled in yet${notResponded ? ` (${notResponded.length})` : ''}</div>`;
+    if (notResponded === null) {
+        html += `<p style="color:var(--danger);font-size:13px;margin:0 0 16px;">Couldn't read the member list: ${esc(avRosterError || 'unknown error')}</p>`;
+    } else if (!notResponded.length) {
+        html += '<p style="color:var(--muted);font-size:13px;margin:0 0 16px;">Everyone has responded 🎉</p>';
+    } else {
+        html += `<div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px;">${notResponded.map(m => chip(m.name)).join('')}</div>
+            <div style="margin-bottom:16px;">
+                <button class="ghost small" id="av-copy-missing">Copy names</button>
+                <button class="ghost small" id="av-ping-missing">📣 Ping them on Discord</button>
+            </div>`;
+    }
+
+    html += `<div style="font-weight:700;margin-bottom:6px;">🚫 Can't make it (${un.length})</div>`;
+    html += un.length
+        ? `<div style="display:flex;flex-direction:column;gap:6px;">${un.map(u => `
+            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">${chip(u.name)}
+                <span style="color:var(--muted);font-size:12px;">${u.note ? esc(u.note) : 'no reason given'}</span></div>`).join('')}</div>`
+        : '<p style="color:var(--muted);font-size:13px;margin:0;">Nobody has said they can\'t make it.</p>';
     $('av-out-body').innerHTML = html;
+
+    $('av-copy-missing')?.addEventListener('click', () => {
+        navigator.clipboard.writeText(notResponded.map(m => m.name).join(', ')).then(() => toast('Names copied'));
+    });
+    $('av-ping-missing')?.addEventListener('click', () => {
+        avPingDiscord('missing', avConfig?.war?.start || 0, {}); // time defaults to the war's start if linked
+    });
 }
 
 function renderAvTzBar() {
@@ -225,7 +381,8 @@ function avBuildTable(cellHtml) {
 function renderAvGrid() {
     $('av-grid-body').innerHTML = avBuildTable((day, hour) => {
         const mine = !!avMine[`${day}-${hour}`];
-        return `<td class="av-cell${mine ? ' av-cell-mine' : ''}" data-day="${day}" data-hour="${hour}" title="${esc(avTctLabel(day, hour))}"></td>`;
+        const war = avIsWarSlot(day, hour);
+        return `<td class="av-cell${mine ? ' av-cell-mine' : ''}${war ? ' av-cell-war' : ''}" data-day="${day}" data-hour="${hour}" title="${esc(avTctLabel(day, hour))}${war ? ' — WAR STARTS' : ''}"></td>`;
     });
     $('av-grid-body').querySelectorAll('.av-cell:not(.av-cell-off)').forEach(cell => {
         cell.addEventListener('click', () => toggleAvCell(Number(cell.dataset.day), Number(cell.dataset.hour), cell));
@@ -260,7 +417,8 @@ function renderAvSummaryGrid() {
         const bg = count ? `rgba(53,217,155,${(0.15 + (count / maxCount) * 0.65).toFixed(2)})` : 'transparent';
         const title = `${avTctLabel(day, hour)} — ${s ? s.names.join(', ') : 'nobody yet'}`;
         const sel = avSelected && avSelected.day === day && avSelected.hour === hour ? ' av-cell-selected' : '';
-        return `<td class="av-cell av-summary-cell${count ? ' av-clickable' : ''}${sel}" style="background:${bg};" data-day="${day}" data-hour="${hour}" title="${esc(title)}">${count || ''}</td>`;
+        const war = avIsWarSlot(day, hour) ? ' av-cell-war' : '';
+        return `<td class="av-cell av-summary-cell${count ? ' av-clickable' : ''}${sel}${war}" style="background:${bg};" data-day="${day}" data-hour="${hour}" title="${esc(title)}">${count || ''}</td>`;
     });
     el.querySelectorAll('.av-clickable').forEach(cell => {
         cell.addEventListener('click', () => {
@@ -272,8 +430,8 @@ function renderAvSummaryGrid() {
     renderAvDetail();
 }
 
-// Who signed up for the picked slot, each name linked to their Torn profile — so a leader can
-// ping exactly the right people when it's time. "Copy names" gives a plain comma-separated list.
+// Who signed up for the picked slot — so a leader can
+// ping exactly the right people on Discord when it's time (or copy the names).
 function renderAvDetail() {
     const el = $('av-detail');
     const s = avSelected && avSummary?.[`${avSelected.day}-${avSelected.hour}`];
@@ -283,25 +441,22 @@ function renderAvDetail() {
     const localNote = offset !== 0
         ? ` <span style="color:var(--muted);font-weight:400;">(${esc(avColLabel(Math.floor(idx / 24), offset))} ${avPad(((idx % 24) + 24) % 24)}:00 your time)</span>`
         : '';
-    // Flag anyone who's overdosed and would still be in hospital at this slot — signed up, but
-    // realistically not going to be there.
-    const [sy, sm, sd] = avStartParts();
-    const slotTs = Date.UTC(sy, sm - 1, sd) / 1000 + (avSelected.day * 24 + avSelected.hour) * 3600;
-    const odUntil = {};
-    for (const o of (avHospital?.overdosed || [])) odUntil[o.id] = o.until;
-    const stillOut = id => id in odUntil && (odUntil[id] == null || odUntil[id] > slotTs);
-    const anyOd = s.names.some((n, i) => stillOut(String(s.ids?.[i])));
     el.style.display = 'block';
     el.innerHTML = `
         <div class="av-detail-box">
             <div style="font-weight:700;margin-bottom:8px;">${esc(avTctLabel(avSelected.day, avSelected.hour))}${localNote} — ${s.count} available</div>
             <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px;">
-                ${s.names.map((n, i) => `<a class="chip" style="text-decoration:none;" target="_blank" rel="noopener" href="https://www.torn.com/profiles.php?XID=${esc(s.ids?.[i] ?? '')}">${esc(n)}${stillOut(String(s.ids?.[i])) ? ' 💊' : ''}</a>`).join('')}
+                ${s.names.map(n => `<span class="chip" style="cursor:default;">${esc(n)}</span>`).join('')}
             </div>
-            ${anyOd ? '<div style="color:var(--muted);font-size:12px;margin-bottom:10px;">💊 = overdosed and still in hospital at this time, so may not actually be around.</div>' : ''}
+            <button class="ghost small" id="av-ping-slot">📣 Ping everyone here on Discord</button>
             <button class="ghost small" id="av-copy-names">Copy names</button>
             <button class="ghost small" id="av-close-detail">Close</button>
         </div>`;
+    $('av-ping-slot').addEventListener('click', () => {
+        const day = avSelected.day, hour = avSelected.hour;
+        const [y, m, d] = avStartParts();
+        avPingDiscord('slot', Date.UTC(y, m - 1, d) / 1000 + (day * 24 + hour) * 3600, { day, hour }); // push time defaults to the slot's start
+    });
     $('av-copy-names').addEventListener('click', () => {
         navigator.clipboard.writeText(s.names.join(', ')).then(() => toast('Names copied'));
     });
@@ -321,11 +476,16 @@ $('av-start-btn').addEventListener('click', async () => {
     const startDate = $('av-start-date').value;
     const days = Number($('av-days').value) || 5;
     if (!startDate) { toast('Pick a start date first.'); return; }
+    // Linked to a matched war (start time taken from Torn itself), or — if none picked — an
+    // optional manually entered war start (TCT). Both are optional; the tracker works unlinked.
+    const warId = $('av-war-select').value;
+    let warStart = 0;
+    if (!warId && $('av-war-date').value) warStart = Math.floor(Date.parse(`${$('av-war-date').value}T${avPad(Number($('av-war-hour').value) || 0)}:00:00Z`) / 1000);
     if (!confirm('Start a new tracker? This wipes everyone\'s current entries.')) return;
     const btn = $('av-start-btn');
     btn.disabled = true;
     try {
-        const result = await avFetch({ action: 'availability-start', startDate, days });
+        const result = await avFetch({ action: 'availability-start', startDate, days, warId, warStart });
         if (result.error) throw new Error(result.error);
         toast('Tracker started');
         await loadAvailability();

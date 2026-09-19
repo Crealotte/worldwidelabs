@@ -26,6 +26,7 @@
 
 const { fetchWarHits, sleep } = require('../lib/warHits');
 const { fetchWarBadgeStats } = require('../lib/warBadgeStats');
+const { tornToDiscordIds } = require('../lib/discordMap');
 
 const REDIS_URL = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL;
 const REDIS_TOKEN = process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN;
@@ -58,6 +59,46 @@ async function isLeader(key) {
     const d = await r.json();
     return !d.error;
 }
+
+// Ranked wars with no end yet — i.e. matched-but-not-started, or still running. What the
+// availability tracker links to, so the war's start time (and the overdose window derived from
+// it) comes straight from Torn instead of being typed in.
+async function getUpcomingWars(key, factionId) {
+    const r = await fetch(`https://api.torn.com/v2/faction?selections=rankedwars&key=${encodeURIComponent(key)}`,
+        { headers: { accept: 'application/json' } });
+    const d = await r.json();
+    if (d.error) throw new Error(d.error.error);
+    return Object.values(d.rankedwars || {})
+        .filter(w => !w.end)
+        .map(w => {
+            const them = (w.factions || []).find(f => String(f.id) !== factionId);
+            return { id: String(w.id), start: w.start ?? w.war?.start ?? null, opponent: them?.name || 'Unknown opponent' };
+        })
+        .filter(w => w.start)
+        .sort((a, b) => a.start - b.start);
+}
+
+async function getRoster(key) {
+    const r = await fetch(`https://api.torn.com/v2/faction/members?striptags=true&key=${encodeURIComponent(key)}`,
+        { headers: { accept: 'application/json' } });
+    const d = await r.json();
+    if (d.error) throw new Error(d.error.error);
+    return (d.members || []).map(m => ({ id: String(m.id), name: m.name }));
+}
+
+// Everyone who has actually filled the tracker in for this war: ticked at least one slot, or
+// marked themselves not available. An entry left behind by ticking and then un-ticking
+// everything doesn't count as having responded.
+function respondedMap(data) {
+    const out = {};
+    for (const [id, entry] of Object.entries(data?.entries || {})) {
+        const slotCount = Object.keys(entry.slots || {}).length;
+        if (slotCount) out[id] = { id, name: entry.name, slotCount, out: false };
+    }
+    for (const [id, u] of Object.entries(data?.unavailable || {})) out[id] = { id, name: u.name, slotCount: out[id]?.slotCount || 0, out: true };
+    return out;
+}
+
 
 module.exports = async function handler(req, res) {
     try {
@@ -120,7 +161,8 @@ module.exports = async function handler(req, res) {
             const mine = data?.entries?.[playerId]?.slots || {};
             const unavailable = data?.unavailable || {};
             const result = {
-                config: data ? { startDate: data.startDate, days: data.days } : null,
+                // war = the ranked war this tracker is linked to ({ id, start, opponent }), if any
+                config: data ? { startDate: data.startDate, days: data.days, war: data.war || null } : null,
                 mine,
                 myUnavailable: unavailable[playerId] || null, // { name, note, at } if I marked myself out
             };
@@ -130,27 +172,14 @@ module.exports = async function handler(req, res) {
                 // leader never counts on someone who already said they can't make it.
                 result.unavailable = Object.entries(unavailable).map(([id, u]) => ({ id, name: u.name, note: u.note || '', at: u.at }));
 
-                // Currently-overdosed members, from the faction's own member statuses — they'll be
-                // out of action (hospital) for a while, so they'll participate less. Matches on
-                // the hospital reason text mentioning "overdose"; that wording isn't verified
-                // against a live key, so the count of OTHER hospitalized members is returned too —
-                // if lots are hospitalized but none show as OD, the leader can tell the matching
-                // needs adjusting rather than trusting an empty list.
-                const hospital = { overdosed: [], hospitalizedOther: 0, error: null };
-                try {
-                    const mr = await fetch(`https://api.torn.com/v2/faction/members?striptags=true&key=${encodeURIComponent(key)}`,
-                        { headers: { accept: 'application/json' } });
-                    const md = await mr.json();
-                    if (md.error) throw new Error(md.error.error);
-                    for (const m of (md.members || [])) {
-                        const st = m.status || {};
-                        if (String(st.state || '').toLowerCase() !== 'hospital') continue;
-                        if (/overdos/i.test(`${st.details || ''} ${st.description || ''}`)) {
-                            hospital.overdosed.push({ id: String(m.id), name: m.name, until: st.until || null, detail: st.details || st.description || '' });
-                        } else hospital.hospitalizedOther++;
-                    }
-                } catch (e) { hospital.error = String(e.message || e); }
-                result.hospital = hospital;
+                // Who has filled the tracker in (ticked a slot or hit "can't make it"), and — from
+                // the member roster — who hasn't yet, so they can be chased.
+                if (data) {
+                    const responded = respondedMap(data);
+                    result.responded = Object.values(responded);
+                    try { result.notResponded = (await getRoster(key)).filter(m => !responded[m.id]); }
+                    catch (e) { result.notResponded = null; result.rosterError = String(e.message || e); }
+                }
 
                 // Aggregate per slot: how many, and who — leaders want to actually act on this,
                 // not just see a number.
@@ -204,11 +233,121 @@ module.exports = async function handler(req, res) {
         // this is meant to answer "who's around for THIS war", not accumulate forever. days is
         // capped generously (a war dragging a day or two past a normal weekend is expected; this
         // just guards against a fat-fingered huge number blowing up the grid).
+        // Posts an @mention message to Discord for everyone who signed up for a slot ('slot') or
+        // hasn't filled the tracker in yet ('missing'). The mention list is built HERE from the
+        // stored data — never taken from the client — and allowed_mentions is locked to exactly
+        // those users, so the free-text message can't smuggle in an @everyone. Needs Discord
+        // posting configured (see below: bot + channel ID, or a webhook); without it, this returns
+        // the ready-made text so the leader can paste it into Discord themselves.
+        // People whose nickname carries no [TornID] (not verified in Discord) can't be mentioned —
+        // they're returned in noDiscord so the leader knows who was left out.
+        if (action === 'availability-ping') {
+            const { kind, day, hour, message } = req.body;
+            const raw = await redis(['GET', availabilityKey(factionId)]);
+            const data = raw ? JSON.parse(raw) : null;
+            if (!data) return res.status(400).json({ error: 'No availability tracker is active right now.' });
+
+            let targets = [];
+            if (kind === 'slot') {
+                const slot = `${Number(day)}-${Number(hour)}`;
+                for (const [id, entry] of Object.entries(data.entries || {})) {
+                    if (data.unavailable?.[id]) continue; // said they can't make it — don't ping them
+                    if (entry.slots?.[slot]) targets.push({ id, name: entry.name });
+                }
+            } else if (kind === 'missing') {
+                try {
+                    const responded = respondedMap(data);
+                    targets = (await getRoster(key)).filter(m => !responded[m.id]);
+                } catch (e) { return res.status(403).json({ error: `Couldn't read the member list: ${e.message}` }); }
+            } else return res.status(400).json({ error: 'Unknown ping kind' });
+            if (!targets.length) return res.status(400).json({ error: 'Nobody to ping for that.' });
+
+            // Optional push time, so the message always states WHEN. Discord's <t:unix:F> markup
+            // renders in each reader's own timezone (and :R as "in 3 hours"); the plain TCT text is
+            // alongside it since TCT is what the war itself runs on.
+            const pushAt = Math.floor(Number(req.body.pushAt) || 0);
+            let timeLine = '';
+            if (pushAt > 1e9 && pushAt < 4e9) {
+                const tct = new Date(pushAt * 1000).toLocaleString('en-GB', { weekday: 'short', day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'UTC' });
+                timeLine = `⏰ **Push: <t:${pushAt}:F>** (<t:${pushAt}:R>) — ${tct} TCT`;
+            }
+            const intro = [String(message || '').slice(0, 400).trim(), timeLine].filter(Boolean).join('\n');
+            let idMap = null, mapError = null;
+            try { idMap = await tornToDiscordIds(); } catch (e) { mapError = String(e.message || e); }
+            const mentions = [], noDiscord = [];
+            for (const t of targets) {
+                const did = idMap?.[t.id];
+                if (did) mentions.push(`<@${did}>`); else noDiscord.push(t.name);
+            }
+
+            const text = [intro, mentions.join(' ')].filter(Boolean).join('\n');
+            // Two ways to post: the existing WorldWideLabs Discord bot (needs DISCORD_WAR_CHANNEL_ID
+            // — the channel to post in — and Send Messages permission there), or a plain channel
+            // webhook (DISCORD_WAR_WEBHOOK_URL). Webhook wins if both are set.
+            const webhook = process.env.DISCORD_WAR_WEBHOOK_URL;
+            const botToken = process.env.DISCORD_BOT_TOKEN;
+            const channelId = process.env.DISCORD_WAR_CHANNEL_ID;
+            const configured = !!webhook || !!(botToken && channelId);
+            if (!configured || !mentions.length) {
+                return res.status(200).json({ sent: false, configured, text, mentioned: mentions.length, noDiscord, mapError });
+            }
+            if (webhook && !/^https:\/\/(?:[a-z]+\.)?discord(?:app)?\.com\/api\/webhooks\//.test(webhook)) {
+                return res.status(500).json({ error: 'DISCORD_WAR_WEBHOOK_URL doesn\'t look like a Discord webhook URL.' });
+            }
+            const postToDiscord = (content, users) => webhook
+                ? fetch(webhook, {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ content, username: 'WWLabs', allowed_mentions: { parse: [], users } }),
+                })
+                : fetch(`https://discord.com/api/v10/channels/${encodeURIComponent(channelId)}/messages`, {
+                    method: 'POST', headers: { Authorization: `Bot ${botToken}`, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ content, allowed_mentions: { parse: [], users } }),
+                });
+
+            // Discord caps a message at 2000 chars — split a long mention list across several.
+            const chunks = [];
+            let cur = intro ? `${intro}\n` : '';
+            for (const m of mentions) {
+                if ((cur + m + ' ').length > 1900) { chunks.push(cur.trim()); cur = ''; }
+                cur += `${m} `;
+            }
+            if (cur.trim()) chunks.push(cur.trim());
+            for (const content of chunks) {
+                const users = [...content.matchAll(/<@(\d+)>/g)].map(x => x[1]);
+                const r = await postToDiscord(content, users);
+                if (!r.ok) {
+                    const body = await r.text().catch(() => '');
+                    return res.status(502).json({ error: `Discord rejected the message (${r.status})${body ? `: ${body.slice(0, 120)}` : ''}` });
+                }
+            }
+            return res.status(200).json({ sent: true, mentioned: mentions.length, noDiscord, messages: chunks.length });
+        }
+
+        // Matched/upcoming wars a tracker can be linked to (picker in the start form).
+        if (action === 'availability-wars') {
+            try { return res.status(200).json({ wars: await getUpcomingWars(key, factionId) }); }
+            catch (e) { return res.status(403).json({ error: String(e.message || e) }); }
+        }
+
+        // Optionally linked to a ranked war (warId — start time and opponent are taken from Torn
+        // itself, not trusted from the client) or given a manual war start (warStart, unix). The
+        // tracker isn't otherwise tied to any war, so both are optional.
         if (action === 'availability-start') {
-            const { startDate, days } = req.body;
+            const { startDate, days, warId, warStart } = req.body;
             const dayCount = Math.min(14, Math.max(1, Number(days) || 5));
             if (!startDate) return res.status(400).json({ error: 'Missing startDate' });
-            await redis(['SET', availabilityKey(factionId), JSON.stringify({ startDate, days: dayCount, entries: {}, unavailable: {} })]);
+            let war = null;
+            if (warId) {
+                let wars;
+                try { wars = await getUpcomingWars(key, factionId); }
+                catch (e) { return res.status(403).json({ error: String(e.message || e) }); }
+                const w = wars.find(x => x.id === String(warId));
+                if (!w) return res.status(400).json({ error: "Couldn't find that war among your matched/upcoming wars — it may have already ended." });
+                war = { id: w.id, start: w.start, opponent: w.opponent };
+            } else if (Number(warStart) > 0) {
+                war = { id: null, start: Number(warStart), opponent: '' };
+            }
+            await redis(['SET', availabilityKey(factionId), JSON.stringify({ startDate, days: dayCount, war, entries: {}, unavailable: {} })]);
             return res.status(200).json({ ok: true });
         }
 

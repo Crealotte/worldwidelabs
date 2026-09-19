@@ -321,6 +321,7 @@
     .av-clickable:hover { border-color: var(--reagent); border-width: 2px; }
     .av-cell-selected { outline: 3px solid var(--reagent); outline-offset: -3px; }
     .av-detail-box { background: var(--bench-2); border: 1px solid var(--reagent-dim); border-radius: var(--radius); padding: 12px 14px; margin: 0 0 12px; }
+    .av-cell-war { box-shadow: inset 0 0 0 3px #f0b432; }
     .av-cell-off { background: var(--bench-2); opacity: .35; cursor: not-allowed; }
     .av-cell-off:hover { border-color: var(--line); border-width: 1px; }
     .av-cell:hover { border-color: var(--reagent); border-width: 2px; }
@@ -1024,6 +1025,22 @@
             <div class="panel" id="av-start-panel" style="display:none;">
                 <h3>Leader: start / reset tracker</h3>
                 <p style="color:var(--muted);font-size:12px;margin:0 0 10px;">Starting a new one wipes everyone's previous entries — only do this for a new war.</p>
+                <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-bottom:12px;">
+                    <div class="field" style="margin:0;min-width:260px;">
+                        <label for="av-war-select">Link to war</label>
+                        <select id="av-war-select"><option value="">Loading matched wars…</option></select>
+                    </div>
+                    <div id="av-war-manual" style="display:none;gap:10px;flex-wrap:wrap;align-items:flex-end;">
+                        <div class="field" style="margin:0;">
+                            <label for="av-war-date">War start date (TCT)</label>
+                            <input id="av-war-date" type="date">
+                        </div>
+                        <div class="field" style="margin:0;max-width:120px;">
+                            <label for="av-war-hour">Hour (TCT)</label>
+                            <input id="av-war-hour" type="number" value="18" min="0" max="23">
+                        </div>
+                    </div>
+                </div>
                 <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;">
                     <div class="field" style="margin:0;">
                         <label for="av-start-date">Start date (first column, e.g. the Friday)</label>
@@ -1044,6 +1061,7 @@
                 <span id="av-tz-note" style="color:var(--muted);"></span>
             </div>
 
+            <div id="av-war-line" style="display:none;margin:0 0 12px;font-size:14px;font-weight:600;"></div>
             <div id="av-unavail-bar" style="display:none;margin:0 0 12px;"></div>
 
             <div id="av-grid-panel" style="display:none;">
@@ -1067,8 +1085,8 @@
                 </div>
 
                 <div class="panel" id="av-out-panel" style="display:none;">
-                    <h3>Who's out</h3>
-                    <p style="color:var(--muted);font-size:12px;margin:0 0 10px;">Members who said they can't make this war, and members currently in hospital from an overdose — leaders/council only. Neither is counted in the availability numbers above (the overdosed are just flagged).</p>
+                    <h3>Responses</h3>
+                    <p style="color:var(--muted);font-size:12px;margin:0 0 10px;">Who has filled the tracker in (ticked a slot or said they can't make it), who hasn't yet, and who can't make it — leaders/council only. Anyone who can't make it isn't counted in the availability numbers above.</p>
                     <div id="av-out-body"></div>
                 </div>
             </div>
