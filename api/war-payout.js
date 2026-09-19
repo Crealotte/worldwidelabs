@@ -118,15 +118,45 @@ module.exports = async function handler(req, res) {
             const raw = await redis(['GET', availabilityKey(factionId)]);
             const data = raw ? JSON.parse(raw) : null;
             const mine = data?.entries?.[playerId]?.slots || {};
+            const unavailable = data?.unavailable || {};
             const result = {
                 config: data ? { startDate: data.startDate, days: data.days } : null,
                 mine,
+                myUnavailable: unavailable[playerId] || null, // { name, note, at } if I marked myself out
             };
             if (await isLeader(key)) {
+                // Everyone who hit "I can't make this war" (the forum-post equivalent) — listed
+                // for the leader, and their ticked slots are left out of the heatmap below so a
+                // leader never counts on someone who already said they can't make it.
+                result.unavailable = Object.entries(unavailable).map(([id, u]) => ({ id, name: u.name, note: u.note || '', at: u.at }));
+
+                // Currently-overdosed members, from the faction's own member statuses — they'll be
+                // out of action (hospital) for a while, so they'll participate less. Matches on
+                // the hospital reason text mentioning "overdose"; that wording isn't verified
+                // against a live key, so the count of OTHER hospitalized members is returned too —
+                // if lots are hospitalized but none show as OD, the leader can tell the matching
+                // needs adjusting rather than trusting an empty list.
+                const hospital = { overdosed: [], hospitalizedOther: 0, error: null };
+                try {
+                    const mr = await fetch(`https://api.torn.com/v2/faction/members?striptags=true&key=${encodeURIComponent(key)}`,
+                        { headers: { accept: 'application/json' } });
+                    const md = await mr.json();
+                    if (md.error) throw new Error(md.error.error);
+                    for (const m of (md.members || [])) {
+                        const st = m.status || {};
+                        if (String(st.state || '').toLowerCase() !== 'hospital') continue;
+                        if (/overdos/i.test(`${st.details || ''} ${st.description || ''}`)) {
+                            hospital.overdosed.push({ id: String(m.id), name: m.name, until: st.until || null, detail: st.details || st.description || '' });
+                        } else hospital.hospitalizedOther++;
+                    }
+                } catch (e) { hospital.error = String(e.message || e); }
+                result.hospital = hospital;
+
                 // Aggregate per slot: how many, and who — leaders want to actually act on this,
                 // not just see a number.
                 const summary = {};
                 for (const [id, entry] of Object.entries(data?.entries || {})) {
+                    if (unavailable[id]) continue; // marked themselves out — don't count their slots
                     for (const slot of Object.keys(entry.slots || {})) {
                         const s = summary[slot] || (summary[slot] = { count: 0, names: [], ids: [] });
                         s.count++;
@@ -153,6 +183,21 @@ module.exports = async function handler(req, res) {
             return res.status(200).json({ ok: true });
         }
 
+        // "I can't make this war" — real life happens, and there's a forum post for it too; this
+        // puts the same thing in the tool so leaders see it next to the availability numbers.
+        // Any member can set/undo their own. Cleared automatically when a new tracker starts.
+        if (action === 'availability-unavailable') {
+            const { unavailable: flag, note } = req.body;
+            const raw = await redis(['GET', availabilityKey(factionId)]);
+            const data = raw ? JSON.parse(raw) : null;
+            if (!data) return res.status(400).json({ error: 'No availability tracker is active for this faction right now — ask a leader to start one.' });
+            data.unavailable = data.unavailable || {};
+            if (flag) data.unavailable[playerId] = { name: playerName, note: String(note || '').slice(0, 140), at: Date.now() };
+            else delete data.unavailable[playerId];
+            await redis(['SET', availabilityKey(factionId), JSON.stringify(data)]);
+            return res.status(200).json({ ok: true });
+        }
+
         if (!(await isLeader(key))) return res.status(403).json({ error: 'Leaders only' });
 
         // Starts a fresh tracker for the newly-matched war — wipes any previous entries, since
@@ -163,7 +208,7 @@ module.exports = async function handler(req, res) {
             const { startDate, days } = req.body;
             const dayCount = Math.min(14, Math.max(1, Number(days) || 5));
             if (!startDate) return res.status(400).json({ error: 'Missing startDate' });
-            await redis(['SET', availabilityKey(factionId), JSON.stringify({ startDate, days: dayCount, entries: {} })]);
+            await redis(['SET', availabilityKey(factionId), JSON.stringify({ startDate, days: dayCount, entries: {}, unavailable: {} })]);
             return res.status(200).json({ ok: true });
         }
 

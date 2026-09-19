@@ -14,6 +14,9 @@
 let avConfig = null; // { startDate, days } from the backend, or null if no tracker is active
 let avMine = {}; // my own slots: "day-hour" (TCT) -> true
 let avSummary = null; // "day-hour" (TCT) -> { count, names } — present only when the caller is a leader
+let avMyUnavailable = null; // { name, note, at } if I marked myself as unable to make this war
+let avUnavailList = null; // leader-only: everyone who did — [{ id, name, note, at }]
+let avHospital = null; // leader-only: { overdosed: [{id, name, until, detail}], hospitalizedOther, error }
 const AV_TZ_KEY = 'wwl_av_local_tz';
 let avLocal = false; // show/click in my own timezone instead of TCT
 try { avLocal = localStorage.getItem(AV_TZ_KEY) === '1'; } catch (e) { /* storage blocked — just default to TCT */ }
@@ -37,6 +40,9 @@ async function loadAvailability() {
         avConfig = result.config;
         avMine = result.mine || {};
         avSummary = result.summary || null; // only ever present for a leader-tier key
+        avMyUnavailable = result.myUnavailable || null;
+        avUnavailList = result.unavailable || null;
+        avHospital = result.hospital || null;
         st.textContent = ''; st.className = 'status';
         renderAvailabilityPage();
     } catch (e) {
@@ -84,14 +90,88 @@ function renderAvailabilityPage() {
         $('av-none-msg').style.display = 'block';
         $('av-grid-panel').style.display = 'none';
         $('av-tz-bar').style.display = 'none';
+        $('av-unavail-bar').style.display = 'none';
         return;
     }
     $('av-none-msg').style.display = 'none';
     $('av-grid-panel').style.display = 'block';
     renderAvTzBar();
+    renderAvUnavailBar();
     renderAvGrid();
     $('av-summary-panel').style.display = avSummary ? 'block' : 'none';
     if (avSummary) renderAvSummaryGrid();
+    $('av-out-panel').style.display = avSummary ? 'block' : 'none'; // leaders only, same signal as the heatmap
+    if (avSummary) renderAvOut();
+}
+
+// Every member's own "I can't make this war" control. While it's on, their grid is dimmed and
+// locked (their ticked slots are ignored by the leader view anyway) with a clear way to undo it.
+function renderAvUnavailBar() {
+    const bar = $('av-unavail-bar');
+    bar.style.display = 'block';
+    if (avMyUnavailable) {
+        bar.innerHTML = `
+            <div class="av-banner" style="background:rgba(220,80,80,.14);border-color:var(--danger);color:var(--danger);">
+                🚫 You've marked yourself as NOT available for this war${avMyUnavailable.note ? ` — “${esc(avMyUnavailable.note)}”` : ''}.
+                <button class="ghost small" id="av-unavail-btn" style="margin-left:10px;">I can make it after all</button>
+            </div>`;
+    } else {
+        bar.innerHTML = `<button class="ghost small" id="av-unavail-btn">🚫 I can't make this war</button>
+            <span style="color:var(--muted);font-size:12px;margin-left:8px;">Real life happens — tell leadership here (same as the forum post).</span>`;
+    }
+    $('av-unavail-btn').addEventListener('click', toggleMyUnavailable);
+    $('av-grid-body').style.opacity = avMyUnavailable ? '.4' : '';
+    $('av-grid-body').style.pointerEvents = avMyUnavailable ? 'none' : '';
+}
+
+async function toggleMyUnavailable() {
+    let note = '';
+    if (!avMyUnavailable) {
+        const answer = prompt('Optional: a short reason (leave blank to skip). Cancel to go back.');
+        if (answer === null) return;
+        note = answer.trim();
+    }
+    const btn = $('av-unavail-btn');
+    btn.disabled = true;
+    try {
+        const result = await avFetch({ action: 'availability-unavailable', unavailable: !avMyUnavailable, note });
+        if (result.error) throw new Error(result.error);
+        await loadAvailability(); // reload so the bar, grid dimming and (for leaders) lists all agree
+    } catch (e) {
+        btn.disabled = false;
+        toast(`Couldn't save that: ${e.message}`);
+    }
+}
+
+// Leader view: who said they can't make it, and who's currently in hospital from an overdose.
+function renderAvOut() {
+    const link = (id, name) => `<a class="chip" style="text-decoration:none;" target="_blank" rel="noopener" href="https://www.torn.com/profiles.php?XID=${esc(id)}">${esc(name)}</a>`;
+    const tct = ts => new Date(ts * 1000).toLocaleString(undefined, { weekday: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'UTC' }) + ' TCT';
+    const un = avUnavailList || [];
+    const od = avHospital?.overdosed || [];
+    let html = `<div style="font-weight:700;margin-bottom:6px;">🚫 Not available (${un.length})</div>`;
+    html += un.length
+        ? `<div style="display:flex;flex-direction:column;gap:6px;margin-bottom:16px;">${un.map(u => `
+            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">${link(u.id, u.name)}
+                <span style="color:var(--muted);font-size:12px;">${u.note ? esc(u.note) : 'no reason given'}</span></div>`).join('')}</div>`
+        : '<p style="color:var(--muted);font-size:13px;margin:0 0 16px;">Nobody has said they can\'t make it yet.</p>';
+
+    html += `<div style="font-weight:700;margin-bottom:6px;">💊 Currently overdosed (${od.length})</div>`;
+    if (avHospital?.error) {
+        html += `<p style="color:var(--danger);font-size:13px;margin:0;">Couldn't check hospital statuses: ${esc(avHospital.error)}</p>`;
+    } else {
+        html += od.length
+            ? `<div style="display:flex;flex-direction:column;gap:6px;">${od.map(o => `
+                <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">${link(o.id, o.name)}
+                    <span style="color:var(--muted);font-size:12px;">${o.until ? `out of hospital ${esc(tct(o.until))}` : 'release time unknown'}${o.detail ? ` — ${esc(o.detail)}` : ''}</span></div>`).join('')}</div>`
+            : '<p style="color:var(--muted);font-size:13px;margin:0;">Nobody is in hospital from an overdose right now.</p>';
+        // Sanity check on the (unverified) overdose matching: if plenty of people are hospitalized
+        // but none are recognized as OD, the reason text may just be worded differently than assumed.
+        if (avHospital && avHospital.hospitalizedOther > 0) {
+            html += `<p style="color:var(--muted);font-size:11px;margin:8px 0 0;">(${avHospital.hospitalizedOther} other member${avHospital.hospitalizedOther === 1 ? ' is' : 's are'} in hospital for something that isn't an overdose. If that looks wrong, tell WWL.)</p>`;
+        }
+    }
+    $('av-out-body').innerHTML = html;
 }
 
 function renderAvTzBar() {
@@ -203,13 +283,22 @@ function renderAvDetail() {
     const localNote = offset !== 0
         ? ` <span style="color:var(--muted);font-weight:400;">(${esc(avColLabel(Math.floor(idx / 24), offset))} ${avPad(((idx % 24) + 24) % 24)}:00 your time)</span>`
         : '';
+    // Flag anyone who's overdosed and would still be in hospital at this slot — signed up, but
+    // realistically not going to be there.
+    const [sy, sm, sd] = avStartParts();
+    const slotTs = Date.UTC(sy, sm - 1, sd) / 1000 + (avSelected.day * 24 + avSelected.hour) * 3600;
+    const odUntil = {};
+    for (const o of (avHospital?.overdosed || [])) odUntil[o.id] = o.until;
+    const stillOut = id => id in odUntil && (odUntil[id] == null || odUntil[id] > slotTs);
+    const anyOd = s.names.some((n, i) => stillOut(String(s.ids?.[i])));
     el.style.display = 'block';
     el.innerHTML = `
         <div class="av-detail-box">
             <div style="font-weight:700;margin-bottom:8px;">${esc(avTctLabel(avSelected.day, avSelected.hour))}${localNote} — ${s.count} available</div>
             <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px;">
-                ${s.names.map((n, i) => `<a class="chip" style="text-decoration:none;" target="_blank" rel="noopener" href="https://www.torn.com/profiles.php?XID=${esc(s.ids?.[i] ?? '')}">${esc(n)}</a>`).join('')}
+                ${s.names.map((n, i) => `<a class="chip" style="text-decoration:none;" target="_blank" rel="noopener" href="https://www.torn.com/profiles.php?XID=${esc(s.ids?.[i] ?? '')}">${esc(n)}${stillOut(String(s.ids?.[i])) ? ' 💊' : ''}</a>`).join('')}
             </div>
+            ${anyOd ? '<div style="color:var(--muted);font-size:12px;margin-bottom:10px;">💊 = overdosed and still in hospital at this time, so may not actually be around.</div>' : ''}
             <button class="ghost small" id="av-copy-names">Copy names</button>
             <button class="ghost small" id="av-close-detail">Close</button>
         </div>`;
