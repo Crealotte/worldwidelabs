@@ -298,11 +298,11 @@ module.exports = async function handler(req, res) {
                 const summary = {};
                 for (const [id, entry] of Object.entries(data?.entries || {})) {
                     if (unavailable[id]) continue; // marked themselves out — don't count their slots
-                    for (const slot of Object.keys(entry.slots || {})) {
-                        const s = summary[slot] || (summary[slot] = { count: 0, names: [], ids: [] });
-                        s.count++;
-                        s.names.push(entry.name || `#${id}`);
-                        s.ids.push(id); // lets the leader view link each name to their Torn profile for pinging
+                    for (const [slot, val] of Object.entries(entry.slots || {})) {
+                        const s = summary[slot] || (summary[slot] = { count: 0, names: [], ids: [], maybe: 0, maybeNames: [], maybeIds: [] });
+                        const name = entry.name || `#${id}`;
+                        if (val === 'maybe') { s.maybe++; s.maybeNames.push(name); s.maybeIds.push(id); }
+                        else { s.count++; s.names.push(name); s.ids.push(id); } // ids let the leader link each name to their Torn profile
                     }
                 }
                 result.summary = summary;
@@ -318,7 +318,12 @@ module.exports = async function handler(req, res) {
             const entry = data.entries[playerId] || (data.entries[playerId] = { name: playerName, slots: {} });
             entry.name = playerName; // keep it current in case of a name change
             const slotKey = `${day}-${hour}`;
-            if (available) entry.slots[slotKey] = true; else delete entry.slots[slotKey];
+            // state: 'yes' (green) | 'maybe' (yellow — likely, but might be busy) | '' (off).
+            // Older clients sent a plain boolean `available`, which still means yes/off.
+            const state = req.body.state !== undefined ? req.body.state : (available ? 'yes' : '');
+            if (state === 'yes') entry.slots[slotKey] = true;
+            else if (state === 'maybe') entry.slots[slotKey] = 'maybe';
+            else delete entry.slots[slotKey];
             await redis(['SET', availabilityKey(factionId, planId), JSON.stringify(data)]);
             return res.status(200).json({ ok: true });
         }
@@ -403,7 +408,7 @@ module.exports = async function handler(req, res) {
                 const slot = `${Number(day)}-${Number(hour)}`;
                 for (const [id, entry] of Object.entries(data.entries || {})) {
                     if (data.unavailable?.[id]) continue; // said they can't make it — don't ping them
-                    if (entry.slots?.[slot]) targets.push({ id, name: entry.name });
+                    if (entry.slots?.[slot] === true) targets.push({ id, name: entry.name });
                 }
             } else if (kind === 'missing') {
                 try {

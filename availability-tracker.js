@@ -554,9 +554,10 @@ function avBuildTable(cellHtml) {
 
 function renderAvGrid() {
     $('av-grid-body').innerHTML = avBuildTable((day, hour) => {
-        const mine = !!avMine[`${day}-${hour}`];
+        const v = avMine[`${day}-${hour}`];
+        const mine = v === 'maybe' ? ' av-cell-maybe' : v ? ' av-cell-mine' : '';
         const war = avIsWarSlot(day, hour);
-        return `<td class="av-cell${mine ? ' av-cell-mine' : ''}${war ? ' av-cell-war' : ''}" data-day="${day}" data-hour="${hour}" title="${esc(avTctLabel(day, hour))}${war ? ' — WAR STARTS' : ''}"></td>`;
+        return `<td class="av-cell${mine}${war ? ' av-cell-war' : ''}" data-day="${day}" data-hour="${hour}" title="${esc(avTctLabel(day, hour))}${war ? ' — WAR STARTS' : ''}"></td>`;
     });
     $('av-grid-body').querySelectorAll('.av-cell:not(.av-cell-off)').forEach(cell => {
         cell.addEventListener('click', () => toggleAvCell(Number(cell.dataset.day), Number(cell.dataset.hour), cell));
@@ -565,17 +566,24 @@ function renderAvGrid() {
 
 // Instant-save, optimistic — flips the box immediately, reverts with a toast if the save fails,
 // rather than making the leader/member wait on a round-trip for every single click.
+// Each click cycles: off -> green (available) -> yellow (maybe: likely, but busy with something
+// else too) -> off again.
+function avApplyCell(cellEl, v) {
+    cellEl.classList.toggle('av-cell-mine', v === true);
+    cellEl.classList.toggle('av-cell-maybe', v === 'maybe');
+}
 async function toggleAvCell(day, hour, cellEl) {
     const key = `${day}-${hour}`;
-    const newVal = !avMine[key];
-    if (newVal) avMine[key] = true; else delete avMine[key];
-    cellEl.classList.toggle('av-cell-mine', newVal);
+    const prev = avMine[key];
+    const next = !prev ? true : prev === true ? 'maybe' : undefined;
+    if (next) avMine[key] = next; else delete avMine[key];
+    avApplyCell(cellEl, next);
     try {
-        const result = await avFetch({ action: 'availability-set', day, hour, available: newVal });
+        const result = await avFetch({ action: 'availability-set', day, hour, state: next === true ? 'yes' : next === 'maybe' ? 'maybe' : '' });
         if (result.error) throw new Error(result.error);
     } catch (e) {
-        if (newVal) delete avMine[key]; else avMine[key] = true;
-        cellEl.classList.toggle('av-cell-mine', !!avMine[key]);
+        if (prev) avMine[key] = prev; else delete avMine[key];
+        avApplyCell(cellEl, prev);
         toast(`Couldn't save that: ${e.message}`);
     }
 }
@@ -588,11 +596,13 @@ function renderAvSummaryGrid() {
     el.innerHTML = avBuildTable((day, hour) => {
         const s = avSummary[`${day}-${hour}`];
         const count = s ? s.count : 0;
-        const bg = count ? `rgba(53,217,155,${(0.15 + (count / maxCount) * 0.65).toFixed(2)})` : 'transparent';
-        const title = `${avTctLabel(day, hour)} — ${s ? s.names.join(', ') : 'nobody yet'}`;
+        const maybe = s ? s.maybe : 0;
+        const bg = count ? `rgba(53,217,155,${(0.15 + (count / maxCount) * 0.65).toFixed(2)})` : maybe ? 'rgba(240,180,50,.25)' : 'transparent';
+        const title = `${avTctLabel(day, hour)} — ${s ? s.names.join(', ') || 'nobody sure yet' : 'nobody yet'}${maybe ? ` (maybe: ${s.maybeNames.join(', ')})` : ''}`;
+        const label = count || maybe ? `${count || ''}${maybe ? `<span style="color:#f0b432;font-size:11px;">${count ? ' +' : ''}${maybe}?</span>` : ''}` : '';
         const sel = avSelected && avSelected.day === day && avSelected.hour === hour ? ' av-cell-selected' : '';
         const war = avIsWarSlot(day, hour) ? ' av-cell-war' : '';
-        return `<td class="av-cell av-summary-cell${count ? ' av-clickable' : ''}${sel}${war}" style="background:${bg};" data-day="${day}" data-hour="${hour}" title="${esc(title)}">${count || ''}</td>`;
+        return `<td class="av-cell av-summary-cell${count || maybe ? ' av-clickable' : ''}${sel}${war}" style="background:${bg};" data-day="${day}" data-hour="${hour}" title="${esc(title)}">${label}</td>`;
     });
     el.querySelectorAll('.av-clickable').forEach(cell => {
         cell.addEventListener('click', () => {
@@ -618,10 +628,14 @@ function renderAvDetail() {
     el.style.display = 'block';
     el.innerHTML = `
         <div class="av-detail-box">
-            <div style="font-weight:700;margin-bottom:8px;">${esc(avTctLabel(avSelected.day, avSelected.hour))}${localNote} — ${s.count} available</div>
+            <div style="font-weight:700;margin-bottom:8px;">${esc(avTctLabel(avSelected.day, avSelected.hour))}${localNote} — ${s.count} available${s.maybe ? `, ${s.maybe} maybe` : ""}</div>
             <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px;">
                 ${s.names.map((n, i) => `<span class="chip" style="cursor:default;">${esc(n)}${avOdIds.has(String(s.ids?.[i])) ? ' 💊' : ''}</span>`).join('')}
             </div>
+            ${s.maybe ? `<div style="color:var(--muted);font-size:12px;margin:0 0 6px;">Maybe (${s.maybe}) — likely available, but might be busy:</div>
+            <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px;">
+                ${s.maybeNames.map((n, i) => `<span class="chip" style="cursor:default;border-color:#f0b432;">${esc(n)}${avOdIds.has(String(s.maybeIds?.[i])) ? ' 💊' : ''}</span>`).join('')}
+            </div>` : ''}
             ${s.names.some((n, i) => avOdIds.has(String(s.ids?.[i]))) ? '<div style="color:var(--muted);font-size:12px;margin-bottom:10px;">💊 = overdosed in the tracking window, so may take part less.</div>' : ''}
             <button class="ghost small" id="av-ping-slot">📣 Ping everyone here on Discord</button>
             <button class="ghost small" id="av-copy-names">Copy names</button>

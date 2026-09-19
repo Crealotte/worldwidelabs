@@ -326,6 +326,7 @@
     .av-cell-off:hover { border-color: var(--line); border-width: 1px; }
     .av-cell:hover { border-color: var(--reagent); border-width: 2px; }
     .av-cell-mine { background: var(--reagent); }
+    .av-cell-maybe { background: #f0b432; }
     .av-summary-cell { cursor: default; color: var(--text); }
     .av-summary-cell:hover { border-color: var(--reagent); }
 
@@ -1090,7 +1091,7 @@
                 <div class="av-banner" id="av-tz-banner" style="display:none;"></div>
                 <div class="panel">
                     <h3>Your availability</h3>
-                    <p style="color:var(--muted);font-size:12px;margin:0 0 10px;">Click a box to mark yourself available that hour — click again to unmark. Saves instantly.</p>
+                    <p style="color:var(--muted);font-size:12px;margin:0 0 10px;">Click a box to cycle it: <b style="color:var(--reagent);">green</b> = available, <b style="color:#f0b432;">yellow</b> = most likely available but maybe doing something else, third click = off. Saves instantly.</p>
                     <div class="table-scroll" style="overflow:auto;max-height:75vh;">
                         <div id="av-grid-body"></div>
                     </div>
