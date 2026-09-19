@@ -305,14 +305,16 @@
         position: sticky; top: 0; background: var(--bench); font-size: 13px;
     }
     .av-hour-label {
-        color: var(--muted); font-family: var(--mono); font-size: 16px; padding: 0 14px 0 4px; text-align: right;
+        color: var(--muted); font-family: var(--mono); font-size: 13px; padding: 0 12px 0 6px; text-align: right;
         position: sticky; left: 0; background: var(--bench);
     }
     .av-cell {
-        width: 72px; height: 72px; border: 1px solid var(--line); cursor: pointer;
-        text-align: center; vertical-align: middle; color: var(--ink); font-weight: 700; font-size: 20px;
+        width: 62px; height: 40px; border: 1px solid var(--line); cursor: pointer;
+        text-align: center; vertical-align: middle; color: var(--ink); font-weight: 700; font-size: 16px;
         transition: background .1s;
     }
+    .av-cell-off { background: var(--bench-2); opacity: .35; cursor: not-allowed; }
+    .av-cell-off:hover { border-color: var(--line); border-width: 1px; }
     .av-cell:hover { border-color: var(--reagent); border-width: 2px; }
     .av-cell-mine { background: var(--reagent); }
     .av-summary-cell { cursor: default; color: var(--text); }
@@ -1027,11 +1029,18 @@
                 </div>
             </div>
 
+            <div id="av-tz-bar" style="display:none;margin:0 0 12px;font-size:13px;">
+                <label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;">
+                    <input type="checkbox" id="av-tz-toggle" style="width:auto;"> Show times in my own timezone
+                </label>
+                <span id="av-tz-note" style="color:var(--muted);"></span>
+            </div>
+
             <div id="av-grid-panel" style="display:none;">
                 <div class="panel">
                     <h3>Your availability</h3>
                     <p style="color:var(--muted);font-size:12px;margin:0 0 10px;">Click a box to mark yourself available that hour — click again to unmark. Saves instantly.</p>
-                    <div class="table-scroll" style="overflow-x:auto;">
+                    <div class="table-scroll" style="overflow:auto;max-height:75vh;">
                         <div id="av-grid-body"></div>
                     </div>
                 </div>
@@ -1039,7 +1048,7 @@
                 <div class="panel" id="av-summary-panel" style="display:none;">
                     <h3>Faction availability</h3>
                     <p style="color:var(--muted);font-size:12px;margin:0 0 10px;">Hover a box to see who — leaders/council only.</p>
-                    <div class="table-scroll" style="overflow-x:auto;">
+                    <div class="table-scroll" style="overflow:auto;max-height:75vh;">
                         <div id="av-summary-body"></div>
                     </div>
                 </div>
