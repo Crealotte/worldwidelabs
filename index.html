@@ -313,6 +313,14 @@
         text-align: center; vertical-align: middle; color: var(--ink); font-weight: 700; font-size: 16px;
         transition: background .1s;
     }
+    .av-banner {
+        margin: 0 0 12px; padding: 14px 18px; border-radius: var(--radius); font-size: 17px; font-weight: 700;
+        line-height: 1.4; background: rgba(240,180,50,.16); border: 2px solid #f0b432; color: #f0b432;
+    }
+    .av-clickable { cursor: pointer; }
+    .av-clickable:hover { border-color: var(--reagent); border-width: 2px; }
+    .av-cell-selected { outline: 3px solid var(--reagent); outline-offset: -3px; }
+    .av-detail-box { background: var(--bench-2); border: 1px solid var(--reagent-dim); border-radius: var(--radius); padding: 12px 14px; margin: 0 0 12px; }
     .av-cell-off { background: var(--bench-2); opacity: .35; cursor: not-allowed; }
     .av-cell-off:hover { border-color: var(--line); border-width: 1px; }
     .av-cell:hover { border-color: var(--reagent); border-width: 2px; }
@@ -1037,6 +1045,7 @@
             </div>
 
             <div id="av-grid-panel" style="display:none;">
+                <div class="av-banner" id="av-tz-banner" style="display:none;"></div>
                 <div class="panel">
                     <h3>Your availability</h3>
                     <p style="color:var(--muted);font-size:12px;margin:0 0 10px;">Click a box to mark yourself available that hour — click again to unmark. Saves instantly.</p>
@@ -1047,7 +1056,9 @@
 
                 <div class="panel" id="av-summary-panel" style="display:none;">
                     <h3>Faction availability</h3>
-                    <p style="color:var(--muted);font-size:12px;margin:0 0 10px;">Hover a box to see who — leaders/council only.</p>
+                    <p style="color:var(--muted);font-size:12px;margin:0 0 10px;">Click a number to see exactly who signed up for that hour — leaders/council only.</p>
+                    <div class="av-banner" id="av-tz-banner-2" style="display:none;"></div>
+                    <div id="av-detail" style="display:none;"></div>
                     <div class="table-scroll" style="overflow:auto;max-height:75vh;">
                         <div id="av-summary-body"></div>
                     </div>

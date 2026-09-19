@@ -128,9 +128,10 @@ module.exports = async function handler(req, res) {
                 const summary = {};
                 for (const [id, entry] of Object.entries(data?.entries || {})) {
                     for (const slot of Object.keys(entry.slots || {})) {
-                        const s = summary[slot] || (summary[slot] = { count: 0, names: [] });
+                        const s = summary[slot] || (summary[slot] = { count: 0, names: [], ids: [] });
                         s.count++;
                         s.names.push(entry.name || `#${id}`);
+                        s.ids.push(id); // lets the leader view link each name to their Torn profile for pinging
                     }
                 }
                 result.summary = summary;

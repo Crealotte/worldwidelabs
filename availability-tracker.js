@@ -97,6 +97,16 @@ function renderAvailabilityPage() {
 function renderAvTzBar() {
     const bar = $('av-tz-bar');
     const supported = avOffsetSupported();
+    // Big, hard-to-miss banner above each grid while viewing in local time, so nobody mistakes
+    // their own hours for TCT (or vice versa) when ticking boxes or reading the heatmap.
+    const showBanner = avLocal && supported;
+    const bannerText = showBanner
+        ? `🌍 You're viewing YOUR LOCAL TIME (${avZoneName(avLocalOffset())}) — not TCT. Boxes you tick are saved as the matching TCT hour.`
+        : '';
+    for (const id of ['av-tz-banner', 'av-tz-banner-2']) {
+        $(id).style.display = showBanner ? 'block' : 'none';
+        $(id).textContent = bannerText;
+    }
     bar.style.display = 'block';
     $('av-tz-toggle').checked = avLocal && supported;
     $('av-tz-toggle').disabled = !supported;
@@ -159,14 +169,56 @@ async function toggleAvCell(day, hour, cellEl) {
     }
 }
 
+let avSelected = null; // { day, hour } — the summary slot whose signups are currently shown
+
 function renderAvSummaryGrid() {
     const maxCount = Math.max(1, ...Object.values(avSummary).map(s => s.count));
-    $('av-summary-body').innerHTML = avBuildTable((day, hour) => {
+    const el = $('av-summary-body');
+    el.innerHTML = avBuildTable((day, hour) => {
         const s = avSummary[`${day}-${hour}`];
         const count = s ? s.count : 0;
         const bg = count ? `rgba(53,217,155,${(0.15 + (count / maxCount) * 0.65).toFixed(2)})` : 'transparent';
         const title = `${avTctLabel(day, hour)} — ${s ? s.names.join(', ') : 'nobody yet'}`;
-        return `<td class="av-cell av-summary-cell" style="background:${bg};" title="${esc(title)}">${count || ''}</td>`;
+        const sel = avSelected && avSelected.day === day && avSelected.hour === hour ? ' av-cell-selected' : '';
+        return `<td class="av-cell av-summary-cell${count ? ' av-clickable' : ''}${sel}" style="background:${bg};" data-day="${day}" data-hour="${hour}" title="${esc(title)}">${count || ''}</td>`;
+    });
+    el.querySelectorAll('.av-clickable').forEach(cell => {
+        cell.addEventListener('click', () => {
+            avSelected = { day: Number(cell.dataset.day), hour: Number(cell.dataset.hour) };
+            renderAvSummaryGrid(); // re-render so the selection highlight moves
+            renderAvDetail();
+        });
+    });
+    renderAvDetail();
+}
+
+// Who signed up for the picked slot, each name linked to their Torn profile — so a leader can
+// ping exactly the right people when it's time. "Copy names" gives a plain comma-separated list.
+function renderAvDetail() {
+    const el = $('av-detail');
+    const s = avSelected && avSummary?.[`${avSelected.day}-${avSelected.hour}`];
+    if (!s) { el.style.display = 'none'; el.innerHTML = ''; return; }
+    const offset = avOffset();
+    const idx = avSelected.day * 24 + avSelected.hour + offset;
+    const localNote = offset !== 0
+        ? ` <span style="color:var(--muted);font-weight:400;">(${esc(avColLabel(Math.floor(idx / 24), offset))} ${avPad(((idx % 24) + 24) % 24)}:00 your time)</span>`
+        : '';
+    el.style.display = 'block';
+    el.innerHTML = `
+        <div class="av-detail-box">
+            <div style="font-weight:700;margin-bottom:8px;">${esc(avTctLabel(avSelected.day, avSelected.hour))}${localNote} — ${s.count} available</div>
+            <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px;">
+                ${s.names.map((n, i) => `<a class="chip" style="text-decoration:none;" target="_blank" rel="noopener" href="https://www.torn.com/profiles.php?XID=${esc(s.ids?.[i] ?? '')}">${esc(n)}</a>`).join('')}
+            </div>
+            <button class="ghost small" id="av-copy-names">Copy names</button>
+            <button class="ghost small" id="av-close-detail">Close</button>
+        </div>`;
+    $('av-copy-names').addEventListener('click', () => {
+        navigator.clipboard.writeText(s.names.join(', ')).then(() => toast('Names copied'));
+    });
+    $('av-close-detail').addEventListener('click', () => {
+        avSelected = null;
+        renderAvSummaryGrid();
     });
 }
 
