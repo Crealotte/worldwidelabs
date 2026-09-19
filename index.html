@@ -327,6 +327,7 @@
     .av-cell:hover { border-color: var(--reagent); border-width: 2px; }
     .av-cell-mine { background: var(--reagent); }
     .av-cell-maybe { background: #f0b432; }
+    .active-toggle { border-color: var(--reagent); color: var(--reagent); }
     .av-sum { cursor: pointer; list-style: none; }
     .av-sum::-webkit-details-marker { display: none; }
     .av-sum h3 { display: inline; margin: 0; }
@@ -454,6 +455,7 @@
                 <div class="nav-item" data-page="respect-edit">Respect Tracker</div>
                 <div class="nav-item" data-page="war-payout">War Payout</div>
                 <div class="nav-item" data-page="armory-tracker">Consumption Tracker</div>
+                <div class="nav-item" data-page="members-overview">Member Overview</div>
                 <div class="nav-item" data-page="labs-funds" style="display:none;">Labs Funds</div>
             </div>
         </div>
@@ -1066,6 +1068,63 @@
             </div>
         </section>
 
+        <section class="page" id="page-members-overview">
+            <div class="lab-label">WWL·15 / leaders &amp; council</div>
+            <h2>Member Overview</h2>
+            <p class="pagedesc">
+                Who is following the rules and who needs an extra push — hits over the last 5 wars
+                (war + chain), candy / alcohol / energy drinks used, and points for competitions.
+                Only visible to leaders and council.
+            </p>
+
+            <div class="panel" id="mo-locked" style="display:none;">
+                <p style="color:var(--muted);margin:0;">🔒 Only leaders and council (faction API access) can see this page.</p>
+            </div>
+
+            <div id="mo-body" style="display:none;">
+                <div class="status" id="mo-status"></div>
+
+                <div class="panel">
+                    <div id="mo-summary" style="display:flex;gap:28px;flex-wrap:wrap;margin-bottom:10px;"></div>
+                    <div id="mo-push"></div>
+                </div>
+
+                <div class="panel">
+                    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:12px;">
+                        <span style="font-size:13px;color:var(--muted);">Weekly numbers:</span>
+                        <button class="ghost small" id="mo-weeks-1">Last week</button>
+                        <button class="ghost small" id="mo-weeks-4">4 weeks (avg per week)</button>
+                        <button class="ghost small" id="mo-refresh" style="margin-left:auto;">Refresh</button>
+                    </div>
+                    <p style="color:var(--muted);font-size:12px;margin:0 0 10px;">Hits are shown as <b>war</b><span style="color:var(--muted);">+chain</span> per war. A member is green at or above the hits target on average, yellow at half of it, red below (members under 14 days are not judged yet). Click a column heading to sort. Weeks run Monday to Monday (TCT).</p>
+                    <div class="table-scroll" style="overflow:auto;max-height:75vh;">
+                        <div id="mo-table"></div>
+                    </div>
+                </div>
+
+                <div class="panel">
+                    <details>
+                        <summary class="av-sum"><h3>Rules &amp; points</h3></summary>
+                        <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-top:10px;">
+                            <div class="field" style="margin:0;max-width:200px;"><label for="mo-min">Target hits per war (war + chain)</label><input id="mo-min" type="number" min="0" value="10"></div>
+                            <div class="field" style="margin:0;max-width:150px;"><label for="mo-wp">Points per war hit</label><input id="mo-wp" type="number" min="0" step="0.5" value="1"></div>
+                            <div class="field" style="margin:0;max-width:150px;"><label for="mo-cp">Points per chain hit</label><input id="mo-cp" type="number" min="0" step="0.5" value="1"></div>
+                            <button class="ghost small" id="mo-save-settings">Save</button>
+                        </div>
+                    </details>
+                </div>
+
+                <div class="panel">
+                    <details>
+                        <summary class="av-sum"><h3>Not connected yet: energy trained &amp; blood bags</h3></summary>
+                        <p style="color:var(--muted);font-size:12px;margin:10px 0;">Torn's data for these has to be identified first. Press the button and send me what it shows — then I can connect both properly instead of guessing. The energy tier you pick per member (1.5m+ → 4,400 E/week, under → 2,200 E/week) is already saved for when that's done.</p>
+                        <button class="ghost small" id="mo-probe-btn">Check what Torn offers</button>
+                        <pre id="mo-probe-out" style="display:none;white-space:pre-wrap;font-size:12px;margin-top:10px;background:var(--bench-2);padding:10px;border-radius:var(--radius);"></pre>
+                    </details>
+                </div>
+            </div>
+        </section>
+
         <section class="page" id="page-availability">
             <div class="lab-label">WWL·13 / for everyone</div>
             <h2>War Availability</h2>
@@ -1479,6 +1538,7 @@
 <script src="war-badges-tracker.js"></script>
 <script src="availability-tracker.js"></script>
 <script src="labs-funds.js"></script>
+<script src="member-overview.js"></script>
 <script src="armory-tracker.js"></script>
 <script src="app-init.js"></script>
 </body>

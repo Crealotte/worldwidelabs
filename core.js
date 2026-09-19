@@ -168,6 +168,7 @@
             setNavLock('respect-edit', memberView);
             setNavLock('war-payout', memberView);
             setNavLock('armory-tracker', memberView);
+            setNavLock('members-overview', memberView);
             if (!memberView) { loadAdoption();
             loadFactionSharing();
             loadRespectGoalPanel(); }
@@ -179,6 +180,7 @@
             setNavLock('respect-edit', true);
             setNavLock('war-payout', true);
             setNavLock('armory-tracker', true);
+            setNavLock('members-overview', true);
         }
         if (document.querySelector('.nav-item[data-page="announce-edit"]').classList.contains('active')) {
             $('announce-locked').style.display = isLeaderCached ? 'none' : 'block';
@@ -190,6 +192,7 @@
             $('feedback-editor').style.display = isLeaderCached ? 'block' : 'none';
             if (isLeaderCached) loadFeedbackEditor();
         }
+        if (document.querySelector('.nav-item[data-page="members-overview"]').classList.contains('active')) loadMemberOverview();
         if (document.querySelector('.nav-item[data-page="ocfit-team"]').classList.contains('active')) {
             loadOcFitTeamBuilder();
         }
@@ -300,6 +303,7 @@
         if (page === 'war-badges') loadWarBadges();
         if (page === 'availability') loadAvailability();
         if (page === 'labs-funds') loadLabsFunds();
+        if (page === 'members-overview') loadMemberOverview();
         if (page === 'armory-tracker') loadArmoryTracker();
         if (page === 'foreign-stock' && !foreignStockLoaded) { foreignStockLoaded = true; loadForeignStock(); }
         if (page === 'crimes-guide' && !crimesGuideLoaded) { crimesGuideLoaded = true; loadCrimesGuide(); }

@@ -27,6 +27,7 @@
 const { fetchWarHits, sleep } = require('../lib/warHits');
 const { fetchWarBadgeStats } = require('../lib/warBadgeStats');
 const { tornToDiscordIds, resolveDiscordIds } = require('../lib/discordMap');
+const { moHandle } = require('../lib/memberOverview');
 const { labsIsOwner, labsHasOwners, labsHandle, labsRecordReceipt } = require('../lib/labsLedger');
 
 const REDIS_URL = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL;
@@ -367,6 +368,9 @@ module.exports = async function handler(req, res) {
         }
 
         if (!(await isLeader(key))) return res.status(403).json({ error: 'Leaders only' });
+
+        // Member Overview (who follows the rules / needs a push) — logic in lib/memberOverview.js.
+        if (action.startsWith('mo-')) return res.status(200).json(await moHandle(action, req.body, { redis, key, factionId }));
 
         // This faction's own Discord destination (see getDiscordPoster). Leader-only. The webhook
         // URL is a secret — it's never sent back, only a hint of which webhook is saved.
