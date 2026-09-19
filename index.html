@@ -1018,14 +1018,24 @@
 
             <div class="status" id="av-status"></div>
 
+            <div id="av-plan-bar" style="display:none;margin:0 0 14px;align-items:center;gap:10px;flex-wrap:wrap;">
+                <label for="av-plan-select" style="font-size:14px;font-weight:700;">Plan:</label>
+                <select id="av-plan-select" style="width:auto;min-width:280px;font-size:14px;"></select>
+                <button class="ghost small" id="av-plan-delete" style="display:none;">Delete this plan</button>
+            </div>
+
             <div class="panel" id="av-none-msg" style="display:none;">
                 <p style="color:var(--muted);margin:0;">No availability tracker is active right now — it gets started once a war is matched.</p>
             </div>
 
             <div class="panel" id="av-start-panel" style="display:none;">
-                <h3>Leader: start / reset tracker</h3>
-                <p style="color:var(--muted);font-size:12px;margin:0 0 10px;">Starting a new one wipes everyone's previous entries — only do this for a new war.</p>
+                <h3>Leader: create a plan</h3>
+                <p style="color:var(--muted);font-size:12px;margin:0 0 10px;">A plan is one tracker — e.g. this weekend, or next weekend. Plans sit side by side (pick between them with the dropdown), so creating a new one never touches the others.</p>
                 <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-bottom:12px;">
+                    <div class="field" style="margin:0;min-width:200px;">
+                        <label for="av-plan-name">Plan name (optional)</label>
+                        <input id="av-plan-name" type="text" maxlength="40" placeholder="e.g. Chain Monday">
+                    </div>
                     <div class="field" style="margin:0;min-width:260px;">
                         <label for="av-war-select">Link to war</label>
                         <select id="av-war-select"><option value="">Loading matched wars…</option></select>
@@ -1050,7 +1060,7 @@
                         <label for="av-days">Days to show</label>
                         <input id="av-days" type="number" value="5" min="1" max="14">
                     </div>
-                    <button class="ghost small" id="av-start-btn">Start tracker</button>
+                    <button class="ghost small" id="av-start-btn">Create plan</button>
                 </div>
             </div>
 
@@ -1065,6 +1075,12 @@
                 <h3>Discord settings</h3>
                 <p style="color:var(--muted);font-size:12px;margin:0 0 10px;">Where <b>your faction's</b> war pings get posted — each faction sets its own, so factions using this app never post into each other's channels. Leaders/council only.</p>
                 <div id="av-discord-body"></div>
+            </div>
+
+            <div class="panel" id="av-od-panel" style="display:none;">
+                <h3>💊 Overdoses</h3>
+                <p style="color:var(--muted);font-size:12px;margin:0 0 10px;">Members who've overdosed recently, so we know who'll likely take part less — leaders/council only. Counted from Torn's own "times overdosed" stat, comparing now against the start of the window (midnight TCT of the day 48h before the war starts, or the last ~3 days if no war is linked). It can't show which drug.</p>
+                <div id="av-od-body"></div>
             </div>
 
             <div id="av-war-line" style="display:none;margin:0 0 12px;font-size:14px;font-weight:600;"></div>

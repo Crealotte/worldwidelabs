@@ -24,9 +24,22 @@ const AV_TZ_KEY = 'wwl_av_local_tz';
 let avLocal = false; // show/click in my own timezone instead of TCT
 try { avLocal = localStorage.getItem(AV_TZ_KEY) === '1'; } catch (e) { /* storage blocked — just default to TCT */ }
 
+// Several plans (trackers) can exist at once — e.g. this weekend AND next weekend — chosen from a
+// dropdown. The picked plan is remembered per browser, and attached to every request that reads
+// or writes a plan's data (the backend falls back to the sensible default if it no longer exists).
+const AV_PLAN_KEY = 'wwl_av_plan';
+let avPlans = []; // light metadata for the dropdown: [{ id, name, startDate, days, war }]
+let avPlanId = null;
+try { avPlanId = localStorage.getItem(AV_PLAN_KEY) || null; } catch (e) { /* storage blocked */ }
+const AV_PLAN_ACTIONS = new Set(['availability-get', 'availability-set', 'availability-unavailable', 'availability-ping']);
+let avOd = null; // leader-only: last overdose view from the backend
+let avOdIds = new Set(); // ids of members who've overdosed in the window (marked in the slot list)
+let avOdScanning = false;
+
 // Posts to /api/war-payout, not its own endpoint — merged in to stay under Vercel Hobby's
 // 12-Serverless-Function-per-deployment limit, same reason War Badges lives there too.
 async function avFetch(body) {
+    if (AV_PLAN_ACTIONS.has(body.action) && avPlanId && !body.planId) body = { ...body, planId: avPlanId };
     const res = await fetch('/api/war-payout', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ key: apiKey, ...body }),
@@ -40,6 +53,9 @@ async function loadAvailability() {
     try {
         const result = await avFetch({ action: 'availability-get' });
         if (result.error) throw new Error(result.error);
+        avPlans = result.plans || [];
+        avPlanId = result.planId || null;
+        try { if (avPlanId) localStorage.setItem(AV_PLAN_KEY, avPlanId); } catch (e) { /* not critical */ }
         avConfig = result.config;
         avMine = result.mine || {};
         avSummary = result.summary || null; // only ever present for a leader-tier key
@@ -52,6 +68,7 @@ async function loadAvailability() {
         renderAvailabilityPage();
         if (avSummary !== null && avWars === null) loadAvWars(); // leaders only, once — feeds the "link to war" picker
         if (avSummary !== null) loadAvDiscord(); // leaders only — this faction's Discord destination
+        if (avSummary !== null) loadAvOd(); // leaders only — who's overdosed in the window
     } catch (e) {
         st.className = 'status err'; st.textContent = e.message;
     }
@@ -116,6 +133,67 @@ function renderAvWarLine() {
         ? ` (${at.toLocaleString(undefined, { weekday: 'short', hour: '2-digit', minute: '2-digit' })} your time)` : '';
     el.style.display = 'block';
     el.innerHTML = `🎯 ${war.opponent ? `War vs <b>${esc(war.opponent)}</b> — s` : 'S'}tarts <b>${esc(tct)}</b>${esc(local)}.${avWarStartSlot() ? ' The gold-outlined box in the grid is the start hour.' : ''}`;
+}
+
+// ---- Overdoses (leader-only). The backend counts each member's "times overdosed" against the
+// start of the window; scanning a whole faction is paced under Torn's rate limit, so it happens
+// here in slices — the browser calls the scan repeatedly until it reports done.
+async function loadAvOd(autoScan = true) {
+    try {
+        const r = await avFetch({ action: 'od-get' });
+        if (r.error) throw new Error(r.error);
+        avOd = r;
+        avOdIds = new Set((r.members || []).map(m => String(m.id)));
+        renderAvOd();
+        if (avConfig && $('av-summary-panel').style.display !== 'none' && avSelected) renderAvDetail(); // refresh the 💊 markers
+        if (autoScan && r.needsScan && !avOdScanning) scanAvOd(); // never scanned for this window yet — do it now
+    } catch (e) {
+        $('av-od-body').innerHTML = `<p style="color:var(--danger);font-size:13px;">Couldn't load overdoses: ${esc(e.message)}</p>`;
+    }
+}
+
+async function scanAvOd() {
+    if (avOdScanning) return;
+    avOdScanning = true;
+    const status = msg => { const el = $('av-od-status'); if (el) el.textContent = msg; };
+    renderAvOd();
+    try {
+        let cursor = 0;
+        for (let guard = 0; guard < 60; guard++) {
+            const r = await avFetch({ action: 'od-scan', cursor });
+            if (r.error) throw new Error(r.error);
+            status(`Scanning members… ${Math.min(r.nextCursor, r.total)}/${r.total}${r.errors ? ` (${r.errors} couldn't be read)` : ''}`);
+            if (r.rateLimited) { status('Torn asked us to slow down — waiting a moment…'); await new Promise(res => setTimeout(res, 15000)); continue; }
+            if (r.done) break;
+            cursor = r.nextCursor;
+        }
+    } catch (e) { toast(`Overdose scan failed: ${e.message}`); }
+    avOdScanning = false;
+    await loadAvOd(false);
+}
+
+function renderAvOd() {
+    const el = $('av-od-body');
+    const d = avOd;
+    if (!d) return;
+    const fmt = ts => new Date(ts * 1000).toLocaleString(undefined, { weekday: 'short', day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'UTC' }) + ' TCT';
+    let html = `<div style="font-size:12px;color:var(--muted);margin-bottom:8px;">Tracking from <b>${esc(fmt(d.window.start))}</b>${d.window.fallback ? ' — no war linked, so this is just the last ~3 days' : ' (48h before the war starts, rounded back to midnight)'}.</div>`;
+    if (d.suspect) {
+        html += '<div style="font-size:12px;color:var(--danger);margin-bottom:8px;">⚠ Torn\'s historical lookup looks like it returned zeros for most members, so these counts may be inflated. Tell WWL if the list looks wrong.</div>';
+    }
+    if (d.scannedAt) {
+        html += d.members.length
+            ? `<div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:8px;">${d.members.map(m => `<span class="chip" style="cursor:default;" title="${m.detectedAt ? esc(`noticed ${fmt(m.detectedAt)}`) : 'counted from the window start'}">${esc(m.name)} <span style="color:var(--danger);font-weight:700;">×${m.delta}</span></span>`).join('')}</div>`
+            : `<p style="color:var(--muted);font-size:13px;margin:0 0 8px;">Nobody has overdosed in this window (${d.scannedCount} members checked).</p>`;
+    } else if (!avOdScanning) {
+        html += '<p style="color:var(--muted);font-size:13px;margin:0 0 8px;">Not scanned yet for this window.</p>';
+    }
+    html += `<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+        <button class="ghost small" id="av-od-refresh" ${avOdScanning ? 'disabled' : ''}>${avOdScanning ? 'Scanning…' : '🔄 Refresh'}</button>
+        <span id="av-od-status" style="font-size:12px;color:var(--muted);">${d.scannedAt && !avOdScanning ? `last updated ${new Date(d.scannedAt * 1000).toLocaleString()}` : ''}</span>
+    </div>`;
+    el.innerHTML = html;
+    $('av-od-refresh')?.addEventListener('click', () => scanAvOd());
 }
 
 // Leader-only: this faction's own Discord destination for pings. A faction on the shared server
@@ -195,9 +273,47 @@ function avOnWarSelect() {
 }
 $('av-war-select').addEventListener('change', avOnWarSelect);
 
+// "Chain Monday — Fri 19 Sep → Tue 23 Sep (vs Somebody)" — the name if it has one, always the dates.
+function avPlanLabel(p) {
+    const f = d => d.toLocaleDateString(undefined, { weekday: 'short', day: '2-digit', month: 'short', timeZone: 'UTC' });
+    const start = new Date(`${p.startDate}T00:00:00Z`);
+    const end = new Date(start); end.setUTCDate(end.getUTCDate() + p.days - 1);
+    return `${p.name ? `${p.name} — ` : ''}${f(start)} → ${f(end)}${p.war?.opponent ? ` (vs ${p.war.opponent})` : ''}`;
+}
+
+function renderAvPlanBar() {
+    const bar = $('av-plan-bar');
+    if (!avPlans.length) { bar.style.display = 'none'; return; }
+    bar.style.display = 'flex';
+    $('av-plan-select').innerHTML = avPlans.map(p => `<option value="${esc(p.id)}"${p.id === avPlanId ? ' selected' : ''}>${esc(avPlanLabel(p))}</option>`).join('');
+    $('av-plan-delete').style.display = avSummary !== null ? 'inline-block' : 'none'; // leaders only
+}
+
+$('av-plan-select').addEventListener('change', () => {
+    avPlanId = $('av-plan-select').value;
+    try { localStorage.setItem(AV_PLAN_KEY, avPlanId); } catch (e) { /* not critical */ }
+    avSelected = null;
+    loadAvailability();
+});
+
+$('av-plan-delete').addEventListener('click', async () => {
+    const p = avPlans.find(x => x.id === avPlanId);
+    if (!p) return;
+    if (!confirm(`Delete "${avPlanLabel(p)}" and everyone's entries for it? This can't be undone.`)) return;
+    try {
+        const r = await avFetch({ action: 'availability-delete', planId: avPlanId });
+        if (r.error) throw new Error(r.error);
+        avPlanId = null;
+        toast('Plan deleted');
+        await loadAvailability();
+    } catch (e) { toast(`Couldn't delete it: ${e.message}`); }
+});
+
 function renderAvailabilityPage() {
+    renderAvPlanBar();
     $('av-start-panel').style.display = avSummary !== null ? 'block' : 'none'; // leader-only, inferred from whether summary came back at all
     $('av-discord-panel').style.display = avSummary !== null ? 'block' : 'none';
+    $('av-od-panel').style.display = avSummary !== null ? 'block' : 'none';
     if (!avConfig) {
         $('av-none-msg').style.display = 'block';
         $('av-grid-panel').style.display = 'none';
@@ -504,8 +620,9 @@ function renderAvDetail() {
         <div class="av-detail-box">
             <div style="font-weight:700;margin-bottom:8px;">${esc(avTctLabel(avSelected.day, avSelected.hour))}${localNote} — ${s.count} available</div>
             <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px;">
-                ${s.names.map(n => `<span class="chip" style="cursor:default;">${esc(n)}</span>`).join('')}
+                ${s.names.map((n, i) => `<span class="chip" style="cursor:default;">${esc(n)}${avOdIds.has(String(s.ids?.[i])) ? ' 💊' : ''}</span>`).join('')}
             </div>
+            ${s.names.some((n, i) => avOdIds.has(String(s.ids?.[i]))) ? '<div style="color:var(--muted);font-size:12px;margin-bottom:10px;">💊 = overdosed in the tracking window, so may take part less.</div>' : ''}
             <button class="ghost small" id="av-ping-slot">📣 Ping everyone here on Discord</button>
             <button class="ghost small" id="av-copy-names">Copy names</button>
             <button class="ghost small" id="av-close-detail">Close</button>
@@ -539,16 +656,17 @@ $('av-start-btn').addEventListener('click', async () => {
     const warId = $('av-war-select').value;
     let warStart = 0;
     if (!warId && $('av-war-date').value) warStart = Math.floor(Date.parse(`${$('av-war-date').value}T${avPad(Number($('av-war-hour').value) || 0)}:00:00Z`) / 1000);
-    if (!confirm('Start a new tracker? This wipes everyone\'s current entries.')) return;
     const btn = $('av-start-btn');
     btn.disabled = true;
     try {
-        const result = await avFetch({ action: 'availability-start', startDate, days, warId, warStart });
+        const result = await avFetch({ action: 'availability-create', name: $('av-plan-name').value.trim(), startDate, days, warId, warStart });
         if (result.error) throw new Error(result.error);
-        toast('Tracker started');
+        avPlanId = result.planId; try { localStorage.setItem(AV_PLAN_KEY, avPlanId); } catch (e) { /* not critical */ }
+        $('av-plan-name').value = '';
+        toast('Plan created');
         await loadAvailability();
     } catch (e) {
-        toast(`Couldn't start it: ${e.message}`);
+        toast(`Couldn't create it: ${e.message}`);
     } finally {
         btn.disabled = false;
     }

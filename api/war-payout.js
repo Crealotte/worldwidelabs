@@ -43,7 +43,41 @@ async function redis(command) {
 }
 
 const restockedKey = (factionId) => `wwl:restocked-wars:${factionId}`;
-const availabilityKey = (factionId) => `wwl:availability:${factionId}`;
+// Availability "plans": several trackers can exist at once (this weekend AND next weekend), each
+// with its own grid, entries and linked war, picked from a dropdown. 'main' is the original
+// single-tracker key from before plans existed, so an existing tracker keeps working untouched;
+// new plans get their own key. A small index per faction holds just the light metadata the
+// dropdown needs, so listing plans never loads every plan's entries.
+const availabilityIndexKey = (factionId) => `wwl:availability-index:${factionId}`;
+const availabilityKey = (factionId, planId) => (!planId || planId === 'main')
+    ? `wwl:availability:${factionId}` : `wwl:availability:${factionId}:${planId}`;
+
+async function loadPlanIndex(factionId) {
+    const raw = await redis(['GET', availabilityIndexKey(factionId)]);
+    if (raw) return JSON.parse(raw);
+    const legacy = await redis(['GET', availabilityKey(factionId, 'main')]); // a tracker from before plans existed
+    if (!legacy) return [];
+    const d = JSON.parse(legacy);
+    return [{ id: 'main', name: d.name || '', startDate: d.startDate, days: d.days, war: d.war || null, createdAt: 0 }];
+}
+
+// The plan to show when none is asked for: the earliest one that hasn't finished yet, else the
+// most recently created.
+function defaultPlanId(plans) {
+    if (!plans.length) return null;
+    const today = new Date().toISOString().slice(0, 10);
+    const endOf = p => { const d = new Date(`${p.startDate}T00:00:00Z`); d.setUTCDate(d.getUTCDate() + p.days); return d.toISOString().slice(0, 10); };
+    const live = plans.filter(p => endOf(p) >= today).sort((a, b) => a.startDate.localeCompare(b.startDate));
+    return (live[0] || plans[plans.length - 1]).id;
+}
+
+async function resolvePlan(factionId, requestedId) {
+    const plans = await loadPlanIndex(factionId);
+    const id = plans.find(p => p.id === requestedId)?.id || defaultPlanId(plans);
+    if (!id) return { plans, id: null, data: null };
+    const raw = await redis(['GET', availabilityKey(factionId, id)]);
+    return { plans, id, data: raw ? JSON.parse(raw) : null };
+}
 
 // Resolves faction + the caller's own identity in one profile fetch — the availability tracker
 // (any member, not just leaders) needs to know who's actually recording their own slots.
@@ -113,6 +147,47 @@ async function getDiscordPoster(factionId) {
         }) };
     }
     return null;
+}
+
+// ---- Overdose tracking, from Torn's own "times overdosed" personal stat — no bot, no hospital
+// status. Torn lets any key read that stat for any member, right now or as of a past timestamp,
+// so "who overdosed since <window start>" is just (count now) - (count at window start). It can't
+// say WHICH drug (that lives in each member's private logs), and personalstats history is daily-
+// ish snapshots, so a member's baseline can sit a little before the exact window start. Every scan
+// also compares against the previous scan and logs any increase as an event with when it was
+// noticed — the start of a log that's ours, instead of depending on another service's.
+const odDocKey = (factionId) => `wwl:od-tracker:${factionId}`;
+
+// The window: from midnight (TCT) of the day 48h before the linked war starts. With no war
+// linked (e.g. nothing matched yet this week) it falls back to the last ~3 days so there's still
+// something to look at.
+function odWindowFor(plans) {
+    const now = Math.floor(Date.now() / 1000);
+    // Across all plans with a war start: the nearest upcoming one, else the most recent that
+    // started within the last two weeks.
+    const starts = (plans || []).map(p => p.war?.start).filter(s => s && s > now - 14 * 86400);
+    const upcoming = starts.filter(s => s >= now).sort((a, b) => a - b)[0];
+    const warStart = upcoming ?? starts.sort((a, b) => b - a)[0] ?? null;
+    if (warStart) return { start: Math.floor((warStart - 48 * 3600) / 86400) * 86400, warStart, fallback: false };
+    return { start: Math.floor((now - 2 * 86400) / 86400) * 86400, warStart: null, fallback: true };
+}
+
+// Reads one member's overdosed count (now, or as of `timestamp`). The response nesting isn't
+// something I could verify against a live key, so this accepts a flat object, a category-nested
+// one, or a name/value list — and returns null rather than 0 if it can't find the number, so a
+// parsing miss can never masquerade as "zero overdoses".
+async function fetchOverdosed(id, key, timestamp) {
+    const r = await fetch(`https://api.torn.com/user/${encodeURIComponent(id)}?selections=personalstats&stat=overdosed${timestamp ? `&timestamp=${timestamp}` : ''}&key=${encodeURIComponent(key)}`);
+    const d = await r.json();
+    if (d.error) { const e = new Error(d.error.error); e.code = d.error.code; throw e; }
+    const ps = d.personalstats;
+    let v;
+    if (Array.isArray(ps)) v = ps.find(x => x.name === 'overdosed')?.value;
+    else if (ps && typeof ps === 'object') {
+        v = ps.overdosed;
+        if (v === undefined) for (const c of Object.values(ps)) if (c && typeof c === 'object' && 'overdosed' in c) { v = c.overdosed; break; }
+    }
+    return Number.isFinite(Number(v)) && v !== undefined && v !== null ? Number(v) : null;
 }
 
 async function getRoster(key) {
@@ -193,13 +268,13 @@ module.exports = async function handler(req, res) {
         // normal length. Slots are keyed "day-hour" (day = 0-indexed offset from the tracker's
         // start date), one flat object per member for O(1) toggling.
         if (action === 'availability-get') {
-            const raw = await redis(['GET', availabilityKey(factionId)]);
-            const data = raw ? JSON.parse(raw) : null;
+            const { plans, id: planId, data } = await resolvePlan(factionId, req.body.planId);
             const mine = data?.entries?.[playerId]?.slots || {};
             const unavailable = data?.unavailable || {};
             const result = {
+                plans, planId, // the dropdown's list, and which one this response is for
                 // war = the ranked war this tracker is linked to ({ id, start, opponent }), if any
-                config: data ? { startDate: data.startDate, days: data.days, war: data.war || null } : null,
+                config: data ? { startDate: data.startDate, days: data.days, war: data.war || null, name: data.name || '' } : null,
                 mine,
                 myUnavailable: unavailable[playerId] || null, // { name, note, at } if I marked myself out
             };
@@ -238,14 +313,13 @@ module.exports = async function handler(req, res) {
         if (action === 'availability-set') {
             const { day, hour, available } = req.body;
             if (day == null || hour == null) return res.status(400).json({ error: 'Missing day/hour' });
-            const raw = await redis(['GET', availabilityKey(factionId)]);
-            const data = raw ? JSON.parse(raw) : null;
+            const { id: planId, data } = await resolvePlan(factionId, req.body.planId);
             if (!data) return res.status(400).json({ error: 'No availability tracker is active for this faction right now — ask a leader to start one.' });
             const entry = data.entries[playerId] || (data.entries[playerId] = { name: playerName, slots: {} });
             entry.name = playerName; // keep it current in case of a name change
             const slotKey = `${day}-${hour}`;
             if (available) entry.slots[slotKey] = true; else delete entry.slots[slotKey];
-            await redis(['SET', availabilityKey(factionId), JSON.stringify(data)]);
+            await redis(['SET', availabilityKey(factionId, planId), JSON.stringify(data)]);
             return res.status(200).json({ ok: true });
         }
 
@@ -254,22 +328,17 @@ module.exports = async function handler(req, res) {
         // Any member can set/undo their own. Cleared automatically when a new tracker starts.
         if (action === 'availability-unavailable') {
             const { unavailable: flag, note } = req.body;
-            const raw = await redis(['GET', availabilityKey(factionId)]);
-            const data = raw ? JSON.parse(raw) : null;
+            const { id: planId, data } = await resolvePlan(factionId, req.body.planId);
             if (!data) return res.status(400).json({ error: 'No availability tracker is active for this faction right now — ask a leader to start one.' });
             data.unavailable = data.unavailable || {};
             if (flag) data.unavailable[playerId] = { name: playerName, note: String(note || '').slice(0, 140), at: Date.now() };
             else delete data.unavailable[playerId];
-            await redis(['SET', availabilityKey(factionId), JSON.stringify(data)]);
+            await redis(['SET', availabilityKey(factionId, planId), JSON.stringify(data)]);
             return res.status(200).json({ ok: true });
         }
 
         if (!(await isLeader(key))) return res.status(403).json({ error: 'Leaders only' });
 
-        // Starts a fresh tracker for the newly-matched war — wipes any previous entries, since
-        // this is meant to answer "who's around for THIS war", not accumulate forever. days is
-        // capped generously (a war dragging a day or two past a normal weekend is expected; this
-        // just guards against a fat-fingered huge number blowing up the grid).
         // This faction's own Discord destination (see getDiscordPoster). Leader-only. The webhook
         // URL is a secret — it's never sent back, only a hint of which webhook is saved.
         if (action === 'discord-settings-get') {
@@ -326,8 +395,7 @@ module.exports = async function handler(req, res) {
         // they're returned in noDiscord so the leader knows who was left out.
         if (action === 'availability-ping') {
             const { kind, day, hour, message } = req.body;
-            const raw = await redis(['GET', availabilityKey(factionId)]);
-            const data = raw ? JSON.parse(raw) : null;
+            const { data } = await resolvePlan(factionId, req.body.planId);
             if (!data) return res.status(400).json({ error: 'No availability tracker is active right now.' });
 
             let targets = [];
@@ -406,13 +474,17 @@ module.exports = async function handler(req, res) {
             catch (e) { return res.status(403).json({ error: String(e.message || e) }); }
         }
 
-        // Optionally linked to a ranked war (warId — start time and opponent are taken from Torn
-        // itself, not trusted from the client) or given a manual war start (warStart, unix). The
-        // tracker isn't otherwise tied to any war, so both are optional.
-        if (action === 'availability-start') {
-            const { startDate, days, warId, warStart } = req.body;
+        // Adds a new plan (tracker) alongside any existing ones — e.g. next weekend's while this
+        // weekend's is still running. Optionally linked to a ranked war (warId — start time and
+        // opponent are taken from Torn itself, not trusted from the client) or given a manual war
+        // start (warStart, unix); neither is required. Capped at 10 plans so the dropdown and
+        // storage can't grow forever.
+        if (action === 'availability-create') {
+            const { startDate, days, warId, warStart, name } = req.body;
             const dayCount = Math.min(14, Math.max(1, Number(days) || 5));
             if (!startDate) return res.status(400).json({ error: 'Missing startDate' });
+            const plans = await loadPlanIndex(factionId);
+            if (plans.length >= 10) return res.status(400).json({ error: 'You already have 10 plans — delete an old one first.' });
             let war = null;
             if (warId) {
                 let wars;
@@ -424,8 +496,99 @@ module.exports = async function handler(req, res) {
             } else if (Number(warStart) > 0) {
                 war = { id: null, start: Number(warStart), opponent: '' };
             }
-            await redis(['SET', availabilityKey(factionId), JSON.stringify({ startDate, days: dayCount, war, entries: {}, unavailable: {} })]);
+            const planId = Math.random().toString(36).slice(2, 8);
+            const planName = String(name || '').trim().slice(0, 40);
+            await redis(['SET', availabilityKey(factionId, planId), JSON.stringify({ name: planName, startDate, days: dayCount, war, entries: {}, unavailable: {} })]);
+            plans.push({ id: planId, name: planName, startDate, days: dayCount, war, createdAt: Date.now() });
+            await redis(['SET', availabilityIndexKey(factionId), JSON.stringify(plans)]);
+            return res.status(200).json({ ok: true, planId });
+        }
+
+        if (action === 'availability-delete') {
+            const { planId } = req.body;
+            const plans = await loadPlanIndex(factionId);
+            if (!plans.find(p => p.id === planId)) return res.status(400).json({ error: 'That plan doesn\'t exist.' });
+            await redis(['DEL', availabilityKey(factionId, planId)]);
+            await redis(['SET', availabilityIndexKey(factionId), JSON.stringify(plans.filter(p => p.id !== planId))]);
             return res.status(200).json({ ok: true });
+        }
+
+        // Overdose view: who's overdosed since the window start, from the last scan. Reads only
+        // stored data (no Torn calls) — the scanning is od-scan below.
+        if (action === 'od-get') {
+            const plans = await loadPlanIndex(factionId);
+            const window = odWindowFor(plans);
+            const raw = await redis(['GET', odDocKey(factionId)]);
+            const doc = raw ? JSON.parse(raw) : null;
+            const valid = !!doc && doc.windowStart === window.start; // baselines belong to one window
+            const members = [];
+            if (valid) {
+                for (const [id, latest] of Object.entries(doc.latest || {})) {
+                    const base = doc.base?.[id];
+                    if (base == null) continue;
+                    const delta = latest.count - base;
+                    if (delta <= 0) continue;
+                    const last = [...(doc.events || [])].reverse().find(e => e.id === id);
+                    members.push({ id, name: doc.names?.[id] || `#${id}`, delta, total: latest.count, detectedAt: last?.at || null });
+                }
+                members.sort((a, b) => b.delta - a.delta);
+            }
+            // Sanity check on the historical baselines: if lots of members who have overdosed at
+            // some point show a baseline of exactly zero, the history lookup probably returned
+            // zeros rather than real values, and the counts above would be inflated.
+            let suspect = false;
+            if (valid) {
+                const ever = Object.entries(doc.latest || {}).filter(([, l]) => l.count > 0);
+                const zeroBase = ever.filter(([id]) => doc.base?.[id] === 0);
+                suspect = ever.length >= 5 && zeroBase.length / ever.length > 0.5;
+            }
+            return res.status(200).json({ window, scannedAt: doc?.scannedAt || 0, scannedCount: valid ? Object.keys(doc.latest || {}).length : 0, needsScan: !valid || !doc.scannedAt, members, suspect });
+        }
+
+        // Scans a slice of the roster: each member's overdosed count now, plus (once per window)
+        // their count at the window start. Paced under Torn's rate limit, so the browser calls
+        // this repeatedly with an advancing cursor until done — one call can't cover a whole
+        // faction inside a serverless function's time budget.
+        if (action === 'od-scan') {
+            const cursor = Math.max(0, Number(req.body.cursor) || 0);
+            const CHUNK = 12;
+            const plans = await loadPlanIndex(factionId);
+            const window = odWindowFor(plans);
+            const now = Math.floor(Date.now() / 1000);
+            const raw = await redis(['GET', odDocKey(factionId)]);
+            const doc = raw ? JSON.parse(raw) : { base: {}, latest: {}, names: {}, events: [], roster: [], scannedAt: 0 };
+            if (doc.windowStart !== window.start) { doc.windowStart = window.start; doc.base = {}; doc.scannedAt = 0; } // baselines are per window
+            if (cursor === 0) {
+                try { doc.roster = await getRoster(key); }
+                catch (e) { return res.status(403).json({ error: `Couldn't read the member list: ${e.message}` }); }
+            }
+            const slice = (doc.roster || []).slice(cursor, cursor + CHUNK);
+            let errors = 0, rateLimited = false;
+            for (const m of slice) {
+                try {
+                    const cur = await fetchOverdosed(m.id, key);
+                    await sleep(600);
+                    if (cur === null) { errors++; continue; }
+                    if (doc.base[m.id] == null) {
+                        const base = await fetchOverdosed(m.id, key, window.start);
+                        await sleep(600);
+                        if (base !== null) doc.base[m.id] = base; else errors++;
+                    }
+                    const prev = doc.latest[m.id];
+                    if (prev && cur > prev.count) doc.events.push({ id: m.id, name: m.name, at: now, from: prev.count, to: cur }); // an increase since the last scan = an overdose noticed
+                    doc.latest[m.id] = { count: cur, at: now };
+                    doc.names[m.id] = m.name;
+                } catch (e) {
+                    errors++;
+                    if (e.code === 5) { rateLimited = true; break; } // Torn's "too many requests" — stop, the browser can retry from here
+                }
+            }
+            const nextCursor = rateLimited ? cursor : cursor + slice.length;
+            const done = !rateLimited && nextCursor >= (doc.roster || []).length;
+            if (done) doc.scannedAt = now;
+            doc.events = (doc.events || []).slice(-500);
+            await redis(['SET', odDocKey(factionId), JSON.stringify(doc)]);
+            return res.status(200).json({ done, nextCursor, total: (doc.roster || []).length, errors, rateLimited });
         }
 
         if (action === 'list-wars') {
