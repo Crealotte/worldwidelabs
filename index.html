@@ -327,6 +327,11 @@
     .av-cell:hover { border-color: var(--reagent); border-width: 2px; }
     .av-cell-mine { background: var(--reagent); }
     .av-cell-maybe { background: #f0b432; }
+    .av-sum { cursor: pointer; list-style: none; }
+    .av-sum::-webkit-details-marker { display: none; }
+    .av-sum h3 { display: inline; margin: 0; }
+    .av-sum::before { content: "▸ "; color: var(--muted); }
+    details[open] > .av-sum::before { content: "▾ "; }
     .av-summary-cell { cursor: default; color: var(--text); }
     .av-summary-cell:hover { border-color: var(--reagent); }
 
@@ -1031,7 +1036,7 @@
             </div>
 
             <div class="panel" id="av-start-panel" style="display:none;">
-                <h3>Leader: create a plan</h3>
+                <details><summary class="av-sum"><h3>Leader: create a plan</h3></summary>
                 <p style="color:var(--muted);font-size:12px;margin:0 0 10px;">A plan is one tracker — e.g. this weekend, or next weekend. Plans sit side by side (pick between them with the dropdown), so creating a new one never touches the others.</p>
                 <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-bottom:12px;">
                     <div class="field" style="margin:0;min-width:200px;">
@@ -1064,19 +1069,14 @@
                     </div>
                     <button class="ghost small" id="av-start-btn">Create plan</button>
                 </div>
-            </div>
-
-            <div id="av-tz-bar" style="display:none;margin:0 0 12px;font-size:13px;">
-                <label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;">
-                    <input type="checkbox" id="av-tz-toggle" style="width:auto;"> Show times in my own timezone
-                </label>
-                <span id="av-tz-note" style="color:var(--muted);"></span>
+                </details>
             </div>
 
             <div class="panel" id="av-discord-panel" style="display:none;">
-                <h3>Discord settings</h3>
+                <details><summary class="av-sum"><h3>Discord settings</h3></summary>
                 <p style="color:var(--muted);font-size:12px;margin:0 0 10px;">Where <b>your faction's</b> war pings get posted — each faction sets its own, so factions using this app never post into each other's channels. Leaders/council only.</p>
                 <div id="av-discord-body"></div>
+                </details>
             </div>
 
             <div class="panel" id="av-od-panel" style="display:none;">
@@ -1087,6 +1087,13 @@
 
             <div id="av-war-line" style="display:none;margin:0 0 12px;font-size:14px;font-weight:600;"></div>
             <div id="av-unavail-bar" style="display:none;margin:0 0 12px;"></div>
+
+            <div id="av-tz-bar" style="display:none;margin:0 0 12px;font-size:13px;">
+                <label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;">
+                    <input type="checkbox" id="av-tz-toggle" style="width:auto;"> Show times in my own timezone
+                </label>
+                <span id="av-tz-note" style="color:var(--muted);"></span>
+            </div>
 
             <div id="av-grid-panel" style="display:none;">
                 <div class="av-banner" id="av-tz-banner" style="display:none;"></div>
