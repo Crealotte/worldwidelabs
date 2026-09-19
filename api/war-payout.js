@@ -26,7 +26,7 @@
 
 const { fetchWarHits, sleep } = require('../lib/warHits');
 const { fetchWarBadgeStats } = require('../lib/warBadgeStats');
-const { tornToDiscordIds } = require('../lib/discordMap');
+const { tornToDiscordIds, resolveDiscordIds } = require('../lib/discordMap');
 
 const REDIS_URL = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL;
 const REDIS_TOKEN = process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN;
@@ -76,6 +76,43 @@ async function getUpcomingWars(key, factionId) {
         })
         .filter(w => w.start)
         .sort((a, b) => a.start - b.start);
+}
+
+// ---- Discord destination, per faction. Several factions can use this app, so where a faction's
+// pings go can't be one global setting. Each faction's leader saves its own: a channel ID (the
+// shared WorldWideLabs bot posts there) or a webhook URL (works for a faction on ANY Discord
+// server, no bot needed). Bot posting is only allowed for factions that actually live on the
+// shared server — otherwise any faction's leader could aim the bot at any channel ID in it.
+const discordSettingsKey = (factionId) => `wwl:discord-settings:${factionId}`;
+const WEBHOOK_RE = /^https:\/\/(?:[a-z]+\.)?discord(?:app)?\.com\/api\/webhooks\/\d+\/[\w-]+$/;
+
+// The shared server's factions: the ones already listed in DISCORD_ROLE_MAP (the existing
+// multi-faction config for that server), plus any extra IDs in DISCORD_WAR_FACTION_IDS.
+function isSharedServerFaction(factionId) {
+    let roleMap = {};
+    try { roleMap = JSON.parse(process.env.DISCORD_ROLE_MAP || '{}'); } catch (e) { /* bad JSON = none configured */ }
+    const extra = (process.env.DISCORD_WAR_FACTION_IDS || '').split(',').map(s => s.trim()).filter(Boolean);
+    return Object.keys(roleMap).includes(String(factionId)) || extra.includes(String(factionId));
+}
+
+// Resolves to { post(content, users) } for this faction, { error }, or null if not set up yet.
+async function getDiscordPoster(factionId) {
+    const raw = await redis(['GET', discordSettingsKey(factionId)]);
+    const s = raw ? JSON.parse(raw) : {};
+    if (s.webhookUrl) {
+        if (!WEBHOOK_RE.test(s.webhookUrl)) return { error: 'The saved Discord webhook URL doesn\'t look valid — save it again in the Discord settings.' };
+        return { post: (content, users) => fetch(s.webhookUrl, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ content, username: 'WWLabs', allowed_mentions: { parse: [], users } }),
+        }) };
+    }
+    if (s.channelId && isSharedServerFaction(factionId) && process.env.DISCORD_BOT_TOKEN) {
+        return { post: (content, users) => fetch(`https://discord.com/api/v10/channels/${encodeURIComponent(s.channelId)}/messages`, {
+            method: 'POST', headers: { Authorization: `Bot ${process.env.DISCORD_BOT_TOKEN}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ content, allowed_mentions: { parse: [], users } }),
+        }) };
+    }
+    return null;
 }
 
 async function getRoster(key) {
@@ -233,11 +270,57 @@ module.exports = async function handler(req, res) {
         // this is meant to answer "who's around for THIS war", not accumulate forever. days is
         // capped generously (a war dragging a day or two past a normal weekend is expected; this
         // just guards against a fat-fingered huge number blowing up the grid).
+        // This faction's own Discord destination (see getDiscordPoster). Leader-only. The webhook
+        // URL is a secret — it's never sent back, only a hint of which webhook is saved.
+        if (action === 'discord-settings-get') {
+            const raw = await redis(['GET', discordSettingsKey(factionId)]);
+            const s = raw ? JSON.parse(raw) : {};
+            return res.status(200).json({
+                factionId,
+                shared: isSharedServerFaction(factionId), // on the shared server -> the bot can post here
+                channelId: s.channelId || '',
+                webhookSet: !!s.webhookUrl,
+                webhookHint: s.webhookUrl ? `webhook …${s.webhookUrl.match(/\/webhooks\/(\d+)\//)?.[1]?.slice(-6) || ''}` : '',
+            });
+        }
+
+        if (action === 'discord-settings-set') {
+            const raw = await redis(['GET', discordSettingsKey(factionId)]);
+            const s = raw ? JSON.parse(raw) : {};
+            const { webhookUrl, channelId, clearWebhook } = req.body;
+            if (clearWebhook) delete s.webhookUrl;
+            if (typeof webhookUrl === 'string' && webhookUrl.trim()) {
+                if (!WEBHOOK_RE.test(webhookUrl.trim())) return res.status(400).json({ error: 'That doesn\'t look like a Discord webhook URL (it should start with https://discord.com/api/webhooks/).' });
+                s.webhookUrl = webhookUrl.trim();
+            }
+            if (typeof channelId === 'string') {
+                if (channelId.trim() && !/^\d{15,25}$/.test(channelId.trim())) return res.status(400).json({ error: 'A channel ID is just a long number — right-click the channel in Discord (Developer Mode on) and choose Copy Channel ID.' });
+                if (channelId.trim() && !isSharedServerFaction(factionId)) return res.status(400).json({ error: 'The shared bot can only post for factions on the shared Discord server — use a webhook instead.' });
+                if (channelId.trim()) s.channelId = channelId.trim(); else delete s.channelId;
+            }
+            await redis(['SET', discordSettingsKey(factionId), JSON.stringify(s)]);
+            return res.status(200).json({ ok: true });
+        }
+
+        // Sends a harmless test message (mentions nobody) so a leader can confirm the destination
+        // works before the first real ping.
+        if (action === 'discord-settings-test') {
+            const poster = await getDiscordPoster(factionId);
+            if (poster?.error) return res.status(400).json({ error: poster.error });
+            if (!poster) return res.status(400).json({ error: 'Nothing saved yet — add a channel ID or webhook first.' });
+            const r = await poster.post(`✅ WWLabs is connected — war availability pings for your faction will post here.`, []);
+            if (!r.ok) {
+                const body = await r.text().catch(() => '');
+                return res.status(502).json({ error: `Discord rejected the test (${r.status})${body ? `: ${body.slice(0, 120)}` : ''} — check the bot can see and post in that channel.` });
+            }
+            return res.status(200).json({ ok: true });
+        }
+
         // Posts an @mention message to Discord for everyone who signed up for a slot ('slot') or
         // hasn't filled the tracker in yet ('missing'). The mention list is built HERE from the
         // stored data — never taken from the client — and allowed_mentions is locked to exactly
-        // those users, so the free-text message can't smuggle in an @everyone. Needs Discord
-        // posting configured (see below: bot + channel ID, or a webhook); without it, this returns
+        // those users, so the free-text message can't smuggle in an @everyone. Needs THIS faction's Discord
+        // destination saved (channel ID or webhook, see discord-settings-*); without it, this returns
         // the ready-made text so the leader can paste it into Discord themselves.
         // People whose nickname carries no [TornID] (not verified in Discord) can't be mentioned —
         // they're returned in noDiscord so the leader knows who was left out.
@@ -272,37 +355,31 @@ module.exports = async function handler(req, res) {
                 timeLine = `⏰ **Push: <t:${pushAt}:F>** (<t:${pushAt}:R>) — ${tct} TCT`;
             }
             const intro = [String(message || '').slice(0, 400).trim(), timeLine].filter(Boolean).join('\n');
-            let idMap = null, mapError = null;
-            try { idMap = await tornToDiscordIds(); } catch (e) { mapError = String(e.message || e); }
+            // Torn ID -> Discord ID. Factions on the shared Discord server get the bot's own
+            // nickname lookup first (one bulk fetch); everyone else — and any gaps — goes through
+            // Torn's own Discord link, which works for any faction on any server.
+            let guildMap = null, mapError = null;
+            if (isSharedServerFaction(factionId)) {
+                try { guildMap = await tornToDiscordIds(); } catch (e) { mapError = String(e.message || e); }
+            }
+            const idMap = await resolveDiscordIds(targets, { key, redis, guildMap });
             const mentions = [], noDiscord = [];
             for (const t of targets) {
-                const did = idMap?.[t.id];
+                const did = idMap[t.id];
                 if (did) mentions.push(`<@${did}>`); else noDiscord.push(t.name);
             }
 
             const text = [intro, mentions.join(' ')].filter(Boolean).join('\n');
-            // Two ways to post: the existing WorldWideLabs Discord bot (needs DISCORD_WAR_CHANNEL_ID
-            // — the channel to post in — and Send Messages permission there), or a plain channel
-            // webhook (DISCORD_WAR_WEBHOOK_URL). Webhook wins if both are set.
-            const webhook = process.env.DISCORD_WAR_WEBHOOK_URL;
-            const botToken = process.env.DISCORD_BOT_TOKEN;
-            const channelId = process.env.DISCORD_WAR_CHANNEL_ID;
-            const configured = !!webhook || !!(botToken && channelId);
+            // Where this faction's pings go is THIS faction's own saved setting (see the
+            // discord-settings actions) — never a global one, or every faction using the app would
+            // post into the same channel.
+            const poster = await getDiscordPoster(factionId);
+            if (poster?.error) return res.status(400).json({ error: poster.error });
+            const configured = !!poster;
             if (!configured || !mentions.length) {
                 return res.status(200).json({ sent: false, configured, text, mentioned: mentions.length, noDiscord, mapError });
             }
-            if (webhook && !/^https:\/\/(?:[a-z]+\.)?discord(?:app)?\.com\/api\/webhooks\//.test(webhook)) {
-                return res.status(500).json({ error: 'DISCORD_WAR_WEBHOOK_URL doesn\'t look like a Discord webhook URL.' });
-            }
-            const postToDiscord = (content, users) => webhook
-                ? fetch(webhook, {
-                    method: 'POST', headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ content, username: 'WWLabs', allowed_mentions: { parse: [], users } }),
-                })
-                : fetch(`https://discord.com/api/v10/channels/${encodeURIComponent(channelId)}/messages`, {
-                    method: 'POST', headers: { Authorization: `Bot ${botToken}`, 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ content, allowed_mentions: { parse: [], users } }),
-                });
+            const postToDiscord = poster.post;
 
             // Discord caps a message at 2000 chars — split a long mention list across several.
             const chunks = [];

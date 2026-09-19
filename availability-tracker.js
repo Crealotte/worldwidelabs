@@ -51,6 +51,7 @@ async function loadAvailability() {
         st.textContent = ''; st.className = 'status';
         renderAvailabilityPage();
         if (avSummary !== null && avWars === null) loadAvWars(); // leaders only, once — feeds the "link to war" picker
+        if (avSummary !== null) loadAvDiscord(); // leaders only — this faction's Discord destination
     } catch (e) {
         st.className = 'status err'; st.textContent = e.message;
     }
@@ -117,6 +118,62 @@ function renderAvWarLine() {
     el.innerHTML = `🎯 ${war.opponent ? `War vs <b>${esc(war.opponent)}</b> — s` : 'S'}tarts <b>${esc(tct)}</b>${esc(local)}.${avWarStartSlot() ? ' The gold-outlined box in the grid is the start hour.' : ''}`;
 }
 
+// Leader-only: this faction's own Discord destination for pings. A faction on the shared server
+// saves a channel ID (the bot posts there); any faction can instead save a webhook URL.
+async function loadAvDiscord() {
+    const el = $('av-discord-body');
+    try {
+        const s = await avFetch({ action: 'discord-settings-get' });
+        if (s.error) throw new Error(s.error);
+        el.innerHTML = `
+            <div style="font-size:12px;color:var(--muted);margin-bottom:10px;">Your faction ID: <b>${esc(s.factionId)}</b></div>
+            ${s.shared ? `
+            <div class="field" style="max-width:420px;">
+                <label for="av-dc-channel">Discord channel ID (the WorldWideLabs bot posts here)</label>
+                <input id="av-dc-channel" type="text" inputmode="numeric" value="${esc(s.channelId)}" placeholder="e.g. 123456789012345678">
+                <div style="font-size:11px;color:var(--muted);margin-top:4px;">Discord → Settings → Advanced → Developer Mode on, then right-click the channel → Copy Channel ID. The bot needs View Channel + Send Messages there.</div>
+            </div>` : `
+            <p style="font-size:12px;color:var(--muted);margin:0 0 10px;">Your faction isn't on the shared Discord server the bot lives in, so use a webhook below (works on any server).</p>`}
+            <div class="field" style="max-width:420px;">
+                <label for="av-dc-webhook">${s.shared ? 'Or a webhook URL' : 'Webhook URL'} ${s.webhookSet ? `<span style="color:var(--reagent);">(saved: ${esc(s.webhookHint)})</span>` : ''}</label>
+                <input id="av-dc-webhook" type="password" placeholder="${s.webhookSet ? 'Saved — paste a new one to replace it' : 'https://discord.com/api/webhooks/…'}" autocomplete="off">
+                <div style="font-size:11px;color:var(--muted);margin-top:4px;">Channel settings → Integrations → Webhooks → New Webhook → Copy Webhook URL.</div>
+            </div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:6px;">
+                <button class="ghost small" id="av-dc-save">Save</button>
+                <button class="ghost small" id="av-dc-test">Send a test message</button>
+                ${s.webhookSet ? '<button class="ghost small" id="av-dc-clear">Remove saved webhook</button>' : ''}
+            </div>
+            <p style="font-size:11px;color:var(--muted);margin:10px 0 0;">@mentions work for members who've linked their Discord on Torn (the same link verification bots use). Anyone without one is skipped, and you're told who.</p>`;
+
+        const save = async (extra = {}) => {
+            const body = { action: 'discord-settings-set', ...extra };
+            if ($('av-dc-channel')) body.channelId = $('av-dc-channel').value;
+            const wh = $('av-dc-webhook').value.trim();
+            if (wh) body.webhookUrl = wh;
+            const r = await avFetch(body);
+            if (r.error) throw new Error(r.error);
+        };
+        $('av-dc-save').addEventListener('click', async () => {
+            try { await save(); toast('Discord settings saved'); loadAvDiscord(); } catch (e) { toast(e.message); }
+        });
+        $('av-dc-test').addEventListener('click', async () => {
+            try {
+                await save(); // save whatever's typed first, so "test" tests what you see
+                const r = await avFetch({ action: 'discord-settings-test' });
+                if (r.error) throw new Error(r.error);
+                toast('Test message sent — check the channel');
+                loadAvDiscord();
+            } catch (e) { toast(e.message); }
+        });
+        $('av-dc-clear')?.addEventListener('click', async () => {
+            try { await save({ clearWebhook: true }); toast('Webhook removed'); loadAvDiscord(); } catch (e) { toast(e.message); }
+        });
+    } catch (e) {
+        el.innerHTML = `<p style="color:var(--danger);font-size:13px;">Couldn't load Discord settings: ${esc(e.message)}</p>`;
+    }
+}
+
 // Matched/upcoming ranked wars for the "link to war" picker in the start form (leaders only).
 async function loadAvWars() {
     const sel = $('av-war-select');
@@ -140,6 +197,7 @@ $('av-war-select').addEventListener('change', avOnWarSelect);
 
 function renderAvailabilityPage() {
     $('av-start-panel').style.display = avSummary !== null ? 'block' : 'none'; // leader-only, inferred from whether summary came back at all
+    $('av-discord-panel').style.display = avSummary !== null ? 'block' : 'none';
     if (!avConfig) {
         $('av-none-msg').style.display = 'block';
         $('av-grid-panel').style.display = 'none';
@@ -281,7 +339,7 @@ async function avPingDiscord(kind, defaultPushAt, extra = {}) {
             toast(`Posted to Discord — ${result.mentioned} @mentioned.${skipped}`);
         } else if (result.text) {
             await navigator.clipboard.writeText(result.text).catch(() => {});
-            toast(`${result.configured ? '' : 'Discord pinging isn\'t connected yet — '}message copied instead, paste it into Discord.${skipped}`);
+            toast(`${result.configured ? '' : 'Your faction\'s Discord isn\'t connected yet (see Discord settings on this page) — '}message copied instead, paste it into Discord.${skipped}`);
         }
         if (result.mapError) toast(`Discord lookup problem: ${result.mapError}`);
     } catch (e) {
