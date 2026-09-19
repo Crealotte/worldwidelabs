@@ -454,6 +454,7 @@
                 <div class="nav-item" data-page="respect-edit">Respect Tracker</div>
                 <div class="nav-item" data-page="war-payout">War Payout</div>
                 <div class="nav-item" data-page="armory-tracker">Consumption Tracker</div>
+                <div class="nav-item" data-page="labs-funds" style="display:none;">Labs Funds</div>
             </div>
         </div>
 
@@ -1014,6 +1015,51 @@
             </div>
         </section>
 
+        <section class="page" id="page-labs-funds">
+            <div class="lab-label">WWL·14 / owner only</div>
+            <h2>Labs Funds</h2>
+            <p class="pagedesc">
+                Every faction's war-pay history and the cut (the retained %) each one keeps out of the
+                payouts, with totals per faction and for all Labs together. New war payouts appear here
+                by themselves whenever a faction saves a payout receipt.
+            </p>
+            <div class="status" id="lf-status"></div>
+
+            <div class="panel">
+                <div id="lf-totals" style="display:flex;gap:28px;flex-wrap:wrap;"></div>
+            </div>
+            <div class="panel">
+                <h3>Per faction</h3>
+                <div id="lf-factions" style="overflow:auto;"></div>
+            </div>
+
+            <div class="panel">
+                <details>
+                    <summary class="av-sum"><h3>Add an entry by hand / import the past</h3></summary>
+                    <p style="color:var(--muted);font-size:12px;margin:10px 0;">For history from before this page existed: a <b>war cut</b> adds money in, <b>spent</b> takes money out (type it as a normal positive number), and an <b>adjustment</b> is a correction (use a minus for less). Receipts already saved in the app can be pulled in automatically with the import button — safe to press more than once.</p>
+                    <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-bottom:10px;">
+                        <div class="field" style="margin:0;min-width:180px;"><label for="lf-add-faction">Faction</label><select id="lf-add-faction"></select></div>
+                        <div class="field" id="lf-new-faction" style="margin:0;display:none;"><label for="lf-add-newname">Faction name</label><input id="lf-add-newname" type="text" maxlength="60"></div>
+                        <div class="field" style="margin:0;"><label for="lf-add-kind">Type</label>
+                            <select id="lf-add-kind"><option value="war">War cut (money in)</option><option value="spend">Spent (money out)</option><option value="adjust">Adjustment (+/−)</option></select></div>
+                        <div class="field" style="margin:0;max-width:150px;"><label for="lf-add-amount">Amount ($)</label><input id="lf-add-amount" type="text" inputmode="decimal" placeholder="e.g. 25000000"></div>
+                        <div class="field" style="margin:0;"><label for="lf-add-date">Date</label><input id="lf-add-date" type="date"></div>
+                    </div>
+                    <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;">
+                        <div class="field" style="margin:0;"><label for="lf-add-opponent">Opponent (optional)</label><input id="lf-add-opponent" type="text" maxlength="60"></div>
+                        <div class="field" style="margin:0;min-width:220px;"><label for="lf-add-note">Note (optional)</label><input id="lf-add-note" type="text" maxlength="140"></div>
+                        <button class="ghost small" id="lf-add-btn">Add entry</button>
+                        <button class="ghost small" id="lf-import-btn">Import existing receipts</button>
+                    </div>
+                </details>
+            </div>
+
+            <div class="panel">
+                <h3 id="lf-history-title">History</h3>
+                <div id="lf-history" style="overflow:auto;"></div>
+            </div>
+        </section>
+
         <section class="page" id="page-availability">
             <div class="lab-label">WWL·13 / for everyone</div>
             <h2>War Availability</h2>
@@ -1426,6 +1472,7 @@
 <script src="war-payout-tracker.js"></script>
 <script src="war-badges-tracker.js"></script>
 <script src="availability-tracker.js"></script>
+<script src="labs-funds.js"></script>
 <script src="armory-tracker.js"></script>
 <script src="app-init.js"></script>
 </body>

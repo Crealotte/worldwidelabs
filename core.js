@@ -105,6 +105,7 @@
         renderLinks();
         await pingTracker();
         checkFactionAccess();
+        if (typeof checkLabsOwner === 'function') checkLabsOwner();
 
         // A direct link like worldwidelabs.vercel.app/availability (for newsletters etc.) wins
         // over whatever page was last open in this session — that's the whole point of sharing
@@ -298,6 +299,7 @@
         if (page === 'war-payout') loadWarPayout();
         if (page === 'war-badges') loadWarBadges();
         if (page === 'availability') loadAvailability();
+        if (page === 'labs-funds') loadLabsFunds();
         if (page === 'armory-tracker') loadArmoryTracker();
         if (page === 'foreign-stock' && !foreignStockLoaded) { foreignStockLoaded = true; loadForeignStock(); }
         if (page === 'crimes-guide' && !crimesGuideLoaded) { crimesGuideLoaded = true; loadCrimesGuide(); }
