@@ -132,6 +132,12 @@
 
     // Leaders with the "API Access" faction permission can read faction data; others get the payout tab locked.
     let isLeaderCached = false;
+    // Leaders can preview the app as a normal member sees it. Only ever hides things in this browser
+    // (the server still checks the real key), so it is a look-and-feel check, not a security change.
+    const MEMBER_VIEW_KEY = "wwl_member_view";
+    let isRealLeader = false;
+    let memberView = false;
+    try { memberView = localStorage.getItem(MEMBER_VIEW_KEY) === "1"; } catch (e) { /* storage blocked */ }
 
     function setNavLock(page, locked) {
         const navItem = document.querySelector(`.nav-item[data-page="${page}"]`);
@@ -151,16 +157,19 @@
     async function checkFactionAccess() {
         try {
             await tornV2('/faction/balance');
-            isLeaderCached = true;
-            setNavLock('announce-edit', false);
-            setNavLock('feedback-edit', false);
-            setNavLock('ocfit-team', false);
-            setNavLock('respect-edit', false);
-            setNavLock('war-payout', false);
-            setNavLock('armory-tracker', false);
-            loadAdoption();
+            isRealLeader = true;
+            isLeaderCached = !memberView;
+            $("member-view-btn").style.display = "block";
+            $("member-view-btn").textContent = memberView ? "👁 Member view: ON (click to exit)" : "👁 View as member";
+            setNavLock('announce-edit', memberView);
+            setNavLock('feedback-edit', memberView);
+            setNavLock('ocfit-team', memberView);
+            setNavLock('respect-edit', memberView);
+            setNavLock('war-payout', memberView);
+            setNavLock('armory-tracker', memberView);
+            if (!memberView) { loadAdoption();
             loadFactionSharing();
-            loadRespectGoalPanel();
+            loadRespectGoalPanel(); }
         } catch (e) {
             isLeaderCached = false;
             setNavLock('announce-edit', true);
@@ -215,6 +224,11 @@
         }
     });
     $('login-key').addEventListener('keydown', e => { if (e.key === 'Enter') $('login-btn').click(); });
+
+    $('member-view-btn').addEventListener('click', () => {
+        try { localStorage.setItem(MEMBER_VIEW_KEY, memberView ? '0' : '1'); } catch (e) { /* storage blocked */ }
+        location.reload(); // simplest way to re-draw every page consistently
+    });
 
     $('logout-btn').addEventListener('click', () => {
         localStorage.removeItem(KEY_STORAGE);

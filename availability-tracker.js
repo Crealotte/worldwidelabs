@@ -58,12 +58,12 @@ async function loadAvailability() {
         try { if (avPlanId) localStorage.setItem(AV_PLAN_KEY, avPlanId); } catch (e) { /* not critical */ }
         avConfig = result.config;
         avMine = result.mine || {};
-        avSummary = result.summary || null; // only ever present for a leader-tier key
+        avSummary = (typeof memberView !== "undefined" && memberView) ? null : result.summary || null; // only ever present for a leader-tier key
         avMyUnavailable = result.myUnavailable || null;
-        avUnavailList = result.unavailable || null;
-        avResponded = result.responded || null;
-        avNotResponded = result.notResponded === undefined ? null : result.notResponded;
-        avRosterError = result.rosterError || null;
+        avUnavailList = (typeof memberView !== "undefined" && memberView) ? null : result.unavailable || null;
+        avResponded = (typeof memberView !== "undefined" && memberView) ? null : result.responded || null;
+        avNotResponded = (typeof memberView !== "undefined" && memberView) ? null : result.notResponded === undefined ? null : result.notResponded;
+        avRosterError = (typeof memberView !== "undefined" && memberView) ? null : result.rosterError || null;
         st.textContent = ''; st.className = 'status';
         renderAvailabilityPage();
         if (avSummary !== null && avWars === null) loadAvWars(); // leaders only, once — feeds the "link to war" picker
