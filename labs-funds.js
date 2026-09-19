@@ -1,5 +1,5 @@
-// labs-funds.js — the "Labs Funds" page, for the owner of all Labs only (the backend refuses anyone
-// else, and the nav item stays hidden unless the backend says you're an owner).
+// labs-funds.js — the "Labs Funds" page. Any faction leader can view it (read-only); only Labs owners
+// can change it (the backend enforces that, the page just hides the controls).
 // Shows every faction's war-pay history, the retained cut (the 20%) each keeps, and running
 // totals per faction and overall. New war payouts land here automatically when a faction saves a
 // payout receipt; the past is filled in with "Import existing receipts" and manual entries.
@@ -8,6 +8,9 @@
 let lfEntries = [];
 let lfExcluded = new Set();
 let lfFilter = '';
+let lfOwner = false; // owners can change things; other leaders get a read-only view
+let lfClaimable = false; // nobody owns Labs yet — a leader can claim it
+let lfOwners = {};
 
 async function lfFetch(body) {
     const res = await fetch('/api/war-payout', {
@@ -17,12 +20,13 @@ async function lfFetch(body) {
     return res.json();
 }
 
-// Reveals the nav item for owners. Called once after login; silent for everyone else.
+// Reveals the nav item for leaders. Called once after login; silent for everyone else.
 async function checkLabsOwner() {
     try {
-        const r = await lfFetch({ action: 'labs-owner' });
+        const r = await lfFetch({ action: 'labs-status' });
+        lfOwner = !!r.owner; lfClaimable = !!r.claimable;
         const nav = document.querySelector('.nav-item[data-page="labs-funds"]');
-        if (nav) nav.style.display = r.owner ? '' : 'none';
+        if (nav) nav.style.display = r.leader ? '' : 'none';
     } catch (e) { /* not an owner, or offline — the nav item just stays hidden */ }
 }
 
@@ -39,6 +43,7 @@ async function loadLabsFunds() {
         if (r.error) throw new Error(r.error);
         lfEntries = r.entries || [];
         lfExcluded = new Set(r.excluded || []);
+        lfOwners = r.owners || {};
         st.textContent = ''; st.className = 'status';
         renderLabsFunds();
     } catch (e) {
@@ -58,6 +63,9 @@ function lfFactions() {
 }
 
 function renderLabsFunds() {
+    $('lf-claim-panel').style.display = lfClaimable && !lfOwner ? 'block' : 'none';
+    $('lf-edit-panel').style.display = lfOwner ? 'block' : 'none';
+    $('lf-owners-line').innerHTML = lfOwner ? `Owners: ${Object.entries(lfOwners).map(([id, n]) => esc(n ? `${n} [${id}]` : id)).join(', ') || '—'} · <a href="#" id="lf-add-owner" style="color:var(--reagent);">add an owner</a>` : 'View only — only Labs owners can change this.';
     const factions = lfFactions();
     const counted = factions.filter(f => !lfExcluded.has(f.key));
     const total = counted.reduce((s, f) => s + f.income + f.out, 0);
@@ -83,7 +91,7 @@ function renderLabsFunds() {
                     <td style="padding:4px 8px;font-family:var(--mono);">${lfMoney(f.income)}</td>
                     <td style="padding:4px 8px;font-family:var(--mono);">${lfMoney(f.out)}</td>
                     <td style="padding:4px 8px;font-family:var(--mono);font-weight:700;color:var(--reagent);">${lfMoney(f.income + f.out)}</td>
-                    <td style="padding:4px 8px;"><input type="checkbox" class="lf-count" data-key="${esc(f.key)}" ${lfExcluded.has(f.key) ? '' : 'checked'} style="width:auto;"></td>
+                    <td style="padding:4px 8px;"><input type="checkbox" class="lf-count" data-key="${esc(f.key)}" ${lfExcluded.has(f.key) ? '' : 'checked'} ${lfOwner ? '' : 'disabled'} style="width:auto;"></td>
                 </tr>`).join('')}
             </tbody>
         </table>
@@ -112,7 +120,7 @@ function renderLabsFunds() {
                     <td style="padding:4px 8px;">${lfKind[e.kind]}${e.source === 'manual' ? '' : ` <span style="color:var(--muted);font-size:11px;">(${e.source})</span>`}</td>
                     <td style="padding:4px 8px;color:var(--muted);">${esc([e.opponent && `vs ${e.opponent}`, e.note].filter(Boolean).join(' — '))}${e.receiptId ? ` <a href="/?receipt=${esc(e.receiptId)}" target="_blank" style="color:var(--reagent);">receipt</a>` : ''}</td>
                     <td style="padding:4px 8px;text-align:right;font-family:var(--mono);${e.amount < 0 ? 'color:var(--danger);' : ''}">${lfMoney(e.amount)}</td>
-                    <td style="padding:4px 8px;"><button class="ghost small lf-del" data-id="${esc(e.id)}" title="Delete this entry">✕</button></td>
+                    <td style="padding:4px 8px;">${lfOwner ? `<button class="ghost small lf-del" data-id="${esc(e.id)}" title="Delete this entry">✕</button>` : ''}</td>
                 </tr>`).join('')}
             </tbody>
         </table>` : '<p style="color:var(--muted);margin:0;">No entries.</p>';
@@ -162,4 +170,24 @@ $('lf-import-btn').addEventListener('click', async () => {
         toast(`Imported ${r.imported} receipt(s) (${r.seen} checked)`);
         await loadLabsFunds();
     } catch (e) { toast(`Import failed: ${e.message}`); } finally { btn.disabled = false; btn.textContent = 'Import existing receipts'; }
+});
+
+$('lf-claim-btn').addEventListener('click', async () => {
+    if (!confirm('Become the Labs owner? Only owners can change the ledger, so make sure this is you.')) return;
+    const r = await lfFetch({ action: 'labs-claim' });
+    if (r.error) { toast(r.error); return; }
+    lfOwner = true; lfClaimable = false;
+    toast('You are now an owner');
+    loadLabsFunds();
+});
+
+document.addEventListener('click', async ev => {
+    if (ev.target.id !== 'lf-add-owner') return;
+    ev.preventDefault();
+    const id = prompt('Torn player ID of the new owner (numbers only):');
+    if (!id) return;
+    const r = await lfFetch({ action: 'labs-add-owner', playerId: id });
+    if (r.error) { toast(r.error); return; }
+    toast('Owner added');
+    loadLabsFunds();
 });

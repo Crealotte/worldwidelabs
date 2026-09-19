@@ -1016,7 +1016,7 @@
         </section>
 
         <section class="page" id="page-labs-funds">
-            <div class="lab-label">WWL·14 / owner only</div>
+            <div class="lab-label">WWL·14 / leaders</div>
             <h2>Labs Funds</h2>
             <p class="pagedesc">
                 Every faction's war-pay history and the cut (the retained %) each one keeps out of the
@@ -1024,6 +1024,12 @@
                 by themselves whenever a faction saves a payout receipt.
             </p>
             <div class="status" id="lf-status"></div>
+            <div id="lf-owners-line" style="color:var(--muted);font-size:12px;margin:0 0 12px;"></div>
+            <div class="panel" id="lf-claim-panel" style="display:none;">
+                <h3>Nobody owns Labs funds yet</h3>
+                <p style="color:var(--muted);font-size:12px;margin:0 0 10px;">Owners are the only ones who can add, import or delete entries; every other leader sees it read-only. Press this only if you are the owner of all Labs — the first person to press it becomes the owner.</p>
+                <button class="ghost small" id="lf-claim-btn">Claim ownership</button>
+            </div>
 
             <div class="panel">
                 <div id="lf-totals" style="display:flex;gap:28px;flex-wrap:wrap;"></div>

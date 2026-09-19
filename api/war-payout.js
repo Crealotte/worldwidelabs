@@ -27,7 +27,7 @@
 const { fetchWarHits, sleep } = require('../lib/warHits');
 const { fetchWarBadgeStats } = require('../lib/warBadgeStats');
 const { tornToDiscordIds, resolveDiscordIds } = require('../lib/discordMap');
-const { labsIsOwner, labsHandle, labsRecordReceipt } = require('../lib/labsLedger');
+const { labsIsOwner, labsHasOwners, labsHandle, labsRecordReceipt } = require('../lib/labsLedger');
 
 const REDIS_URL = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL;
 const REDIS_TOKEN = process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN;
@@ -343,14 +343,27 @@ module.exports = async function handler(req, res) {
             return res.status(200).json({ ok: true });
         }
 
-        // ---- Labs funds (owner only) ----------------------------------------------------------
-        // The owner of all Labs sees every faction's war-pay history and the retained cut ("the 20%")
-        // each one keeps. Who counts as owner: Torn player IDs in the WWL_OWNER_IDS env var.
+        // ---- Labs funds ------------------------------------------------------------------------
+        // Every faction's war-pay history and the retained cut ("the 20%") each one keeps. Any
+        // faction leader can VIEW it; only an owner can change it. Owners are kept in the database
+        // (first leader to press "Claim ownership" becomes the owner, and can add more owners) —
+        // WWL_OWNER_IDS in Vercel still works as an extra, optional way to name them.
         // Logic lives in lib/labsLedger.js; this is just the routing.
-        if (action === 'labs-owner') return res.status(200).json({ owner: labsIsOwner(playerId) });
         if (action.startsWith('labs-')) {
-            if (!labsIsOwner(playerId)) return res.status(403).json({ error: 'Owner only' });
-            return res.status(200).json(await labsHandle(action, req.body, { redis, key }));
+            const owner = await labsIsOwner(redis, playerId);
+            if (action === 'labs-status') {
+                const leader = owner || await isLeader(key);
+                return res.status(200).json({ owner, leader, claimable: leader && !owner && !(await labsHasOwners(redis)) });
+            }
+            const readOnly = action === 'labs-get';
+            if (action === 'labs-claim') {
+                if (!(await isLeader(key))) return res.status(403).json({ error: 'Leaders only' });
+            } else if (readOnly) {
+                if (!owner && !(await isLeader(key))) return res.status(403).json({ error: 'Leaders only' });
+            } else if (!owner) {
+                return res.status(403).json({ error: 'Owner only' });
+            }
+            return res.status(200).json(await labsHandle(action, req.body, { redis, key, playerId, playerName }));
         }
 
         if (!(await isLeader(key))) return res.status(403).json({ error: 'Leaders only' });
