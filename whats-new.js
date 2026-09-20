@@ -7,10 +7,19 @@
 // what is NEW since the last posted version, so nothing is announced twice (see wnBigPost below).
 //
 // TO ADD AN UPDATE: put a new object at the TOP of WHATS_NEW below with the next version number
-// (the last one is 1.12 → the next is 1.13). Plain text only (no HTML).
+// (the last one is 1.13 → the next is 1.14). Plain text only (no HTML).
 'use strict';
 
 const WHATS_NEW = [
+    {
+        version: '1.13', date: '2026-09-20',
+        title: 'New Faction menu: Steadfast planner and Perk roadmap',
+        everyone: [
+            'Faction menu → Steadfast planner: which stats get the top perk this month and next month (swapped on the first Sunday), the rotation for the whole year, and the countdown of the energy still to train per stat.',
+            'Faction menu → Perk roadmap: the order in which the faction unlocks its perks with respect. What we have is ticked off automatically from the real levels, the next perk is highlighted, and it shows how far behind schedule we are.',
+        ],
+        leaders: [],
+    },
     {
         version: '1.12', date: '2026-09-20',
         title: 'Steadfast countdown',

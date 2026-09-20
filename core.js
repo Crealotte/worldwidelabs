@@ -312,6 +312,8 @@
         if (page === 'energy') loadGymPlanner();
         if (page === 'gym-stats') loadGymStats();
         if (page === 'war-reports') loadWarReports();
+        if (page === 'steadfast') loadFactionSteadfast();
+        if (page === 'perk-roadmap') loadFactionRoadmap();
         if (page === 'bug-report') loadBugReport();
         if (page === 'labs-funds') loadLabsFunds();
         if (page === 'members-overview') loadMemberOverview();

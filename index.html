@@ -476,6 +476,16 @@
             </div>
         </div>
 
+        <div class="nav-group">
+            <div class="nav-group-header" data-group="faction">
+                <span>Faction</span>
+                <svg class="nav-chevron" width="10" height="10" viewBox="0 0 10 10"><path d="M2 3.5L5 6.5L8 3.5" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </div>
+            <div class="nav-group-items" data-group-items="faction">
+                <div class="nav-item" data-page="steadfast">Steadfast planner</div>
+                <div class="nav-item" data-page="perk-roadmap">Perk roadmap</div>
+            </div>
+
 
         <div class="nav-group">
             <div class="nav-group-header" data-group="crimes">
@@ -1486,6 +1496,29 @@
             </div>
         </section>
 
+        <section class="page" id="page-steadfast">
+            <div class="lab-label">WWL·21 / faction</div>
+            <h2>Steadfast planner</h2>
+            <p class="pagedesc">Which stats get the top Steadfast perk this month and next month, the yearly rotation, and how far the faction is with the energy challenge for the next level. The perks are swapped on the first Sunday of the new month.</p>
+            <div class="panel"><div id="fs-months"></div></div>
+            <div class="panel">
+                <h3>⏳ To be able to upgrade to 9%</h3>
+                <div id="fs-countdown"></div>
+            </div>
+            <div class="panel">
+                <h3>Rotation for the year</h3>
+                <div class="table-scroll" style="overflow:auto;"><div id="fs-rotation"></div></div>
+            </div>
+        </section>
+
+        <section class="page" id="page-perk-roadmap">
+            <div class="lab-label">WWL·22 / faction</div>
+            <h2>Perk roadmap</h2>
+            <p class="pagedesc">The order in which the faction unlocks its perks with respect, ticked off automatically from the levels the faction really has. When we are behind schedule the order stays the same. Steadfast is upgraded as soon as it can be, so it is not in this list.</p>
+            <div class="panel"><div id="fr-summary"></div></div>
+            <div class="panel"><div class="table-scroll" style="overflow:auto;"><div id="fr-table"></div></div></div>
+        </section>
+
         <section class="page" id="page-availability">
             <div class="lab-label">WWL·13 / for everyone</div>
             <h2>War Availability</h2>
@@ -1845,6 +1878,7 @@
 <script src="whats-new.js"></script>
 <script src="my-standing.js"></script>
 <script src="perk-countdown.js"></script>
+<script src="faction-perks.js"></script>
 <script src="armory-tracker.js"></script>
 <script src="app-init.js"></script>
 </body>
