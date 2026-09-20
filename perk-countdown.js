@@ -53,7 +53,7 @@ function renderSteadfastCard(leader) {
 $('pc-share').addEventListener('click', async () => {
     const r = await pcFetch({ action: 'steadfast-share' });
     if (r.error) { toast(r.error); return; }
-    const url = `${window.location.origin}/api/war-payout?steadfast=${r.token}`;
+    const url = `${window.location.origin}/steadfast/${r.token}.png`; // ends in .png, like YATA posters, so Torn accepts it as a picture
     $('pc-share-url').value = url;
     $('pc-share-img').src = url;
     $('pc-share-out').style.display = 'block';

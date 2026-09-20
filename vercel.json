@@ -4,6 +4,7 @@
     "api/armory-tracker.js": { "maxDuration": 60 }
   },
   "rewrites": [
+    { "source": "/steadfast/:code.png", "destination": "/api/war-payout?steadfast=:code" },
     { "source": "/((?!api/|.*\\.[\\w]+$).*)", "destination": "/index.html" }
   ]
 }
