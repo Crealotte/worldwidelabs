@@ -229,6 +229,15 @@ module.exports = async function handler(req, res) {
         res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
         res.setHeader('Vary', 'Origin');
         if (req.method === 'OPTIONS') return res.status(204).end();
+        // The WWL userscript for Torn: GET /wwl-energy-planner.user.js (see vercel.json). Tampermonkey installs it straight
+        // from this link; the site's own address is filled in so the script talks to the right place.
+        if (req.method === 'GET' && req.query?.script) {
+            const src = require('fs').readFileSync(require('path').join(process.cwd(), 'userscripts', 'energy-plan.user.js'), 'utf8');
+            const host = String(req.headers['x-forwarded-host'] || req.headers.host || '').replace(/[^\w.:-]/g, '');
+            res.setHeader('Content-Type', 'text/javascript; charset=utf-8');
+            res.setHeader('Cache-Control', 'public, max-age=300');
+            return res.status(200).send(src.split('__WWL_BASE__').join(`https://${host}`));
+        }
         if (!REDIS_URL || !REDIS_TOKEN) {
             return res.status(500).json({ error: 'Database not connected. In Vercel: Storage -> Create Database -> Upstash Redis, and connect it to this project.' });
         }

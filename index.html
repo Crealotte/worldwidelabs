@@ -674,6 +674,20 @@
             <div class="lab-label">WWL·02 / weekly energy goals</div>
             <h2>Weekly energy goals</h2>
             <p class="pagedesc">Our week is 4 training days + 2 war prep days + 1 war day. Tick things off as you do them — the bar fills itself.</p>
+                <details class="panel" style="margin:0 0 16px;padding:10px 14px;" id="gp-script-panel">
+                    <summary style="cursor:pointer;font-weight:700;">📱 Use this checklist inside Torn (Tampermonkey or TornPDA)</summary>
+                    <div style="font-size:13px;color:var(--muted);margin-top:8px;line-height:1.6;">
+                        A small userscript shows this same checklist on Torn's gym page, so you can tick off your steps while you train. Ticks are shared both ways, and the script updates itself when there is a new version.
+                        <ol style="margin:6px 0 6px 18px;padding:0;">
+                            <li>Have <a href="https://www.tampermonkey.net/" target="_blank" rel="noopener" style="color:var(--reagent);">Tampermonkey</a> installed in your browser.</li>
+                            <li>Press <b>Install the script</b> below. Tampermonkey opens and asks to install it — press Install.</li>
+                            <li>Open Torn's gym page and press the <b>WWL energy plan</b> bar at the bottom right. The first time it asks for your API key.</li>
+                        </ol>
+                        Your settings (stat, method, candy, cans, refill) are changed here on the planner, never in the script — the script shows a link back to this page.
+                        <br><b>TornPDA:</b> open the link, copy all the text and add it under Settings → Userscripts. Your API key is filled in for you there.
+                    </div>
+                    <a class="ghost small" href="/wwl-energy-planner.user.js" style="display:inline-block;margin-top:8px;padding:6px 12px;border:1px solid var(--reagent);border-radius:var(--radius);color:var(--reagent);text-decoration:none;font-weight:700;">⬇ Install the script (Tampermonkey)</a>
+                </details>
 
             <div class="panel">
                 <h3>Your energy group</h3>
@@ -747,20 +761,6 @@
                     <div class="bar-track"><div class="bar-fill" id="gp-progress-fill" style="background:var(--reagent);width:0%;"></div></div>
                 </div>
                 <div id="gp-plan" style="margin-bottom:18px;"></div>
-                <details class="panel" style="margin:0 0 16px;padding:10px 14px;" id="gp-script-panel">
-                    <summary style="cursor:pointer;font-weight:700;">📱 Use this checklist inside Torn (TornPDA or Tampermonkey)</summary>
-                    <div style="font-size:13px;color:var(--muted);margin-top:8px;line-height:1.6;">
-                        A small userscript shows this same checklist on Torn's gym page, so you can tick off your steps while you train. Ticks are shared both ways.
-                        <ol style="margin:6px 0 6px 18px;padding:0;">
-                            <li>Press <b>Copy the script</b> below.</li>
-                            <li><b>TornPDA:</b> Settings → Userscripts → add a new script and paste it. Your API key is filled in for you.<br><b>Computer:</b> in Tampermonkey create a new script, paste it and save. It asks for your API key once.</li>
-                            <li>Open Torn's gym page and press the <b>WWL energy plan</b> bar at the bottom right.</li>
-                        </ol>
-                        Your settings (stat, method, candy, cans, refill) are changed here on the planner, never in the script — the script shows a link back to this page.
-                    </div>
-                    <button class="ghost small" id="gp-script-copy" style="margin-top:8px;">Copy the script</button>
-                </details>
-
                 <h3 id="gp-chart-head" style="margin:0 0 10px;">Compared over one week</h3>
                 <div id="gp-chart"></div>
                 <p style="color:var(--muted);font-size:12px;margin:10px 0 0;">Uses the standard community gym formula with your own stat, max happy, gym and gym bonuses. Happy is assumed to drop by about half of the energy of each train. Item costs use current market values and count only the extra items (jump items and energy cans), not your normal Xanax use.</p>

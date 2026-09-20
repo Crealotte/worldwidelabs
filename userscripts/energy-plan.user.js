@@ -1,7 +1,9 @@
 // ==UserScript==
 // @name         WWL Energy plan
 // @namespace    https://worldwidelabs.vercel.app
-// @version      1.0
+// @version      1.1
+// @updateURL    __WWL_BASE__/wwl-energy-planner.user.js
+// @downloadURL  __WWL_BASE__/wwl-energy-planner.user.js
 // @description  Shows your WorldWideLabs weekly energy plan (the checklist from the Energy planner) inside Torn's gym page, and lets you tick the steps off. Ticks are shared with the WWL site.
 // @match        https://www.torn.com/gym.php*
 // @grant        none

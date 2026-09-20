@@ -531,12 +531,3 @@ async function gpPlanFetch(body) {
         return r.error ? null : r;
     } catch (e) { return null; }
 }
-
-// Copy the userscript with this site's own address filled in.
-$('gp-script-copy').addEventListener('click', async () => {
-    try {
-        const src = await (await fetch('/wwl-energy-planner.user.js', { cache: 'no-store' })).text();
-        await navigator.clipboard.writeText(src.split('__WWL_BASE__').join(location.origin));
-        toast('Script copied — paste it into TornPDA or Tampermonkey');
-    } catch (e) { toast('Could not copy the script — try again'); }
-});

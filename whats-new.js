@@ -17,7 +17,7 @@ const WHATS_NEW = [
         everyone: [
             'On a phone the menu is now hidden like in Torn: press the ☰ button or swipe from the left edge to the right to open it. The menu items are real links now, so you can open one in a new tab, and Vimium and other browser tools work with them.',
             'Bugs & suggestions: the screenshot of a bug is now shown to everyone on the Known bugs list (press "View screenshot"), and you can attach a short screen recording (up to about 3 MB) to a bug report.',
-            'Energy planner: a new "Use this checklist inside Torn" box has a small userscript for TornPDA or Tampermonkey. It shows your weekly checklist on Torn\'s gym page, with the same ticks as the site, and a link back to the planner for changing your settings.',
+            'Energy planner: a new "Use this checklist inside Torn" box has a small userscript you install with one click in Tampermonkey (or paste into TornPDA). It shows your weekly checklist on Torn\'s gym page, with the same ticks as the site, and a link back to the planner for changing your settings.',
             'New Timezone map (Faction menu): a world map with the timezone lines. Choose your country and it lights up — the more members from a country, the greener. The US is split into its states, and a magnifier button (2×, 4× or 8×) enlarges any spot you hover over. Nobody is shown by name.',
         ],
         leaders: [
