@@ -12,6 +12,7 @@
 'use strict';
 
 let moData = null; // { members, wars, hits, tiers, energyTarget, settings }
+let moEnergy = null; // { perMember: { id: energy }, partial, sinceDay } — energy trained in the gym over the period, from the daily contributor snapshots
 let moStats = {}; // "<id>:<timestamp>" -> { candyused, alcoholused, energydrinkused, bloodwithdrawn }
 let moPeriodId = null; // which option of the period dropdown is picked
 let moCustomWeeks = 4;
@@ -19,7 +20,7 @@ let moDates = null; // { from, to } as YYYY-MM-DD, to = last whole day included 
 let moPerWeek = false; // false = totals over the period, true = average per week
 let moSort = 'war';
 let moBusy = false;
-const MO_KEYS = [['bloodwithdrawn', 'Blood bags filled'], ['candyused', 'Candy'], ['alcoholused', 'Alcohol'], ['energydrinkused', 'Energy drinks']];
+const MO_KEYS = [['energytrained', 'Energy trained'], ['bloodwithdrawn', 'Blood bags filled'], ['candyused', 'Candy'], ['alcoholused', 'Alcohol'], ['energydrinkused', 'Energy drinks']];
 const MO_DAY = 86400;
 
 async function moFetch(body) {
@@ -89,7 +90,7 @@ function renderPeriodBar() {
     $('mo-date-from').value = moDates.from; $('mo-date-to').value = moDates.to;
     $('mo-view-total').classList.toggle('active-toggle', !moPerWeek);
     $('mo-view-week').classList.toggle('active-toggle', moPerWeek);
-    $('mo-period-note').textContent = `${moDaysIn(cur)} days (${Math.round(moWeeksIn(cur) * 10) / 10} weeks) · ${moFmt(cur.start)} 00:00 → ${moFmt(cur.end)} 00:00 TCT${cur.id === 'dates' ? '' : ' (Sunday to Sunday)'}`;
+    $('mo-period-note').textContent = (moEnergy?.partial && moEnergy.sinceDay ? `Energy trained is counted since ${moFmt(moEnergy.sinceDay * 86400)} — that is when the counting started. ` : '') + `${moDaysIn(cur)} days (${Math.round(moWeeksIn(cur) * 10) / 10} weeks) · ${moFmt(cur.start)} 00:00 → ${moFmt(cur.end)} 00:00 TCT${cur.id === 'dates' ? '' : ' (Sunday to Sunday)'}`;
 }
 
 async function loadMemberOverview() {
@@ -123,6 +124,7 @@ async function loadMemberOverview() {
         // consumption snapshots at the period's start and end, in rounds until everything is in
         const ids = moData.members.map(m => m.id);
         const p = moPeriod();
+        try { const e = await moFetch({ action: 'mo-energy', from: p.start, to: p.end }); moEnergy = e.error ? null : e; renderMemberOverview(); } catch (e) { moEnergy = null; }
         let lastPending = Infinity;
         for (let round = 0; round < 40; round++) {
             const s = await moFetch({ action: 'mo-stats', ids, timestamps: [p.start, p.end] });
@@ -147,6 +149,10 @@ function moWarsInPeriod() {
 
 // Used over the period (or per week), from two snapshots. Null when either snapshot is missing.
 function moUsed(id, stat) {
+    if (stat === 'energytrained') { // not a snapshot of personal stats: the faction's contributor counters
+        if (!moEnergy || !moEnergy.snapshots) return null;
+        return (moEnergy.perMember[id] ?? 0) / (moPerWeek ? moWeeksIn(moPeriod()) : 1);
+    }
     const p = moPeriod();
     const end = moStats[`${id}:${p.end}`];
     const start = moStats[`${id}:${p.start}`];
