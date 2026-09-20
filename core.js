@@ -170,6 +170,7 @@
             setNavLock('war-payout', memberView);
             setNavLock('armory-tracker', memberView);
             setNavLock('members-overview', memberView);
+            setNavLock('newsletter', memberView);
             setNavLock('availability-leaders', memberView);
             if (!memberView) { setTimeout(() => { if (typeof loadSteadfastCard === 'function') loadSteadfastCard(); }, 8000); loadAdoption();
             loadFactionSharing();
@@ -183,6 +184,7 @@
             setNavLock('war-payout', true);
             setNavLock('armory-tracker', true);
             setNavLock('members-overview', true);
+            setNavLock('newsletter', true);
             setNavLock('availability-leaders', true);
         }
         if (document.querySelector('.nav-item[data-page="announce-edit"]').classList.contains('active')) {
@@ -316,6 +318,7 @@
         if (page === 'steadfast') loadFactionSteadfast();
         if (page === 'perk-roadmap') loadFactionRoadmap();
         if (page === 'tz-map') loadTzMap();
+        if (page === 'newsletter') loadNewsletter();
         if (page === 'bug-report') loadBugReport();
         if (page === 'labs-funds') loadLabsFunds();
         if (page === 'members-overview') loadMemberOverview();
