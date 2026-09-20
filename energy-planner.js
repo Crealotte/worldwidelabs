@@ -228,7 +228,7 @@
     function renderHappyJumps() {
         $('eg-jump-intro').innerHTML = HAPPY_JUMP_INTRO.map(b => `<li>${esc(b)}</li>`).join('');
         $('eg-jumps').innerHTML = HAPPY_JUMPS.map((j, i) => `
-            <div class="ocfit-scenario" data-collapse="eg-jump-${i}" style="margin-bottom:10px;">
+            <div class="ocfit-scenario collapsed" data-collapse="eg-jump-${i}" style="margin-bottom:10px;">
                 <div class="ocfit-scenario-header">
                     <span>${esc(j.name)}</span>
                     <span style="font-size:11px;color:var(--muted);">${esc(j.cost)}</span>
