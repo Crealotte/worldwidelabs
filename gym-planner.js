@@ -137,6 +137,14 @@ async function gpLoadPrices() {
         try { sessionStorage.setItem('wwl_gym_prices3', JSON.stringify({ at: Date.now(), p, cans, candy })); } catch (e) { /* not critical */ }
     } catch (e) { /* prices stay unknown — costs shown as "?" */ }
 }
+
+// ---- which candy the member uses for the candy jump (any candy worth 25 happy) — the cost follows their choice ----
+const GP_CANDY_KEY = 'wwl_gym_candy';
+function gpCandyChoice() { // the chosen candy, else the cheapest one with a price, else null
+    let name = '';
+    try { name = localStorage.getItem(GP_CANDY_KEY) || ''; } catch (e) { /* cheapest */ }
+    return gpCandy25.find(c => c.name === name) || gpCandy25.find(c => c.price != null) || null;
+}
 // Every gym with its dots per stat (stored ×10) and the energy one train costs there.
 async function gpLoadGyms() {
     if (gpGyms) return;
@@ -310,7 +318,9 @@ function renderGymPlanner() {
     $('gp-settings-label').textContent = `— ${GP_STAT_LABEL[inp.stat]} · ${chosen.name}`;
 
     // estimates for every method (jump methods with the member's own jumps/week)
-    const rows = methods.map(m => ({ m, w: gpWeek(m, inp, gpPrices) }));
+    const candyPick = gpCandyChoice();
+    const prices = candyPick && candyPick.price != null ? { ...gpPrices, [GP_ITEMS.candy]: candyPick.price } : gpPrices;
+    const rows = methods.map(m => ({ m, w: gpWeek(m, inp, prices) }));
 
     // method cards: name, what it is, and the estimated gain and cost for a week
     $('gp-methods').innerHTML = rows.map(({ m, w }) => `
@@ -324,7 +334,12 @@ function renderGymPlanner() {
         $('gp-sessions').dataset.method = ''; renderGymPlanner();
     }));
 
-    $('gp-candy-note').innerHTML = gpCandy25.length ? `Candy jump: any candy worth 25 happy works (49 of them = 1,225 happy) — <b style="color:var(--text);">${gpCandy25.map(c => esc(c.name)).join(', ')}</b>. The cost uses the cheapest one.` : 'Candy jump: any candy worth 25 happy works, for example the Lollipop.';
+    // candy jump: pick which 25-happy candy you use — the cost follows it
+    $('gp-candy-wrap').style.display = sel === 'candy' ? 'block' : 'none';
+    $('gp-candy-pick').innerHTML = gpCandy25.map(c => `<option value="${esc(c.name)}" ${candyPick && c.name === candyPick.name ? 'selected' : ''}>${esc(c.name)}${c.price ? ` — ${gpMoney(c.price)} each` : ''}</option>`).join('');
+    $('gp-candy-note').textContent = gpCandy25.length
+        ? `Any candy worth 25 happy works (49 of them = 1,225 happy). Pick the one you use, so the cost is right for you. By default it is the cheapest.`
+        : 'Any candy worth 25 happy works, for example the Lollipop. The list of candies could not be loaded right now.';
     // natural energy options: only when a natural method is the picked one
     const natState = gpNatState();
     const nat = chosen.kind === 'natural' ? gpNatFor(chosen.mode) : null;
@@ -439,7 +454,7 @@ function gpJumpSteps(m, inp) {
     else if (m.items.xanax) steps.push(`Stack ${m.items.xanax} Xanax back-to-back to reach 1,000 E, then wait out all the cooldowns`);
     else steps.push(`Wait until your energy bar is full (${gpN(inp.fill)} E)`);
     steps.push('Wait until just past a :00 / :15 / :30 / :45 reset');
-    const main = m.items.candy ? `all ${m.items.candy} candies worth 25 happy each (${gpCandy25.length ? gpCandy25.map(c => c.name).slice(0, 6).join(', ') : 'for example Lollipop'})` : m.items.choco ? `all ${m.items.choco} Big Boxes of Chocolate Bars` : `all ${m.items.edvd} Erotic DVDs`;
+    const main = m.items.candy ? `all ${m.items.candy} ${gpCandyChoice()?.name || 'candies worth 25 happy each'} (25 happy each)` : m.items.choco ? `all ${m.items.choco} Big Boxes of Chocolate Bars` : `all ${m.items.edvd} Erotic DVDs`;
     steps.push(`Take ${main}`);
     steps.push(`Use the Ecstasy — it doubles your happy (about ${gpN(peak)})`);
     return steps;
@@ -495,3 +510,4 @@ $('gp-can-n').addEventListener('change', () => {
     el.open = saved !== null ? saved === '1' : !hasChoice;
     el.addEventListener('toggle', () => { try { localStorage.setItem('wwl_gym_settings_open', el.open ? '1' : '0'); } catch (e) { /* not critical */ } });
 })();
+$('gp-candy-pick').addEventListener('change', () => { try { localStorage.setItem(GP_CANDY_KEY, $('gp-candy-pick').value); } catch (e) { /* not critical */ } renderGymPlanner(); });
