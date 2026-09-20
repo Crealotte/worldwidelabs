@@ -146,7 +146,12 @@ const gpMoney = n => `$${Math.round(n).toLocaleString()}`;
 function renderGymPlanner() {
     const inp = gpInputs();
     const grp = gpGroup();
+    let showJumps = false;
+    try { showJumps = localStorage.getItem('wwl_gym_show_jumps') === '1'; } catch (e) { /* hidden */ }
     const high = grp.group === 'a';
+    const jumpsOff = high && !showJumps; // 1.5m+ normally trains on natural energy, but can switch the jump methods on
+    $('gp-show-jumps').textContent = showJumps ? 'Hide the happy jump options' : 'I do happy jumps — show the jump options';
+    $('gp-show-jumps').style.display = high ? '' : 'none';
     $('gp-group-note').innerHTML = grp.total === null && grp.source === 'unknown'
         ? 'Your battle stats couldn\'t be read, so pick your group with the buttons below.'
         : `${grp.source === 'chosen' ? 'You picked' : 'From your own battle stats'}: <b style="color:var(--text);">${high ? '1.5m+' : 'under 1.5m'}</b>${grp.total ? ` (${(grp.total / 1e6).toFixed(2)}m total)` : ''} — <b style="color:var(--text);">at least ${high ? '4,400' : '2,200'} energy a week</b>${high ? ', natural energy method (jumping is no longer normal at this level).' : ', and you can plan happy jumps below.'}`;
@@ -155,9 +160,9 @@ function renderGymPlanner() {
     $('gp-group-auto').style.color = grp.source === 'chosen' ? 'var(--text)' : 'var(--reagent)';
     if (Number($('gp-weekly').value) !== (high ? 4400 : 2200) && $('gp-weekly').dataset.group !== grp.group) $('gp-weekly').value = high ? 4400 : 2200;
     $('gp-weekly').dataset.group = grp.group;
-    ['gp-how', 'gp-chart-head', 'gp-chart', 'gp-methods'].forEach(id => { $(id).style.display = high ? 'none' : ''; });
+    ['gp-how', 'gp-chart-head', 'gp-chart', 'gp-methods'].forEach(id => { $(id).style.display = jumpsOff ? 'none' : ''; });
     const all = gpMethods(inp.fill, inp.job);
-    const methods = high ? all.filter(m => m.id === 'natural') : all; // 1.5m+ trains on natural energy
+    const methods = jumpsOff ? all.filter(m => m.id === 'natural') : all; // 1.5m+ trains on natural energy unless they switch jumps on
     let sel = 'natural';
     try { sel = localStorage.getItem(GP_METHOD_KEY) || 'natural'; } catch (e) { /* default */ }
     if (!methods.find(m => m.id === sel)) sel = 'natural';
@@ -314,4 +319,9 @@ $('gp-autofill').addEventListener('click', () => { gpAutofill(); renderGymPlanne
 $('gp-group-auto').addEventListener('click', () => {
     try { localStorage.removeItem(GP_GROUP_KEY); } catch (e) { /* not critical */ }
     $('gp-weekly').dataset.group = ''; renderGymPlanner();
+});
+$('gp-show-jumps').addEventListener('click', () => {
+    let on = false;
+    try { on = localStorage.getItem('wwl_gym_show_jumps') === '1'; localStorage.setItem('wwl_gym_show_jumps', on ? '0' : '1'); } catch (e) { /* not critical */ }
+    renderGymPlanner();
 });
