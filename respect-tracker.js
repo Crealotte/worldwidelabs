@@ -91,6 +91,12 @@ async function loadRespectGoalPanel() {
             const liveResult = await respectFetch({ action: 'current-respect' }).catch(() => null);
             totalRespect = liveResult?.totalRespect ?? null;
         }
+        // Torn can be busy right after login (many requests at once) — try again a few times before giving up, so the panel doesn't just vanish.
+        for (let i = 0; i < 3 && totalRespect == null; i++) {
+            await new Promise(res => setTimeout(res, 3000));
+            const again = await respectFetch({ action: 'current-respect' }).catch(() => null);
+            totalRespect = again?.totalRespect ?? null;
+        }
         if (totalRespect == null) { $('respect-goal-panel').style.display = 'none'; return; }
 
         const current = totalRespect;

@@ -33,12 +33,12 @@ function renderSteadfastCard(leader) {
     $('pc-rows').innerHTML = cd.rows.map(r => {
         const pct = r.goal ? Math.min(100, r.total / r.goal * 100) : 0;
         return `<div style="margin-bottom:12px;">
-            <div style="display:flex;justify-content:space-between;gap:10px;font-size:14px;"><b style="color:${PC_COLOR[r.stat]};">${PC_LABEL[r.stat]} <span style="color:var(--muted);font-weight:400;">${r.pct}% now · level ${r.nextLevel} next</span></b>
+            <div style="display:flex;justify-content:space-between;gap:10px;font-size:14px;"><b style="color:${PC_COLOR[r.stat]};">${PC_LABEL[r.stat]}</b>
                 <span style="font-family:var(--mono);">${r.goal ? `${n(r.total)} / ${n(r.goal)}` : `${n(r.total)} energy`}</span></div>
-            ${r.goal ? `<div style="background:var(--bench-2);border-radius:4px;height:10px;margin:4px 0;"><div style="width:${pct.toFixed(1)}%;background:${r.done ? 'var(--reagent)' : '#f0b432'};height:10px;border-radius:4px;"></div></div>` : ''}
+            ${r.goal ? `<div style="background:var(--bench-2);border-radius:4px;height:8px;margin:5px 0;"><div style="width:${pct.toFixed(1)}%;background:${r.done ? 'var(--reagent)' : 'rgba(240,180,50,.45)'};height:8px;border-radius:4px;"></div></div>` : ''}
             <div style="font-size:12px;color:var(--muted);">${r.goal
                 ? (r.done ? '<span style="color:var(--reagent);">Challenge done ✓</span>' : `<b style="color:var(--text);">${n(r.remaining)} energy to go</b>${r.etaDays ? ` — about ${r.etaDays} day${r.etaDays === 1 ? '' : 's'} at the recent pace` : ''}`)
-                : `Goal for level ${r.nextLevel} not known yet${leader ? ' — set it below' : ''}.`}</div></div>`;
+                : 'Goal not known yet.'}</div></div>`;
     }).join('');
     $('pc-summary').innerHTML = cd.allDone
         ? '<b style="color:var(--reagent);">All challenges are done — time to upgrade! 🎉</b>'
