@@ -7,10 +7,21 @@
 // what is NEW since the last posted version, so nothing is announced twice (see wnBigPost below).
 //
 // TO ADD AN UPDATE: put a new object at the TOP of WHATS_NEW below with the next version number
-// (the last one is 1.10 → the next is 1.11). Plain text only (no HTML).
+// (the last one is 1.11 → the next is 1.12). Plain text only (no HTML).
 'use strict';
 
 const WHATS_NEW = [
+    {
+        version: '1.11', date: '2026-09-20',
+        title: 'Availability overview for leaders and smarter bug reports',
+        everyone: [
+            'Bug reports: a report you send now also appears in the Known bugs list as "To review" (without your name), so others who run into the same thing can press "I have this too" instead of sending it again.',
+        ],
+        leaders: [
+            'Availability overview (Leadership menu): the leaders\' side of War Availability — the heatmap, who filled it in, overdoses, creating plans and the Discord settings — moved to its own page, so the War Availability page is just the grid for everyone.',
+            'Known bugs: reports sent through the site arrive with the status "To review"; mark them known, being fixed or fixed, or delete them.',
+        ],
+    },
     {
         version: '1.10', date: '2026-09-20',
         title: 'War reports, Gym stats and Bug reports',

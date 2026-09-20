@@ -170,6 +170,7 @@
             setNavLock('war-payout', memberView);
             setNavLock('armory-tracker', memberView);
             setNavLock('members-overview', memberView);
+            setNavLock('availability-leaders', memberView);
             if (!memberView) { loadAdoption();
             loadFactionSharing();
             loadRespectGoalPanel(); }
@@ -182,6 +183,7 @@
             setNavLock('war-payout', true);
             setNavLock('armory-tracker', true);
             setNavLock('members-overview', true);
+            setNavLock('availability-leaders', true);
         }
         if (document.querySelector('.nav-item[data-page="announce-edit"]').classList.contains('active')) {
             $('announce-locked').style.display = isLeaderCached ? 'none' : 'block';
@@ -194,6 +196,7 @@
             if (isLeaderCached) loadFeedbackEditor();
         }
         if (document.querySelector('.nav-item[data-page="members-overview"]').classList.contains('active')) loadMemberOverview();
+        if (document.querySelector('.nav-item[data-page="availability-leaders"]').classList.contains('active')) loadAvailability();
         if (document.querySelector('.nav-item[data-page="whats-new"]').classList.contains('active')) renderWhatsNew();
         if (typeof updateWhatsNewBadge === 'function' && !document.querySelector('.nav-item[data-page="whats-new"]').classList.contains('active')) updateWhatsNewBadge();
         if (document.querySelector('.nav-item[data-page="ocfit-team"]').classList.contains('active')) {
@@ -305,7 +308,7 @@
         if (page === 'respect-edit') loadRespectEditor();
         if (page === 'war-payout') loadWarPayout();
         if (page === 'war-badges') loadWarBadges();
-        if (page === 'availability') loadAvailability();
+        if (page === 'availability' || page === 'availability-leaders') loadAvailability();
         if (page === 'energy') loadGymPlanner();
         if (page === 'gym-stats') loadGymStats();
         if (page === 'war-reports') loadWarReports();

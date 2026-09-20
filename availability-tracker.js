@@ -3,7 +3,8 @@
 // after being matched, before the war starts. Leaders/council additionally see the whole faction
 // added up per slot (backend only includes that `summary` for a leader-tier key, see
 // api/war-payout.js's 'availability-get' action), so this page shows more to a leader than to a
-// regular member from the exact same load, no separate leader page needed.
+// regular member from the exact same load. The leaders' half (heatmap, responses, overdoses, plans, Discord)
+// lives on its own page, Availability overview under Leadership; both pages share this file and one load.
 //
 // Everything is STORED in TCT (Torn City Time = UTC) as "day-hour" slots, relative to the tracker's
 // start date — that never changes, so leaders always see one consistent picture. The "show in my
@@ -48,7 +49,7 @@ async function avFetch(body) {
 }
 
 async function loadAvailability() {
-    const st = $('av-status');
+    const st = { set className(v) { $('av-status').className = v; $('av-status-l').className = v; }, set textContent(v) { $('av-status').textContent = v; $('av-status-l').textContent = v; } }; // both pages show the same status
     st.className = 'status ok'; st.textContent = 'Loading…';
     try {
         const result = await avFetch({ action: 'availability-get' });
@@ -282,21 +283,25 @@ function avPlanLabel(p) {
 }
 
 function renderAvPlanBar() {
-    const bar = $('av-plan-bar');
-    if (!avPlans.length) { bar.style.display = 'none'; return; }
-    bar.style.display = 'flex';
-    $('av-plan-select').innerHTML = avPlans.map(p => `<option value="${esc(p.id)}"${p.id === avPlanId ? ' selected' : ''}>${esc(avPlanLabel(p))}</option>`).join('');
-    $('av-plan-delete').style.display = avSummary !== null ? 'inline-block' : 'none'; // leaders only
+    // the plan picker exists on the member page and (with the delete button) on the leaders' overview
+    const options = avPlans.map(p => `<option value="${esc(p.id)}"${p.id === avPlanId ? ' selected' : ''}>${esc(avPlanLabel(p))}</option>`).join('');
+    for (const sfx of ['', '-l']) {
+        const bar = $('av-plan-bar' + sfx);
+        if (!avPlans.length) { bar.style.display = 'none'; continue; }
+        bar.style.display = 'flex';
+        $('av-plan-select' + sfx).innerHTML = options;
+    }
+    $('av-plan-delete-l').style.display = avSummary !== null ? 'inline-block' : 'none'; // leaders only
 }
 
-$('av-plan-select').addEventListener('change', () => {
-    avPlanId = $('av-plan-select').value;
+['av-plan-select', 'av-plan-select-l'].forEach(id => $(id).addEventListener('change', () => {
+    avPlanId = $(id).value;
     try { localStorage.setItem(AV_PLAN_KEY, avPlanId); } catch (e) { /* not critical */ }
     avSelected = null;
     loadAvailability();
-});
+}));
 
-$('av-plan-delete').addEventListener('click', async () => {
+$('av-plan-delete-l').addEventListener('click', async () => {
     const p = avPlans.find(x => x.id === avPlanId);
     if (!p) return;
     if (!confirm(`Delete "${avPlanLabel(p)}" and everyone's entries for it? This can't be undone.`)) return;
@@ -310,12 +315,15 @@ $('av-plan-delete').addEventListener('click', async () => {
 });
 
 function renderAvailabilityPage() {
+    $('av-leaders-locked').style.display = avSummary === null ? 'block' : 'none'; // the leaders' page is for leaders only
     renderAvPlanBar();
     $('av-start-panel').style.display = avSummary !== null ? 'block' : 'none'; // leader-only, inferred from whether summary came back at all
     $('av-discord-panel').style.display = avSummary !== null ? 'block' : 'none';
     $('av-od-panel').style.display = avSummary !== null ? 'block' : 'none';
     if (!avConfig) {
         $('av-none-msg').style.display = 'block';
+        $('av-none-msg-l').style.display = 'block';
+        $('av-tz-bar-l').style.display = 'none';
         $('av-grid-panel').style.display = 'none';
         $('av-tz-bar').style.display = 'none';
         $('av-unavail-bar').style.display = 'none';
@@ -323,6 +331,7 @@ function renderAvailabilityPage() {
         return;
     }
     $('av-none-msg').style.display = 'none';
+    $('av-none-msg-l').style.display = 'none';
     $('av-grid-panel').style.display = 'block';
     renderAvWarLine();
     renderAvTzBar();
@@ -520,12 +529,17 @@ function renderAvTzBar() {
     bar.style.display = 'block';
     $('av-tz-toggle').checked = avLocal && supported;
     $('av-tz-toggle').disabled = !supported;
+    $('av-tz-toggle-l').checked = avLocal && supported;
+    $('av-tz-toggle-l').disabled = !supported;
+    $('av-tz-bar-l').style.display = avSummary !== null ? 'block' : 'none';
     const offset = avLocalOffset();
-    $('av-tz-note').textContent = !supported
+    const tzNote = !supported
         ? `(your timezone, UTC${offset >= 0 ? '+' : ''}${offset}, has a half-hour offset that can't line up with hourly slots — showing TCT)`
         : avLocal
             ? `— showing your local time (${avZoneName(offset)}). Everything is still saved in TCT, so leaders see it in TCT; hover a box for its TCT time.`
             : '— currently showing TCT (Torn City Time, UTC).';
+    $('av-tz-note').textContent = tzNote;
+    $('av-tz-note-l').textContent = tzNote;
 }
 
 // Builds a table for either grid. In TCT mode that's plainly `days` columns x 24 rows; in local
@@ -655,11 +669,11 @@ function renderAvDetail() {
     });
 }
 
-$('av-tz-toggle').addEventListener('change', () => {
-    avLocal = $('av-tz-toggle').checked;
+['av-tz-toggle', 'av-tz-toggle-l'].forEach(id => $(id).addEventListener('change', () => {
+    avLocal = $(id).checked;
     try { localStorage.setItem(AV_TZ_KEY, avLocal ? '1' : '0'); } catch (e) { /* not critical */ }
     if (avConfig) renderAvailabilityPage();
-});
+}));
 
 $('av-start-btn').addEventListener('click', async () => {
     const startDate = $('av-start-date').value;

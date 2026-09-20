@@ -70,7 +70,7 @@ $('br-send').addEventListener('click', async () => {
 
 // ---- Known bugs: read the list, "I have this too", and (leaders) keep the list up to date ----
 let kbBugs = [];
-const KB_STATUS = { known: ['Known', 'var(--muted)'], fixing: ['Being fixed', '#f0b432'], fixed: ['Fixed', 'var(--reagent)'] };
+const KB_STATUS = { review: ['To review', '#7aa2ff'], known: ['Known', 'var(--muted)'], fixing: ['Being fixed', '#f0b432'], fixed: ['Fixed', 'var(--reagent)'] };
 async function kbFetch(body) {
     const res = await fetch('/api/war-payout', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key: apiKey, ...body }) });
     const text = await res.text();
@@ -92,7 +92,7 @@ function kbRow(b, leader) {
         </div>
         ${b.note ? `<div style="color:var(--muted);font-size:13px;margin-top:3px;">${esc(b.note)}</div>` : ''}
         ${leader ? `<div style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap;align-items:center;font-size:12px;color:var(--muted);">${b.count} reported ·
-            ${['known', 'fixing', 'fixed'].filter(s => s !== b.status).map(s => `<button class="ghost small kb-status" data-id="${esc(b.id)}" data-status="${s}">Mark ${KB_STATUS[s][0].toLowerCase()}</button>`).join('')}
+            ${['review', 'known', 'fixing', 'fixed'].filter(s => s !== b.status).map(s => `<button class="ghost small kb-status" data-id="${esc(b.id)}" data-status="${s}">Mark ${KB_STATUS[s][0].toLowerCase()}</button>`).join('')}
             <button class="ghost small kb-del" data-id="${esc(b.id)}">Delete</button></div>` : ''}
     </div>`;
 }
