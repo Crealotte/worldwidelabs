@@ -296,6 +296,7 @@ function renderGymPlanner() {
     const chosen = methods.find(m => m.id === sel);
     if ($('gp-sessions').dataset.method !== sel) { $('gp-sessions').value = chosen.sessions; $('gp-sessions').dataset.method = sel; }
     $('gp-sessions-wrap').style.display = chosen.kind === 'natural' ? 'none' : 'inline-flex';
+    $('gp-settings-label').textContent = `— ${GP_STAT_LABEL[inp.stat]} · ${chosen.name}`;
 
     // estimates for every method (jump methods with the member's own jumps/week)
     const rows = methods.map(m => ({ m, w: gpWeek(m, inp, gpPrices) }));
@@ -470,3 +471,15 @@ $('gp-can-n').addEventListener('change', () => {
     gpSaveNatState(s);
     renderGymPlanner();
 }));
+
+// The settings fold away once someone has made their choices (open the first time, closed after that);
+// opening or closing it by hand is remembered.
+(function () {
+    const el = $('gp-settings');
+    let saved = null;
+    try { saved = localStorage.getItem('wwl_gym_settings_open'); } catch (e) { /* default */ }
+    let hasChoice = false;
+    try { hasChoice = !!localStorage.getItem(GP_METHOD_KEY); } catch (e) { /* first time */ }
+    el.open = saved !== null ? saved === '1' : !hasChoice;
+    el.addEventListener('toggle', () => { try { localStorage.setItem('wwl_gym_settings_open', el.open ? '1' : '0'); } catch (e) { /* not critical */ } });
+})();
