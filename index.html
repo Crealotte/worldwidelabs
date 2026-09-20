@@ -335,6 +335,12 @@
     .gp-stat.best, .gp-stat.best.sel { border-color: #f0b432; box-shadow: inset 0 0 0 1px #f0b432; } /* both starred stats look the same, selected or not */
     .gp-stat.sel, .gp-method.sel { border-color: var(--reagent); box-shadow: inset 0 0 0 1px var(--reagent); }
     .gp-stat.sel { background: rgba(53,217,155,.12); }
+    .gp-settings-btn { display: flex; align-items: center; justify-content: space-between; gap: 12px; cursor: pointer; list-style: none; margin-bottom: 12px; padding: 12px 16px; font-weight: 700; font-size: 15px; background: var(--bench-2); border: 2px solid var(--reagent); border-radius: var(--radius); color: var(--text); }
+    .gp-settings-btn::-webkit-details-marker { display: none; }
+    .gp-settings-btn:hover { background: rgba(53,217,155,.12); }
+    .gp-settings-btn #gp-settings-label { font-weight: 400; font-size: 13px; color: var(--muted); }
+    .gp-settings-hint { color: var(--reagent); font-size: 13px; white-space: nowrap; }
+    #gp-settings[open] .when-closed, #gp-settings:not([open]) .when-open { display: none; }
     .gp-stat .t, .gp-method .t { font-weight: 700; font-size: 14px; }
     .gp-stat .s, .gp-method .s { color: var(--muted); font-size: 12px; margin-top: 2px; }
     .gp-method .n { font-size: 12px; margin-top: 6px; font-family: var(--mono); }
@@ -636,7 +642,7 @@
                 <p class="pagedesc" style="margin-bottom:12px;">Pick the stat you train and how you train — everything else is taken from your own account. You get a week plan plus an <b>estimate</b> of your stat growth and item cost for every method. The week is our ideal one: 4 training days, 2 war prep days and 1 war day (only with a termed war). Gains are estimates — Torn adds a random amount to every train.</p>
 
                 <details id="gp-settings" open>
-                <summary class="av-sum" style="margin-bottom:10px;"><b style="font-size:14px;">Your settings</b> <span id="gp-settings-label" style="color:var(--muted);font-size:13px;"></span></summary>
+                <summary class="gp-settings-btn"><span>⚙ Your settings <span id="gp-settings-label"></span></span><span class="gp-settings-hint"><span class="when-closed">Click to change ▾</span><span class="when-open">Click to close ▴</span></span></summary>
                 <div style="font-size:13px;color:var(--muted);margin-bottom:6px;">Which stat do you train?</div>
                 <div id="gp-stats"></div>
                 <div id="gp-stat-hint" style="display:none;color:var(--muted);font-size:12px;margin:6px 0 8px;">★ = the two stats with the best faction (Steadfast) bonus — the best ones to train.</div>
