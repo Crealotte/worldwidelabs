@@ -596,10 +596,12 @@
             <p class="pagedesc">Our week is 4 training days + 2 war prep days + 1 war day. Tick things off as you do them — the bar fills itself.</p>
 
             <div class="panel">
-                <h3>Which group are you in?</h3>
+                <h3>Your energy group</h3>
+                <p id="gp-group-note" style="font-size:14px;margin:0 0 10px;color:var(--muted);">Checking your battle stats…</p>
                 <div class="row" style="display:flex;gap:12px;">
                     <button id="eg-group-a" class="ghost" style="flex:1;">1,500,000+ total battle stats</button>
                     <button id="eg-group-b" class="ghost" style="flex:1;">Under 1,500,000 total battle stats</button>
+                    <button id="gp-group-auto" class="ghost" style="flex:0 0 auto;">Automatic</button>
                 </div>
             </div>
 
@@ -642,7 +644,7 @@
                     <p style="color:var(--muted);font-size:12px;margin:8px 0 0;">Uses the standard community gym formula. Happy is assumed to drop by about half of the energy of each train, and energy not used in jumps is trained at your normal max happy. Item costs use current market values and count only the jump items (not your normal Xanax use).</p>
                 </details>
 
-                <div style="font-size:13px;color:var(--muted);margin-bottom:6px;">How do you train?</div>
+                <div id="gp-how" style="font-size:13px;color:var(--muted);margin-bottom:6px;">How do you train?</div>
                 <div id="gp-methods" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;"></div>
                 <span id="gp-sessions-wrap" style="display:none;align-items:center;gap:6px;font-size:13px;margin-bottom:10px;">Jumps this week (max 4): <input id="gp-sessions" type="number" min="0" max="4" style="width:70px;"></span>
 
@@ -654,7 +656,7 @@
                 </div>
                 <div id="gp-plan" style="margin-bottom:18px;"></div>
 
-                <h3 style="margin:0 0 10px;">Compared over one week</h3>
+                <h3 id="gp-chart-head" style="margin:0 0 10px;">Compared over one week</h3>
                 <div id="gp-chart"></div>
             </div>
 

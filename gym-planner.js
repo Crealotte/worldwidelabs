@@ -69,6 +69,27 @@ function gpWeek(m, inp, prices) {
     return { gain, cost, priced, energyUsed, perSession, restEnergy: r.trains * inp.E };
 }
 
+// ---- energy group: worked out from the member's own total battle stats (1.5m+ = 4,400 E a week and
+// natural energy, since jumping is no longer normal there; under = 2,200 E a week and the jump methods).
+// A member can override it with the buttons on the page; "Automatic" goes back to their stats.
+const GP_GROUP_KEY = 'wwl_gym_group_override';
+const GP_TIER_LIMIT = 1500000;
+function gpTotalStats() {
+    try {
+        const ps = profile?.personalstats;
+        const t = Number(ps?.totalstats) || ['strength', 'defense', 'speed', 'dexterity'].reduce((s, k) => s + (Number(ps?.[k]) || 0), 0);
+        return t > 0 ? t : null;
+    } catch (e) { return null; }
+}
+function gpGroup() {
+    let o = null;
+    try { o = localStorage.getItem(GP_GROUP_KEY); } catch (e) { /* automatic */ }
+    const total = gpTotalStats();
+    if (o === 'a' || o === 'b') return { group: o, total, source: 'chosen' };
+    if (total !== null) return { group: total >= GP_TIER_LIMIT ? 'a' : 'b', total, source: 'auto' };
+    return { group: 'b', total, source: 'unknown' }; // nothing known: show the full set of methods
+}
+
 // ---- inputs, prices ----
 let gpPrices = {};
 async function gpLoadPrices() {
@@ -107,8 +128,7 @@ function gpAutofill() {
         if (profile?.personalstats?.[stat] != null) $('gp-s').value = Math.round(profile.personalstats[stat]);
         if (profile?.happy?.maximum) $('gp-base').value = profile.happy.maximum;
         if (profile?.energy?.maximum) $('gp-fill').value = profile.energy.maximum;
-        const g = (typeof egGroup !== 'undefined' && egGroup) || localStorage.getItem('wwl_energy_group');
-        $('gp-weekly').value = g === 'a' ? 4400 : 2200;
+        $('gp-weekly').value = gpGroup().group === 'a' ? 4400 : 2200;
     } catch (e) { /* the boxes just stay editable */ }
 }
 
@@ -119,7 +139,19 @@ const gpMoney = n => `$${Math.round(n).toLocaleString()}`;
 
 function renderGymPlanner() {
     const inp = gpInputs();
-    const methods = gpMethods(inp.fill, inp.job);
+    const grp = gpGroup();
+    const high = grp.group === 'a';
+    $('gp-group-note').innerHTML = grp.total === null && grp.source === 'unknown'
+        ? 'Your battle stats couldn\'t be read, so pick your group with the buttons below.'
+        : `${grp.source === 'chosen' ? 'You picked' : 'From your own battle stats'}: <b style="color:var(--text);">${high ? '1.5m+' : 'under 1.5m'}</b>${grp.total ? ` (${(grp.total / 1e6).toFixed(2)}m total)` : ''} — <b style="color:var(--text);">${high ? '4,400' : '2,200'} energy a week</b>${high ? ', natural energy method (jumping is no longer normal at this level).' : ', and you can plan happy jumps below.'}`;
+    ['a', 'b'].forEach(g => { const b = $(`eg-group-${g}`); b.style.borderColor = grp.source === 'chosen' && grp.group === g ? 'var(--reagent)' : 'var(--line)'; b.style.color = grp.source === 'chosen' && grp.group === g ? 'var(--reagent)' : 'var(--text)'; });
+    $('gp-group-auto').style.borderColor = grp.source === 'chosen' ? 'var(--line)' : 'var(--reagent)';
+    $('gp-group-auto').style.color = grp.source === 'chosen' ? 'var(--text)' : 'var(--reagent)';
+    if (Number($('gp-weekly').value) !== (high ? 4400 : 2200) && $('gp-weekly').dataset.group !== grp.group) $('gp-weekly').value = high ? 4400 : 2200;
+    $('gp-weekly').dataset.group = grp.group;
+    ['gp-how', 'gp-chart-head', 'gp-chart', 'gp-methods'].forEach(id => { $(id).style.display = high ? 'none' : ''; });
+    const all = gpMethods(inp.fill, inp.job);
+    const methods = high ? all.filter(m => m.id === 'natural') : all; // 1.5m+ trains on natural energy
     let sel = 'natural';
     try { sel = localStorage.getItem(GP_METHOD_KEY) || 'natural'; } catch (e) { /* default */ }
     if (!methods.find(m => m.id === sel)) sel = 'natural';
@@ -253,5 +285,12 @@ $('gp-sessions').addEventListener('change', () => {
 });
 $('gp-autofill').addEventListener('click', () => { gpAutofill(); renderGymPlanner(); });
 
-// Picking the group above sets the weekly energy target for the plan (4,400 at 1.5m+, 2,200 under).
-['a', 'b'].forEach(g => $(`eg-group-${g}`).addEventListener('click', () => { $('gp-weekly').value = g === 'a' ? 4400 : 2200; renderGymPlanner(); }));
+// The group buttons override the automatic group; "Automatic" goes back to the member's own battle stats.
+['a', 'b'].forEach(g => $(`eg-group-${g}`).addEventListener('click', () => {
+    try { localStorage.setItem(GP_GROUP_KEY, g); } catch (e) { /* not critical */ }
+    $('gp-weekly').dataset.group = ''; renderGymPlanner();
+}));
+$('gp-group-auto').addEventListener('click', () => {
+    try { localStorage.removeItem(GP_GROUP_KEY); } catch (e) { /* not critical */ }
+    $('gp-weekly').dataset.group = ''; renderGymPlanner();
+});
