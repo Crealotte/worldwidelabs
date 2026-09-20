@@ -7,10 +7,18 @@
 // what is NEW since the last posted version, so nothing is announced twice (see wnBigPost below).
 //
 // TO ADD AN UPDATE: put a new object at the TOP of WHATS_NEW below with the next version number
-// (the last one is 1.12 → the next is 1.13). Plain text only (no HTML).
+// (the last one is 1.13 → the next is 1.14). Plain text only (no HTML).
 'use strict';
 
 const WHATS_NEW = [
+    {
+        version: '1.13', date: '2026-09-20',
+        title: 'Timezone map',
+        everyone: [
+            'New Timezone map (Faction menu): a world map with the timezone lines. Choose your country and it lights up — the more members from a country, the greener. Nobody is shown by name.',
+        ],
+        leaders: [],
+    },
     {
         version: '1.12', date: '2026-09-20',
         title: 'Energy tracker: energy trained in the gym per member',
@@ -18,7 +26,6 @@ const WHATS_NEW = [
             'New Energy tracker page (Training menu): the energy every member trained in the gym per stat and per day, like Torn Intel — click a member for the day-by-day rows, pick any dates in the calendar (or "This newsletter month"), and follow your own row.',
             '"Your standing" on the dashboard now shows your real energy trained this month and over the rolling 4-5 weeks.',
             'Bug reports page: new Suggestions box — add an idea and vote 👍 or 👎 on the ideas of others; the most wanted come first.',
-            'New Timezone map (Faction menu): a world map with the timezone lines. Choose your country and it lights up — the more members from a country, the greener. Nobody is shown by name.',
         ],
         leaders: [
             'Energy trained in the gym is now counted for every member from the faction\'s own gym counters: an "Energy trained" column in Member Overview (with a winner for it, and the weekly minimum next to it).',
@@ -172,7 +179,7 @@ const wnFmtDate = d => new Date(`${d}T12:00:00Z`).toLocaleDateString(undefined, 
 
 // ---- which version was last posted in Discord (per browser) ----
 const WN_POSTED_KEY = 'wwl_whatsnew_posted';
-const WN_POSTED_DEFAULT = '1.11'; // what the owner had already posted in Discord (up to v1.11); a leader can move it with "Mark posted up to here"
+const WN_POSTED_DEFAULT = '1.12'; // what the owner had already posted in Discord (up to v1.12); a leader can move it with "Mark posted up to here"
 const wnPostedIndex = () => { // index in WHATS_NEW of the newest version already posted, -1 = none
     let v = null;
     try { v = localStorage.getItem(WN_POSTED_KEY); } catch (e) { /* none */ }
