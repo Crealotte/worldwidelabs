@@ -101,6 +101,9 @@
         padding: 10px 12px; border-radius: var(--radius); cursor: pointer;
         color: var(--muted); font-weight: 500; border: 1px solid transparent;
     }
+    a.nav-item { text-decoration: none; }
+    #nav-burger { display: none; position: fixed; top: 10px; left: 10px; z-index: 55; width: 40px; height: 40px; align-items: center; justify-content: center; font-size: 22px; background: var(--bench); color: var(--text); border: 1px solid var(--line); border-radius: var(--radius); cursor: pointer; }
+    #nav-backdrop { display: none; position: fixed; inset: 0; z-index: 59; background: rgba(0,0,0,.55); opacity: 0; pointer-events: none; transition: opacity .22s ease; }
     .nav-item:hover { color: var(--text); background: var(--bench-2); }
     .nav-item.active { color: var(--reagent); background: rgba(53,217,155,.08); border-color: rgba(53,217,155,.25); }
     .nav-item .idx { font-family: var(--mono); font-size: 10px; opacity: .7; }
@@ -375,14 +378,20 @@
 
     @media (max-width: 760px) {
         .shell { flex-direction: column; }
+        /* like Torn: the menu is hidden and slides in from the left (hamburger button, or swipe right from the left edge) */
         nav.side {
-            width: 100%; flex-direction: column; padding: 12px; gap: 2px;
-            border-right: none; border-bottom: 1px solid var(--line);
-            max-height: 60vh; overflow-y: auto;
+            position: fixed; top: 0; left: 0; bottom: 0; z-index: 60; width: 280px; max-width: 85vw;
+            flex-direction: column; padding: 12px; gap: 2px;
+            border-right: 1px solid var(--line); overflow-y: auto;
+            transform: translateX(-102%); transition: transform .22s ease; box-shadow: none;
         }
+        body.nav-open nav.side { transform: none; box-shadow: 0 0 30px rgba(0,0,0,.6); }
         nav.side .spacer, .whoami { display: none; }
         .nav-item { padding: 10px 12px; font-size: 14px; }
-        main { padding: 18px; }
+        #nav-burger { display: flex; }
+        #nav-backdrop { display: block; }
+        body.nav-open #nav-backdrop { opacity: 1; pointer-events: auto; }
+        main { padding: 60px 18px 18px; }
         .grid2, .grid3 { grid-template-columns: 1fr; }
         .crimes-grid { grid-template-columns: repeat(2, 1fr); }
     }
@@ -430,6 +439,8 @@
 <!-- ==================== APP ==================== -->
 <div id="app-view">
 <div class="shell">
+    <button id="nav-burger" type="button" aria-label="Open the menu">☰</button>
+    <div id="nav-backdrop"></div>
     <nav class="side">
         <div class="logo">
             <svg width="26" height="26" viewBox="0 0 34 34" fill="none" aria-hidden="true">
@@ -439,8 +450,8 @@
             </svg>
             <h1>WW<span style="color:var(--reagent)">Labs</span></h1>
         </div>
-        <div class="nav-item active" data-page="dashboard">Dashboard</div>
-        <div class="nav-item" data-page="profile">Player profile</div>
+        <a class="nav-item active" data-page="dashboard" href="/dashboard">Dashboard</a>
+        <a class="nav-item" data-page="profile" href="/profile">Player profile</a>
 
         <div class="nav-group">
             <div class="nav-group-header" data-group="training">
@@ -448,9 +459,9 @@
                 <svg class="nav-chevron" width="10" height="10" viewBox="0 0 10 10"><path d="M2 3.5L5 6.5L8 3.5" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
             </div>
             <div class="nav-group-items" data-group-items="training">
-                <div class="nav-item" data-page="energy">Energy planner</div>
-                <div class="nav-item" data-page="gym-stats">Gym stats</div>
-                <div class="nav-item" data-page="energy-tracker">Energy tracker</div>
+                <a class="nav-item" data-page="energy" href="/energy">Energy planner</a>
+                <a class="nav-item" data-page="gym-stats" href="/gym-stats">Gym stats</a>
+                <a class="nav-item" data-page="energy-tracker" href="/energy-tracker">Energy tracker</a>
             </div>
         </div>
 
@@ -460,8 +471,8 @@
                 <svg class="nav-chevron" width="10" height="10" viewBox="0 0 10 10"><path d="M2 3.5L5 6.5L8 3.5" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
             </div>
             <div class="nav-group-items" data-group-items="targets">
-                <div class="nav-item" data-page="targets">Level targets</div>
-                <div class="nav-item" data-page="targetfinder">Target finder</div>
+                <a class="nav-item" data-page="targets" href="/targets">Level targets</a>
+                <a class="nav-item" data-page="targetfinder" href="/targetfinder">Target finder</a>
             </div>
         </div>
 
@@ -471,9 +482,9 @@
                 <svg class="nav-chevron" width="10" height="10" viewBox="0 0 10 10"><path d="M2 3.5L5 6.5L8 3.5" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
             </div>
             <div class="nav-group-items" data-group-items="war">
-                <div class="nav-item" data-page="war-badges">War Badges</div>
-                <div class="nav-item" data-page="availability">War Availability</div>
-                <div class="nav-item" data-page="war-reports">War reports</div>
+                <a class="nav-item" data-page="war-badges" href="/war-badges">War Badges</a>
+                <a class="nav-item" data-page="availability" href="/availability">War Availability</a>
+                <a class="nav-item" data-page="war-reports" href="/war-reports">War reports</a>
             </div>
         </div>
 
@@ -483,9 +494,9 @@
                 <svg class="nav-chevron" width="10" height="10" viewBox="0 0 10 10"><path d="M2 3.5L5 6.5L8 3.5" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
             </div>
             <div class="nav-group-items" data-group-items="faction">
-                <div class="nav-item" data-page="steadfast">Steadfast planner</div>
-                <div class="nav-item" data-page="perk-roadmap">Perk roadmap</div>
-                <div class="nav-item" data-page="tz-map">Timezone map</div>
+                <a class="nav-item" data-page="steadfast" href="/steadfast">Steadfast planner</a>
+                <a class="nav-item" data-page="perk-roadmap" href="/perk-roadmap">Perk roadmap</a>
+                <a class="nav-item" data-page="tz-map" href="/tz-map">Timezone map</a>
             </div>
 
 
@@ -495,35 +506,35 @@
                 <svg class="nav-chevron" width="10" height="10" viewBox="0 0 10 10"><path d="M2 3.5L5 6.5L8 3.5" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
             </div>
             <div class="nav-group-items" data-group-items="crimes">
-                <div class="nav-item" data-page="crimes-guide">Crimes Guide</div>
-                <div class="nav-item" data-page="ocfit">OC Fit Tracker</div>
+                <a class="nav-item" data-page="crimes-guide" href="/crimes-guide">Crimes Guide</a>
+                <a class="nav-item" data-page="ocfit" href="/ocfit">OC Fit Tracker</a>
             </div>
         </div>
 
-        <div class="nav-item" data-page="foreign-stock">Overseas Stock</div>
+        <a class="nav-item" data-page="foreign-stock" href="/foreign-stock">Overseas Stock</a>
         <div class="nav-group">
             <div class="nav-group-header" data-group="leadership">
                 <span>Leadership</span>
                 <svg class="nav-chevron" width="10" height="10" viewBox="0 0 10 10"><path d="M2 3.5L5 6.5L8 3.5" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
             </div>
             <div class="nav-group-items" data-group-items="leadership">
-                <div class="nav-item" data-page="announce-edit">Announcements</div>
-                <div class="nav-item" data-page="feedback-edit">Feedback form</div>
-                <div class="nav-item" data-page="ocfit-team">OC Team Builder</div>
-                <div class="nav-item" data-page="respect-edit">Respect Tracker</div>
-                <div class="nav-item" data-page="war-payout">War Payout</div>
-                <div class="nav-item" data-page="armory-tracker">Consumption Tracker</div>
-                <div class="nav-item" data-page="availability-leaders">Availability overview</div>
-                <div class="nav-item" data-page="members-overview">Member Overview</div>
-                <div class="nav-item" data-page="newsletter">Newsletter</div>
-                <div class="nav-item" data-page="labs-funds" style="display:none;">Labs Funds</div>
+                <a class="nav-item" data-page="announce-edit" href="/announce-edit">Announcements</a>
+                <a class="nav-item" data-page="feedback-edit" href="/feedback-edit">Feedback form</a>
+                <a class="nav-item" data-page="ocfit-team" href="/ocfit-team">OC Team Builder</a>
+                <a class="nav-item" data-page="respect-edit" href="/respect-edit">Respect Tracker</a>
+                <a class="nav-item" data-page="war-payout" href="/war-payout">War Payout</a>
+                <a class="nav-item" data-page="armory-tracker" href="/armory-tracker">Consumption Tracker</a>
+                <a class="nav-item" data-page="availability-leaders" href="/availability-leaders">Availability overview</a>
+                <a class="nav-item" data-page="members-overview" href="/members-overview">Member Overview</a>
+                <a class="nav-item" data-page="newsletter" href="/newsletter">Newsletter</a>
+                <a class="nav-item" data-page="labs-funds" href="/labs-funds" style="display:none;">Labs Funds</a>
             </div>
         </div>
 
-        <div class="nav-item" data-page="whats-new" id="nav-whats-new">What's new</div>
-        <div class="nav-item" data-page="links">Tools &amp; links</div>
-        <div class="nav-item" data-page="feedback">Feedback</div>
-        <div class="nav-item" data-page="bug-report">Bugs &amp; suggestions</div>
+        <a class="nav-item" data-page="whats-new" id="nav-whats-new" href="/whats-new">What's new</a>
+        <a class="nav-item" data-page="links" href="/links">Tools &amp; links</a>
+        <a class="nav-item" data-page="feedback" href="/feedback">Feedback</a>
+        <a class="nav-item" data-page="bug-report" href="/bug-report">Bugs &amp; suggestions</a>
 
 
         <div class="spacer"></div>
@@ -1424,9 +1435,13 @@
                 <div class="field"><label for="br-text">What went wrong?</label>
                     <textarea autocomplete="off" id="br-text" rows="6" maxlength="1500" placeholder="What did you do, what did you expect, and what happened instead?" style="width:100%;"></textarea></div>
                 <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:10px;">
-                    <label class="ghost small" for="br-file" style="cursor:pointer;padding:6px 12px;border:1px solid var(--line);border-radius:var(--radius);">📎 Add a screenshot</label>
-                    <input type="file" id="br-file" accept="image/*" style="display:none;">
-                    <span style="color:var(--muted);font-size:12px;">or paste one with Ctrl+V</span>
+                    <label class="ghost small" for="br-file" style="cursor:pointer;padding:6px 12px;border:1px solid var(--line);border-radius:var(--radius);">📎 Add a screenshot or short recording</label>
+                    <input type="file" id="br-file" accept="image/*,video/mp4,video/webm,video/quicktime" style="display:none;">
+                    <span style="color:var(--muted);font-size:12px;">or paste a screenshot with Ctrl+V. Recordings: up to about 3 MB (a short clip) — for a longer one, upload it somewhere and paste the link in your description.</span>
+                </div>
+                <div id="br-video-wrap" style="display:none;margin-bottom:12px;">
+                    <video id="br-video-preview" controls muted style="max-width:100%;max-height:260px;border:1px solid var(--line);border-radius:var(--radius);display:block;margin-bottom:6px;"></video>
+                    <button class="ghost small" id="br-clear-video">Remove recording</button>
                 </div>
                 <div id="br-preview-wrap" style="display:none;margin-bottom:12px;">
                     <img id="br-preview" alt="Screenshot preview" style="max-width:100%;max-height:260px;border:1px solid var(--line);border-radius:var(--radius);display:block;margin-bottom:6px;">
@@ -1959,6 +1974,7 @@
 <div id="toast"></div>
 
 <script src="core.js"></script>
+<script src="mobile-nav.js"></script>
 <script src="faction-sharing.js"></script>
 <script src="dashboard.js"></script>
 <script src="announcements.js"></script>

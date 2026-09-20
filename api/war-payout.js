@@ -420,7 +420,7 @@ module.exports = async function handler(req, res) {
         }
         // Known bugs list — anyone can read it and press "I have this too"; only leaders change the list.
         if (action.startsWith('bugs-')) {
-            if (!['bugs-list', 'bugs-metoo'].includes(action) && !(await isLeader(key))) return res.status(403).json({ error: 'Leaders only' });
+            if (!['bugs-list', 'bugs-metoo', 'bugs-shot'].includes(action) && !(await isLeader(key))) return res.status(403).json({ error: 'Leaders only' });
             return res.status(200).json(await bugsHandle(action, req.body, { redis, playerId }));
         }
 

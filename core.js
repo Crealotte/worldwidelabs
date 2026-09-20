@@ -278,7 +278,11 @@
     });
 
     document.querySelectorAll('.nav-item').forEach(item => {
-        item.addEventListener('click', () => goToPage(item.dataset.page));
+        item.addEventListener('click', e => {
+            if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button === 1) return; // let the browser open it in a new tab
+            e.preventDefault();
+            goToPage(item.dataset.page);
+        });
     });
 
     const CURRENT_PAGE_KEY = 'wwl_current_page';

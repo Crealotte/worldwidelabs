@@ -4,30 +4,44 @@
 'use strict';
 
 let brShot = null; // data URL of the resized screenshot, or null
+let brVideo = null; // data URL of a short screen recording (max about 3 MB), or null
+const BR_MAX_VIDEO = 3 * 1024 * 1024;
 
 function brResize(file) {
     return new Promise((resolve, reject) => {
         const img = new Image();
         const url = URL.createObjectURL(file);
         img.onload = () => {
-            const scale = Math.min(1, 1600 / img.width);
+            const scale = Math.min(1, 1400 / img.width);
             const c = document.createElement('canvas');
             c.width = Math.round(img.width * scale); c.height = Math.round(img.height * scale);
             c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
             URL.revokeObjectURL(url);
-            resolve(c.toDataURL('image/jpeg', 0.75));
+            resolve(c.toDataURL('image/jpeg', 0.7));
         };
         img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('That file could not be read as an image.')); };
         img.src = url;
     });
 }
+function brReadVideo(file) {
+    return new Promise((resolve, reject) => { const r = new FileReader(); r.onload = () => resolve(r.result); r.onerror = () => reject(new Error('That file could not be read.')); r.readAsDataURL(file); });
+}
+async function brSetVideo(file) {
+    if (file.size > BR_MAX_VIDEO) { toast('That recording is over 3 MB — record a shorter clip, or upload it somewhere and paste the link in your description.'); return; }
+    if (!/^video\/(mp4|webm|quicktime)$/.test(file.type)) { toast('Please use an mp4, webm or mov recording.'); return; }
+    try { brVideo = await brReadVideo(file); } catch (e) { toast(e.message); return; }
+    $('br-video-preview').src = brVideo;
+    $('br-video-wrap').style.display = 'block';
+}
+function brClearVideo() { brVideo = null; $('br-video-preview').removeAttribute('src'); $('br-video-wrap').style.display = 'none'; }
 async function brSetShot(file) {
-    if (!file || !file.type.startsWith('image/')) { toast('Please choose an image.'); return; }
+    if (file && file.type.startsWith('video/')) { await brSetVideo(file); return; }
+    if (!file || !(file.type.startsWith('image/') || file.type.startsWith('video/'))) { toast('Please choose an image or a short recording.'); return; }
     try { brShot = await brResize(file); } catch (e) { toast(e.message); return; }
     $('br-preview').src = brShot;
     $('br-preview-wrap').style.display = 'block';
 }
-function brClearShot() { brShot = null; $('br-file').value = ''; $('br-preview-wrap').style.display = 'none'; }
+function brClearShot() { brShot = null; brClearVideo(); $('br-file').value = ''; $('br-preview-wrap').style.display = 'none'; }
 
 function loadBugReport() {
     loadKnownBugs();
@@ -58,7 +72,7 @@ $('br-send').addEventListener('click', async () => {
     try {
         const res = await fetch('/api/war-payout', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ key: apiKey, action: 'bug-report', description, page: $('br-page').value, screenshot: brShot }),
+            body: JSON.stringify({ key: apiKey, action: 'bug-report', description, page: $('br-page').value, screenshot: brShot, video: brVideo }),
         });
         const text = await res.text();
         let r; try { r = JSON.parse(text); } catch (e) { throw new Error(`Server problem (${res.status}) — try a smaller screenshot.`); }
@@ -92,6 +106,7 @@ function kbRow(b, leader) {
             ${b.status !== 'fixed' ? `<button class="ghost small kb-metoo" data-id="${esc(b.id)}" style="margin-left:auto;${b.mine ? 'border-color:var(--reagent);color:var(--reagent);' : ''}">${b.mine ? '✓ You have this too' : 'I have this too'} · ${b.count}</button>` : ''}
         </div>
         ${b.note ? `<div style="color:var(--muted);font-size:13px;margin-top:3px;">${esc(b.note)}</div>` : ''}
+        ${b.hasShot ? `<div style="margin-top:6px;"><button class="ghost small kb-shot" data-id="${esc(b.id)}">📷 View screenshot</button><div class="kb-shot-box" data-id="${esc(b.id)}" style="display:none;margin-top:6px;"></div></div>` : ''}
         ${leader ? `<div style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap;align-items:center;font-size:12px;color:var(--muted);">${b.count} reported ·
             ${['review', 'known', 'fixing', 'fixed'].filter(s => s !== b.status).map(s => `<button class="ghost small kb-status" data-id="${esc(b.id)}" data-status="${s}">Mark ${KB_STATUS[s][0].toLowerCase()}</button>`).join('')}
             <button class="ghost small kb-del" data-id="${esc(b.id)}">Delete</button></div>` : ''}
@@ -108,6 +123,18 @@ function renderKnownBugs() {
         const r = await kbFetch({ action: 'bugs-metoo', id: btn.dataset.id });
         if (r.error) toast(r.error); else toast('Thanks — noted, no need to send a report');
         loadKnownBugs();
+    }));
+    document.querySelectorAll('.kb-shot').forEach(btn => btn.addEventListener('click', async () => {
+        const box = document.querySelector(`.kb-shot-box[data-id="${btn.dataset.id}"]`);
+        if (box.style.display === 'block') { box.style.display = 'none'; btn.textContent = '📷 View screenshot'; return; }
+        if (!box.innerHTML) {
+            btn.disabled = true;
+            const r = await kbFetch({ action: 'bugs-shot', id: btn.dataset.id });
+            btn.disabled = false;
+            if (r.error || !r.shot) { toast(r.error || 'The screenshot is no longer available.'); return; }
+            box.innerHTML = `<img alt="Screenshot of the bug" src="${r.shot}" style="max-width:100%;max-height:420px;border:1px solid var(--line);border-radius:var(--radius);display:block;">`;
+        }
+        box.style.display = 'block'; btn.textContent = '📷 Hide screenshot';
     }));
     document.querySelectorAll('.kb-status').forEach(btn => btn.addEventListener('click', async () => { await kbFetch({ action: 'bugs-status', id: btn.dataset.id, status: btn.dataset.status }); loadKnownBugs(); }));
     document.querySelectorAll('.kb-del').forEach(btn => btn.addEventListener('click', async () => { if (!confirm('Delete this known bug?')) return; await kbFetch({ action: 'bugs-delete', id: btn.dataset.id }); loadKnownBugs(); }));
@@ -182,3 +209,4 @@ $('sg-send').addEventListener('click', async () => {
     $('sg-text').value = '';
     loadSuggestions();
 });
+$('br-clear-video').addEventListener('click', brClearVideo);
