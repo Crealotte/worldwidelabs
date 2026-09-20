@@ -6,7 +6,6 @@
 'use strict';
 
 const msFmt = ts => new Date(ts * 1000).toLocaleDateString(undefined, { day: 'numeric', month: 'short', timeZone: 'UTC' });
-const MS_CATS = [['war', 'War hits (last 5 wars)'], ['chain', 'Chain hits (last 5 wars)'], ['bloodwithdrawn', 'Blood bags filled'], ['candyused', 'Candy'], ['alcoholused', 'Alcohol'], ['energydrinkused', 'Energy drinks']];
 
 async function loadMyStanding() {
     const panel = $('dash-standing-panel');
@@ -19,30 +18,51 @@ async function loadMyStanding() {
         if (r.error) { panel.style.display = 'none'; return; }
 
         const groupLabel = r.tier === 'high' ? '1.5m+ battle stats' : r.tier === 'low' ? 'under 1.5m battle stats' : null;
-        const energy = groupLabel
-            ? `<b>${r.energyNeeded.toLocaleString()} energy</b> to train this month <span style="color:var(--muted);">(${r.weeklyEnergy.toLocaleString()} a week × ${r.period.plannedWeeks} weeks, ${msFmt(r.period.start)} → ${msFmt(r.period.plannedEnd)})</span>
-               <div style="color:var(--muted);font-size:12px;margin-top:2px;">Your group: ${groupLabel}${r.tierSource === 'leader' ? ' (set by a leader)' : ' (worked out from your own stats)'}. Energy trained so far isn't tracked yet.</div>`
-            : '<span style="color:var(--muted);">Your energy group isn\'t known yet — it is picked up from your battle stats the next time you open the app.</span>';
+        const big = 'font-size:40px;line-height:1.1;';
+        const num = n => Math.round(n).toLocaleString();
 
-        const warCells = r.wars.length ? r.wars.map(w => {
-            const color = w.unknown ? 'var(--muted)' : w.notIn ? 'var(--muted)' : w.ok ? '#35d99b' : '#e05555';
+        // --- the two big tiles: energy and war participation ---
+        const energyTile = `
+            <div class="stat">
+                <div class="k">⚡ Energy trained this month</div>
+                <div class="v" style="${big}">— <span style="color:var(--muted);font-size:20px;">/ ${groupLabel ? num(r.energyNeeded) : '?'}</span></div>
+                <div class="s">${groupLabel
+                    ? `${num(r.weeklyEnergy)} a week × ${r.period.plannedWeeks} weeks · ${msFmt(r.period.start)} → ${msFmt(r.period.plannedEnd)}<br>Group: ${groupLabel}${r.tierSource === 'leader' ? ' (set by a leader)' : ' (from your own stats)'}`
+                    : 'Your energy group is picked up from your battle stats the next time you open the app.'}
+                    <br>Energy trained isn't tracked yet.</div>
+            </div>`;
+
+        const warColor = !r.eligible ? 'var(--muted)' : r.okWars >= r.need ? 'var(--reagent)' : 'var(--danger)';
+        const chips = r.wars.map(w => {
+            const color = w.unknown || w.notIn ? 'var(--muted)' : w.ok ? 'var(--reagent)' : 'var(--danger)';
             const text = w.unknown ? '…' : w.notIn ? '—' : `${w.war}${w.chain ? `+${w.chain}` : ''}`;
-            return `<div style="text-align:center;min-width:64px;"><div style="font-family:var(--mono);font-weight:700;color:${color};">${text}</div><div style="color:var(--muted);font-size:10px;">${esc(w.opponent.slice(0, 10))}</div></div>`;
-        }).join('') : '<span style="color:var(--muted);">Not calculated yet — it appears after a leader has opened Member Overview.</span>';
-        const wars = r.wars.length
-            ? `<b>${r.okWars} of the last ${r.eligible}</b> wars taken part in <span style="color:var(--muted);">(needed: ${r.need} — ${r.rule.minWarHits} war hits per war, or ${r.rule.minChainHits} chain hits if you did none)</span>`
-            : '';
+            return `<span title="vs ${esc(w.opponent)}" style="font-family:var(--mono);font-size:12px;color:${color};margin-right:10px;">${text}</span>`;
+        }).join('');
+        const warTile = `
+            <div class="stat">
+                <div class="k">⚔ War participation (last 5 wars)</div>
+                <div class="v" style="${big}color:${warColor};">${r.wars.length && r.eligible ? `${r.okWars}/${r.eligible}` : '—'}</div>
+                <div class="s">${r.wars.length
+                    ? `Needed: ${r.need} of ${r.eligible}${r.eligible < 5 ? ' (you joined recently)' : ''} — ${r.rule.minWarHits} war hits per war, or ${r.rule.minChainHits} chain hits if you did none<br>${chips}`
+                    : 'Not calculated yet — it appears after a leader has opened Member Overview.'}</div>
+            </div>`;
 
-        const places = MS_CATS.filter(([k]) => r.places[k]).map(([k, label]) => {
+        // --- the smaller tiles: each with the number big and the place under it ---
+        const small = [['bloodwithdrawn', '🩸 Blood bags filled'], ['candyused', '🍬 Candy'], ['alcoholused', '🍺 Alcohol'],
+            ['energydrinkused', '🥤 Energy drinks'], ['war', '⚔ War hits (last 5 wars)'], ['chain', '⛓ Chain hits (last 5 wars)']].map(([k, label]) => {
             const p = r.places[k];
-            return `<tr><td style="padding:3px 8px;">${esc(label)}</td><td style="padding:3px 8px;font-family:var(--mono);text-align:right;">${Math.round(p.value).toLocaleString()}</td><td style="padding:3px 8px;text-align:right;font-weight:700;color:var(--reagent);">#${p.place} <span style="color:var(--muted);font-weight:400;">of ${p.of}</span></td></tr>`;
+            return `
+            <div class="stat">
+                <div class="k">${label}</div>
+                <div class="v" style="font-size:26px;">${p ? num(p.value) : '…'}</div>
+                <div class="s">${p ? `<b style="color:var(--reagent);">#${p.place}</b> of ${p.of}` : 'place not known yet'}</div>
+            </div>`;
         }).join('');
 
         $('dash-standing-body').innerHTML = `
-            <div style="margin-bottom:12px;">${energy}</div>
-            <div style="margin-bottom:12px;">${wars}<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px;">${warCells}</div></div>
-            ${places ? `<div style="color:var(--muted);font-size:12px;margin-bottom:4px;">Your place this month (${msFmt(r.period.start)} → ${msFmt(r.period.end)}${r.period.running ? ', full weeks so far' : ''})</div>
-            <table style="font-size:13px;border-collapse:collapse;">${places}</table>` : ''}`;
+            <div class="grid2" style="margin-bottom:14px;">${energyTile}${warTile}</div>
+            <div style="color:var(--muted);font-size:12px;margin-bottom:8px;">Your numbers and place this month (${msFmt(r.period.start)} → ${msFmt(r.period.end)}${r.period.running ? ', full weeks so far' : ''}); the war and chain hits count the last 5 wars instead.</div>
+            <div class="grid3">${small}</div>`;
         panel.style.display = 'block';
     } catch (e) { panel.style.display = 'none'; }
 }
