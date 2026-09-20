@@ -14,7 +14,7 @@ async function loadEnergyTracker() {
     const st = $('et-status');
     st.className = 'status ok'; st.textContent = 'Loading…';
     try {
-        const res = await fetch('/api/war-payout', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key: apiKey, action: 'energy-board', days: etDays }) });
+        const res = await fetch('/api/war-payout', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key: apiKey, action: 'energy-board', days: etDays, ...(etRange || {}) }) });
         const text = await res.text();
         let r; try { r = JSON.parse(text); } catch (e) { throw new Error(`Server problem (${res.status})`); }
         if (r.error) throw new Error(r.error);
