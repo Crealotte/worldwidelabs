@@ -1438,9 +1438,10 @@
         <section class="page" id="page-tz-map">
             <div class="lab-label">WWL·24 / for everyone</div>
             <h2>Timezone map</h2>
-            <p class="pagedesc">Where in the world the faction plays from, just for fun. The vertical stripes are the timezones (one stripe per hour from UTC); the greener a stripe, the more members live in it. Only the timezone of your device is used, never your location, and nobody is shown by name.</p>
+            <p class="pagedesc">Where in the world the faction lives, just for fun. Choose your own country and it lights up on the map; the more members from a country, the greener it gets. Only the country is stored and nobody is shown by name.</p>
             <div class="status" id="tz-status"></div>
             <div class="panel">
+                <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px;"><label for="tz-country" style="font-size:14px;font-weight:700;">I live in:</label><select id="tz-country" style="width:auto;min-width:240px;"></select><button class="ghost small" id="tz-save">Save</button><button class="ghost small" id="tz-clear" style="display:none;">Remove me</button></div>
                 <div id="tz-summary" style="margin-bottom:8px;font-size:13px;color:var(--muted);"></div>
                 <div id="tz-map" style="width:100%;overflow-x:auto;"></div>
             </div>
