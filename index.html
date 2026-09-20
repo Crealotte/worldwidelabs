@@ -485,6 +485,7 @@
             <div class="nav-group-items" data-group-items="faction">
                 <div class="nav-item" data-page="steadfast">Steadfast planner</div>
                 <div class="nav-item" data-page="perk-roadmap">Perk roadmap</div>
+                <div class="nav-item" data-page="tz-map">Timezone map</div>
             </div>
 
 
@@ -1434,6 +1435,21 @@
             </div>
         </section>
 
+        <section class="page" id="page-tz-map">
+            <div class="lab-label">WWL·24 / for everyone</div>
+            <h2>Timezone map</h2>
+            <p class="pagedesc">Where in the world the faction plays from, just for fun. The vertical stripes are the timezones (one stripe per hour from UTC); the greener a stripe, the more members live in it. Only the timezone of your device is used, never your location, and nobody is shown by name.</p>
+            <div class="status" id="tz-status"></div>
+            <div class="panel">
+                <div id="tz-summary" style="margin-bottom:8px;font-size:13px;color:var(--muted);"></div>
+                <div id="tz-map" style="width:100%;overflow-x:auto;"></div>
+            </div>
+            <div class="panel">
+                <h3 style="margin-top:0;">Timezones in the faction</h3>
+                <div id="tz-list"></div>
+            </div>
+        </section>
+
         <section class="page" id="page-availability-leaders">
             <div class="lab-label">WWL·20 / leaders &amp; council</div>
             <h2>Availability overview</h2>
@@ -1938,6 +1954,7 @@
 <script src="my-standing.js"></script>
 <script src="perk-countdown.js"></script>
 <script src="faction-perks.js"></script>
+<script src="tz-map.js"></script>
 <script src="armory-tracker.js"></script>
 <script src="app-init.js"></script>
 </body>

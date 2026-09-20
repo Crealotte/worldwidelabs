@@ -18,6 +18,7 @@ const WHATS_NEW = [
             'New Energy tracker page (Training menu): the energy every member trained in the gym per stat and per day, like Torn Intel — click a member for the day-by-day rows, pick any dates in the calendar (or "This newsletter month"), and follow your own row.',
             '"Your standing" on the dashboard now shows your real energy trained this month and over the rolling 4-5 weeks.',
             'Bug reports page: new Suggestions box — add an idea and vote 👍 or 👎 on the ideas of others; the most wanted come first.',
+            'New Timezone map (Faction menu): a world map with the timezone stripes, coloured by how many members live in each. It only uses the timezone of your device and shows nobody by name.',
         ],
         leaders: [
             'Energy trained in the gym is now counted for every member from the faction\'s own gym counters: an "Energy trained" column in Member Overview (with a winner for it, and the weekly minimum next to it).',

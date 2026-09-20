@@ -32,6 +32,7 @@ const { gymHandle } = require('../lib/gymStats');
 const { warReports } = require('../lib/warReports');
 const { sendBugReport, bugsHandle, suggestHandle } = require('../lib/bugReport');
 const { steadfastHandle, steadfastImage, energyDaily } = require('../lib/steadfast');
+const { tzHandle } = require('../lib/tzMap');
 const { nightlyHandle, nightlyRun } = require('../lib/nightly');
 const { labsIsOwner, labsHasOwners, labsHandle, labsRecordReceipt } = require('../lib/labsLedger');
 
@@ -400,6 +401,8 @@ module.exports = async function handler(req, res) {
             if (!(await isLeader(key))) return res.status(403).json({ error: 'Leaders only' });
             return res.status(200).json(await nightlyHandle(action, { redis, key, factionId, playerId, name: playerName }));
         }
+        // Timezone map — every member reports their own timezone; everyone reads anonymous counts.
+        if (action.startsWith('tz-')) return res.status(200).json(await tzHandle(action, req.body, { redis, factionId, playerId }));
         // Suggestions — everyone can read, add and vote; only leaders set a status or delete.
         if (action.startsWith('sug-')) {
             const leader = ['sug-list', 'sug-status', 'sug-delete'].includes(action) ? await isLeader(key) : false;

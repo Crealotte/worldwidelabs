@@ -315,6 +315,7 @@
         if (page === 'war-reports') loadWarReports();
         if (page === 'steadfast') loadFactionSteadfast();
         if (page === 'perk-roadmap') loadFactionRoadmap();
+        if (page === 'tz-map') loadTzMap();
         if (page === 'bug-report') loadBugReport();
         if (page === 'labs-funds') loadLabsFunds();
         if (page === 'members-overview') loadMemberOverview();
@@ -327,7 +328,7 @@
             $('feedback-editor').style.display = isLeaderCached ? 'block' : 'none';
             if (isLeaderCached) loadFeedbackEditor();
         }
-        if (page === 'dashboard') { startCooldownTicker(); loadAnnouncement(); loadPolls(); loadRespectGoalPanel(); loadDashboardWarBadges(); loadMyStanding(); setTimeout(() => { if (typeof loadSteadfastCard === 'function') loadSteadfastCard(); }, 8000); } else { stopCooldownTicker(); }
+        if (page === 'dashboard') { startCooldownTicker(); loadAnnouncement(); loadPolls(); loadRespectGoalPanel(); loadDashboardWarBadges(); loadMyStanding(); setTimeout(() => { if (typeof tzReport === 'function') tzReport(); }, 6000); setTimeout(() => { if (typeof loadSteadfastCard === 'function') loadSteadfastCard(); }, 8000); } else { stopCooldownTicker(); }
         if (page === 'announce-edit') {
             $('announce-locked').style.display = isLeaderCached ? 'none' : 'block';
             $('announce-editor').style.display = isLeaderCached ? 'block' : 'none';
