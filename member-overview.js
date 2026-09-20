@@ -113,7 +113,7 @@ async function loadMemberOverview() {
             Object.assign(moStats, s.values);
             renderMemberOverview();
             if (!s.pending) break;
-            if (s.pending >= lastPending && s.failed) { st.className = 'status err'; st.textContent = `Couldn't read Torn stats for ${s.pending} lookups — some members' stats may be hidden.`; return; }
+            if (s.pending >= lastPending && s.failed) { st.className = 'status err'; st.textContent = `Couldn't read Torn stats for ${s.pending} lookups. Torn said: ${s.firstError || 'nothing'}`; return; }
             lastPending = s.pending;
             st.className = 'status ok'; st.textContent = `Reading stats… ${s.pending} lookups left (first time for this period only)`;
         }
