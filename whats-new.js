@@ -17,11 +17,13 @@ const WHATS_NEW = [
         everyone: [
             'New Energy tracker page (Training menu): the energy every member trained in the gym per stat and per day, like Torn Intel — click a member for the day-by-day rows, pick any dates in the calendar (or "This newsletter month"), and follow your own row.',
             '"Your standing" on the dashboard now shows your real energy trained this month and over the rolling 4-5 weeks.',
+            'Bug reports page: new Suggestions box — add an idea and vote 👍 or 👎 on the ideas of others; the most wanted come first.',
         ],
         leaders: [
             'Energy trained in the gym is now counted for every member from the faction\'s own gym counters: an "Energy trained" column in Member Overview (with a winner for it, and the weekly minimum next to it).',
             'The days before we started counting were filled in from Torn Intel (Member Overview → "Energy trained: fill in the past"). From now on the counter runs by itself.',
             'You can switch on nightly saving on the dashboard card (Steadfast countdown) with your own key, kept encrypted — so nothing is missed on days nobody logs in.',
+            'Suggestions: you can mark each idea as planned, done or not planned, or delete it.',
         ],
     },
     {

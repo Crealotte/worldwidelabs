@@ -31,6 +31,7 @@ function brClearShot() { brShot = null; $('br-file').value = ''; $('br-preview-w
 
 function loadBugReport() {
     loadKnownBugs();
+    loadSuggestions();
     // the page list comes from the sidebar; the page they came from is pre-selected
     if (!$('br-page').options.length) {
         $('br-page').innerHTML = [...document.querySelectorAll('.nav-item')].filter(n => n.style.display !== 'none').map(n => `<option value="${esc(n.dataset.page)}">${esc(n.textContent.trim())}</option>`).join('') + '<option value="other">Something else / the whole app</option>';
@@ -118,6 +119,7 @@ $('kb-add').addEventListener('click', async () => {
     $('kb-title').value = ''; $('kb-note').value = '';
     toast('Added to the known bugs');
     loadKnownBugs();
+    loadSuggestions();
 });
 
 // While someone types a report, matching known bugs are shown above the form — a hint, never a block.
@@ -129,3 +131,54 @@ function kbSuggest() {
     $('kb-suggest').innerHTML = hits.length ? `<div style="border:1px solid #f0b432;border-radius:var(--radius);padding:8px 12px;font-size:13px;"><b>This looks like a known bug:</b> ${hits.map(b => esc(b.title)).join(' · ')} — press "I have this too" in the list above instead of sending a report.</div>` : '';
 }
 $('br-text').addEventListener('input', kbSuggest);
+
+// ---- Suggestions: add an idea, vote thumbs up / down, (leaders) set a status. Backend: suggestHandle in lib/bugReport.js ----
+let sgList = [];
+const SG_STATUS = { open: ['Open', 'var(--muted)'], planned: ['Planned', '#f0b432'], done: ['Done', 'var(--reagent)'], declined: ['Not planned', '#7aa2ff'] };
+async function loadSuggestions() {
+    const r = await kbFetch({ action: 'sug-list' });
+    if (r.error) { $('sg-list').innerHTML = `<p style="color:var(--danger);font-size:13px;">${esc(r.error)}</p>`; return; }
+    sgList = r.suggestions || [];
+    renderSuggestions();
+}
+function sgRow(s, leader) {
+    const [label, color] = SG_STATUS[s.status] || SG_STATUS.open;
+    const on = 'border-color:var(--reagent);color:var(--reagent);';
+    return `<div style="border-top:1px solid var(--line);padding:8px 0;">
+        <div style="display:flex;gap:10px;align-items:baseline;flex-wrap:wrap;">
+            ${s.status !== 'open' ? `<span style="font-size:11px;font-weight:700;color:${color};border:1px solid ${color};border-radius:10px;padding:1px 8px;">${label}</span>` : ''}
+            <span style="font-size:14px;flex:1;min-width:200px;white-space:pre-wrap;">${esc(s.text)}</span>
+            <span style="display:flex;gap:6px;">
+                <button class="ghost small sg-vote" data-id="${esc(s.id)}" data-vote="1" style="${s.mine === 1 ? on : ''}">👍 ${s.up}</button>
+                <button class="ghost small sg-vote" data-id="${esc(s.id)}" data-vote="-1" style="${s.mine === -1 ? 'border-color:var(--danger);color:var(--danger);' : ''}">👎 ${s.down}</button>
+            </span>
+        </div>
+        ${leader ? `<div style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap;align-items:center;font-size:12px;color:var(--muted);">${s.by ? `by ${esc(s.by)} ·` : ''}
+            ${Object.keys(SG_STATUS).filter(k => k !== s.status).map(k => `<button class="ghost small sg-status" data-id="${esc(s.id)}" data-status="${k}">Mark ${SG_STATUS[k][0].toLowerCase()}</button>`).join('')}
+            <button class="ghost small sg-del" data-id="${esc(s.id)}">Delete</button></div>` : ''}
+    </div>`;
+}
+function renderSuggestions() {
+    const leader = typeof isLeaderCached !== 'undefined' && isLeaderCached;
+    const open = sgList.filter(s => s.status === 'open' || s.status === 'planned'), rest = sgList.filter(s => s.status === 'done' || s.status === 'declined');
+    $('sg-list').innerHTML = (open.length ? open.map(s => sgRow(s, leader)).join('') : '<p style="color:var(--muted);font-size:13px;margin:0;">No suggestions yet — be the first!</p>')
+        + (rest.length ? `<details style="margin-top:8px;"><summary class="av-sum"><span style="font-size:13px;">Done / not planned (${rest.length})</span></summary>${rest.map(s => sgRow(s, leader)).join('')}</details>` : '');
+    document.querySelectorAll('.sg-vote').forEach(b => b.addEventListener('click', async () => {
+        b.disabled = true;
+        const r = await kbFetch({ action: 'sug-vote', id: b.dataset.id, vote: Number(b.dataset.vote) });
+        if (r.error) toast(r.error);
+        loadSuggestions();
+    }));
+    document.querySelectorAll('.sg-status').forEach(b => b.addEventListener('click', async () => { await kbFetch({ action: 'sug-status', id: b.dataset.id, status: b.dataset.status }); loadSuggestions(); }));
+    document.querySelectorAll('.sg-del').forEach(b => b.addEventListener('click', async () => { if (!confirm('Delete this suggestion?')) return; await kbFetch({ action: 'sug-delete', id: b.dataset.id }); loadSuggestions(); }));
+}
+$('sg-send').addEventListener('click', async () => {
+    const st = $('sg-status'), btn = $('sg-send');
+    btn.disabled = true;
+    const r = await kbFetch({ action: 'sug-add', text: $('sg-text').value });
+    btn.disabled = false;
+    if (r.error) { st.className = 'status err'; st.textContent = r.error; return; }
+    st.className = 'status ok'; st.textContent = '✓ Thanks — your idea is on the list.';
+    $('sg-text').value = '';
+    loadSuggestions();
+});

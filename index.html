@@ -521,7 +521,7 @@
         <div class="nav-item" data-page="whats-new" id="nav-whats-new">What's new</div>
         <div class="nav-item" data-page="links">Tools &amp; links</div>
         <div class="nav-item" data-page="feedback">Feedback</div>
-        <div class="nav-item" data-page="bug-report">Bug reports</div>
+        <div class="nav-item" data-page="bug-report">Bugs &amp; suggestions</div>
 
 
         <div class="spacer"></div>
@@ -1384,7 +1384,7 @@
 
         <section class="page" id="page-bug-report">
             <div class="lab-label">WWL·19 / for everyone</div>
-            <h2>Bug reports</h2>
+            <h2>Bug reports &amp; suggestions</h2>
             <p class="pagedesc">Something not working or looking wrong? Tell us what happened. Your report goes straight to the owner on Discord, with your name and the page you were on. A screenshot helps a lot.</p>
 
             <div class="panel" id="kb-panel">
@@ -1419,6 +1419,18 @@
                 </div>
                 <button class="ghost" id="br-send">Send report</button>
                 <div class="status" id="br-status"></div>
+            </div>
+
+            <div class="panel" id="sg-panel">
+                <h3 style="margin-top:0;">💡 Suggestions</h3>
+                <p style="color:var(--muted);font-size:12px;margin:0 0 10px;">Got an idea for WWL? Add it here and vote 👍 or 👎 on the ideas of others — the most wanted ones come first.</p>
+                <div id="sg-list"></div>
+                <div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--line);">
+                    <div class="field"><label for="sg-text">Your idea</label>
+                        <textarea autocomplete="off" id="sg-text" rows="3" maxlength="600" placeholder="What should WWL do or do better?" style="width:100%;"></textarea></div>
+                    <button class="ghost" id="sg-send">Add suggestion</button>
+                    <div class="status" id="sg-status"></div>
+                </div>
             </div>
         </section>
 

@@ -30,7 +30,7 @@ const { tornToDiscordIds, resolveDiscordIds } = require('../lib/discordMap');
 const { moHandle, moMe } = require('../lib/memberOverview');
 const { gymHandle } = require('../lib/gymStats');
 const { warReports } = require('../lib/warReports');
-const { sendBugReport, bugsHandle } = require('../lib/bugReport');
+const { sendBugReport, bugsHandle, suggestHandle } = require('../lib/bugReport');
 const { steadfastHandle, steadfastImage, energyDaily } = require('../lib/steadfast');
 const { nightlyHandle, nightlyRun } = require('../lib/nightly');
 const { labsIsOwner, labsHasOwners, labsHandle, labsRecordReceipt } = require('../lib/labsLedger');
@@ -399,6 +399,12 @@ module.exports = async function handler(req, res) {
         if (action.startsWith('nightly-')) {
             if (!(await isLeader(key))) return res.status(403).json({ error: 'Leaders only' });
             return res.status(200).json(await nightlyHandle(action, { redis, key, factionId, playerId, name: playerName }));
+        }
+        // Suggestions — everyone can read, add and vote; only leaders set a status or delete.
+        if (action.startsWith('sug-')) {
+            const leader = ['sug-list', 'sug-status', 'sug-delete'].includes(action) ? await isLeader(key) : false;
+            if (['sug-status', 'sug-delete'].includes(action) && !leader) return res.status(403).json({ error: 'Leaders only' });
+            return res.status(200).json(await suggestHandle(action, req.body, { redis, playerId, name: playerName, isLeader: leader }));
         }
         // Known bugs list — anyone can read it and press "I have this too"; only leaders change the list.
         if (action.startsWith('bugs-')) {
