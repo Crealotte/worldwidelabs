@@ -321,3 +321,13 @@ Gym log sample: ${r.gymError ? `(error: ${r.gymError})` : (r.gymSample || '(none
 
 $('mo-date-from').addEventListener('change', () => { if ($('mo-date-from').value) { moDates.from = $('mo-date-from').value; renderMemberOverview(); loadMemberOverview(); } });
 $('mo-date-to').addEventListener('change', () => { if ($('mo-date-to').value) { moDates.to = $('mo-date-to').value; renderMemberOverview(); loadMemberOverview(); } });
+
+$('mo-probe-upg-btn').addEventListener('click', async () => {
+    const btn = $('mo-probe-upg-btn'); btn.disabled = true; btn.textContent = 'Checking…';
+    try {
+        const r = await moFetch({ action: 'mo-probe-upgrades' });
+        if (r.error) throw new Error(r.error);
+        $('mo-probe-upg-out').textContent = `Old endpoint (faction upgrades):\n${r.v1}\n\nNew endpoint (v2 faction upgrades):\n${r.v2}`;
+        $('mo-probe-upg-out').style.display = 'block';
+    } catch (e) { toast(e.message); } finally { btn.disabled = false; btn.textContent = 'Check faction upgrades'; }
+});
