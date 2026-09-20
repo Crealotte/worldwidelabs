@@ -30,7 +30,9 @@ function gpMethods(fill, job, candy = 1) {
     return [
         { id: 'nat-soft', kind: 'natural', mode: 'soft', name: 'Natural energy — Soft', sub: '3 bars + 2 Xanax a day · 3 log-ins', sessions: 0, items: {}, addHappy: 0, energy: 0, ecstasy: false },
         { id: 'nat-hard', kind: 'natural', mode: 'hard', name: 'Natural energy — Hard', sub: '4 bars + 3 Xanax a day · 4 log-ins', sessions: 0, items: {}, addHappy: 0, energy: 0, ecstasy: false },
-        { id: 'candy', name: 'Candy jump', sub: 'Starter jump — 49 candies worth 25 happy each + Ecstasy', sessions: 4, items: { candy: 49, ecstasy: 1 }, addHappy: 1225 * candy, energy: fill, ecstasy: true },
+        { id: 'candy', name: 'Candy jump', sub: 'Starter jump — 49 candies worth 25 happy + Ecstasy', sessions: 4, items: { candy: 49, ecstasy: 1 }, addHappy: 1225 * candy, energy: fill, ecstasy: true },
+        { id: 'candy1', name: 'Candy jump (1 Xanax)', sub: '49 candies worth 25 happy + Ecstasy + 1 Xanax', sessions: 4, items: { candy: 49, ecstasy: 1, xanax: 1 }, addHappy: 1225 * candy, energy: fill + 250, ecstasy: true },
+        { id: 'candy4', name: 'Candy jump (4 Xanax)', sub: '49 candies worth 25 happy + Ecstasy + 4 Xanax + refill', sessions: 2, items: { candy: 49, ecstasy: 1, xanax: 4 }, addHappy: 1225 * candy, energy: fill + 1000, ecstasy: true, refill: true },
         { id: 'choco1', name: 'Big Choco jump (1 Xanax)', sub: '49 Big Boxes + Ecstasy + 1 Xanax', sessions: 4, items: { choco: 49, ecstasy: 1, xanax: 1 }, addHappy: 1715 * candy, energy: fill + 250, ecstasy: true },
         { id: 'choco4', name: 'Big Choco jump (4 Xanax)', sub: '49 Big Boxes + Ecstasy + 4 Xanax + refill', sessions: 2, items: { choco: 49, ecstasy: 1, xanax: 4 }, addHappy: 1715 * candy, energy: fill + 1000, ecstasy: true, refill: true },
         { id: 'edvd5', name: 'Happy Jump (5 EDVD)', sub: 'The regular happy jump — 5 EDVD + Ecstasy + 4 Xanax', sessions: 1, items: { edvd: 5, ecstasy: 1, xanax: 4 }, addHappy: job ? 25000 : 12500, energy: fill + 1000, ecstasy: true, refill: true },
@@ -335,7 +337,7 @@ function renderGymPlanner() {
     }));
 
     // candy jump: pick which 25-happy candy you use — the cost follows it
-    $('gp-candy-wrap').style.display = sel === 'candy' ? 'block' : 'none';
+    $('gp-candy-wrap').style.display = sel.startsWith('candy') ? 'block' : 'none';
     $('gp-candy-pick').innerHTML = gpCandy25.map(c => `<option value="${esc(c.name)}" ${candyPick && c.name === candyPick.name ? 'selected' : ''}>${esc(c.name)}${c.price ? ` — ${gpMoney(c.price)} each` : ''}</option>`).join('');
     $('gp-candy-note').textContent = gpCandy25.length
         ? `Any candy worth 25 happy works (49 of them = 1,225 happy). Pick the one you use, so the cost is right for you. By default it is the cheapest.`

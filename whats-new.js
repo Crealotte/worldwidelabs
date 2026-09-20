@@ -15,7 +15,7 @@ const WHATS_NEW = [
         version: '1.11', date: '2026-09-20',
         title: 'Availability overview for leaders and smarter bug reports',
         everyone: [
-            'The Lollipop jump is now the Candy jump: any candy worth 25 happy works, and you pick which candy you use in the training planner, so the cost is right for you.',
+            'The Lollipop jump is now the Candy jump: any candy worth 25 happy works, and you pick which candy you use in the training planner, so the cost is right for you. There are also Candy jumps with 1 or 4 Xanax, like the Big Choco ones.',
             'Bug reports: a report you send now also appears in the Known bugs list as "To review" (without your name), so others who run into the same thing can press "I have this too" instead of sending it again.',
         ],
         leaders: [
