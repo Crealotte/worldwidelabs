@@ -170,7 +170,13 @@ async function gpLoadPerks() {
 }
 const gpPerkList = () => (Array.isArray(gpPerks) ? gpPerks : []);
 // Gym-gain perks multiply each other (1 + %) — for the stat being trained.
-function gpGymMult(stat) { return gpPerkList().filter(p => p.kind === 'gym' && (!p.stat || p.stat === stat)).reduce((m, p) => m * (1 + p.pct / 100), 1); }
+function gpGymMult(stat) {
+    // Bonuses from the same source add up (education: +1% strength and +1% all gym gains = +2%); the different
+    // sources (faction, property, education, ...) then multiply each other.
+    const bySource = {};
+    gpPerkList().filter(p => p.kind === 'gym' && (!p.stat || p.stat === stat)).forEach(p => { bySource[p.source] = (bySource[p.source] || 0) + p.pct; });
+    return Object.values(bySource).reduce((m, pct) => m * (1 + pct / 100), 1);
+}
 function gpCandyMult() { return gpPerkList().filter(p => p.kind === 'candy').reduce((m, p) => m * (1 + p.pct / 100), 1); }
 // Faction Steadfast per stat, for the line that shows it.
 function gpSteadfast() {
