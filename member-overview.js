@@ -1,19 +1,25 @@
 // member-overview.js — the Member Overview page (leader/council only): who follows the rules and
-// who needs an extra push, plus a points leaderboard for competitions. Backend: lib/memberOverview.js
-// via /api/war-payout ('mo-*' actions, refused for anyone without faction API access).
+// who needs an extra push, plus a points leaderboard and winners list for competitions.
+// Backend: lib/memberOverview.js via /api/war-payout ('mo-*' actions, refused for anyone without
+// faction API access).
 //
-// Shows: hits per member over the last 5 wars (war + chain), a traffic light from the hits rule,
-// candy / alcohol / energy drinks used per week (1 week or 4-week average), the member's energy
-// tier, and points. Energy trained and blood bags need Torn data that isn't identified yet — the
-// "Check what Torn offers" button finds it out.
+// Everything is shown for a chosen PERIOD. Weeks run Sunday to Sunday (TCT). The newsletter comes
+// out on the first Sunday of each month, so a "newsletter period" runs from the previous first
+// Sunday to this one — 4 or 5 weeks depending on the month. A custom "last N weeks" is there too.
+// Shows: hits per member for the wars that ended in the period (war + chain), a traffic light from
+// the hits rule, blood bags filled / candy / alcohol / energy drinks used (total or per week),
+// energy tier, points, and a winners list. Energy trained needs Torn data that isn't connected yet.
 'use strict';
 
 let moData = null; // { members, wars, hits, tiers, energyTarget, settings }
-let moStats = {}; // "<id>:<timestamp>" -> { candyused, alcoholused, energydrinkused }
-let moWeeks = 1; // 1 = last full week, 4 = average per week over the last 4 weeks
+let moStats = {}; // "<id>:<timestamp>" -> { candyused, alcoholused, energydrinkused, bloodwithdrawn }
+let moPeriodId = null; // which option of the period dropdown is picked
+let moCustomWeeks = 4;
+let moPerWeek = false; // false = totals over the period, true = average per week
 let moSort = 'points';
 let moBusy = false;
 const MO_KEYS = [['bloodwithdrawn', 'Blood bags filled'], ['candyused', 'Candy'], ['alcoholused', 'Alcohol'], ['energydrinkused', 'Energy drinks']];
+const MO_DAY = 86400;
 
 async function moFetch(body) {
     const res = await fetch('/api/war-payout', {
@@ -23,13 +29,55 @@ async function moFetch(body) {
     return res.json();
 }
 
-// Monday 00:00 TCT (UTC) of the current week, in unix seconds — weekly figures run Monday to Monday.
-function moWeekStart() {
+// ---- Periods. Weeks are Sunday 00:00 TCT (UTC) to Sunday 00:00. ----
+function moLatestSunday() {
     const d = new Date();
-    const dow = (d.getUTCDay() + 6) % 7; // Monday = 0
-    return Math.floor(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() - dow) / 1000);
+    return Math.floor(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() - d.getUTCDay()) / 1000);
 }
-const moStamps = () => { const b0 = moWeekStart(); return { b0, b1: b0 - 7 * 86400, b4: b0 - 28 * 86400 }; };
+function moFirstSunday(y, m) { // first Sunday of month m (0-11), as unix seconds
+    const first = new Date(Date.UTC(y, m, 1));
+    return Math.floor(Date.UTC(y, m, 1 + (7 - first.getUTCDay()) % 7) / 1000);
+}
+const moFmt = ts => new Date(ts * 1000).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' });
+
+// The choices in the dropdown: the period still running (up to the latest full week), the last few
+// newsletter periods, and a custom number of weeks.
+function moPeriods() {
+    const now = Math.floor(Date.now() / 1000);
+    const latest = moLatestSunday();
+    const today = new Date();
+    const dates = []; // newsletter dates (first Sundays) up to now, newest first
+    for (let i = 0; dates.length < 8 && i < 24; i++) {
+        const dt = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth() - i, 1));
+        const t = moFirstSunday(dt.getUTCFullYear(), dt.getUTCMonth());
+        if (t <= now) dates.push(t);
+    }
+    const out = [];
+    if (latest > dates[0]) out.push({ id: 'now', start: dates[0], end: latest, label: `Running now — ${moFmt(dates[0])} → ${moFmt(latest)} (full weeks so far)` });
+    for (let i = 0; i < dates.length - 1; i++) {
+        const weeks = Math.round((dates[i] - dates[i + 1]) / (7 * MO_DAY));
+        out.push({ id: `p${dates[i]}`, start: dates[i + 1], end: dates[i], label: `Newsletter ${moFmt(dates[i])} — ${moFmt(dates[i + 1])} → ${moFmt(dates[i])} (${weeks} weeks)` });
+    }
+    out.push({ id: 'custom', start: latest - moCustomWeeks * 7 * MO_DAY, end: latest, label: `Last ${moCustomWeeks} full weeks (custom)` });
+    return out;
+}
+function moPeriod() {
+    const list = moPeriods();
+    return list.find(p => p.id === moPeriodId) || list.find(p => p.id !== 'now' && p.id !== 'custom') || list[0];
+}
+const moWeeksIn = p => Math.max(1, Math.round((p.end - p.start) / (7 * MO_DAY)));
+
+function renderPeriodBar() {
+    const list = moPeriods();
+    const cur = moPeriod();
+    moPeriodId = cur.id;
+    $('mo-period').innerHTML = list.map(p => `<option value="${p.id}" ${p.id === cur.id ? 'selected' : ''}>${esc(p.label)}</option>`).join('');
+    $('mo-custom-weeks').value = moCustomWeeks;
+    $('mo-custom-wrap').style.display = cur.id === 'custom' ? 'inline-flex' : 'none';
+    $('mo-view-total').classList.toggle('active-toggle', !moPerWeek);
+    $('mo-view-week').classList.toggle('active-toggle', moPerWeek);
+    $('mo-period-note').textContent = `${moWeeksIn(cur)} weeks · ${moFmt(cur.start)} 00:00 → ${moFmt(cur.end)} 00:00 TCT (Sunday to Sunday)`;
+}
 
 async function loadMemberOverview() {
     if (moBusy) return;
@@ -39,12 +87,14 @@ async function loadMemberOverview() {
     const st = $('mo-status');
     st.className = 'status ok'; st.textContent = 'Loading…';
     try {
-        const r = await moFetch({ action: 'mo-get' });
-        if (r.error) throw new Error(r.error);
-        moData = r;
+        if (!moData) {
+            const r = await moFetch({ action: 'mo-get' });
+            if (r.error) throw new Error(r.error);
+            moData = r;
+        }
         renderMemberOverview();
-        // finish any of the last 5 wars not calculated yet — one at a time, each is saved for good
-        const todo = moData.wars.filter(w => !moData.hits[w.id]);
+        // finish any war in this period not counted yet — one at a time, each is saved for good
+        const todo = moWarsInPeriod().filter(w => !moData.hits[w.id]);
         for (let i = 0; i < todo.length; i++) {
             st.className = 'status ok'; st.textContent = `Counting hits for a war you haven't opened here before (${i + 1} of ${todo.length})…`;
             const w = await moFetch({ action: 'mo-war', warId: todo[i].id });
@@ -53,19 +103,19 @@ async function loadMemberOverview() {
             else moData.hits[w.warId] = w.hits;
             renderMemberOverview();
         }
-        // weekly consumption snapshots, in rounds until everything is in
+        // consumption snapshots at the period's start and end, in rounds until everything is in
         const ids = moData.members.map(m => m.id);
-        const { b0, b1, b4 } = moStamps();
+        const p = moPeriod();
         let lastPending = Infinity;
         for (let round = 0; round < 40; round++) {
-            const s = await moFetch({ action: 'mo-stats', ids, timestamps: [b4, b1, b0] });
+            const s = await moFetch({ action: 'mo-stats', ids, timestamps: [p.start, p.end] });
             if (s.error) throw new Error(s.error);
             Object.assign(moStats, s.values);
             renderMemberOverview();
             if (!s.pending) break;
             if (s.pending >= lastPending && s.failed) { st.className = 'status err'; st.textContent = `Couldn't read Torn stats for ${s.pending} lookups — some members' stats may be hidden.`; return; }
             lastPending = s.pending;
-            st.className = 'status ok'; st.textContent = `Reading weekly stats… ${s.pending} lookups left (first time only)`;
+            st.className = 'status ok'; st.textContent = `Reading stats… ${s.pending} lookups left (first time for this period only)`;
         }
         if (st.className !== 'status err') { st.textContent = ''; st.className = 'status'; }
     } catch (e) {
@@ -73,18 +123,25 @@ async function loadMemberOverview() {
     } finally { moBusy = false; }
 }
 
-// Used per week, from two snapshots. Null when either snapshot is missing.
+// Wars that ended inside the picked period.
+function moWarsInPeriod() {
+    const p = moPeriod();
+    return (moData?.wars || []).filter(w => w.end >= p.start && w.end < p.end).sort((a, b) => a.end - b.end);
+}
+
+// Used over the period (or per week), from two snapshots. Null when either snapshot is missing.
 function moUsed(id, stat) {
-    const { b0, b1, b4 } = moStamps();
-    const end = moStats[`${id}:${b0}`];
-    const start = moStats[`${id}:${moWeeks === 1 ? b1 : b4}`];
+    const p = moPeriod();
+    const end = moStats[`${id}:${p.end}`];
+    const start = moStats[`${id}:${p.start}`];
     if (!end || !start) return null;
-    const v = (end[stat] - start[stat]) / moWeeks;
+    const v = (end[stat] - start[stat]) / (moPerWeek ? moWeeksIn(p) : 1);
     return v < 0 ? null : v;
 }
 
 function moRows() {
-    const { wars, hits, settings, tiers } = moData;
+    const { hits, settings, tiers } = moData;
+    const wars = moWarsInPeriod();
     const counted = wars.filter(w => hits[w.id]);
     return moData.members.map(m => {
         let war = 0, chain = 0;
@@ -108,15 +165,28 @@ function moRows() {
 }
 
 const MO_LIGHT = { green: '#35d99b', yellow: '#f0b432', red: '#e05555', grey: '#666' };
-const moAgo = ts => { if (!ts) return '—'; const d = Math.floor((Date.now() / 1000 - ts) / 86400); return d < 1 ? 'today' : `${d}d ago`; };
-const moNum = v => v === null ? '…' : (moWeeks === 1 ? String(Math.round(v)) : (Math.round(v * 10) / 10).toLocaleString());
+const moAgo = ts => { if (!ts) return '—'; const d = Math.floor((Date.now() / 1000 - ts) / MO_DAY); return d < 1 ? 'today' : `${d}d ago`; };
+const moNum = v => v === null ? '…' : (moPerWeek ? (Math.round(v * 10) / 10).toLocaleString() : Math.round(v).toLocaleString());
+
+// Top 3 per competition for the newsletter. Ties share a value but are listed in order.
+function moWinners(rows) {
+    const cats = [
+        ['Points (hits)', r => r.points, 'points'],
+        ...MO_KEYS.map(([k, l]) => [l, r => r.used[k], 'stat']),
+    ];
+    return cats.map(([label, get]) => ({
+        label,
+        top: rows.filter(r => (get(r) ?? 0) > 0).sort((a, b) => get(b) - get(a)).slice(0, 3).map(r => ({ name: r.name, value: get(r) })),
+    }));
+}
 
 function renderMemberOverview() {
     if (!moData) return;
+    renderPeriodBar();
     const rows = moRows();
     const sortVal = { points: r => -r.points, name: r => r.name.toLowerCase(), light: r => ({ red: 0, yellow: 1, green: 2, grey: 3 })[r.light], active: r => -(r.lastAction || 0) };
     MO_KEYS.forEach(([k]) => { sortVal[k] = r => -(r.used[k] ?? -1); });
-    rows.sort((a, b) => { const x = sortVal[moSort](a), y = sortVal[moSort](b); return x < y ? -1 : x > y ? 1 : 0; });
+    const sorted = rows.slice().sort((a, b) => { const x = sortVal[moSort](a), y = sortVal[moSort](b); return x < y ? -1 : x > y ? 1 : 0; });
 
     const red = rows.filter(r => r.light === 'red');
     const yellow = rows.filter(r => r.light === 'yellow');
@@ -124,18 +194,32 @@ function renderMemberOverview() {
         <div><div style="color:var(--muted);font-size:11px;">Members</div><div style="font-weight:700;">${rows.length}</div></div>
         <div><div style="color:var(--muted);font-size:11px;">On track</div><div style="font-weight:700;color:${MO_LIGHT.green};">${rows.filter(r => r.light === 'green').length}</div></div>
         <div><div style="color:var(--muted);font-size:11px;">Slipping</div><div style="font-weight:700;color:${MO_LIGHT.yellow};">${yellow.length}</div></div>
-        <div><div style="color:var(--muted);font-size:11px;">Needs a push</div><div style="font-weight:700;color:${MO_LIGHT.red};">${red.length}</div></div>`;
+        <div><div style="color:var(--muted);font-size:11px;">Needs a push</div><div style="font-weight:700;color:${MO_LIGHT.red};">${red.length}</div></div>
+        <div><div style="color:var(--muted);font-size:11px;">Wars in period</div><div style="font-weight:700;">${moWarsInPeriod().length}</div></div>`;
     $('mo-push').innerHTML = red.length ? `<span style="color:var(--muted);font-size:12px;">Needs a push (hits): </span>${red.map(r => `<span class="chip" style="cursor:default;border-color:${MO_LIGHT.red};">${esc(r.name)}</span>`).join(' ')}` : '';
+
+    const winners = moWinners(rows);
+    const medal = ['🥇', '🥈', '🥉'];
+    const fmt = v => (moPerWeek ? Math.round(v * 10) / 10 : Math.round(v)).toLocaleString();
+    $('mo-winners').innerHTML = winners.map(w => `
+        <div style="min-width:170px;">
+            <div style="color:var(--muted);font-size:11px;margin-bottom:4px;">${esc(w.label)}</div>
+            ${w.top.length ? w.top.map((t, i) => `<div style="font-size:13px;">${medal[i]} ${esc(t.name)} <span style="color:var(--muted);font-family:var(--mono);">${fmt(t.value)}</span></div>`).join('') : '<div style="color:var(--muted);font-size:12px;">no data yet</div>'}
+        </div>`).join('');
+    $('mo-copy-winners').onclick = () => {
+        const p = moPeriod();
+        const text = `Competition winners — ${moFmt(p.start)} → ${moFmt(p.end)}\n\n` + winners.map(w =>
+            `${w.label}\n${w.top.length ? w.top.map((t, i) => `${medal[i]} ${t.name} — ${fmt(t.value)}`).join('\n') : '(no data)'}`).join('\n\n');
+        navigator.clipboard.writeText(text).then(() => toast('Winners copied'));
+    };
 
     $('mo-min').value = moData.settings.minHitsPerWar;
     $('mo-wp').value = moData.settings.warPoints;
     $('mo-cp').value = moData.settings.chainPoints;
-    $('mo-weeks-1').classList.toggle('active-toggle', moWeeks === 1);
-    $('mo-weeks-4').classList.toggle('active-toggle', moWeeks === 4);
 
     const th = (key, label) => `<th style="padding:4px 8px;cursor:pointer;white-space:nowrap;${moSort === key ? 'color:var(--reagent);' : ''}" data-sort="${key}">${label}${moSort === key ? ' ▾' : ''}</th>`;
-    const warHead = moData.wars.map(w => `<th style="padding:4px 8px;font-size:11px;white-space:nowrap;" title="${esc(`vs ${w.opponent}`)}">${esc(w.opponent.slice(0, 10))}<br><span style="color:var(--muted);">${new Date(w.end * 1000).toLocaleDateString(undefined, { day: '2-digit', month: 'short', timeZone: 'UTC' })}</span></th>`).join('');
-    const weekLabel = moWeeks === 1 ? 'last week' : 'avg / week, 4 wks';
+    const warHead = moWarsInPeriod().map(w => `<th style="padding:4px 8px;font-size:11px;white-space:nowrap;" title="${esc(`vs ${w.opponent}`)}">${esc(w.opponent.slice(0, 10))}<br><span style="color:var(--muted);">${new Date(w.end * 1000).toLocaleDateString(undefined, { day: '2-digit', month: 'short', timeZone: 'UTC' })}</span></th>`).join('');
+    const unitLabel = moPerWeek ? 'per week' : 'in period';
     $('mo-table').innerHTML = `
         <table style="width:100%;font-size:13px;border-collapse:collapse;">
             <thead><tr style="color:var(--muted);text-align:left;">
@@ -143,10 +227,10 @@ function renderMemberOverview() {
                 ${warHead}
                 <th style="padding:4px 8px;">Avg hits</th>
                 <th style="padding:4px 8px;" title="1.5m+ battle stats = ${moData.energyTarget.high} E/week, under = ${moData.energyTarget.low} E/week. Torn hides battle stats, so set it by hand.">Energy tier</th>
-                ${MO_KEYS.map(([k, l]) => th(k, `${l}<br><span style="font-size:10px;font-weight:400;">${weekLabel}</span>`)).join('')}
+                ${MO_KEYS.map(([k, l]) => th(k, `${l}<br><span style="font-size:10px;font-weight:400;">${unitLabel}</span>`)).join('')}
                 ${th('points', 'Points')}
             </tr></thead>
-            <tbody>${rows.map(r => `
+            <tbody>${sorted.map(r => `
                 <tr style="border-top:1px solid var(--line);">
                     <td style="padding:4px 8px;"><span title="${r.isNew ? 'New member (under 14 days) — not judged yet' : r.light}" style="display:inline-block;width:12px;height:12px;border-radius:50%;background:${MO_LIGHT[r.light]};"></span></td>
                     <td style="padding:4px 8px;white-space:nowrap;"><a href="https://www.torn.com/profiles.php?XID=${esc(r.id)}" target="_blank" rel="noopener" style="color:var(--text);">${esc(r.name)}</a></td>
@@ -169,9 +253,14 @@ function renderMemberOverview() {
     }));
 }
 
-$('mo-weeks-1').addEventListener('click', () => { moWeeks = 1; renderMemberOverview(); });
-$('mo-weeks-4').addEventListener('click', () => { moWeeks = 4; renderMemberOverview(); });
-$('mo-refresh').addEventListener('click', () => loadMemberOverview());
+$('mo-period').addEventListener('change', () => { moPeriodId = $('mo-period').value; renderMemberOverview(); loadMemberOverview(); });
+$('mo-custom-weeks').addEventListener('change', () => {
+    moCustomWeeks = Math.min(26, Math.max(1, Number($('mo-custom-weeks').value) || 4));
+    renderMemberOverview(); loadMemberOverview();
+});
+$('mo-view-total').addEventListener('click', () => { moPerWeek = false; renderMemberOverview(); });
+$('mo-view-week').addEventListener('click', () => { moPerWeek = true; renderMemberOverview(); });
+$('mo-refresh').addEventListener('click', () => { moData = null; loadMemberOverview(); });
 
 $('mo-save-settings').addEventListener('click', async () => {
     const r = await moFetch({ action: 'mo-settings', minHitsPerWar: $('mo-min').value, warPoints: $('mo-wp').value, chainPoints: $('mo-cp').value });

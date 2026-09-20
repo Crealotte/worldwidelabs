@@ -1090,13 +1090,25 @@
                 </div>
 
                 <div class="panel">
+                    <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">
+                        <h3 style="margin:0;">🏆 Winners for this period</h3>
+                        <button class="ghost small" id="mo-copy-winners">Copy for newsletter</button>
+                    </div>
+                    <div id="mo-winners" style="display:flex;gap:24px;flex-wrap:wrap;"></div>
+                </div>
+
+                <div class="panel">
                     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:12px;">
-                        <span style="font-size:13px;color:var(--muted);">Weekly numbers:</span>
-                        <button class="ghost small" id="mo-weeks-1">Last week</button>
-                        <button class="ghost small" id="mo-weeks-4">4 weeks (avg per week)</button>
+                        <span style="font-size:13px;color:var(--muted);">Period:</span>
+                        <select id="mo-period" style="width:auto;max-width:100%;font-size:13px;"></select>
+                        <span id="mo-custom-wrap" style="display:none;align-items:center;gap:6px;font-size:13px;">weeks: <input id="mo-custom-weeks" type="number" min="1" max="26" value="4" style="width:70px;"></span>
+                        <span style="font-size:13px;color:var(--muted);margin-left:8px;">Show:</span>
+                        <button class="ghost small" id="mo-view-total">Total</button>
+                        <button class="ghost small" id="mo-view-week">Per week</button>
                         <button class="ghost small" id="mo-refresh" style="margin-left:auto;">Refresh</button>
                     </div>
-                    <p style="color:var(--muted);font-size:12px;margin:0 0 10px;">Hits are shown as <b>war</b><span style="color:var(--muted);">+chain</span> per war. A member is green at or above the hits target on average, yellow at half of it, red below (members under 14 days are not judged yet). Click a column heading to sort. Weeks run Monday to Monday (TCT).</p>
+                    <div id="mo-period-note" style="color:var(--muted);font-size:12px;margin:-4px 0 10px;"></div>
+                    <p style="color:var(--muted);font-size:12px;margin:0 0 10px;">Hits are shown as <b>war</b><span style="color:var(--muted);">+chain</span> per war. A member is green at or above the hits target on average, yellow at half of it, red below (members under 14 days are not judged yet). Click a column heading to sort. Weeks run Sunday to Sunday (TCT). Wars count towards the period they ended in.</p>
                     <div class="table-scroll" style="overflow:auto;max-height:75vh;">
                         <div id="mo-table"></div>
                     </div>
