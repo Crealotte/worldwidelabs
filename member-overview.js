@@ -346,7 +346,7 @@ $('mo-import-btn').addEventListener('click', async () => {
         if (r.error) throw new Error(r.error);
         out.style.color = r.matched ? 'var(--reagent)' : 'var(--danger)';
         out.textContent = r.matched
-            ? `✓ Imported ${r.matched} member${r.matched === 1 ? '' : 's'}, ${r.days} days.${r.unmatched.length ? ` Not recognised: ${r.unmatched.join(', ')}.` : ''} Paste the next member whenever you like.`
+            ? `✓ Imported ${r.matched} member${r.matched === 1 ? '' : 's'}, ${r.days} days${r.todayIncluded ? ', including today so far' : ''}.${r.skipped ? ` (${r.skipped} day rows left out: we count those days ourselves.)` : ''}${r.unmatched.length ? ` Not recognised: ${r.unmatched.join(', ')}.` : ''} Paste the next member whenever you like.`
             : `Nothing imported — no member with day-by-day rows was recognised${r.unmatched.length ? ` (${r.unmatched.join(', ')})` : ''}. Make sure the member is opened in Intel so the day rows are included.`;
         if (r.matched) { $('mo-import-text').value = ''; moEnergy = null; loadMemberOverview(); }
     } catch (e) { out.style.color = 'var(--danger)'; out.textContent = e.message; }
