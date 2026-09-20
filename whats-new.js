@@ -9,6 +9,18 @@
 const WHATS_NEW = [
     {
         date: '2026-09-20',
+        title: 'Your standing on the dashboard',
+        everyone: [
+            'New "Your standing" card on the dashboard: your energy group (worked out from your own total battle stats), the energy you need to train this month (4,400 a week at 1.5m+ stats, 2,200 below — 17,600 or 22,000 in a 4 or 5 week month at the top group), how many of the last 5 wars you took part in, and your place this month in each competition.',
+            'The "Who\'s on board" and "Other factions" lists on the dashboard are now closed by default — click the title to open them.',
+        ],
+        leaders: [
+            'Member Overview: the energy group is now picked automatically from each member\'s own battle stats (you can still override it), it shows the energy each member needs for the period, and there is an "Exact dates" option to compare with other tools.',
+            'Polls: you can now hide a poll from the dashboard (and show it again) without deleting it — under Announcements, "Hide from dashboard".',
+        ],
+    },
+    {
+        date: '2026-09-20',
         title: 'Member Overview, Labs Funds and a lot more',
         everyone: [
             'What\'s new page (this one): every update from now on is listed here.',
