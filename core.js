@@ -314,7 +314,7 @@
             $('feedback-editor').style.display = isLeaderCached ? 'block' : 'none';
             if (isLeaderCached) loadFeedbackEditor();
         }
-        if (page === 'dashboard') { startCooldownTicker(); loadAnnouncement(); loadPolls(); loadRespectGoalPanel(); loadDashboardWarBadges(); } else { stopCooldownTicker(); }
+        if (page === 'dashboard') { startCooldownTicker(); loadAnnouncement(); loadPolls(); loadRespectGoalPanel(); loadDashboardWarBadges(); loadMyStanding(); } else { stopCooldownTicker(); }
         if (page === 'announce-edit') {
             $('announce-locked').style.display = isLeaderCached ? 'none' : 'block';
             $('announce-editor').style.display = isLeaderCached ? 'block' : 'none';

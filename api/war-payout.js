@@ -27,7 +27,7 @@
 const { fetchWarHits, sleep } = require('../lib/warHits');
 const { fetchWarBadgeStats } = require('../lib/warBadgeStats');
 const { tornToDiscordIds, resolveDiscordIds } = require('../lib/discordMap');
-const { moHandle } = require('../lib/memberOverview');
+const { moHandle, moMe } = require('../lib/memberOverview');
 const { labsIsOwner, labsHasOwners, labsHandle, labsRecordReceipt } = require('../lib/labsLedger');
 
 const REDIS_URL = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL;
@@ -87,7 +87,7 @@ async function getProfile(key) {
     const r = await fetch(`https://api.torn.com/user/?selections=profile&key=${encodeURIComponent(key)}`);
     const profile = await r.json();
     if (profile.error || !profile.faction?.faction_id) return null;
-    return { factionId: String(profile.faction.faction_id), factionName: profile.faction.faction_name || '', playerId: String(profile.player_id), name: profile.name };
+    return { factionId: String(profile.faction.faction_id), factionName: profile.faction.faction_name || '', daysInFaction: profile.faction.days_in_faction ?? null, playerId: String(profile.player_id), name: profile.name };
 }
 async function isLeader(key) {
     const r = await fetch(`https://api.torn.com/v2/faction/balance?key=${encodeURIComponent(key)}`,
@@ -236,7 +236,7 @@ module.exports = async function handler(req, res) {
 
         const profile = await getProfile(key);
         if (!profile) return res.status(403).json({ error: 'Could not determine your faction from this key' });
-        const { factionId, playerId, name: playerName, factionName } = profile;
+        const { factionId, playerId, name: playerName, factionName, daysInFaction } = profile;
 
         // Open to any logged-in member of the faction, not leader-gated — this is what lets the
         // faction dashboard show the latest war's badge winners to everyone, not just leaders.
@@ -343,6 +343,9 @@ module.exports = async function handler(req, res) {
             await redis(['SET', availabilityKey(factionId, planId), JSON.stringify(data)]);
             return res.status(200).json({ ok: true });
         }
+
+        // My standing (dashboard card) — open to every member; only ever describes the caller. See lib/memberOverview.js.
+        if (action === 'mo-me') return res.status(200).json(await moMe({ redis, key, factionId, playerId, daysInFaction }));
 
         // ---- Labs funds ------------------------------------------------------------------------
         // Every faction's war-pay history and the retained cut ("the 20%") each one keeps. Any

@@ -253,7 +253,7 @@ function renderMemberOverview() {
                 ${th('light', '●')}${th('name', 'Member')}${th('active', 'Active')}
                 ${warHead}
                 <th style="padding:4px 8px;" title="Wars (of the last 5) where the war rule was met">Wars OK</th>
-                <th style="padding:4px 8px;" title="1.5m+ battle stats = ${moData.energyTarget.high} E/week, under = ${moData.energyTarget.low} E/week. Torn hides battle stats, so set it by hand.">Energy tier</th>
+                <th style="padding:4px 8px;" title="1.5m+ battle stats = ${moData.energyTarget.high} E/week, under = ${moData.energyTarget.low} E/week. Picked automatically from each member's own battle stats once they have opened the app; you can override it.">Energy tier</th>
                 ${MO_KEYS.map(([k, l]) => th(k, `${l}<br><span style="font-size:10px;font-weight:400;">${unitLabel}</span>`)).join('')}
                 ${th('war', 'War hits')}${th('chain', 'Chain hits')}
             </tr></thead>
@@ -264,8 +264,15 @@ function renderMemberOverview() {
                     <td style="padding:4px 8px;color:var(--muted);white-space:nowrap;">${moAgo(r.lastAction)}</td>
                     ${r.perWar.map(p => `<td style="padding:4px 8px;font-family:var(--mono);white-space:nowrap;${p ? `color:${p.notIn ? MO_LIGHT.grey : p.ok ? MO_LIGHT.green : MO_LIGHT.red};` : ''}" ${p?.notIn ? 'title="Not in the faction yet when this war started"' : ''}>${p ? (p.notIn ? '—' : `${p.war}${p.chain ? `<span style="color:var(--muted);">+${p.chain}</span>` : ''}`) : '…'}</td>`).join('')}
                     <td style="padding:4px 8px;font-family:var(--mono);font-weight:700;color:${MO_LIGHT[r.light]};">${r.counted ? `${r.okWars}/${r.counted}` : '…'}</td>
-                    <td style="padding:4px 8px;"><select class="mo-tier" data-id="${esc(r.id)}" style="font-size:12px;padding:2px 4px;width:auto;">
-                        <option value="">—</option><option value="high" ${r.tier === 'high' ? 'selected' : ''}>1.5m+ · ${moData.energyTarget.high}</option><option value="low" ${r.tier === 'low' ? 'selected' : ''}>&lt;1.5m · ${moData.energyTarget.low}</option></select></td>
+                    <td style="padding:4px 8px;white-space:nowrap;">${(() => {
+                        const auto = moData.autoTier?.[r.id];
+                        const eff = r.tier || auto?.tier || '';
+                        const weeks = moWeeksIn(moPeriod());
+                        const need = eff ? Math.round(moData.energyTarget[eff] * weeks) : null;
+                        return `<select class="mo-tier" data-id="${esc(r.id)}" style="font-size:12px;padding:2px 4px;width:auto;">
+                        <option value="">${auto ? `Auto: ${auto.tier === 'high' ? '1.5m+' : '&lt;1.5m'}` : 'Auto (not seen yet)'}</option><option value="high" ${r.tier === 'high' ? 'selected' : ''}>Set: 1.5m+</option><option value="low" ${r.tier === 'low' ? 'selected' : ''}>Set: &lt;1.5m</option></select>
+                        <div style="color:var(--muted);font-size:10px;">${need ? `${need.toLocaleString()} E needed` : ''}${auto ? ` · ${(auto.total / 1e6).toFixed(2)}m stats` : ''}</div>`;
+                    })()}</td>
                     ${MO_KEYS.map(([k]) => `<td style="padding:4px 8px;font-family:var(--mono);">${moNum(r.used[k])}</td>`).join('')}
                     <td style="padding:4px 8px;font-family:var(--mono);">${r.war}</td><td style="padding:4px 8px;font-family:var(--mono);">${r.chain}</td>
                 </tr>`).join('')}

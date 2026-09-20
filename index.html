@@ -512,6 +512,11 @@
                 <div id="respect-goal-body"></div>
             </div>
 
+            <div class="panel" id="dash-standing-panel" style="display:none;">
+                <h3>📈 Your standing</h3>
+                <div id="dash-standing-body"></div>
+            </div>
+
             <div class="panel" id="dash-war-badges-panel" style="display:none;">
                 <h3 id="dash-war-badges-title">🏆 War Badges</h3>
                 <div id="dash-war-badges-body"></div>
@@ -535,7 +540,7 @@
             </div>
 
             <div class="panel" id="adoption" style="display:none;">
-                <h3>Who's on board <span style="font-weight:400;color:var(--muted);font-size:12px;">(leaders only)</span></h3>
+                <details><summary class="av-sum"><h3>Who's on board <span style="font-weight:400;color:var(--muted);font-size:12px;">(leaders only)</span></h3></summary>
                 <p style="color:var(--muted);font-size:12px;margin:0 0 12px;" id="adoption-summary"></p>
                 <div class="table-scroll" style="max-height:340px;overflow-y:auto;">
                     <table>
@@ -551,11 +556,13 @@
                 <p style="color:var(--muted);font-size:11px;margin:6px 0 0;">
                     Only a snapshot of name / WWLabs status / Discord status is shared — never your API key. Refreshes automatically whenever you open this dashboard.
                 </p>
+                </details>
             </div>
 
             <div class="panel" id="shared-factions-panel" style="display:none;">
-                <h3>Other factions <span style="font-weight:400;color:var(--muted);font-size:12px;">(shared by their own leaders)</span></h3>
+                <details><summary class="av-sum"><h3>Other factions <span style="font-weight:400;color:var(--muted);font-size:12px;">(shared by their own leaders)</span></h3></summary>
                 <div id="shared-factions-list"></div>
+                </details>
             </div>
         </section>
 
@@ -1561,6 +1568,7 @@
 <script src="labs-funds.js"></script>
 <script src="member-overview.js"></script>
 <script src="whats-new.js"></script>
+<script src="my-standing.js"></script>
 <script src="armory-tracker.js"></script>
 <script src="app-init.js"></script>
 </body>
