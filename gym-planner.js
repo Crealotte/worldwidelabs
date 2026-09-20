@@ -24,9 +24,9 @@ function gpMethods(fill, job) {
         { id: 'natural', name: 'Natural energy (no jump)', sessions: 0, items: {}, addHappy: 0, energy: 0, ecstasy: false },
         { id: 'lollipop', name: 'Lollipop jump', sessions: 4, items: { lollipop: 49, ecstasy: 1 }, addHappy: 1225, energy: fill, ecstasy: true },
         { id: 'choco1', name: 'Big Choco jump (1 Xanax)', sessions: 4, items: { choco: 49, ecstasy: 1, xanax: 1 }, addHappy: 1715, energy: fill + 250, ecstasy: true },
-        { id: 'choco4', name: 'Big Choco jump (4 Xanax)', sessions: 2, items: { choco: 49, ecstasy: 1, xanax: 4 }, addHappy: 1715, energy: fill + 1000, ecstasy: true },
-        { id: 'edvd5', name: '5x EDVD jump', sessions: 1, items: { edvd: 5, ecstasy: 1, xanax: 4 }, addHappy: job ? 25000 : 12500, energy: fill + 1000, ecstasy: true },
-        { id: 'edvd9', name: '9x EDVD jump', sessions: 1, items: { edvd: 9, ecstasy: 1, xanax: 4 }, addHappy: job ? 45000 : 22500, energy: fill + 1000, ecstasy: true },
+        { id: 'choco4', name: 'Big Choco jump (4 Xanax)', sessions: 2, items: { choco: 49, ecstasy: 1, xanax: 4 }, addHappy: 1715, energy: fill + 1000, ecstasy: true, refill: true },
+        { id: 'edvd5', name: '5x EDVD jump', sessions: 1, items: { edvd: 5, ecstasy: 1, xanax: 4 }, addHappy: job ? 25000 : 12500, energy: fill + 1000, ecstasy: true, refill: true },
+        { id: 'edvd9', name: '9x EDVD jump', sessions: 1, items: { edvd: 9, ecstasy: 1, xanax: 4 }, addHappy: job ? 45000 : 22500, energy: fill + 1000, ecstasy: true, refill: true },
     ];
 }
 
@@ -159,43 +159,79 @@ function renderGymPlanner() {
             ${m.id !== 'natural' ? (w.gain - rows[0].w.gain > 0 ? `<div style="font-size:11px;color:var(--muted);margin-top:2px;">+${gpN(w.gain - rows[0].w.gain)} stat points more than natural${w.priced && w.cost > 0 ? ` — about ${gpMoney(w.cost / (w.gain - rows[0].w.gain))} per extra point` : ''}</div>` : '<div style="font-size:11px;color:var(--muted);margin-top:2px;">No gain over natural with these numbers</div>') : ''}
         </div>`).join('');
 
-    // week plan for the chosen method: 4 training days, 2 war prep days, 1 war day (ideal termed-war week)
+    // Week plan for the chosen method, laid out like the standard planner: one block per day, each
+    // step its own tick box, progress counted in energy. Ideal termed-war week: 4 training days,
+    // 2 war prep days, 1 war day.
     const w = rows.find(r => r.m.id === sel).w;
     let checks = {};
     try { checks = JSON.parse(localStorage.getItem(gpWeekKey()) || '{}'); } catch (e) { /* none */ }
-    const trainDays = [1, 2, 3, 4];
     // jump sessions spread over the 4 training days (1 -> day 1, 2 -> days 1 & 3, 3 -> days 1-3, 4 -> every day)
     const jumpDayOf = {}; // training day index (0-3) -> session number
     for (let k = 0; k < chosen.sessions; k++) jumpDayOf[Math.floor(k * 4 / chosen.sessions)] = k;
-    const restPerDay = Math.round((chosen.id === 'natural' ? inp.weekly : w.restEnergy) / 4);
-    const dayRows = [];
-    trainDays.forEach((d, i) => {
+    const restTotal = chosen.id === 'natural' ? inp.weekly : w.restEnergy;
+    const restPerDay = Math.round(restTotal / 4);
+    const fillsFor = (energy) => { // natural energy split into bars, like the standard planner
+        const out = [];
+        for (let left = Math.round(energy), i = 1; left > 0; i++) { const part = Math.min(inp.fill, left); out.push({ label: `Natural energy fill #${i} (${gpN(part)} E) — at your normal happy`, value: part }); left -= part; }
+        return out;
+    };
+    const blocks = [];
+    for (let i = 0; i < 4; i++) {
+        const day = `d${i + 1}`;
+        const items = [];
         const s = jumpDayOf[i] !== undefined ? w.perSession[jumpDayOf[i]] : null;
-        const text = s
-            ? `<b>${esc(chosen.name)}</b> — ${Object.entries(chosen.items).map(([k, q]) => `${q}× ${GP_ITEMS[k]}`).join(', ')}. Wait for a :00/:15/:30/:45 reset, take everything, then spend ${gpN(s.energy)} E. Happy ≈ ${gpN(s.peak)}, est. +${gpN(s.gain)} ${inp.stat}.${restPerDay ? ` Plus about ${gpN(restPerDay)} E of natural energy at normal happy.` : ''}`
-            : `Train about ${gpN(restPerDay)} E of natural energy at normal happy.`;
-        dayRows.push({ key: `d${d}`, title: `Training day ${d}`, text });
-    });
-    dayRows.push({ key: 'p1', title: 'War prep day 1', text: 'No gym in this ideal week — get ready for the war.', info: true });
-    dayRows.push({ key: 'p2', title: 'War prep day 2', text: 'No gym in this ideal week — get ready for the war.', info: true });
-    dayRows.push({ key: 'w', title: 'War day', text: 'Hit! (Only when we have a termed war — this is the ideal week.)', info: true });
-    $('gp-plan').innerHTML = dayRows.map(r => `
-        <label style="display:flex;gap:10px;align-items:flex-start;padding:8px 0;border-top:1px solid var(--line);${r.info ? 'opacity:.75;' : 'cursor:pointer;'}">
-            ${r.info ? '<span style="width:16px;"></span>' : `<input type="checkbox" class="gp-check" data-k="${r.key}" ${checks[r.key] ? 'checked' : ''} style="width:auto;margin-top:3px;">`}
-            <span><b style="font-size:13px;">${r.title}</b><br><span style="font-size:13px;color:var(--muted);">${r.text}</span></span>
-        </label>`).join('');
+        let note = '';
+        if (s) {
+            note = `${chosen.name}: happy ≈ ${gpN(s.peak)}, estimated +${gpN(s.gain)} ${inp.stat} from this jump.`;
+            gpJumpSteps(chosen, inp).forEach((label, n) => items.push({ key: `${day}s${n}`, label, value: 0 }));
+            const jumpTrain = chosen.refill ? s.energy - inp.fill : s.energy;
+            items.push({ key: `${day}train`, label: `Train: spend ${gpN(jumpTrain)} E`, value: jumpTrain });
+            if (chosen.refill) items.push({ key: `${day}refill`, label: `Spend 25 points on an energy refill and train again (${gpN(inp.fill)} E)`, value: inp.fill });
+        }
+        fillsFor(restPerDay).forEach((it, n) => items.push({ key: `${day}n${n}`, label: it.label, value: it.value }));
+        blocks.push({ title: `Training day ${i + 1}`, note, items });
+    }
+    blocks.push({ title: 'War prep day 1', note: 'No gym in this ideal week — get ready for the war.', items: [] });
+    blocks.push({ title: 'War prep day 2', note: 'No gym in this ideal week — get ready for the war.', items: [] });
+    blocks.push({ title: 'War day', note: 'Hit! (Only when we have a termed war — this is the ideal week.)', items: [] });
+
+    $('gp-plan').innerHTML = blocks.map(b => `
+        <div class="stat" style="margin-bottom:10px;">
+            <div class="k">${esc(b.title)}</div>
+            ${b.note ? `<div class="s" style="margin:4px 0 8px;line-height:1.5;">${esc(b.note)}</div>` : ''}
+            ${b.items.map(it => `<label style="display:flex;align-items:center;gap:8px;padding:6px 0;cursor:pointer;">
+                <input type="checkbox" class="gp-check" data-k="${it.key}" data-value="${it.value}" ${checks[it.key] ? 'checked' : ''} style="width:auto;">
+                ${esc(it.label)}
+            </label>`).join('')}
+        </div>`).join('');
     $('gp-plan').querySelectorAll('.gp-check').forEach(cb => cb.addEventListener('change', () => {
         checks[cb.dataset.k] = cb.checked;
         try { localStorage.setItem(gpWeekKey(), JSON.stringify(checks)); } catch (e) { /* not critical */ }
-        renderGpProgress(checks);
+        renderGpProgress();
     }));
-    renderGpProgress(checks);
+    renderGpProgress();
     $('gp-summary').innerHTML = `<b>${esc(chosen.name)}</b> for a week: about <b style="color:var(--reagent);">+${gpN(w.gain)} ${inp.stat}</b> from ${gpN(w.energyUsed)} energy${w.priced ? `, jump items ≈ <b>${gpMoney(w.cost)}</b>` : ''}.`;
 }
-function renderGpProgress(checks) {
-    const done = ['d1', 'd2', 'd3', 'd4'].filter(k => checks[k]).length;
-    $('gp-progress').textContent = `${done} of 4 training days done this week`;
-    $('gp-progress-fill').style.width = `${done * 25}%`;
+
+// The steps before the training itself, per method (shortened from the jump guide below).
+function gpJumpSteps(m, inp) {
+    const items = Object.entries(m.items).map(([k, q]) => `${q}× ${GP_ITEMS[k]}`).join(' + ');
+    const peak = Math.min(99999, (inp.base + m.addHappy) * 2);
+    const steps = [`Have everything ready: ${items}`];
+    if (m.items.xanax === 1) steps.push('Take 1 Xanax and wait out the drug cooldown (6–8 h)');
+    else if (m.items.xanax) steps.push(`Stack ${m.items.xanax} Xanax back-to-back to reach 1,000 E, then wait out all the cooldowns`);
+    else steps.push(`Wait until your energy bar is full (${gpN(inp.fill)} E)`);
+    steps.push('Wait until just past a :00 / :15 / :30 / :45 reset');
+    const main = m.items.lollipop ? `all ${m.items.lollipop} Lollipops` : m.items.choco ? `all ${m.items.choco} Big Boxes of Chocolate Bars` : `all ${m.items.edvd} Erotic DVDs`;
+    steps.push(`Take ${main}`);
+    steps.push(`Use the Ecstasy — it doubles your happy (about ${gpN(peak)})`);
+    return steps;
+}
+function renderGpProgress() {
+    let done = 0, total = 0;
+    document.querySelectorAll('#gp-plan .gp-check').forEach(cb => { const v = parseInt(cb.dataset.value, 10) || 0; total += v; if (cb.checked) done += v; });
+    $('gp-progress').textContent = `${gpN(done)} / ${gpN(total)} E`;
+    $('gp-progress-fill').style.width = `${total ? Math.min(100, done / total * 100) : 0}%`;
 }
 
 async function loadGymPlanner() {
@@ -216,3 +252,6 @@ $('gp-sessions').addEventListener('change', () => {
     renderGymPlanner();
 });
 $('gp-autofill').addEventListener('click', () => { gpAutofill(); renderGymPlanner(); });
+
+// Picking the group above sets the weekly energy target for the plan (4,400 at 1.5m+, 2,200 under).
+['a', 'b'].forEach(g => $(`eg-group-${g}`).addEventListener('click', () => { $('gp-weekly').value = g === 'a' ? 4400 : 2200; renderGymPlanner(); }));
