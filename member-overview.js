@@ -327,7 +327,7 @@ $('mo-probe-upg-btn').addEventListener('click', async () => {
     try {
         const r = await moFetch({ action: 'mo-probe-upgrades' });
         if (r.error) throw new Error(r.error);
-        $('mo-probe-upg-out').textContent = `New endpoint (v2 faction upgrades):\n${r.v2}\n\nChallenge contributors (which stat names Torn accepts):\n${Object.entries(r.contrib || {}).map(([k, v]) => `${k}: ${v}`).join('\n')}`;
+        $('mo-probe-upg-out').textContent = `Faction gym totals (v2 faction stats):\n${r.fstats}\n\nNew endpoint (v2 faction upgrades):\n${r.v2}\n\nChallenge contributors (which stat names Torn accepts):\n${Object.entries(r.contrib || {}).map(([k, v]) => `${k}: ${v}`).join('\n')}`;
         $('mo-probe-upg-out').style.display = 'block';
     } catch (e) { toast(e.message); } finally { btn.disabled = false; btn.textContent = 'Check faction upgrades'; }
 });
