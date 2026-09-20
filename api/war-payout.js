@@ -30,7 +30,7 @@ const { tornToDiscordIds, resolveDiscordIds } = require('../lib/discordMap');
 const { moHandle, moMe } = require('../lib/memberOverview');
 const { gymHandle } = require('../lib/gymStats');
 const { warReports } = require('../lib/warReports');
-const { sendBugReport } = require('../lib/bugReport');
+const { sendBugReport, bugsHandle } = require('../lib/bugReport');
 const { labsIsOwner, labsHasOwners, labsHandle, labsRecordReceipt } = require('../lib/labsLedger');
 
 const REDIS_URL = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL;
@@ -356,6 +356,11 @@ module.exports = async function handler(req, res) {
         if (action === 'receipts-report') return res.status(200).json(await warReports({ redis, key, factionId, playerId, leader: await isLeader(key) }));
         // Bug reports page — posts a member's report (and screenshot) to a Discord channel. See lib/bugReport.js.
         if (action === 'bug-report') return res.status(200).json(await sendBugReport({ redis, playerId, name: playerName, factionName, body: req.body }));
+        // Known bugs list — anyone can read it and press "I have this too"; only leaders change the list.
+        if (action.startsWith('bugs-')) {
+            if (!['bugs-list', 'bugs-metoo'].includes(action) && !(await isLeader(key))) return res.status(403).json({ error: 'Leaders only' });
+            return res.status(200).json(await bugsHandle(action, req.body, { redis, playerId }));
+        }
 
         // ---- Labs funds ------------------------------------------------------------------------
         // Every faction's war-pay history and the retained cut ("the 20%") each one keeps. Any

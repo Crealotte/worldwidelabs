@@ -1,42 +1,55 @@
-// whats-new.js — the "What's new" page: a list of updates, newest first, open to every member.
-// Each entry has two lists: `everyone` (shown to all) and `leaders` (only shown to leaders/council,
-// and never revealed to normal members). Leaders also get a "Copy as message" button per update and
-// buttons that build ONE big post of all updates (split in parts that fit a Discord message).
+// whats-new.js — the "What's new" page: the updates, newest first, each with a version number and the
+// real date it went online (taken from the push history). Open to every member.
+// Each entry has two lists: `everyone` (shown to all) and `leaders` (only shown to leaders/council, and
+// never revealed to normal members).
 //
-// TO ADD AN UPDATE: put a new object at the TOP of WHATS_NEW below. Plain text only (no HTML).
-// Dates of the older entries are approximate (they group what was added around then).
+// For the leaders' Discord posts: each version can be marked as "posted", and the big post only builds
+// what is NEW since the last posted version, so nothing is announced twice (see wnBigPost below).
+//
+// TO ADD AN UPDATE: put a new object at the TOP of WHATS_NEW below with the next version number
+// (the last one is 1.10 → the next is 1.11). Plain text only (no HTML).
 'use strict';
 
 const WHATS_NEW = [
     {
-        date: '2026-09-21',
-        title: 'New pages: War reports, Gym stats and Bug reports',
+        version: '1.10', date: '2026-09-20',
+        title: 'War reports, Gym stats and Bug reports',
         everyone: [
             'War reports (War menu): every past war payout report with the opponent, win or loss, the score and a link to the full report. Open the pay details to see what was paid — leaders see everyone, everyone else sees their own line.',
             'Gym stats (Training menu): a graph of your own battle stats over time, your growth over the last weeks, and personal goals per stat with an estimate of when you will reach them. It builds up every day you open WWL.',
-            'Bug reports (bottom of the menu): describe a problem, add a screenshot (or paste one with Ctrl+V) and it goes straight to the owner on Discord, with your name and the page you were on.',
+            'Bug reports (bottom of the menu): describe a problem, add a screenshot (or paste one with Ctrl+V) and it goes straight to the owner on Discord. Check the "Known bugs" list first — if your problem is on it, press "I have this too" instead of sending another report.',
         ],
-        leaders: [],
+        leaders: [
+            'Bug reports: you can keep the Known bugs list up to date (add a bug, mark it known / being fixed / fixed, delete it) and you see how many members have each one.',
+        ],
     },
     {
-        date: '2026-09-21',
+        version: '1.9', date: '2026-09-20',
         title: 'Tailored training plan (Energy planner)',
         everyone: [
             'Pick the stat to train (the two stats with the best faction Steadfast bonus are starred) and how you train: natural energy — Soft or Hard — or a happy jump (Lollipop, Big Choco, 5 EDVD, 9 EDVD). Every method is a card that already shows its estimated stat gain and item cost for a week, and all methods are compared side by side.',
             'You get a week plan — 4 training days, 2 war prep days and the war day — with a tick box for every step and a progress bar in energy.',
             'Everything is pulled from your own account: your stat, max happy, energy bar (donator or not), gym, and your gym bonuses (faction Steadfast, candy bonus, property and education perks, cooldowns). Your total battle stats only decide your weekly minimum: 4,400 energy at 1.5m+, 2,200 under. The estimates use the community gym formula, so they are estimates — Torn adds a random amount to every train.',
             'Natural energy: Soft is 3 bars + 2 Xanax a day (3 log-ins), Hard is 4 bars + 3 Xanax. The daily energy refill is on by default, you can add energy cans (each can has its own energy and price), and experienced players can set their own bars and Xanax per day.',
-            'Your settings fold away into one button once you have chosen, so the page shows your plan first. The Happy Jump guides are closed by default, and the weekly minimum under 1.5m is now correctly 2,200 energy (it said 2,400).',
+            'Your settings fold away into one button once you have chosen, so the page shows your plan first.',
         ],
         leaders: [],
     },
     {
-        date: '2026-09-20',
-        title: 'Your standing, a tidier menu and the war participation rule',
+        version: '1.8', date: '2026-09-20',
+        title: 'Tidier menu and Energy planner fixes',
+        everyone: [
+            'The menu is reorganised: a War group (War Badges, War Availability, War reports), a Crimes group (Crimes Guide, OC Fit Tracker), and What\'s new, Tools & links, Feedback and Bug reports at the bottom. What\'s new turns bold with a dot when there is an update you haven\'t opened yet.',
+            'Energy planner: the Happy Jump guides are closed by default, and the weekly minimum under 1.5m battle stats is now correctly 2,200 energy (it said 2,400).',
+            'War participation fix: a war counts when you did 10 war hits, or 20 chain hits if you did fewer than 10 war hits (before, the chain hits only counted if you had no war hits at all).',
+        ],
+        leaders: [],
+    },
+    {
+        version: '1.7', date: '2026-09-20',
+        title: 'Your standing on the dashboard',
         everyone: [
             'New "Your standing" card on the dashboard: how much energy you need to train this month (4,400 a week at 1.5m+, 2,200 below — 17,600 or 22,000 for a 4 or 5 week month), how many of your last 5 wars count as taken part in (e.g. 3/5, or 1/2 if you joined recently), and your place this month for war hits, chain hits, blood bags, candy, alcohol and energy drinks.',
-            'War participation: a war counts when you did 10 war hits, or 20 chain hits if you did fewer than 10 war hits. You need it in 3 of your last 5 wars. Wars from before you joined the faction are not held against you.',
-            'The menu is reorganised: a War group (War Badges, War Availability, War reports), a Crimes group (Crimes Guide, OC Fit Tracker), and What\'s new, Tools & links, Feedback and Bug reports at the bottom. What\'s new turns bold with a dot when there is an update you haven\'t opened yet.',
         ],
         leaders: [
             'The "Who\'s on board" and "Other factions" lists on the dashboard are closed by default — click the title to open them.',
@@ -44,60 +57,117 @@ const WHATS_NEW = [
         ],
     },
     {
-        date: '2026-09-20',
-        title: 'Member Overview, Labs Funds and View as member',
+        version: '1.6', date: '2026-09-19',
+        title: 'Member Overview and this What\'s new page',
+        everyone: [
+            'What\'s new (this page): every update, with a version number and date.',
+            'War participation rule: a war counts when you did 10 war hits, or 20 chain hits if you did fewer than 10 war hits, and you need it in 3 of your last 5 wars. Wars from before you joined the faction are not held against you.',
+        ],
+        leaders: [
+            'Member Overview (Leadership menu, leaders and council only): for the last 5 wars, war hits and chain hits per member with a green / red light for who took part in enough wars — wars before someone joined are not counted against them. Also blood bags filled, candy, alcohol and energy drinks used per period, and each member\'s energy group and weekly need.',
+            'Member Overview periods run Sunday to Sunday and follow the newsletter (first Sunday of the month, 4 or 5 weeks), with a Total / Per week switch, an "Exact dates" option to compare with other tools, a winner for each competition and a "Copy for newsletter" button.',
+        ],
+    },
+    {
+        version: '1.5', date: '2026-09-19',
+        title: 'Labs Funds and View as member',
         everyone: [],
         leaders: [
-            'Member Overview (Leadership menu, leaders and council only): for the last 5 wars, war hits and chain hits per member with a green / red light for who took part in enough wars (10 war hits or 20 chain hits, in 3 of 5) — wars before someone joined are not counted against them. Also blood bags filled, candy, alcohol and energy drinks used per period, and each member\'s energy group and weekly need.',
-            'Member Overview periods run Sunday to Sunday and follow the newsletter (first Sunday of the month, 4 or 5 weeks), with a Total / Per week switch, an "Exact dates" option to compare with other tools, a winner for each competition and a "Copy for newsletter" button.',
-            'Labs Funds (Leadership menu): every faction\'s war payout cut in one place with history and totals. Any leader can view it; only the owner can change it.',
+            'Labs Funds (Leadership menu): every faction\'s war payout cut in one place with history and totals. Any leader can view it; only the owner can change it (the owner claims it on first use).',
             'View as member: a button in the sidebar to preview exactly what a normal member sees.',
         ],
     },
     {
-        date: '2026-09-14',
-        title: 'War Availability',
+        version: '1.4', date: '2026-09-19',
+        title: 'War Availability: plans, overdoses and yellow boxes',
         everyone: [
-            'War Availability (War menu): tick the hours you can play before a war. Click a box once for green (available), twice for yellow (probably, but busy with something else), a third time to clear it. Big banner on top, and a switch to show all times in your own timezone.',
-            'A "I can\'t make it" button for when you are out for the whole war, and a plan picker to see this weekend and next weekend.',
+            'Click a box once for green (available), twice for yellow (probably, but busy with something else), a third time to clear it.',
+            'A plan picker to see this weekend and next weekend, and the "Create a plan" and Discord settings panels are closed by default; the timezone switch now sits right above the grid.',
         ],
         leaders: [
-            'Create several plans (this weekend, next weekend) and link a plan to a war so the start time comes from Torn.',
-            'A heatmap of how many people are available per hour — click an hour to see who — plus a list of who has filled it in, who hasn\'t, and who can\'t make it.',
-            'Ping people on Discord: everyone in an hour, or everyone who hasn\'t filled it in, with a message from a set of standard ones and the time it starts. Set your faction\'s Discord channel or webhook first under "Discord settings" (closed by default, like "Create a plan").',
+            'Create several plans (this weekend, next weekend), each with its own grid and linked war.',
             'Overdoses: who has overdosed since midnight before the 48 hours ahead of the war, so you know who may take part less.',
         ],
     },
     {
-        date: '2026-09-06',
-        title: 'War Payout, War Badges and Consumption Tracker',
+        version: '1.3', date: '2026-09-19',
+        title: 'War Availability: timezone, who is available and Discord pings',
         everyone: [
-            'War Badges (War menu): badges for the best in each category of the last war (like most hits, most assists, most respect), with the badge winners of the last war on the dashboard too.',
+            'A switch to show all times in your own timezone, plus a big banner explaining it, and smaller boxes in a scrollable grid.',
+            'An "I can\'t make it" button for when you are out for the whole war.',
+        ],
+        leaders: [
+            'Click an hour in the heatmap to see who is available then.',
+            'A list of who has filled it in, who hasn\'t, and who can\'t make it. Link a plan to a war so the start time comes from Torn.',
+            'Ping people on Discord — everyone in an hour, or everyone who hasn\'t filled it in — with a message from a set of standard ones and the time it starts. Each faction sets its own Discord channel or webhook under "Discord settings", so factions never post into each other\'s channels.',
+        ],
+    },
+    {
+        version: '1.2', date: '2026-09-18',
+        title: 'War Availability and page links',
+        everyone: [
+            'War Availability (War menu): tick the hours you can play before a war, in real time slots (00:00 – 01:00), so leaders can see when the faction can mobilise.',
             'Every page now has its own address, so you can link straight to a page (for example /availability).',
+        ],
+        leaders: [],
+    },
+    {
+        version: '1.1', date: '2026-09-18',
+        title: 'War Badges for everyone and a better Consumption Tracker',
+        everyone: [
+            'War Badges (War menu) is open to everyone and reads from the saved payout reports, so everyone can see the badge winners of past wars.',
+        ],
+        leaders: [
+            'Consumption Tracker: a hand-picked list of items (drugs, medical, energy drinks, candy, alcohol, temporary items), blood bags grouped under Medical, and the numbers now match the armory log (long date ranges are read in pieces).',
+            'A "restocked" tick box per war in the War Payout list.',
+        ],
+    },
+    {
+        version: '1.0', date: '2026-09-06',
+        title: 'War Payout fix, War Badges and Consumption Tracker',
+        everyone: [
+            'War Badges: awards for the best in each category of a war, with the badge winners of the last war shown on the dashboard.',
             'Payout receipts can be opened by everyone with the link.',
         ],
         leaders: [
-            'War Payout calculator fixed: every war hit is now counted straight from Torn, not just hits inside the chains you add. Chain hits after the war are paid at the flat chain rate, and hits can\'t be counted twice. Payout receipts can be saved and shared with a link.',
-            'Consumption Tracker (Leadership menu): pick a date range to see what was used per item (drugs, medical with the blood bags, energy drinks, candy, alcohol, temporary items), and get a shopping list to restock. There is a "restocked" tick box per war.',
+            'War Payout calculator fixed: every war hit is now counted straight from Torn, not just hits inside the chains you add. Chain hits after the war are paid at the flat chain rate, and hits can\'t be counted twice.',
+            'Consumption Tracker (Leadership menu): pick a date range to see what was used per item, and get a shopping list to restock.',
         ],
     },
 ];
 
 const wnFmtDate = d => new Date(`${d}T12:00:00Z`).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' });
 
+// ---- which version was last posted in Discord (per browser) ----
+const WN_POSTED_KEY = 'wwl_whatsnew_posted';
+const wnPostedIndex = () => { // index in WHATS_NEW of the newest version already posted, -1 = none
+    let v = null;
+    try { v = localStorage.getItem(WN_POSTED_KEY); } catch (e) { /* none */ }
+    return WHATS_NEW.findIndex(e => e.version === v);
+};
+function wnSetPosted(version) { try { localStorage.setItem(WN_POSTED_KEY, version); } catch (e) { /* not critical */ } }
+
 function renderWhatsNew() {
     markWhatsNewSeen(); // opening the page counts as having seen the latest update
     const leader = typeof isLeaderCached !== 'undefined' && isLeaderCached;
+    const posted = wnPostedIndex();
     $('wn-leader-tools').style.display = leader ? 'block' : 'none';
+    const news = WHATS_NEW.filter((e, i) => posted < 0 || i < posted).length; // versions not posted yet
+    $('wn-posted-note').innerHTML = posted < 0 ? 'Nothing is marked as posted yet.'
+        : `Last posted in Discord: <b style="color:var(--text);">v${esc(WHATS_NEW[posted].version)}</b>. ${news ? `<b style="color:var(--reagent);">${news} newer version${news === 1 ? '' : 's'}</b> not posted yet.` : 'Everything has been posted.'}`;
     $('wn-list').innerHTML = WHATS_NEW.filter(e => leader || (e.everyone || []).length).map(e => {
         const i = WHATS_NEW.indexOf(e);
+        const isPosted = posted >= 0 && i >= posted;
         const items = (list, tag) => list.map(t => `<li style="margin:4px 0;">${tag ? `<span class="chip" style="cursor:default;font-size:10px;padding:1px 6px;margin-right:6px;">leaders</span>` : ''}${esc(t)}</li>`).join('');
         return `
         <div class="panel">
             <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:8px;">
+                <span style="font-family:var(--mono);font-size:12px;font-weight:700;color:var(--reagent);border:1px solid var(--reagent);border-radius:10px;padding:1px 8px;">v${esc(e.version)}</span>
                 <h3 style="margin:0;">${esc(e.title)}</h3>
                 <span style="color:var(--muted);font-size:12px;">${wnFmtDate(e.date)}</span>
-                ${leader ? `<button class="ghost small wn-copy" data-i="${i}" style="margin-left:auto;">Copy as message</button>` : ''}
+                ${leader ? `<span style="margin-left:auto;display:flex;gap:8px;align-items:center;">${isPosted ? '<span style="color:var(--muted);font-size:12px;">✓ posted</span>' : ''}
+                    <button class="ghost small wn-copy" data-i="${i}">Copy as message</button>
+                    <button class="ghost small wn-mark" data-v="${esc(e.version)}" title="Marks this version and all older ones as posted in Discord">Mark posted up to here</button></span>` : ''}
             </div>
             <ul style="margin:0;padding-left:20px;font-size:14px;">
                 ${items(e.everyone || [], false)}${leader ? items(e.leaders || [], true) : ''}
@@ -107,21 +177,28 @@ function renderWhatsNew() {
     document.querySelectorAll('.wn-copy').forEach(b => b.addEventListener('click', () => {
         const e = WHATS_NEW[Number(b.dataset.i)];
         const bullet = t => `• ${t}`;
-        const text = [`📢 **WorldWideLabs update: ${e.title}**`,
+        const text = [`📢 **WorldWideLabs v${e.version}: ${e.title}**`,
             (e.everyone || []).length ? `\n**For everyone**\n${e.everyone.map(bullet).join('\n')}` : '',
             (e.leaders || []).length ? `\n**For leaders and council**\n${e.leaders.map(bullet).join('\n')}` : ''].join('\n');
         navigator.clipboard.writeText(text).then(() => toast('Message copied — paste it in Discord'));
     }));
+    document.querySelectorAll('.wn-mark').forEach(b => b.addEventListener('click', () => { wnSetPosted(b.dataset.v); renderWhatsNew(); toast(`Marked as posted up to v${b.dataset.v}`); }));
 }
 
-// ---- one big post with every update, split into parts that each fit in a Discord message (2,000 characters) ----
-function wnBigPost(includeLeaders) {
-    const lines = [`📢 **WorldWideLabs — everything that is new${includeLeaders ? ' (leaders and council)' : ''}**`];
-    WHATS_NEW.forEach(e => {
+// ---- one big post with the updates NOT posted yet (or all of them), split into parts that each fit in a
+// Discord message (2,000 characters) ----
+function wnBigPost(includeLeaders, onlyNew) {
+    const posted = wnPostedIndex();
+    const from = onlyNew && posted >= 0 ? posted : WHATS_NEW.length; // entries with index < from are new
+    const list = WHATS_NEW.slice(0, from);
+    const first = list[list.length - 1], last = list[0];
+    const lines = [`📢 **WorldWideLabs — ${onlyNew && posted >= 0 ? `new since v${WHATS_NEW[posted].version}` : 'everything that is new'}${list.length ? ` (v${first.version}${list.length > 1 ? ` – v${last.version}` : ''})` : ''}${includeLeaders ? ' — leaders and council' : ''}**`];
+    list.forEach(e => {
         const mine = [...(e.everyone || []).map(t => `• ${t}`), ...(includeLeaders ? (e.leaders || []).map(t => `• 🔒 (leaders) ${t}`) : [])];
         if (!mine.length) return;
-        lines.push(`\n**${e.title}**`, ...mine);
+        lines.push(`\n**v${e.version} — ${e.title}**`, ...mine);
     });
+    if (lines.length === 1) return [];
     const parts = []; let cur = '';
     for (const line of lines) {
         const piece = line.length > 1900 ? line.slice(0, 1900) : line;
@@ -131,17 +208,22 @@ function wnBigPost(includeLeaders) {
     return parts;
 }
 function renderWnBig(parts, label) {
-    $('wn-big').innerHTML = `<div style="color:var(--muted);font-size:12px;margin:8px 0;">${esc(label)} — Discord takes 2,000 characters per message, so it is in ${parts.length} part${parts.length === 1 ? '' : 's'}. Copy and post them in order.</div>`
+    if (!parts.length) { $('wn-big').innerHTML = '<div style="color:var(--muted);font-size:13px;margin:8px 0;">Nothing new to post — everything is already marked as posted.</div>'; return; }
+    $('wn-big').innerHTML = `<div style="color:var(--muted);font-size:12px;margin:8px 0;">${esc(label)} — Discord takes 2,000 characters per message, so it is in ${parts.length} part${parts.length === 1 ? '' : 's'}. Copy and post them in order, then press "I posted it".</div>`
         + parts.map((p, i) => `<div style="margin-bottom:10px;">
             <div style="display:flex;align-items:center;gap:10px;margin-bottom:4px;"><b style="font-size:13px;">Part ${i + 1} of ${parts.length}</b><span style="color:var(--muted);font-size:12px;">${p.length} characters</span>
                 <button class="ghost small wn-part" data-i="${i}" style="margin-left:auto;">Copy part ${i + 1}</button></div>
-            <textarea readonly rows="6" style="width:100%;font-size:12px;">${esc(p)}</textarea></div>`).join('');
+            <textarea readonly rows="6" style="width:100%;font-size:12px;">${esc(p)}</textarea></div>`).join('')
+        + `<button class="ghost small" id="wn-posted-btn">✓ I posted it — mark v${esc(WHATS_NEW[0].version)} and older as posted</button>`;
     $('wn-big').querySelectorAll('.wn-part').forEach(b => b.addEventListener('click', () => {
         navigator.clipboard.writeText(parts[Number(b.dataset.i)]).then(() => toast(`Part ${Number(b.dataset.i) + 1} copied`));
     }));
+    $('wn-posted-btn').addEventListener('click', () => { wnSetPosted(WHATS_NEW[0].version); $('wn-big').innerHTML = ''; renderWhatsNew(); toast('Marked as posted'); });
 }
-$('wn-big-all').addEventListener('click', () => renderWnBig(wnBigPost(false), 'Post for everyone (no leader features)'));
-$('wn-big-leaders').addEventListener('click', () => renderWnBig(wnBigPost(true), 'Post for leaders (includes the leader features)'));
+$('wn-big-new').addEventListener('click', () => renderWnBig(wnBigPost(false, true), 'Post for everyone — only what is new since the last posted version'));
+$('wn-big-new-leaders').addEventListener('click', () => renderWnBig(wnBigPost(true, true), 'Post for leaders — only what is new since the last posted version'));
+$('wn-big-all').addEventListener('click', () => renderWnBig(wnBigPost(false, false), 'Post for everyone — all versions'));
+$('wn-big-leaders').addEventListener('click', () => renderWnBig(wnBigPost(true, false), 'Post for leaders — all versions'));
 
 // ---- "something new" marker on the sidebar item -------------------------------------------------
 // The item turns bold (with a dot) when the newest update this person can see hasn't been opened yet.
@@ -150,7 +232,7 @@ const WN_SEEN_KEY = 'wwl_whatsnew_seen';
 function wnLatestId() {
     const leader = typeof isLeaderCached !== 'undefined' && isLeaderCached;
     const e = WHATS_NEW.find(x => leader || (x.everyone || []).length); // members skip updates that are leaders-only
-    return e ? `${e.date}|${e.title}` : '';
+    return e ? `${e.version}|${e.title}` : '';
 }
 function updateWhatsNewBadge() {
     const nav = $('nav-whats-new');

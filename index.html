@@ -1246,9 +1246,19 @@
             <div class="lab-label">WWL·16 / for everyone</div>
             <h2>What's new</h2>
             <p class="pagedesc">Everything that's been added or changed in WorldWideLabs, newest first.</p>
-            <div id="wn-leader-tools" style="display:none;margin-bottom:14px;">
-                <button class="ghost small" id="wn-big-all">📋 One big post — for everyone</button>
-                <button class="ghost small" id="wn-big-leaders">📋 One big post — for leaders (with leader features)</button>
+            <div id="wn-leader-tools" class="panel" style="display:none;">
+                <h3 style="margin:0 0 6px;">Post in Discord</h3>
+                <div id="wn-posted-note" style="font-size:13px;color:var(--muted);margin-bottom:10px;"></div>
+                <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:6px;">
+                    <button class="ghost small" id="wn-big-new">📋 Post what's new — for everyone</button>
+                    <button class="ghost small" id="wn-big-new-leaders">📋 Post what's new — for leaders</button>
+                </div>
+                <details><summary class="av-sum"><span style="font-size:12px;">Post all versions instead (from the start)</span></summary>
+                    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;">
+                        <button class="ghost small" id="wn-big-all">📋 All versions — for everyone</button>
+                        <button class="ghost small" id="wn-big-leaders">📋 All versions — for leaders</button>
+                    </div>
+                </details>
                 <div id="wn-big"></div>
             </div>
             <div id="wn-list"></div>
@@ -1312,7 +1322,24 @@
             <h2>Bug reports</h2>
             <p class="pagedesc">Something not working or looking wrong? Tell us what happened. Your report goes straight to the owner on Discord, with your name and the page you were on. A screenshot helps a lot.</p>
 
+            <div class="panel" id="kb-panel">
+                <h3>🔎 Known bugs</h3>
+                <p style="color:var(--muted);font-size:12px;margin:0 0 10px;">Check here first — if your problem is on the list, just press <b>"I have this too"</b> instead of sending a new report. We are already on it.</p>
+                <div id="kb-list"></div>
+                <div id="kb-leader" style="display:none;margin-top:12px;padding-top:12px;border-top:1px solid var(--line);">
+                    <div style="font-size:13px;font-weight:700;margin-bottom:6px;">Leaders: add a known bug</div>
+                    <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;">
+                        <div class="field" style="margin:0;min-width:220px;flex:1;"><label for="kb-title">Short title</label><input autocomplete="off" id="kb-title" type="text" maxlength="80" placeholder="e.g. Availability grid does not save on mobile"></div>
+                        <div class="field" style="margin:0;min-width:220px;flex:2;"><label for="kb-note">What members should know (optional)</label><input autocomplete="off" id="kb-note" type="text" maxlength="400" placeholder="e.g. Reload the page, a fix is coming"></div>
+                        <div class="field" style="margin:0;"><label for="kb-status">Status</label><select autocomplete="off" id="kb-status"><option value="known">Known</option><option value="fixing">Being fixed</option><option value="fixed">Fixed</option></select></div>
+                        <button class="ghost small" id="kb-add">Add</button>
+                    </div>
+                </div>
+            </div>
+
             <div class="panel">
+                <h3 style="margin-top:0;">Not on the list? Report it</h3>
+                <div id="kb-suggest" style="display:none;margin-bottom:12px;"></div>
                 <div class="field" style="max-width:340px;"><label for="br-page">Which page was it on?</label><select autocomplete="off" id="br-page"></select></div>
                 <div class="field"><label for="br-text">What went wrong?</label>
                     <textarea autocomplete="off" id="br-text" rows="6" maxlength="1500" placeholder="What did you do, what did you expect, and what happened instead?" style="width:100%;"></textarea></div>
