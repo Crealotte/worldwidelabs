@@ -13,7 +13,7 @@ let moStats = {}; // "<id>:<timestamp>" -> { candyused, alcoholused, energydrink
 let moWeeks = 1; // 1 = last full week, 4 = average per week over the last 4 weeks
 let moSort = 'points';
 let moBusy = false;
-const MO_KEYS = [['candyused', 'Candy'], ['alcoholused', 'Alcohol'], ['energydrinkused', 'Energy drinks']];
+const MO_KEYS = [['bloodwithdrawn', 'Blood bags filled'], ['candyused', 'Candy'], ['alcoholused', 'Alcohol'], ['energydrinkused', 'Energy drinks']];
 
 async function moFetch(body) {
     const res = await fetch('/api/war-payout', {
