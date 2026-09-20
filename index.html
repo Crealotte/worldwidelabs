@@ -328,6 +328,16 @@
     .av-cell-mine { background: var(--reagent); }
     .av-cell-maybe { background: #f0b432; }
     .active-toggle { border-color: var(--reagent); color: var(--reagent); }
+    #gp-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+    #gp-methods { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 10px; }
+    .gp-stat, .gp-method { text-align: left; background: var(--bench-2); border: 1px solid var(--line); border-radius: var(--radius); padding: 10px 12px; color: var(--text); cursor: pointer; font: inherit; }
+    .gp-stat:hover, .gp-method:hover { border-color: var(--reagent); }
+    .gp-stat.best { border-color: #f0b432; }
+    .gp-stat.sel, .gp-method.sel { border-color: var(--reagent); box-shadow: inset 0 0 0 1px var(--reagent); }
+    .gp-stat .t, .gp-method .t { font-weight: 700; font-size: 14px; }
+    .gp-stat .s, .gp-method .s { color: var(--muted); font-size: 12px; margin-top: 2px; }
+    .gp-method .n { font-size: 12px; margin-top: 6px; font-family: var(--mono); }
+    @media (max-width: 700px) { #gp-stats { grid-template-columns: repeat(2, 1fr); } }
     #eg-panel { display: none !important; } /* the standard checklist is replaced by the tailored plan (gym-planner.js) */
     .nav-item.has-new { font-weight: 700; color: var(--text); }
     .nav-item.has-new::after { content: " ●"; color: var(--reagent); font-size: 10px; }
@@ -621,25 +631,25 @@
 
             <div class="panel" id="gp-panel">
                 <h3>🎯 Your tailored training plan</h3>
-                <p class="pagedesc" style="margin-bottom:12px;">Pick the stat you train and how you train — everything else is taken from your own account. You get a week plan plus an <b>estimate</b> of your stat growth and item cost next to the other methods. The week is our ideal one: 4 training days, 2 war prep days and 1 war day (only with a termed war). Gains are estimates — Torn adds a random amount to every train.</p>
+                <p class="pagedesc" style="margin-bottom:12px;">Pick the stat you train and how you train — everything else is taken from your own account. You get a week plan plus an <b>estimate</b> of your stat growth and item cost for every method. The week is our ideal one: 4 training days, 2 war prep days and 1 war day (only with a termed war). Gains are estimates — Torn adds a random amount to every train.</p>
 
-                <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-bottom:8px;">
-                    <div class="field" style="margin:0;"><label for="gp-stat">Stat to train</label>
-                        <select autocomplete="off" id="gp-stat"><option value="strength">Strength</option><option value="defense">Defense</option><option value="speed">Speed</option><option value="dexterity">Dexterity</option></select></div>
-                </div>
-                <div id="gp-data-note" style="color:var(--muted);font-size:12px;margin-bottom:6px;line-height:1.5;"></div>
+                <div style="font-size:13px;color:var(--muted);margin-bottom:6px;">Which stat do you train?</div>
+                <div id="gp-stats"></div>
+                <div id="gp-stat-hint" style="display:none;color:var(--muted);font-size:12px;margin:6px 0 8px;">★ = the two stats with the best faction (Steadfast) bonus — the best ones to train.</div>
+                <div id="gp-data-note" style="color:var(--muted);font-size:12px;margin:8px 0 6px;line-height:1.5;"></div>
                 <div id="gp-perks-note" style="color:var(--muted);font-size:12px;margin-bottom:14px;line-height:1.5;"></div>
 
-                <div id="gp-how" style="font-size:13px;color:var(--muted);margin-bottom:6px;">How do you train?</div>
-                <div id="gp-methods" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;"></div>
+                <div id="gp-how" style="font-size:13px;color:var(--muted);margin-bottom:6px;">How do you train? (estimate for one week, next to each method)</div>
+                <div id="gp-methods" style="margin-bottom:12px;"></div>
 
                 <div id="gp-nat-opts" style="display:none;margin-bottom:10px;">
-                    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:6px;">
-                        <button class="ghost small" id="gp-nat-soft">Soft</button>
-                        <button class="ghost small" id="gp-nat-hard">Hard</button>
-                        <label style="display:inline-flex;align-items:center;gap:6px;font-size:13px;margin-left:8px;"><input type="checkbox" id="gp-refill" checked style="width:auto;"> Energy refill each day</label>
+                    <div id="gp-nat-desc" style="font-size:13px;margin-bottom:8px;"></div>
+                    <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-bottom:6px;">
+                        <label style="display:inline-flex;align-items:center;gap:6px;font-size:13px;margin-bottom:8px;"><input type="checkbox" id="gp-refill" checked style="width:auto;"> Energy refill each day</label>
+                        <div class="field" style="margin:0;min-width:240px;"><label for="gp-can">Energy cans</label><select autocomplete="off" id="gp-can"></select></div>
+                        <div class="field" style="margin:0;max-width:110px;"><label for="gp-can-n">Cans per day</label><input autocomplete="off" id="gp-can-n" type="number" min="0" max="6" value="0"></div>
                     </div>
-                    <div id="gp-nat-desc" style="color:var(--muted);font-size:12px;margin-bottom:6px;"></div>
+                    <div id="gp-can-note" style="color:var(--muted);font-size:12px;margin-bottom:8px;"></div>
                     <details>
                         <summary class="av-sum"><span style="font-size:12px;">Experienced players: set your own bars and Xanax per day</span></summary>
                         <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-top:8px;">
@@ -661,8 +671,9 @@
 
                 <h3 id="gp-chart-head" style="margin:0 0 10px;">Compared over one week</h3>
                 <div id="gp-chart"></div>
-                <p style="color:var(--muted);font-size:12px;margin:10px 0 0;">Uses the standard community gym formula with your own stat, max happy, gym and gym bonuses. Happy is assumed to drop by about half of the energy of each train. Item costs use current market values and count only the jump items (not your normal Xanax use).</p>
+                <p style="color:var(--muted);font-size:12px;margin:10px 0 0;">Uses the standard community gym formula with your own stat, max happy, gym and gym bonuses. Happy is assumed to drop by about half of the energy of each train. Item costs use current market values and count only the extra items (jump items and energy cans), not your normal Xanax use.</p>
             </div>
+
 
 
             <div class="panel" style="margin-top:16px;">
