@@ -1,5 +1,5 @@
 // member-overview.js — the Member Overview page (leader/council only): who follows the rules and
-// who needs an extra push, plus a points leaderboard and winners list for competitions.
+// who needs an extra push, plus a winners list (one winner per category) for competitions.
 // Backend: lib/memberOverview.js via /api/war-payout ('mo-*' actions, refused for anyone without
 // faction API access).
 //
@@ -8,7 +8,7 @@
 // Sunday to this one — 4 or 5 weeks depending on the month. A custom "last N weeks" is there too.
 // Shows: hits per member for the wars that ended in the period (war + chain), a traffic light from
 // the hits rule, blood bags filled / candy / alcohol / energy drinks used (total or per week),
-// energy tier, points, and a winners list. Energy trained needs Torn data that isn't connected yet.
+// energy tier, and a winners list. Energy trained needs Torn data that isn't connected yet.
 'use strict';
 
 let moData = null; // { members, wars, hits, tiers, energyTarget, settings }
@@ -16,7 +16,7 @@ let moStats = {}; // "<id>:<timestamp>" -> { candyused, alcoholused, energydrink
 let moPeriodId = null; // which option of the period dropdown is picked
 let moCustomWeeks = 4;
 let moPerWeek = false; // false = totals over the period, true = average per week
-let moSort = 'points';
+let moSort = 'war';
 let moBusy = false;
 const MO_KEYS = [['bloodwithdrawn', 'Blood bags filled'], ['candyused', 'Candy'], ['alcoholused', 'Alcohol'], ['energydrinkused', 'Energy drinks']];
 const MO_DAY = 86400;
@@ -158,7 +158,6 @@ function moRows() {
         if (avg !== null && !isNew) light = avg >= settings.minHitsPerWar ? 'green' : avg >= settings.minHitsPerWar / 2 ? 'yellow' : 'red';
         return {
             ...m, perWar, war, chain, avg, light, isNew, tier: tiers[m.id] || '',
-            points: war * settings.warPoints + chain * settings.chainPoints,
             used: Object.fromEntries(MO_KEYS.map(([k]) => [k, moUsed(m.id, k)])),
         };
     });
@@ -171,7 +170,8 @@ const moNum = v => v === null ? '…' : (moPerWeek ? (Math.round(v * 10) / 10).t
 // Top 3 per competition for the newsletter. Ties share a value but are listed in order.
 function moWinners(rows) {
     const cats = [
-        ['Points (hits)', r => r.points, 'points'],
+        ['War hits', r => r.war],
+        ['Chain hits', r => r.chain],
         ...MO_KEYS.map(([k, l]) => [l, r => r.used[k], 'stat']),
     ];
     return cats.map(([label, get]) => ({
@@ -184,7 +184,7 @@ function renderMemberOverview() {
     if (!moData) return;
     renderPeriodBar();
     const rows = moRows();
-    const sortVal = { points: r => -r.points, name: r => r.name.toLowerCase(), light: r => ({ red: 0, yellow: 1, green: 2, grey: 3 })[r.light], active: r => -(r.lastAction || 0) };
+    const sortVal = { war: r => -r.war, chain: r => -r.chain, name: r => r.name.toLowerCase(), light: r => ({ red: 0, yellow: 1, green: 2, grey: 3 })[r.light], active: r => -(r.lastAction || 0) };
     MO_KEYS.forEach(([k]) => { sortVal[k] = r => -(r.used[k] ?? -1); });
     const sorted = rows.slice().sort((a, b) => { const x = sortVal[moSort](a), y = sortVal[moSort](b); return x < y ? -1 : x > y ? 1 : 0; });
 
@@ -214,8 +214,6 @@ function renderMemberOverview() {
     };
 
     $('mo-min').value = moData.settings.minHitsPerWar;
-    $('mo-wp').value = moData.settings.warPoints;
-    $('mo-cp').value = moData.settings.chainPoints;
 
     const th = (key, label) => `<th style="padding:4px 8px;cursor:pointer;white-space:nowrap;${moSort === key ? 'color:var(--reagent);' : ''}" data-sort="${key}">${label}${moSort === key ? ' ▾' : ''}</th>`;
     const warHead = moWarsInPeriod().map(w => `<th style="padding:4px 8px;font-size:11px;white-space:nowrap;" title="${esc(`vs ${w.opponent}`)}">${esc(w.opponent.slice(0, 10))}<br><span style="color:var(--muted);">${new Date(w.end * 1000).toLocaleDateString(undefined, { day: '2-digit', month: 'short', timeZone: 'UTC' })}</span></th>`).join('');
@@ -228,7 +226,7 @@ function renderMemberOverview() {
                 <th style="padding:4px 8px;">Avg hits</th>
                 <th style="padding:4px 8px;" title="1.5m+ battle stats = ${moData.energyTarget.high} E/week, under = ${moData.energyTarget.low} E/week. Torn hides battle stats, so set it by hand.">Energy tier</th>
                 ${MO_KEYS.map(([k, l]) => th(k, `${l}<br><span style="font-size:10px;font-weight:400;">${unitLabel}</span>`)).join('')}
-                ${th('points', 'Points')}
+                ${th('war', 'War hits')}${th('chain', 'Chain hits')}
             </tr></thead>
             <tbody>${sorted.map(r => `
                 <tr style="border-top:1px solid var(--line);">
@@ -240,7 +238,7 @@ function renderMemberOverview() {
                     <td style="padding:4px 8px;"><select class="mo-tier" data-id="${esc(r.id)}" style="font-size:12px;padding:2px 4px;width:auto;">
                         <option value="">—</option><option value="high" ${r.tier === 'high' ? 'selected' : ''}>1.5m+ · ${moData.energyTarget.high}</option><option value="low" ${r.tier === 'low' ? 'selected' : ''}>&lt;1.5m · ${moData.energyTarget.low}</option></select></td>
                     ${MO_KEYS.map(([k]) => `<td style="padding:4px 8px;font-family:var(--mono);">${moNum(r.used[k])}</td>`).join('')}
-                    <td style="padding:4px 8px;font-family:var(--mono);font-weight:700;color:var(--reagent);">${r.points}</td>
+                    <td style="padding:4px 8px;font-family:var(--mono);">${r.war}</td><td style="padding:4px 8px;font-family:var(--mono);">${r.chain}</td>
                 </tr>`).join('')}
             </tbody>
         </table>`;
@@ -263,7 +261,7 @@ $('mo-view-week').addEventListener('click', () => { moPerWeek = true; renderMemb
 $('mo-refresh').addEventListener('click', () => { moData = null; loadMemberOverview(); });
 
 $('mo-save-settings').addEventListener('click', async () => {
-    const r = await moFetch({ action: 'mo-settings', minHitsPerWar: $('mo-min').value, warPoints: $('mo-wp').value, chainPoints: $('mo-cp').value });
+    const r = await moFetch({ action: 'mo-settings', minHitsPerWar: $('mo-min').value });
     if (r.error) { toast(r.error); return; }
     moData.settings = r.settings;
     toast('Saved');
