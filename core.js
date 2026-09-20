@@ -193,6 +193,7 @@
             if (isLeaderCached) loadFeedbackEditor();
         }
         if (document.querySelector('.nav-item[data-page="members-overview"]').classList.contains('active')) loadMemberOverview();
+        if (document.querySelector('.nav-item[data-page="whats-new"]').classList.contains('active')) renderWhatsNew();
         if (document.querySelector('.nav-item[data-page="ocfit-team"]').classList.contains('active')) {
             loadOcFitTeamBuilder();
         }
@@ -304,6 +305,7 @@
         if (page === 'availability') loadAvailability();
         if (page === 'labs-funds') loadLabsFunds();
         if (page === 'members-overview') loadMemberOverview();
+        if (page === 'whats-new') renderWhatsNew();
         if (page === 'armory-tracker') loadArmoryTracker();
         if (page === 'foreign-stock' && !foreignStockLoaded) { foreignStockLoaded = true; loadForeignStock(); }
         if (page === 'crimes-guide' && !crimesGuideLoaded) { crimesGuideLoaded = true; loadCrimesGuide(); }
