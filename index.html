@@ -1109,7 +1109,7 @@
                         <button class="ghost small" id="mo-refresh" style="margin-left:auto;">Refresh</button>
                     </div>
                     <div id="mo-period-note" style="color:var(--muted);font-size:12px;margin:-4px 0 10px;"></div>
-                    <p style="color:var(--muted);font-size:12px;margin:0 0 10px;">Hits are shown as <b>war</b><span style="color:var(--muted);">+chain</span> per war. A member is green at or above the hits target on average, yellow at half of it, red below (members under 14 days are not judged yet). Click a column heading to sort. Weeks run Sunday to Sunday (TCT). Wars count towards the period they ended in.</p>
+                    <p style="color:var(--muted);font-size:12px;margin:0 0 10px;">Hits are shown as <b>war</b><span style="color:var(--muted);">+chain</span> per war. A war counts for a member at 10 war hits, or 20 chain hits if they did no war hits (green = counts, red = doesn't). Green overall = it counted in at least 3 of the last 5 wars; red = fewer, so they need a push on warring (members under 14 days are not judged yet). The last-5-wars rule ignores the period; the period only affects the consumption columns. Click a column heading to sort. Weeks run Sunday to Sunday (TCT). </p>
                     <div class="table-scroll" style="overflow:auto;max-height:75vh;">
                         <div id="mo-table"></div>
                     </div>
@@ -1119,7 +1119,9 @@
                     <details>
                         <summary class="av-sum"><h3>Rules</h3></summary>
                         <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-top:10px;">
-                            <div class="field" style="margin:0;max-width:200px;"><label for="mo-min">Target hits per war (war + chain)</label><input id="mo-min" type="number" min="0" value="10"></div>
+                            <div class="field" style="margin:0;max-width:170px;"><label for="mo-min">War hits needed per war</label><input id="mo-min" type="number" min="0" value="10"></div>
+                            <div class="field" style="margin:0;max-width:200px;"><label for="mo-minchain">…or chain hits if 0 war hits</label><input id="mo-minchain" type="number" min="0" value="20"></div>
+                            <div class="field" style="margin:0;max-width:170px;"><label for="mo-need">Wars to meet it (of last 5)</label><input id="mo-need" type="number" min="1" max="5" value="3"></div>
                             <button class="ghost small" id="mo-save-settings">Save</button>
                         </div>
                     </details>

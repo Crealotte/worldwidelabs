@@ -123,10 +123,9 @@ async function loadMemberOverview() {
     } finally { moBusy = false; }
 }
 
-// Wars that ended inside the picked period.
+// The last 5 finished wars (rolling) — what the war rule is judged on, whatever period is picked.
 function moWarsInPeriod() {
-    const p = moPeriod();
-    return (moData?.wars || []).filter(w => w.end >= p.start && w.end < p.end).sort((a, b) => a.end - b.end);
+    return (moData?.wars || []).slice().sort((a, b) => b.end - a.end).slice(0, 5).sort((a, b) => a.end - b.end);
 }
 
 // Used over the period (or per week), from two snapshots. Null when either snapshot is missing.
@@ -139,25 +138,31 @@ function moUsed(id, stat) {
     return v < 0 ? null : v;
 }
 
+// The war rule: a war counts for a member if they did at least `minWarHits` war hits — or, having
+// done no war hits at all, at least `minChainHits` chain hits instead.
+function moWarOk(p, s) { return !!p && (p.war >= s.minWarHits || (p.war === 0 && p.chain >= s.minChainHits)); }
+
 function moRows() {
     const { hits, settings, tiers } = moData;
     const wars = moWarsInPeriod();
     const counted = wars.filter(w => hits[w.id]);
     return moData.members.map(m => {
-        let war = 0, chain = 0;
+        let war = 0, chain = 0, okWars = 0;
         const perWar = wars.map(w => {
             const h = hits[w.id]?.[m.id];
             if (!hits[w.id]) return null;
-            war += h?.war || 0; chain += h?.chain || 0;
-            return { war: h?.war || 0, chain: h?.chain || 0 };
+            const p = { war: h?.war || 0, chain: h?.chain || 0 };
+            war += p.war; chain += p.chain;
+            p.ok = moWarOk(p, settings);
+            if (p.ok) okWars++;
+            return p;
         });
-        const n = counted.length;
-        const avg = n ? (war + chain) / n : null;
         const isNew = m.daysInFaction !== null && m.daysInFaction < 14;
+        // Pushed on warring when they met the rule in fewer than `needWars` of the last 5 wars.
         let light = 'grey';
-        if (avg !== null && !isNew) light = avg >= settings.minHitsPerWar ? 'green' : avg >= settings.minHitsPerWar / 2 ? 'yellow' : 'red';
+        if (counted.length && !isNew) light = okWars >= settings.needWars ? 'green' : 'red';
         return {
-            ...m, perWar, war, chain, avg, light, isNew, tier: tiers[m.id] || '',
+            ...m, perWar, war, chain, okWars, counted: counted.length, light, isNew, tier: tiers[m.id] || '',
             used: Object.fromEntries(MO_KEYS.map(([k]) => [k, moUsed(m.id, k)])),
         };
     });
@@ -170,8 +175,8 @@ const moNum = v => v === null ? '…' : (moPerWeek ? (Math.round(v * 10) / 10).t
 // Top 3 per competition for the newsletter. Ties share a value but are listed in order.
 function moWinners(rows) {
     const cats = [
-        ['War hits', r => r.war],
-        ['Chain hits', r => r.chain],
+        ['War hits (last 5 wars)', r => r.war],
+        ['Chain hits (last 5 wars)', r => r.chain],
         ...MO_KEYS.map(([k, l]) => [l, r => r.used[k], 'stat']),
     ];
     return cats.map(([label, get]) => ({
@@ -189,14 +194,13 @@ function renderMemberOverview() {
     const sorted = rows.slice().sort((a, b) => { const x = sortVal[moSort](a), y = sortVal[moSort](b); return x < y ? -1 : x > y ? 1 : 0; });
 
     const red = rows.filter(r => r.light === 'red');
-    const yellow = rows.filter(r => r.light === 'yellow');
     $('mo-summary').innerHTML = `
         <div><div style="color:var(--muted);font-size:11px;">Members</div><div style="font-weight:700;">${rows.length}</div></div>
         <div><div style="color:var(--muted);font-size:11px;">On track</div><div style="font-weight:700;color:${MO_LIGHT.green};">${rows.filter(r => r.light === 'green').length}</div></div>
-        <div><div style="color:var(--muted);font-size:11px;">Slipping</div><div style="font-weight:700;color:${MO_LIGHT.yellow};">${yellow.length}</div></div>
+        
         <div><div style="color:var(--muted);font-size:11px;">Needs a push</div><div style="font-weight:700;color:${MO_LIGHT.red};">${red.length}</div></div>
-        <div><div style="color:var(--muted);font-size:11px;">Wars in period</div><div style="font-weight:700;">${moWarsInPeriod().length}</div></div>`;
-    $('mo-push').innerHTML = red.length ? `<span style="color:var(--muted);font-size:12px;">Needs a push (hits): </span>${red.map(r => `<span class="chip" style="cursor:default;border-color:${MO_LIGHT.red};">${esc(r.name)}</span>`).join(' ')}` : '';
+        <div><div style="color:var(--muted);font-size:11px;">Wars judged</div><div style="font-weight:700;">${moWarsInPeriod().length}</div></div>`;
+    $('mo-push').innerHTML = red.length ? `<span style="color:var(--muted);font-size:12px;">Needs a push on warring (met the war rule in fewer than ${moData.settings.needWars} of the last 5 wars): </span>${red.map(r => `<span class="chip" style="cursor:default;border-color:${MO_LIGHT.red};">${esc(r.name)}</span>`).join(' ')}` : '';
 
     const winners = moWinners(rows);
     const medal = ['🥇', '🥈', '🥉'];
@@ -213,7 +217,9 @@ function renderMemberOverview() {
         navigator.clipboard.writeText(text).then(() => toast('Winners copied'));
     };
 
-    $('mo-min').value = moData.settings.minHitsPerWar;
+    $('mo-min').value = moData.settings.minWarHits;
+    $('mo-minchain').value = moData.settings.minChainHits;
+    $('mo-need').value = moData.settings.needWars;
 
     const th = (key, label) => `<th style="padding:4px 8px;cursor:pointer;white-space:nowrap;${moSort === key ? 'color:var(--reagent);' : ''}" data-sort="${key}">${label}${moSort === key ? ' ▾' : ''}</th>`;
     const warHead = moWarsInPeriod().map(w => `<th style="padding:4px 8px;font-size:11px;white-space:nowrap;" title="${esc(`vs ${w.opponent}`)}">${esc(w.opponent.slice(0, 10))}<br><span style="color:var(--muted);">${new Date(w.end * 1000).toLocaleDateString(undefined, { day: '2-digit', month: 'short', timeZone: 'UTC' })}</span></th>`).join('');
@@ -223,7 +229,7 @@ function renderMemberOverview() {
             <thead><tr style="color:var(--muted);text-align:left;">
                 ${th('light', '●')}${th('name', 'Member')}${th('active', 'Active')}
                 ${warHead}
-                <th style="padding:4px 8px;">Avg hits</th>
+                <th style="padding:4px 8px;" title="Wars (of the last 5) where the war rule was met">Wars OK</th>
                 <th style="padding:4px 8px;" title="1.5m+ battle stats = ${moData.energyTarget.high} E/week, under = ${moData.energyTarget.low} E/week. Torn hides battle stats, so set it by hand.">Energy tier</th>
                 ${MO_KEYS.map(([k, l]) => th(k, `${l}<br><span style="font-size:10px;font-weight:400;">${unitLabel}</span>`)).join('')}
                 ${th('war', 'War hits')}${th('chain', 'Chain hits')}
@@ -233,8 +239,8 @@ function renderMemberOverview() {
                     <td style="padding:4px 8px;"><span title="${r.isNew ? 'New member (under 14 days) — not judged yet' : r.light}" style="display:inline-block;width:12px;height:12px;border-radius:50%;background:${MO_LIGHT[r.light]};"></span></td>
                     <td style="padding:4px 8px;white-space:nowrap;"><a href="https://www.torn.com/profiles.php?XID=${esc(r.id)}" target="_blank" rel="noopener" style="color:var(--text);">${esc(r.name)}</a></td>
                     <td style="padding:4px 8px;color:var(--muted);white-space:nowrap;">${moAgo(r.lastAction)}</td>
-                    ${r.perWar.map(p => `<td style="padding:4px 8px;font-family:var(--mono);white-space:nowrap;">${p ? `${p.war}${p.chain ? `<span style="color:var(--muted);">+${p.chain}</span>` : ''}` : '…'}</td>`).join('')}
-                    <td style="padding:4px 8px;font-family:var(--mono);">${r.avg === null ? '…' : (Math.round(r.avg * 10) / 10)}</td>
+                    ${r.perWar.map(p => `<td style="padding:4px 8px;font-family:var(--mono);white-space:nowrap;${p ? `color:${p.ok ? MO_LIGHT.green : MO_LIGHT.red};` : ''}">${p ? `${p.war}${p.chain ? `<span style="color:var(--muted);">+${p.chain}</span>` : ''}` : '…'}</td>`).join('')}
+                    <td style="padding:4px 8px;font-family:var(--mono);font-weight:700;color:${MO_LIGHT[r.light]};">${r.counted ? `${r.okWars}/${r.counted}` : '…'}</td>
                     <td style="padding:4px 8px;"><select class="mo-tier" data-id="${esc(r.id)}" style="font-size:12px;padding:2px 4px;width:auto;">
                         <option value="">—</option><option value="high" ${r.tier === 'high' ? 'selected' : ''}>1.5m+ · ${moData.energyTarget.high}</option><option value="low" ${r.tier === 'low' ? 'selected' : ''}>&lt;1.5m · ${moData.energyTarget.low}</option></select></td>
                     ${MO_KEYS.map(([k]) => `<td style="padding:4px 8px;font-family:var(--mono);">${moNum(r.used[k])}</td>`).join('')}
@@ -261,7 +267,7 @@ $('mo-view-week').addEventListener('click', () => { moPerWeek = true; renderMemb
 $('mo-refresh').addEventListener('click', () => { moData = null; loadMemberOverview(); });
 
 $('mo-save-settings').addEventListener('click', async () => {
-    const r = await moFetch({ action: 'mo-settings', minHitsPerWar: $('mo-min').value });
+    const r = await moFetch({ action: 'mo-settings', minWarHits: $('mo-min').value, minChainHits: $('mo-minchain').value, needWars: $('mo-need').value });
     if (r.error) { toast(r.error); return; }
     moData.settings = r.settings;
     toast('Saved');
