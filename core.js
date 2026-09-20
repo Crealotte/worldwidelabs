@@ -292,6 +292,7 @@
         if (page !== 'payout-receipt' && window.location.pathname.replace(/^\/+|\/+$/g, '') !== page) {
             history.replaceState(null, '', '/' + page);
         }
+        { const prev = sessionStorage.getItem(CURRENT_PAGE_KEY); if (page === 'bug-report' && prev && prev !== 'bug-report') sessionStorage.setItem('wwl_prev_page', prev); } // so a bug report knows where you came from
         sessionStorage.setItem(CURRENT_PAGE_KEY, page);
         if (page === 'targets') loadBaldrLists();
         if (page === 'targetfinder') initTargetFinder();
@@ -308,6 +309,7 @@
         if (page === 'energy') loadGymPlanner();
         if (page === 'gym-stats') loadGymStats();
         if (page === 'war-reports') loadWarReports();
+        if (page === 'bug-report') loadBugReport();
         if (page === 'labs-funds') loadLabsFunds();
         if (page === 'members-overview') loadMemberOverview();
         if (page === 'whats-new') renderWhatsNew();

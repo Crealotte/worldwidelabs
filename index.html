@@ -509,6 +509,7 @@
         <div class="nav-item" data-page="whats-new" id="nav-whats-new">What's new</div>
         <div class="nav-item" data-page="links">Tools &amp; links</div>
         <div class="nav-item" data-page="feedback">Feedback</div>
+        <div class="nav-item" data-page="bug-report">Bug reports</div>
 
 
         <div class="spacer"></div>
@@ -1301,6 +1302,29 @@
             <div id="wr-list"></div>
         </section>
 
+        <section class="page" id="page-bug-report">
+            <div class="lab-label">WWL·19 / for everyone</div>
+            <h2>Bug reports</h2>
+            <p class="pagedesc">Something not working or looking wrong? Tell us what happened. Your report goes straight to the owner on Discord, with your name and the page you were on. A screenshot helps a lot.</p>
+
+            <div class="panel">
+                <div class="field" style="max-width:340px;"><label for="br-page">Which page was it on?</label><select autocomplete="off" id="br-page"></select></div>
+                <div class="field"><label for="br-text">What went wrong?</label>
+                    <textarea autocomplete="off" id="br-text" rows="6" maxlength="1500" placeholder="What did you do, what did you expect, and what happened instead?" style="width:100%;"></textarea></div>
+                <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:10px;">
+                    <label class="ghost small" for="br-file" style="cursor:pointer;padding:6px 12px;border:1px solid var(--line);border-radius:var(--radius);">📎 Add a screenshot</label>
+                    <input type="file" id="br-file" accept="image/*" style="display:none;">
+                    <span style="color:var(--muted);font-size:12px;">or paste one with Ctrl+V</span>
+                </div>
+                <div id="br-preview-wrap" style="display:none;margin-bottom:12px;">
+                    <img id="br-preview" alt="Screenshot preview" style="max-width:100%;max-height:260px;border:1px solid var(--line);border-radius:var(--radius);display:block;margin-bottom:6px;">
+                    <button class="ghost small" id="br-clear">Remove screenshot</button>
+                </div>
+                <button class="ghost" id="br-send">Send report</button>
+                <div class="status" id="br-status"></div>
+            </div>
+        </section>
+
         <section class="page" id="page-availability">
             <div class="lab-label">WWL·13 / for everyone</div>
             <h2>War Availability</h2>
@@ -1705,6 +1729,7 @@
 <script src="gym-planner.js"></script>
 <script src="gym-stats.js"></script>
 <script src="war-reports.js"></script>
+<script src="bug-report.js"></script>
 <script src="level-targets.js"></script>
 <script src="tools-links.js"></script>
 <script src="player-profile.js"></script>
