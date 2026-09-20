@@ -736,6 +736,19 @@
                     <div class="bar-track"><div class="bar-fill" id="gp-progress-fill" style="background:var(--reagent);width:0%;"></div></div>
                 </div>
                 <div id="gp-plan" style="margin-bottom:18px;"></div>
+                <details class="panel" style="margin:0 0 16px;padding:10px 14px;" id="gp-script-panel">
+                    <summary style="cursor:pointer;font-weight:700;">📱 Use this checklist inside Torn (TornPDA or Tampermonkey)</summary>
+                    <div style="font-size:13px;color:var(--muted);margin-top:8px;line-height:1.6;">
+                        A small userscript shows this same checklist on Torn's gym page, so you can tick off your steps while you train. Ticks are shared both ways.
+                        <ol style="margin:6px 0 6px 18px;padding:0;">
+                            <li>Press <b>Copy the script</b> below.</li>
+                            <li><b>TornPDA:</b> Settings → Userscripts → add a new script and paste it. Your API key is filled in for you.<br><b>Computer:</b> in Tampermonkey create a new script, paste it and save. It asks for your API key once.</li>
+                            <li>Open Torn's gym page and press the <b>WWL energy plan</b> bar at the bottom right.</li>
+                        </ol>
+                        Your settings (stat, method, candy, cans, refill) are changed here on the planner, never in the script — the script shows a link back to this page.
+                    </div>
+                    <button class="ghost small" id="gp-script-copy" style="margin-top:8px;">Copy the script</button>
+                </details>
 
                 <h3 id="gp-chart-head" style="margin:0 0 10px;">Compared over one week</h3>
                 <div id="gp-chart"></div>

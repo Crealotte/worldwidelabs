@@ -439,9 +439,19 @@ function renderGymPlanner() {
     $('gp-plan').querySelectorAll('.gp-check').forEach(cb => cb.addEventListener('change', () => {
         checks[cb.dataset.k] = cb.checked;
         try { localStorage.setItem(gpWeekKey(), JSON.stringify(checks)); } catch (e) { /* not critical */ }
+        gpPlanFetch({ action: 'plan-check', step: cb.dataset.k, checked: cb.checked }); // so the userscript in Torn shows the same ticks
         renderGpProgress();
     }));
     renderGpProgress();
+    // keep a copy of the plan on the server, so the WWL userscript in Torn shows the same checklist (ticks are shared both ways)
+    gpPlanFetch({ action: 'plan-save', week: Math.floor(Date.now() / (7 * 86400e3)), stat: inp.stat, method: chosen.name, checks,
+        summary: `${chosen.name}: about +${gpN(w.gain)} ${inp.stat} from ${gpN(w.energyUsed)} energy a week`, blocks }).then(r => {
+        const server = r?.plan?.checks;
+        if (!server) return;
+        let changed = false;
+        $('gp-plan').querySelectorAll('.gp-check').forEach(cb => { const on = !!server[cb.dataset.k]; if (cb.checked !== on) { cb.checked = on; checks[cb.dataset.k] = on; changed = true; } });
+        if (changed) { try { localStorage.setItem(gpWeekKey(), JSON.stringify(checks)); } catch (e) { /* not critical */ } renderGpProgress(); }
+    });
     const gap = inp.weekly - w.energyUsed;
     const reqNote = gap > 0 ? `<div style="color:var(--danger);font-size:13px;margin-top:4px;">That is ${gpN(gap)} E short of your minimum of ${gpN(inp.weekly)} E a week — add a bar, a Xanax, a refill or an energy can.</div>` : `<div style="color:var(--reagent);font-size:13px;margin-top:4px;">Meets your minimum of ${gpN(inp.weekly)} E a week.</div>`;
     $('gp-summary').innerHTML = `<b>${esc(chosen.name)}</b> for a week: about <b style="color:var(--reagent);">+${gpN(w.gain)} ${inp.stat}</b> from ${gpN(w.energyUsed)} energy${w.priced ? `, items ≈ <b>${gpMoney(w.cost)}</b>` : ''}.${reqNote}`;
@@ -513,3 +523,20 @@ $('gp-can-n').addEventListener('change', () => {
     el.addEventListener('toggle', () => { try { localStorage.setItem('wwl_gym_settings_open', el.open ? '1' : '0'); } catch (e) { /* not critical */ } });
 })();
 $('gp-candy-pick').addEventListener('change', () => { try { localStorage.setItem(GP_CANDY_KEY, $('gp-candy-pick').value); } catch (e) { /* not critical */ } renderGymPlanner(); });
+
+async function gpPlanFetch(body) {
+    try {
+        const res = await fetch('/api/war-payout', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key: apiKey, ...body }) });
+        const r = await res.json();
+        return r.error ? null : r;
+    } catch (e) { return null; }
+}
+
+// Copy the userscript with this site's own address filled in.
+$('gp-script-copy').addEventListener('click', async () => {
+    try {
+        const src = await (await fetch('/wwl-energy-planner.user.js', { cache: 'no-store' })).text();
+        await navigator.clipboard.writeText(src.split('__WWL_BASE__').join(location.origin));
+        toast('Script copied — paste it into TornPDA or Tampermonkey');
+    } catch (e) { toast('Could not copy the script — try again'); }
+});

@@ -13,8 +13,9 @@
 const WHATS_NEW = [
     {
         version: '1.13', date: '2026-09-20',
-        title: 'Timezone map and Newsletter',
+        title: 'Timezone map, Newsletter and the energy plan inside Torn',
         everyone: [
+            'Energy planner: a new "Use this checklist inside Torn" box has a small userscript for TornPDA or Tampermonkey. It shows your weekly checklist on Torn\'s gym page, with the same ticks as the site, and a link back to the planner for changing your settings.',
             'New Timezone map (Faction menu): a world map with the timezone lines. Choose your country and it lights up — the more members from a country, the greener. The US is split into its states, and a magnifier button (2×, 4× or 8×) enlarges any spot you hover over. Nobody is shown by name.',
         ],
         leaders: [
@@ -74,9 +75,7 @@ const WHATS_NEW = [
             'Natural energy: Soft is 3 bars + 2 Xanax a day (3 log-ins), Hard is 4 bars + 3 Xanax. The daily energy refill is on by default, you can add energy cans (each can has its own energy and price), and experienced players can set their own bars and Xanax per day.',
             'Your settings fold away into one button once you have chosen, so the page shows your plan first.',
         ],
-        leaders: [
-            'New Newsletter page (Leadership menu): builds a draft of the monthly newsletter in Discord-sized parts — competition winners incl. energy trained, the Steadfast perks of this and next month, respect gained, perks upgraded and what the perk roadmap unlocks next. You can change every part before you copy it. Respect gained and perks upgraded are saved from today on, so they fill in from the next newsletter.',
-        ],
+        leaders: [],
     },
     {
         version: '1.8', date: '2026-09-20',
@@ -86,9 +85,7 @@ const WHATS_NEW = [
             'Energy planner: the Happy Jump guides are closed by default, and the weekly minimum under 1.5m battle stats is now correctly 2,200 energy (it said 2,400).',
             'War participation fix: a war counts when you did 10 war hits, or 20 chain hits if you did fewer than 10 war hits (before, the chain hits only counted if you had no war hits at all).',
         ],
-        leaders: [
-            'New Newsletter page (Leadership menu): builds a draft of the monthly newsletter in Discord-sized parts — competition winners incl. energy trained, the Steadfast perks of this and next month, respect gained, perks upgraded and what the perk roadmap unlocks next. You can change every part before you copy it. Respect gained and perks upgraded are saved from today on, so they fill in from the next newsletter.',
-        ],
+        leaders: [],
     },
     {
         version: '1.7', date: '2026-09-20',
@@ -154,9 +151,7 @@ const WHATS_NEW = [
             'War Availability (War menu): tick the hours you can play before a war, in real time slots (00:00 – 01:00), so leaders can see when the faction can mobilise.',
             'Every page now has its own address, so you can link straight to a page (for example /availability).',
         ],
-        leaders: [
-            'New Newsletter page (Leadership menu): builds a draft of the monthly newsletter in Discord-sized parts — competition winners incl. energy trained, the Steadfast perks of this and next month, respect gained, perks upgraded and what the perk roadmap unlocks next. You can change every part before you copy it. Respect gained and perks upgraded are saved from today on, so they fill in from the next newsletter.',
-        ],
+        leaders: [],
     },
     {
         version: '1.1', date: '2026-09-18',

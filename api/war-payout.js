@@ -33,6 +33,7 @@ const { warReports } = require('../lib/warReports');
 const { sendBugReport, bugsHandle, suggestHandle } = require('../lib/bugReport');
 const { steadfastHandle, steadfastImage, energyDaily } = require('../lib/steadfast');
 const { tzHandle } = require('../lib/tzMap');
+const { planHandle } = require('../lib/planSync');
 const { nightlyHandle, nightlyRun } = require('../lib/nightly');
 const { labsIsOwner, labsHasOwners, labsHandle, labsRecordReceipt } = require('../lib/labsLedger');
 
@@ -222,6 +223,12 @@ function respondedMap(data) {
 
 module.exports = async function handler(req, res) {
     try {
+        // The WWL userscript runs on torn.com and reads/ticks the energy plan from here, so torn.com may call these actions.
+        res.setHeader('Access-Control-Allow-Origin', 'https://www.torn.com');
+        res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+        res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+        res.setHeader('Vary', 'Origin');
+        if (req.method === 'OPTIONS') return res.status(204).end();
         if (!REDIS_URL || !REDIS_TOKEN) {
             return res.status(500).json({ error: 'Database not connected. In Vercel: Storage -> Create Database -> Upstash Redis, and connect it to this project.' });
         }
@@ -401,6 +408,8 @@ module.exports = async function handler(req, res) {
             if (!(await isLeader(key))) return res.status(403).json({ error: 'Leaders only' });
             return res.status(200).json(await nightlyHandle(action, { redis, key, factionId, playerId, name: playerName }));
         }
+        // The weekly energy plan, shared between the Energy planner page and the userscript in Torn.
+        if (action.startsWith('plan-')) return res.status(200).json(await planHandle(action, req.body, { redis, playerId }));
         // Timezone map — every member reports their own timezone; everyone reads anonymous counts.
         if (action.startsWith('tz-')) return res.status(200).json(await tzHandle(action, req.body, { redis, factionId, playerId }));
         // Suggestions — everyone can read, add and vote; only leaders set a status or delete.
