@@ -379,12 +379,19 @@ module.exports = async function handler(req, res) {
         if (action === 'bug-report') return res.status(200).json(await sendBugReport({ redis, playerId, name: playerName, factionName, body: req.body }));
         // Energy tracker page — energy trained per member per day (like Torn Intel's leaderboard), open to every member.
         if (action === 'energy-board') {
-            const days = Math.min(120, Math.max(7, Number(req.body.days) || 30));
             const today = Math.floor(Date.now() / 1000 / 86400);
-            const r = await energyDaily(redis, factionId, today - days + 1, today);
+            const isoDay = s => (/^\d{4}-\d{2}-\d{2}$/.test(String(s || '')) ? Math.floor(Date.parse(`${s}T00:00:00Z`) / 1000 / 86400) : null);
+            let fromDay = isoDay(req.body.from), toDay = isoDay(req.body.to);
+            if (fromDay === null || toDay === null || toDay < fromDay) { // no calendar range picked: the last N days
+                const n = Math.min(120, Math.max(7, Number(req.body.days) || 30));
+                fromDay = today - n + 1; toDay = today;
+            }
+            toDay = Math.min(toDay, today); fromDay = Math.max(fromDay, toDay - 365); // at most a year at once
+            const days = toDay - fromDay + 1;
+            const r = await energyDaily(redis, factionId, fromDay, toDay);
             const rosterRaw = await redis(['GET', `wwl:mo-roster:${factionId}`]); // names a leader's page saved, for members without one yet
             for (const m of (rosterRaw ? JSON.parse(rosterRaw) : [])) if (r.members[m.id] && !r.members[m.id].name) r.members[m.id].name = m.name;
-            return res.status(200).json({ ...r, days, today, me: playerId });
+            return res.status(200).json({ ...r, days, today, fromDay, toDay, me: playerId });
         }
         // Steadfast countdown — everyone can read the stored numbers; refreshing, the share link and the goals are for leaders.
         if (action.startsWith('steadfast-')) return res.status(200).json(await steadfastHandle(action, req.body, { redis, key, factionId, leader: action === 'steadfast-get' ? false : await isLeader(key) }));

@@ -1554,6 +1554,12 @@
                     <button class="ghost small et-range" data-days="60">60 days</button>
                     <button class="ghost small et-range" data-days="90">90 days</button>
                 </div>
+                <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px;">
+                    <span style="font-size:13px;color:var(--muted);">Calendar:</span>
+                    <input type="date" id="et-from" style="width:auto;"> <span style="color:var(--muted);">to</span> <input type="date" id="et-to" style="width:auto;">
+                    <button class="ghost small" id="et-apply">Show</button>
+                    <button class="ghost small" id="et-news" title="From the first Sunday of the month until today">This newsletter month</button>
+                </div>
                 <div id="et-note" style="color:var(--muted);font-size:12px;margin-bottom:8px;"></div>
                 <div class="table-scroll" style="overflow:auto;"><div id="et-table"></div></div>
             </div>

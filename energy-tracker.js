@@ -7,6 +7,7 @@
 
 let etData = null;
 let etDays = 30;
+let etRange = null; // { from, to } as YYYY-MM-DD when a calendar range is picked, else null (= the last etDays days)
 let etOpen = new Set();
 
 async function loadEnergyTracker() {
@@ -38,12 +39,16 @@ function etRow(id, m) {
 
 function renderEnergyTracker() {
     const rows = Object.entries(etData.members).map(([id, m]) => etRow(id, m)).filter(r => r.total > 0 || r.id === etData.me).sort((a, b) => b.total - a.total);
-    document.querySelectorAll('.et-range').forEach(b => b.classList.toggle('active-toggle', Number(b.dataset.days) === etDays));
+    document.querySelectorAll('.et-range').forEach(b => b.classList.toggle('active-toggle', !etRange && Number(b.dataset.days) === etDays));
+    const iso = d => new Date(d * 86400e3).toISOString().slice(0, 10);
+    $('et-from').value = iso(etData.fromDay); $('et-to').value = iso(etData.toDay);
+    $('et-news').classList.toggle('active-toggle', !!etRange && etRange.news);
+    const label = etRange ? `${etDate(iso(etData.fromDay))} → ${etDate(iso(etData.toDay))}` : `last ${etData.days} days`;
 
     const mine = rows.find(r => r.id === etData.me);
     $('et-me').innerHTML = mine ? `
         <div class="grid3">
-            <div class="stat"><div class="k">You — last ${etData.days} days</div><div class="v good">${Math.round(mine.total).toLocaleString()}</div><div class="s">energy trained in the gym</div></div>
+            <div class="stat"><div class="k">You — ${label}</div><div class="v good">${Math.round(mine.total).toLocaleString()}</div><div class="s">energy trained in the gym</div></div>
             <div class="stat"><div class="k">Per day</div><div class="v">${Math.round(mine.avg).toLocaleString()}</div><div class="s">on average</div></div>
             <div class="stat"><div class="k">Your place</div><div class="v">#${rows.indexOf(mine) + 1}</div><div class="s">of ${rows.length}</div></div>
         </div>` : '<p style="color:var(--muted);margin:0;">No energy of yours has been counted in these days yet.</p>';
@@ -82,4 +87,19 @@ function renderEnergyTracker() {
     }));
 }
 
-document.querySelectorAll('.et-range').forEach(b => b.addEventListener('click', () => { etDays = Number(b.dataset.days); loadEnergyTracker(); }));
+document.querySelectorAll('.et-range').forEach(b => b.addEventListener('click', () => { etDays = Number(b.dataset.days); etRange = null; loadEnergyTracker(); }));
+
+// the calendar: pick any from / to date (both days included)
+$('et-apply').addEventListener('click', () => {
+    const from = $('et-from').value, to = $('et-to').value;
+    if (!from || !to || to < from) { toast('Pick a from date that is not after the to date.'); return; }
+    etRange = { from, to }; etOpen = new Set(); loadEnergyTracker();
+});
+// the current newsletter month: from the latest first Sunday of a month until today
+$('et-news').addEventListener('click', () => {
+    const now = new Date();
+    const firstSunday = (y, m) => { const f = new Date(Date.UTC(y, m, 1)); return new Date(Date.UTC(y, m, 1 + (7 - f.getUTCDay()) % 7)); };
+    let s = firstSunday(now.getUTCFullYear(), now.getUTCMonth());
+    if (s > now) s = firstSunday(now.getUTCFullYear(), now.getUTCMonth() - 1);
+    etRange = { from: s.toISOString().slice(0, 10), to: now.toISOString().slice(0, 10), news: true }; etOpen = new Set(); loadEnergyTracker();
+});
