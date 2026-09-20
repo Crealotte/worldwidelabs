@@ -9,6 +9,15 @@
 const WHATS_NEW = [
     {
         date: '2026-09-20',
+        title: 'Sidebar tidy-up and war rule fix',
+        everyone: [
+            'The sidebar is reorganised: a new War group (War Badges and War Availability), a Crimes group (Crimes Guide and OC Fit Tracker), and What\'s new, Tools & links and Feedback now sit at the bottom. What\'s new turns bold with a dot when there is an update you haven\'t opened yet.',
+            'War participation: a war now counts when you did 10 war hits, or 20 chain hits if you did fewer than 10 war hits (before, the chain hits only counted if you had no war hits at all).',
+        ],
+        leaders: [],
+    },
+    {
+        date: '2026-09-20',
         title: 'Your standing on the dashboard',
         everyone: [
             'New "Your standing" card on the dashboard: your energy group (worked out from your own total battle stats), the energy you need to train this month (4,400 a week at 1.5m+ stats, 2,200 below — 17,600 or 22,000 in a 4 or 5 week month at the top group), how many of the last 5 wars you took part in, and your place this month in each competition.',
