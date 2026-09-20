@@ -337,3 +337,18 @@ $('mo-probe-upg-btn').addEventListener('click', async () => {
         $('mo-probe-upg-out').style.display = 'block';
     } catch (e) { toast(e.message); } finally { btn.disabled = false; btn.textContent = 'Check faction upgrades'; }
 });
+
+$('mo-import-btn').addEventListener('click', async () => {
+    const out = $('mo-import-out'), btn = $('mo-import-btn');
+    btn.disabled = true; btn.textContent = 'Importing…'; out.textContent = '';
+    try {
+        const r = await moFetch({ action: 'mo-energy-import', text: $('mo-import-text').value });
+        if (r.error) throw new Error(r.error);
+        out.style.color = r.matched ? 'var(--reagent)' : 'var(--danger)';
+        out.textContent = r.matched
+            ? `✓ Imported ${r.matched} member${r.matched === 1 ? '' : 's'}, ${r.days} days.${r.unmatched.length ? ` Not recognised: ${r.unmatched.join(', ')}.` : ''} Paste the next member whenever you like.`
+            : `Nothing imported — no member with day-by-day rows was recognised${r.unmatched.length ? ` (${r.unmatched.join(', ')})` : ''}. Make sure the member is opened in Intel so the day rows are included.`;
+        if (r.matched) { $('mo-import-text').value = ''; moEnergy = null; loadMemberOverview(); }
+    } catch (e) { out.style.color = 'var(--danger)'; out.textContent = e.message; }
+    finally { btn.disabled = false; btn.textContent = 'Import this member'; }
+});

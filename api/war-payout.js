@@ -31,7 +31,8 @@ const { moHandle, moMe } = require('../lib/memberOverview');
 const { gymHandle } = require('../lib/gymStats');
 const { warReports } = require('../lib/warReports');
 const { sendBugReport, bugsHandle } = require('../lib/bugReport');
-const { steadfastHandle, steadfastImage, steadfastRefresh } = require('../lib/steadfast');
+const { steadfastHandle, steadfastImage } = require('../lib/steadfast');
+const { nightlyHandle, nightlyRun } = require('../lib/nightly');
 const { labsIsOwner, labsHasOwners, labsHandle, labsRecordReceipt } = require('../lib/labsLedger');
 
 const REDIS_URL = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL;
@@ -228,16 +229,8 @@ module.exports = async function handler(req, res) {
         // key per faction, of a leader with faction API access, separated by commas. Harmless to call by hand: it only
         // refreshes stored numbers.
         if (req.method === 'GET' && req.query?.cron) {
-            const keys = String(process.env.WWL_SNAPSHOT_KEYS || '').split(',').map(s => s.trim()).filter(Boolean);
-            const results = [];
-            for (const k of keys) {
-                try {
-                    const p = await getProfile(k);
-                    if (!p) { results.push({ ok: false, error: 'key not usable' }); continue; }
-                    await steadfastRefresh({ redis, key: k, factionId: p.factionId, force: true });
-                    results.push({ ok: true, faction: p.factionId });
-                } catch (e) { results.push({ ok: false, error: String(e.message || e).slice(0, 120) }); }
-            }
+            const extra = String(process.env.WWL_SNAPSHOT_KEYS || '').split(',').map(s => s.trim()).filter(Boolean);
+            const results = await nightlyRun(redis, extra, getProfile);
             return res.status(200).json({ ran: results.length, results });
         }
 
@@ -386,6 +379,11 @@ module.exports = async function handler(req, res) {
         if (action === 'bug-report') return res.status(200).json(await sendBugReport({ redis, playerId, name: playerName, factionName, body: req.body }));
         // Steadfast countdown — everyone can read the stored numbers; refreshing, the share link and the goals are for leaders.
         if (action.startsWith('steadfast-')) return res.status(200).json(await steadfastHandle(action, req.body, { redis, key, factionId, leader: action === 'steadfast-get' ? false : await isLeader(key) }));
+        // Nightly saving switched on by a leader from the app (their key is kept encrypted for the cron job). See lib/nightly.js.
+        if (action.startsWith('nightly-')) {
+            if (!(await isLeader(key))) return res.status(403).json({ error: 'Leaders only' });
+            return res.status(200).json(await nightlyHandle(action, { redis, key, factionId, playerId, name: playerName }));
+        }
         // Known bugs list — anyone can read it and press "I have this too"; only leaders change the list.
         if (action.startsWith('bugs-')) {
             if (!['bugs-list', 'bugs-metoo'].includes(action) && !(await isLeader(key))) return res.status(403).json({ error: 'Leaders only' });

@@ -46,6 +46,7 @@ function renderSteadfastCard(leader) {
     $('pc-updated').textContent = `Numbers from ${new Date(cd.at * 1000).toLocaleString()}`;
     $('pc-leader').style.display = leader ? 'block' : 'none';
     if (leader) {
+        pcLoadNightly();
         cd.rows.forEach(r => { const el = $(`pc-goal-${r.stat}`); if (document.activeElement !== el) el.value = ''; el.placeholder = r.goal ? n(r.goal) : 'goal'; });
     }
 }
@@ -66,4 +67,30 @@ $('pc-goals-save').addEventListener('click', async () => {
     if (r.error) { toast(r.error); return; }
     pcCountdown = r.countdown; renderSteadfastCard(true);
     toast('Goals saved');
+});
+
+// ---- nightly saving (leaders): switched on from here, with the leader's own key, kept encrypted on the server ----
+async function pcLoadNightly() {
+    const r = await pcFetch({ action: 'nightly-status' });
+    if (r.error) { $('pc-nightly-status').textContent = ''; return; }
+    const when = ts => new Date(ts * 1000).toLocaleString();
+    $('pc-nightly-status').innerHTML = r.enabled
+        ? `<span style="color:var(--reagent);font-weight:700;">ON</span> — switched on by ${esc(r.by || 'a leader')} (${when(r.since)}). Last run: ${r.lastRun ? when(r.lastRun) : 'not yet'} ${r.lastOk === false ? `<span style="color:var(--danger);">✗ ${esc(r.lastError || 'failed')} — turn it on again with a working key</span>` : r.lastOk ? '✓' : ''}`
+        : '<span style="color:var(--muted);">OFF — the counters are only saved when a leader opens WWL.</span>';
+    $('pc-nightly-on').style.display = r.enabled ? 'none' : 'inline-block';
+    $('pc-nightly-off').style.display = r.enabled ? 'inline-block' : 'none';
+}
+$('pc-nightly-on').addEventListener('click', async () => {
+    if (!confirm('Turn on nightly saving?\n\nYour API key is kept ENCRYPTED on the WorldWideLabs server and used once a night only to read the faction\'s gym counters and upgrade levels (the same things the app reads when you open it). It is never shown to anyone. You can turn it off here at any time, or delete the key in Torn to stop it.')) return;
+    const btn = $('pc-nightly-on'); btn.disabled = true;
+    const r = await pcFetch({ action: 'nightly-enable' });
+    btn.disabled = false;
+    if (r.error) { toast(`Couldn't turn it on: ${r.error}`); return; }
+    toast('Nightly saving is on'); pcLoadNightly();
+});
+$('pc-nightly-off').addEventListener('click', async () => {
+    if (!confirm('Turn nightly saving off? The counters are then only saved when a leader opens WWL.')) return;
+    const r = await pcFetch({ action: 'nightly-disable' });
+    if (r.error) { toast(r.error); return; }
+    toast('Nightly saving is off'); pcLoadNightly();
 });
