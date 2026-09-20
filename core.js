@@ -307,6 +307,7 @@
         if (page === 'availability') loadAvailability();
         if (page === 'energy') loadGymPlanner();
         if (page === 'gym-stats') loadGymStats();
+        if (page === 'war-reports') loadWarReports();
         if (page === 'labs-funds') loadLabsFunds();
         if (page === 'members-overview') loadMemberOverview();
         if (page === 'whats-new') renderWhatsNew();

@@ -429,6 +429,7 @@ $('wp-save-receipt').addEventListener('click', async () => {
         const receipt = {
             opponent: wpSelectedWar?.them?.name || 'Not specified', warEnd: wpSelectedWar?.end || Math.floor(Date.now() / 1000),
             warStart: wpSelectedWar?.start, enemyFactionId: wpSelectedWar?.them?.id, // used server-side to also bake War Badges into this receipt
+            won: wpSelectedWar?.winner != null ? String(wpSelectedWar.winner) === String(wpSelectedWar.us?.id) : null, scoreUs: wpSelectedWar?.us?.score ?? null, scoreThem: wpSelectedWar?.them?.score ?? null, // shown on the War reports page
             costs: wpCosts, netPool: computed.netPool, retained: computed.retained, payoutPool: computed.payoutPool,
             retainPct: computed.cfg.retainPct, mode: computed.cfg.mode, subSplit: computed.subSplit,
             warRate: computed.warRate, overflowRate: computed.overflowRate,
