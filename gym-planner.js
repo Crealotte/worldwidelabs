@@ -147,23 +147,17 @@ const gpMoney = n => `$${Math.round(n).toLocaleString()}`;
 function renderGymPlanner() {
     const inp = gpInputs();
     const grp = gpGroup();
-    let showJumps = false;
-    try { showJumps = localStorage.getItem('wwl_gym_show_jumps') === '1'; } catch (e) { /* hidden */ }
     const high = grp.group === 'a';
-    const jumpsOff = false; // every option is always listed, so everyone can compare the estimates
-    $('gp-show-jumps').textContent = showJumps ? 'Hide the happy jump options' : 'I do happy jumps — show the jump options';
-    $('gp-show-jumps').style.display = 'none';
     $('gp-group-note').innerHTML = grp.total === null && grp.source === 'unknown'
         ? 'Your battle stats couldn\'t be read, so pick your group with the buttons below.'
-        : `${grp.source === 'chosen' ? 'You picked' : 'From your own battle stats'}: <b style="color:var(--text);">${high ? '1.5m+' : 'under 1.5m'}</b>${grp.total ? ` (${(grp.total / 1e6).toFixed(2)}m total)` : ''} — <b style="color:var(--text);">at least ${high ? '4,400' : '2,200'} energy a week</b>${high ? ', and most people at this level train on natural energy — the jump options below are there to compare.' : ', and you can plan happy jumps below.'}`;
+        : `${grp.source === 'chosen' ? 'You picked' : 'From your own battle stats'}: <b style="color:var(--text);">${high ? '1.5m+' : 'under 1.5m'}</b>${grp.total ? ` (${(grp.total / 1e6).toFixed(2)}m total)` : ''} — <b style="color:var(--text);">at least ${high ? '4,400' : '2,200'} energy a week</b>${high ? '.' : '.'}`;
     ['a', 'b'].forEach(g => { const b = $(`eg-group-${g}`); b.style.borderColor = grp.source === 'chosen' && grp.group === g ? 'var(--reagent)' : 'var(--line)'; b.style.color = grp.source === 'chosen' && grp.group === g ? 'var(--reagent)' : 'var(--text)'; });
     $('gp-group-auto').style.borderColor = grp.source === 'chosen' ? 'var(--line)' : 'var(--reagent)';
     $('gp-group-auto').style.color = grp.source === 'chosen' ? 'var(--text)' : 'var(--reagent)';
     if (Number($('gp-weekly').value) !== (high ? 4400 : 2200) && $('gp-weekly').dataset.group !== grp.group) $('gp-weekly').value = high ? 4400 : 2200;
     $('gp-weekly').dataset.group = grp.group;
-    ['gp-how', 'gp-chart-head', 'gp-chart', 'gp-methods'].forEach(id => { $(id).style.display = jumpsOff ? 'none' : ''; });
     const all = gpMethods(inp.fill, inp.job);
-    const methods = jumpsOff ? all.filter(m => m.id === 'natural') : all; // 1.5m+ trains on natural energy unless they switch jumps on
+    const methods = all; // every method is listed for everyone — the group only changes the weekly minimum
     let sel = 'natural';
     try { sel = localStorage.getItem(GP_METHOD_KEY) || 'natural'; } catch (e) { /* default */ }
     if (!methods.find(m => m.id === sel)) sel = 'natural';
@@ -320,9 +314,4 @@ $('gp-autofill').addEventListener('click', () => { gpAutofill(); renderGymPlanne
 $('gp-group-auto').addEventListener('click', () => {
     try { localStorage.removeItem(GP_GROUP_KEY); } catch (e) { /* not critical */ }
     $('gp-weekly').dataset.group = ''; renderGymPlanner();
-});
-$('gp-show-jumps').addEventListener('click', () => {
-    let on = false;
-    try { on = localStorage.getItem('wwl_gym_show_jumps') === '1'; localStorage.setItem('wwl_gym_show_jumps', on ? '0' : '1'); } catch (e) { /* not critical */ }
-    renderGymPlanner();
 });
