@@ -56,7 +56,7 @@ $('br-send').addEventListener('click', async () => {
     try {
         const res = await fetch('/api/war-payout', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ key: apiKey, action: 'bug-report', description, page: $('br-page').value, screenshot: brShot, agent: navigator.userAgent }),
+            body: JSON.stringify({ key: apiKey, action: 'bug-report', description, page: $('br-page').value, screenshot: brShot }),
         });
         const text = await res.text();
         let r; try { r = JSON.parse(text); } catch (e) { throw new Error(`Server problem (${res.status}) — try a smaller screenshot.`); }
