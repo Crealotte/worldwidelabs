@@ -15,6 +15,7 @@ let moData = null; // { members, wars, hits, tiers, energyTarget, settings }
 let moStats = {}; // "<id>:<timestamp>" -> { candyused, alcoholused, energydrinkused, bloodwithdrawn }
 let moPeriodId = null; // which option of the period dropdown is picked
 let moCustomWeeks = 4;
+let moDates = null; // { from, to } as YYYY-MM-DD, to = last whole day included — for matching another tool's dates
 let moPerWeek = false; // false = totals over the period, true = average per week
 let moSort = 'war';
 let moBusy = false;
@@ -59,6 +60,14 @@ function moPeriods() {
         const weeks = Math.round((dates[i] - dates[i + 1]) / (7 * MO_DAY));
         out.push({ id: `p${dates[i]}`, start: dates[i + 1], end: dates[i], label: `Newsletter ${moFmt(dates[i])} — ${moFmt(dates[i + 1])} → ${moFmt(dates[i])} (${weeks} weeks)` });
     }
+    if (!moDates) { // default: the 30 whole days up to yesterday
+        const y = new Date((latest > 0 ? Math.floor(now / MO_DAY) * MO_DAY - MO_DAY : 0) * 1000);
+        const f = new Date(y.getTime() - 29 * MO_DAY * 1000);
+        moDates = { from: f.toISOString().slice(0, 10), to: y.toISOString().slice(0, 10) };
+    }
+    const dStart = Math.floor(Date.parse(`${moDates.from}T00:00:00Z`) / 1000);
+    const dEnd = Math.min(Math.floor(Date.parse(`${moDates.to}T00:00:00Z`) / 1000) + MO_DAY, Math.floor(now / MO_DAY) * MO_DAY); // whole days only, never today
+    if (dEnd > dStart) out.push({ id: 'dates', start: dStart, end: dEnd, label: `Exact dates — ${moFmt(dStart)} → ${moFmt(dEnd - MO_DAY)} (whole days)` });
     out.push({ id: 'custom', start: latest - moCustomWeeks * 7 * MO_DAY, end: latest, label: `Last ${moCustomWeeks} full weeks (custom)` });
     return out;
 }
@@ -66,7 +75,8 @@ function moPeriod() {
     const list = moPeriods();
     return list.find(p => p.id === moPeriodId) || list.find(p => p.id !== 'now' && p.id !== 'custom') || list[0];
 }
-const moWeeksIn = p => Math.max(1, Math.round((p.end - p.start) / (7 * MO_DAY)));
+const moWeeksIn = p => Math.max(1 / 7, (p.end - p.start) / (7 * MO_DAY)); // exact, so odd date ranges average correctly
+const moDaysIn = p => Math.round((p.end - p.start) / MO_DAY);
 
 function renderPeriodBar() {
     const list = moPeriods();
@@ -75,9 +85,11 @@ function renderPeriodBar() {
     $('mo-period').innerHTML = list.map(p => `<option value="${p.id}" ${p.id === cur.id ? 'selected' : ''}>${esc(p.label)}</option>`).join('');
     $('mo-custom-weeks').value = moCustomWeeks;
     $('mo-custom-wrap').style.display = cur.id === 'custom' ? 'inline-flex' : 'none';
+    $('mo-dates-wrap').style.display = cur.id === 'dates' ? 'inline-flex' : 'none';
+    $('mo-date-from').value = moDates.from; $('mo-date-to').value = moDates.to;
     $('mo-view-total').classList.toggle('active-toggle', !moPerWeek);
     $('mo-view-week').classList.toggle('active-toggle', moPerWeek);
-    $('mo-period-note').textContent = `${moWeeksIn(cur)} weeks · ${moFmt(cur.start)} 00:00 → ${moFmt(cur.end)} 00:00 TCT (Sunday to Sunday)`;
+    $('mo-period-note').textContent = `${moDaysIn(cur)} days (${Math.round(moWeeksIn(cur) * 10) / 10} weeks) · ${moFmt(cur.start)} 00:00 → ${moFmt(cur.end)} 00:00 TCT${cur.id === 'dates' ? '' : ' (Sunday to Sunday)'}`;
 }
 
 async function loadMemberOverview() {
@@ -299,3 +311,6 @@ Gym log sample: ${r.gymError ? `(error: ${r.gymError})` : (r.gymSample || '(none
         $('mo-probe-out').style.display = 'block';
     } catch (e) { toast(e.message); } finally { btn.disabled = false; btn.textContent = 'Check what Torn offers'; }
 });
+
+$('mo-date-from').addEventListener('change', () => { if ($('mo-date-from').value) { moDates.from = $('mo-date-from').value; renderMemberOverview(); loadMemberOverview(); } });
+$('mo-date-to').addEventListener('change', () => { if ($('mo-date-to').value) { moDates.to = $('mo-date-to').value; renderMemberOverview(); loadMemberOverview(); } });
