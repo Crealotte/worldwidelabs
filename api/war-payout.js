@@ -236,7 +236,7 @@ module.exports = async function handler(req, res) {
             const host = String(req.headers['x-forwarded-host'] || req.headers.host || '').replace(/[^\w.:-]/g, '');
             res.setHeader('Content-Type', 'text/javascript; charset=utf-8');
             res.setHeader('Cache-Control', 'public, max-age=300');
-            return res.status(200).send(src.split('__WWL_BASE__').join(`https://${host}`));
+            return res.status(200).send(src.split('__WWL_BASE__').join(`https://${host}`).split('__WWL_HOST__').join(host));
         }
         if (!REDIS_URL || !REDIS_TOKEN) {
             return res.status(500).json({ error: 'Database not connected. In Vercel: Storage -> Create Database -> Upstash Redis, and connect it to this project.' });

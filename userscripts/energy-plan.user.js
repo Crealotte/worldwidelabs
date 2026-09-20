@@ -1,12 +1,13 @@
 // ==UserScript==
 // @name         WWL Energy plan
 // @namespace    https://worldwidelabs.vercel.app
-// @version      1.2
+// @version      1.3
 // @updateURL    __WWL_BASE__/wwl-energy-planner.user.js
 // @downloadURL  __WWL_BASE__/wwl-energy-planner.user.js
 // @description  Shows your WorldWideLabs weekly energy plan (the checklist from the Energy planner) inside Torn. On a computer it is a small window you can drag around and close; in TornPDA it is a menu. Ticks are shared with the WWL site.
 // @match        https://www.torn.com/*
-// @grant        none
+// @grant        GM_xmlhttpRequest
+// @connect      __WWL_HOST__
 // ==/UserScript==
 
 (function () {
@@ -36,11 +37,25 @@
         }
         return k;
     }
+    // Sends the request through the userscript manager (Tampermonkey's GM_xmlhttpRequest, or TornPDA's own call), because Torn's page
+    // is not always allowed to talk to another site directly. A plain fetch is only the last resort.
+    function post(url, obj) {
+        const data = JSON.stringify(obj), headers = { 'Content-Type': 'application/json' };
+        if (typeof GM_xmlhttpRequest === 'function') {
+            return new Promise((ok, no) => GM_xmlhttpRequest({
+                method: 'POST', url, headers, data, timeout: 25000,
+                onload: r => { try { ok(JSON.parse(r.responseText)); } catch (e) { no(new Error(`WWL answered with a problem (${r.status})`)); } },
+                onerror: () => no(new Error('Could not reach WWL — check your connection, and that the script is allowed to connect to it')),
+                ontimeout: () => no(new Error('WWL took too long to answer — try again')),
+            }));
+        }
+        if (typeof PDA_httpPost === 'function') return PDA_httpPost(url, headers, data).then(r => JSON.parse(r.responseText));
+        return fetch(url, { method: 'POST', headers, body: data }).then(r => r.json());
+    }
     async function api(body) {
         const key = getKey();
         if (!key) throw new Error('No API key');
-        const res = await fetch(`${WWL}/api/war-payout`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key, ...body }) });
-        const r = await res.json();
+        const r = await post(`${WWL}/api/war-payout`, { key, ...body });
         if (r.error) throw new Error(r.error);
         return r;
     }
