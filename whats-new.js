@@ -50,6 +50,7 @@ const WHATS_NEW = [
 const wnFmtDate = d => new Date(`${d}T12:00:00Z`).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' });
 
 function renderWhatsNew() {
+    markWhatsNewSeen(); // opening the page counts as having seen the latest update
     const leader = typeof isLeaderCached !== 'undefined' && isLeaderCached;
     $('wn-list').innerHTML = WHATS_NEW.map((e, i) => {
         const items = (list, tag) => list.map(t => `<li style="margin:4px 0;">${tag ? `<span class="chip" style="cursor:default;font-size:10px;padding:1px 6px;margin-right:6px;">leaders</span>` : ''}${esc(t)}</li>`).join('');
@@ -73,4 +74,25 @@ function renderWhatsNew() {
             (e.leaders || []).length ? `\n**For leaders and council**\n${e.leaders.map(bullet).join('\n')}` : ''].join('\n');
         navigator.clipboard.writeText(text).then(() => toast('Message copied — paste it in Discord'));
     }));
+}
+
+// ---- "something new" marker on the sidebar item -------------------------------------------------
+// The item turns bold (with a dot) when the newest update this person can see hasn't been opened yet.
+// Remembered per browser: opening the What's new page marks the latest update as seen.
+const WN_SEEN_KEY = 'wwl_whatsnew_seen';
+function wnLatestId() {
+    const leader = typeof isLeaderCached !== 'undefined' && isLeaderCached;
+    const e = WHATS_NEW.find(x => leader || (x.everyone || []).length); // members skip updates that are leaders-only
+    return e ? `${e.date}|${e.title}` : '';
+}
+function updateWhatsNewBadge() {
+    const nav = $('nav-whats-new');
+    if (!nav) return;
+    let seen = '';
+    try { seen = localStorage.getItem(WN_SEEN_KEY) || ''; } catch (e) { /* storage blocked — never nag */ seen = wnLatestId(); }
+    nav.classList.toggle('has-new', !!wnLatestId() && seen !== wnLatestId());
+}
+function markWhatsNewSeen() {
+    try { localStorage.setItem(WN_SEEN_KEY, wnLatestId()); } catch (e) { /* not critical */ }
+    updateWhatsNewBadge();
 }

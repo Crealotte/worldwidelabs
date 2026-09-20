@@ -106,6 +106,7 @@
         await pingTracker();
         checkFactionAccess();
         if (typeof checkLabsOwner === 'function') checkLabsOwner();
+        if (typeof updateWhatsNewBadge === 'function') updateWhatsNewBadge();
 
         // A direct link like worldwidelabs.vercel.app/availability (for newsletters etc.) wins
         // over whatever page was last open in this session — that's the whole point of sharing
@@ -194,6 +195,7 @@
         }
         if (document.querySelector('.nav-item[data-page="members-overview"]').classList.contains('active')) loadMemberOverview();
         if (document.querySelector('.nav-item[data-page="whats-new"]').classList.contains('active')) renderWhatsNew();
+        if (typeof updateWhatsNewBadge === 'function' && !document.querySelector('.nav-item[data-page="whats-new"]').classList.contains('active')) updateWhatsNewBadge();
         if (document.querySelector('.nav-item[data-page="ocfit-team"]').classList.contains('active')) {
             loadOcFitTeamBuilder();
         }
