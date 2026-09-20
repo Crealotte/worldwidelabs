@@ -116,7 +116,7 @@ function gpInputs() {
     return {
         stat: $('gp-stat').value, S: num('gp-s', saved.S || 100000), base: num('gp-base', saved.base || 5000),
         E: num('gp-e', 10), G: num('gp-g', 7.3), perk: 1 + (Number($('gp-perk').value) || 0) / 100, // perks in %, 0 = none
-        weekly: num('gp-weekly', 2200), fill: num('gp-fill', 150), job: $('gp-job').checked,
+        weekly: num('gp-weekly', 2200), fill: (n => (n >= 50 && n <= 250 ? n : 150))(num('gp-fill', 150)), job: $('gp-job').checked,
         bars: Math.min(4, Math.max(1, Math.round(num('gp-bars', 3)))), xan: Math.min(4, Math.max(0, Math.round(Number($('gp-xan').value) || 0))), refill: $('gp-refill').checked ? 1 : 0,
     };
 }
@@ -131,7 +131,8 @@ function gpAutofill() {
         const stat = $('gp-stat').value;
         if (profile?.personalstats?.[stat] != null) $('gp-s').value = Math.round(profile.personalstats[stat]);
         if (profile?.happy?.maximum) $('gp-base').value = profile.happy.maximum;
-        if (profile?.energy?.maximum) $('gp-fill').value = profile.energy.maximum;
+        const bar = Number(profile?.energy?.maximum);
+        $('gp-fill').value = (bar >= 100 && bar <= 150) ? bar : (profile?.donator ? 150 : 100);
         if (!$('gp-bars').value) $('gp-bars').value = 3;
         if ($('gp-xan').value === '') $('gp-xan').value = 2;
         $('gp-weekly').value = gpGroup().group === 'a' ? 4400 : 2200;
@@ -149,12 +150,12 @@ function renderGymPlanner() {
     let showJumps = false;
     try { showJumps = localStorage.getItem('wwl_gym_show_jumps') === '1'; } catch (e) { /* hidden */ }
     const high = grp.group === 'a';
-    const jumpsOff = high && !showJumps; // 1.5m+ normally trains on natural energy, but can switch the jump methods on
+    const jumpsOff = false; // every option is always listed, so everyone can compare the estimates
     $('gp-show-jumps').textContent = showJumps ? 'Hide the happy jump options' : 'I do happy jumps — show the jump options';
-    $('gp-show-jumps').style.display = high ? '' : 'none';
+    $('gp-show-jumps').style.display = 'none';
     $('gp-group-note').innerHTML = grp.total === null && grp.source === 'unknown'
         ? 'Your battle stats couldn\'t be read, so pick your group with the buttons below.'
-        : `${grp.source === 'chosen' ? 'You picked' : 'From your own battle stats'}: <b style="color:var(--text);">${high ? '1.5m+' : 'under 1.5m'}</b>${grp.total ? ` (${(grp.total / 1e6).toFixed(2)}m total)` : ''} — <b style="color:var(--text);">at least ${high ? '4,400' : '2,200'} energy a week</b>${high ? ', natural energy method (jumping is no longer normal at this level).' : ', and you can plan happy jumps below.'}`;
+        : `${grp.source === 'chosen' ? 'You picked' : 'From your own battle stats'}: <b style="color:var(--text);">${high ? '1.5m+' : 'under 1.5m'}</b>${grp.total ? ` (${(grp.total / 1e6).toFixed(2)}m total)` : ''} — <b style="color:var(--text);">at least ${high ? '4,400' : '2,200'} energy a week</b>${high ? ', and most people at this level train on natural energy — the jump options below are there to compare.' : ', and you can plan happy jumps below.'}`;
     ['a', 'b'].forEach(g => { const b = $(`eg-group-${g}`); b.style.borderColor = grp.source === 'chosen' && grp.group === g ? 'var(--reagent)' : 'var(--line)'; b.style.color = grp.source === 'chosen' && grp.group === g ? 'var(--reagent)' : 'var(--text)'; });
     $('gp-group-auto').style.borderColor = grp.source === 'chosen' ? 'var(--line)' : 'var(--reagent)';
     $('gp-group-auto').style.color = grp.source === 'chosen' ? 'var(--text)' : 'var(--reagent)';
