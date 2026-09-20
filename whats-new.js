@@ -7,37 +7,22 @@
 // what is NEW since the last posted version, so nothing is announced twice (see wnBigPost below).
 //
 // TO ADD AN UPDATE: put a new object at the TOP of WHATS_NEW below with the next version number
-// (the last one is 1.13 → the next is 1.14). Plain text only (no HTML).
+// (the last one is 1.11 → the next is 1.12). Plain text only (no HTML).
 'use strict';
 
 const WHATS_NEW = [
     {
-        version: '1.13', date: '2026-09-20',
-        title: 'New Faction menu: Steadfast planner and Perk roadmap',
-        everyone: [
-            'Faction menu → Steadfast planner: which stats get the top perk this month and next month (swapped on the first Sunday), the rotation for the whole year, and the countdown of the energy still to train per stat.',
-            'Faction menu → Perk roadmap: the order in which the faction unlocks its perks with respect. What we have is ticked off automatically from the real levels, the next perk is highlighted, and it shows how far behind schedule we are.',
-        ],
-        leaders: [],
-    },
-    {
-        version: '1.12', date: '2026-09-20',
-        title: 'Steadfast countdown',
-        everyone: [
-            'New "Steadfast countdown" card on the dashboard: for every stat, how much energy the faction has trained towards the challenge for the next Steadfast level, how much is still to go, and about when it will be done. We upgrade to 9% when all of them are done.',
-        ],
-        leaders: [
-            'The countdown updates by itself whenever a leader opens WWL. You can get a picture link (like YATA\'s posters) on the dashboard card, paste it in the faction announcement once, and the picture stays up to date for everyone, without logging in.',
-        ],
-    },
-    {
         version: '1.11', date: '2026-09-20',
-        title: 'Availability overview for leaders and smarter bug reports',
+        title: 'Faction menu, Steadfast countdown, Availability overview and more',
         everyone: [
+            'New Faction menu → Steadfast planner: which stats get the top perk this month and next month (swapped on the first Sunday), the rotation for the whole year, and the countdown of the energy still to train per stat.',
+            'New Faction menu → Perk roadmap: the order in which the faction unlocks its perks with respect. What we have is ticked off automatically from the real levels, the next perk is highlighted, and it shows how far behind schedule we are.',
+            'New "Steadfast countdown" card on the dashboard: for every stat, how much energy the faction has trained towards the challenge to be able to upgrade to 9%, how much is still to go, and about when it will be done. We upgrade when all of them are done.',
             'The Lollipop jump is now the Candy jump: any candy worth 25 happy works, and you pick which candy you use in the training planner, so the cost is right for you. There are also Candy jumps with 1 or 4 Xanax, like the Big Choco ones.',
             'Bug reports: a report you send now also appears in the Known bugs list as "To review" (without your name), so others who run into the same thing can press "I have this too" instead of sending it again.',
         ],
         leaders: [
+            'The Steadfast countdown updates by itself whenever a leader opens WWL. You can get a picture link (like YATA\'s posters) on the dashboard card, paste it in the faction announcement once, and the picture stays up to date for everyone, without logging in.',
             'Availability overview (Leadership menu): the leaders\' side of War Availability — the heatmap, who filled it in, overdoses, creating plans and the Discord settings — moved to its own page, so the War Availability page is just the grid for everyone.',
             'Known bugs: reports sent through the site arrive with the status "To review"; mark them known, being fixed or fixed, or delete them.',
         ],
