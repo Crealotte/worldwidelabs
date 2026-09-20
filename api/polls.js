@@ -10,6 +10,7 @@
 // POST { key, action:'create', question, options, durationMs } -> leaders only: starts a brand-new poll
 // POST { key, action:'close', pollId }                     -> leaders only: ends a poll immediately,
 //                                                              whether or not it had a duration set
+// POST { key, action:'hide', pollId, hidden }               -> leaders only: hides a poll from members' dashboard (or shows it again) without deleting it
 // POST { key, action:'delete', pollId }                     -> leaders only: removes a poll entirely
 // POST { key, action:'vote', pollId, optionIndex }          -> any member: vote on the ACTIVE poll only
 
@@ -143,6 +144,19 @@ module.exports = async function handler(req, res) {
             // Setting expiresAt to now closes it immediately, whether it originally had a
             // duration or not (a no-duration poll has expiresAt: null, which never auto-closes).
             poll.expiresAt = Date.now();
+            await redis(['SET', pollKey(factionId, pollId), JSON.stringify(poll)]);
+            return res.status(200).json({ ok: true });
+        }
+
+        // Take a poll off the dashboard (or put it back) without deleting it — its votes and results stay
+        // safe, leaders can still see it in the editor list, and members no longer see it at all.
+        if (action === 'hide') {
+            const { pollId, hidden } = req.body;
+            if (!pollId) return res.status(400).json({ error: 'Missing pollId' });
+            const raw = await redis(['GET', pollKey(factionId, pollId)]);
+            const poll = raw ? JSON.parse(raw) : null;
+            if (!poll) return res.status(404).json({ error: 'Poll not found' });
+            poll.hidden = !!hidden;
             await redis(['SET', pollKey(factionId, pollId), JSON.stringify(poll)]);
             return res.status(200).json({ ok: true });
         }

@@ -81,15 +81,16 @@
         try {
             const data = await fetchPolls();
             const panel = $('poll-panel');
-            if (!data?.active) { panel.style.display = 'none'; return; }
+            if (!data?.active || data.active.hidden) { panel.style.display = 'none'; return; } // hidden by a leader = not shown to members
             panel.style.display = 'block';
 
             $('poll-active-body').innerHTML = pollResultsHtml(data.active, { votable: true });
             wirePollVoting($('poll-active-body'));
 
-            if (data.past?.length) {
+            const shownPast = (data.past || []).filter(p => !p.hidden);
+            if (shownPast.length) {
                 $('poll-past-wrap').style.display = 'block';
-                $('poll-past-body').innerHTML = data.past.map(p => `
+                $('poll-past-body').innerHTML = shownPast.map(p => `
                     <div style="border-top:1px solid var(--line);padding-top:10px;margin-top:10px;">
                         ${pollResultsHtml(p, { votable: false })}
                     </div>`).join('');
@@ -132,10 +133,11 @@
                         <div>
                             <b style="font-size:13px;">${esc(p.question)}</b>
                             ${i === 0 ? '<span class="badge" style="position:static;margin-left:8px;">Active</span>' : ''}
-                            <div style="color:var(--muted);font-size:11px;margin-top:2px;">${p.totalVotes || 0} vote${p.totalVotes === 1 ? '' : 's'} · created ${new Date(p.createdAt).toLocaleDateString()}${p.closed ? ' · closed' : ''}</div>
+                            <div style="color:var(--muted);font-size:11px;margin-top:2px;">${p.totalVotes || 0} vote${p.totalVotes === 1 ? '' : 's'} · created ${new Date(p.createdAt).toLocaleDateString()}${p.closed ? ' · closed' : ''}${p.hidden ? ' · hidden from members' : ''}</div>
                         </div>
                         <div style="display:flex;gap:8px;">
                             ${i === 0 && !p.closed ? `<button class="ghost small poll-close" data-pollid="${esc(p.pollId)}">Close vote</button>` : ''}
+                            <button class="ghost small poll-hide" data-pollid="${esc(p.pollId)}" data-hidden="${p.hidden ? '0' : '1'}">${p.hidden ? 'Show on dashboard' : 'Hide from dashboard'}</button>
                             <button class="ghost small poll-delete" data-pollid="${esc(p.pollId)}">Delete</button>
                         </div>
                     </div>
@@ -158,6 +160,26 @@
                     } catch (e) {
                         toast(e.message || 'Could not close the vote');
                         btn.disabled = false; btn.textContent = 'Close vote';
+                    }
+                });
+            });
+
+            $('an-poll-list').querySelectorAll('.poll-hide').forEach(btn => {
+                btn.addEventListener('click', async () => {
+                    btn.disabled = true;
+                    try {
+                        const res = await fetch('/api/polls', {
+                            method: 'POST', headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ key: apiKey, action: 'hide', pollId: btn.dataset.pollid, hidden: btn.dataset.hidden === '1' }),
+                        });
+                        const result = await res.json();
+                        if (result.error) throw new Error(result.error);
+                        loadPollEditor();
+                        loadPolls();
+                        toast(btn.dataset.hidden === '1' ? 'Poll hidden from the dashboard' : 'Poll shown on the dashboard');
+                    } catch (e) {
+                        toast(e.message || 'Could not change that');
+                        btn.disabled = false;
                     }
                 });
             });
