@@ -44,7 +44,7 @@ async function loadMyStanding() {
                 <div class="k">⚔ War participation (last 5 wars)</div>
                 <div class="v" style="${big}color:${warColor};">${r.wars.length && r.eligible ? `${r.okWars}/${r.eligible}` : '—'}</div>
                 <div class="s">${r.wars.length
-                    ? `Needed: ${r.need} of ${r.eligible}${r.eligible < 5 ? ' (you joined recently)' : ''} — ${r.rule.minWarHits} war hits per war, or ${r.rule.minChainHits} chain hits if you did none<br>${chips}`
+                    ? `Needed: ${r.need} of ${r.eligible}${r.eligible < 5 ? ' (you joined recently)' : ''} — ${r.rule.minWarHits} war hits per war, or ${r.rule.minChainHits} chain hits if you did fewer war hits than that<br>${chips}`
                     : 'Not calculated yet — it appears after a leader has opened Member Overview.'}</div>
             </div>`;
 

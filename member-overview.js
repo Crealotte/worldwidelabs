@@ -156,8 +156,8 @@ function moUsed(id, stat) {
 }
 
 // The war rule: a war counts for a member if they did at least `minWarHits` war hits — or, having
-// done no war hits at all, at least `minChainHits` chain hits instead.
-function moWarOk(p, s) { return !!p && (p.war >= s.minWarHits || (p.war === 0 && p.chain >= s.minChainHits)); }
+// done fewer than that, at least `minChainHits` chain hits instead.
+function moWarOk(p, s) { return !!p && (p.war >= s.minWarHits || (p.war < s.minWarHits && p.chain >= s.minChainHits)); }
 
 function moRows() {
     const { hits, settings, tiers } = moData;
