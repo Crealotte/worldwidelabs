@@ -31,7 +31,7 @@ const { moHandle, moMe } = require('../lib/memberOverview');
 const { gymHandle } = require('../lib/gymStats');
 const { warReports } = require('../lib/warReports');
 const { sendBugReport, bugsHandle } = require('../lib/bugReport');
-const { steadfastHandle, steadfastImage } = require('../lib/steadfast');
+const { steadfastHandle, steadfastImage, steadfastRefresh } = require('../lib/steadfast');
 const { labsIsOwner, labsHasOwners, labsHandle, labsRecordReceipt } = require('../lib/labsLedger');
 
 const REDIS_URL = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL;
@@ -223,6 +223,24 @@ module.exports = async function handler(req, res) {
         if (!REDIS_URL || !REDIS_TOKEN) {
             return res.status(500).json({ error: 'Database not connected. In Vercel: Storage -> Create Database -> Upstash Redis, and connect it to this project.' });
         }
+        // The daily snapshot (Vercel Cron, see vercel.json): saves the faction's gym counters and upgrade levels once a day
+        // without anyone having to log in. It uses the API key(s) in the WWL_SNAPSHOT_KEYS environment variable — one
+        // key per faction, of a leader with faction API access, separated by commas. Harmless to call by hand: it only
+        // refreshes stored numbers.
+        if (req.method === 'GET' && req.query?.cron) {
+            const keys = String(process.env.WWL_SNAPSHOT_KEYS || '').split(',').map(s => s.trim()).filter(Boolean);
+            const results = [];
+            for (const k of keys) {
+                try {
+                    const p = await getProfile(k);
+                    if (!p) { results.push({ ok: false, error: 'key not usable' }); continue; }
+                    await steadfastRefresh({ redis, key: k, factionId: p.factionId, force: true });
+                    results.push({ ok: true, faction: p.factionId });
+                } catch (e) { results.push({ ok: false, error: String(e.message || e).slice(0, 120) }); }
+            }
+            return res.status(200).json({ ran: results.length, results });
+        }
+
         // The Steadfast countdown picture for a faction announcement: GET /api/war-payout?steadfast=<code> (no login;
         // the long random code in the link is the "key"). See lib/steadfast.js.
         if (req.method === 'GET' && req.query?.steadfast) {
