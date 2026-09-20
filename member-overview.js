@@ -287,6 +287,8 @@ $('mo-probe-btn').addEventListener('click', async () => {
         if (r.error) throw new Error(r.error);
         const stats = Object.entries(r.stats).map(([k, v]) => `${k} = ${v}`).join('\n') || '(none found)';
         $('mo-probe-out').textContent = `Torn stats about gym/energy/drinks/xanax on your account (${r.statKeys} stats in total):\n${stats}\n\nGym log types: ${JSON.stringify(r.gymTypes || {})}\nKey access level: ${r.keyInfo}
+Newer stats endpoint: ${r.v2Error ? `error: ${r.v2Error}` : `extra names: ${(r.v2Extra || []).join(", ") || "(none)"}
+Gym/energy-like values: ${JSON.stringify(r.v2Gym || {})}`}
 Gym log sample (v2): ${r.gymSampleV2}
 Gym log sample: ${r.gymError ? `(error: ${r.gymError})` : (r.gymSample || '(none)')}\n\nAll stat names: ${(r.allKeys || []).join(', ')}\n\nArmory lines mentioning blood bags (last 3 days):\n${r.bloodLines.join('\n') || '(none)'}`;
         $('mo-probe-out').style.display = 'block';
