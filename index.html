@@ -332,8 +332,9 @@
     #gp-methods { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 10px; }
     .gp-stat, .gp-method { text-align: left; background: var(--bench-2); border: 1px solid var(--line); border-radius: var(--radius); padding: 10px 12px; color: var(--text); cursor: pointer; font: inherit; }
     .gp-stat:hover, .gp-method:hover { border-color: var(--reagent); }
-    .gp-stat.best { border-color: #f0b432; }
+    .gp-stat.best, .gp-stat.best.sel { border-color: #f0b432; box-shadow: inset 0 0 0 1px #f0b432; } /* both starred stats look the same, selected or not */
     .gp-stat.sel, .gp-method.sel { border-color: var(--reagent); box-shadow: inset 0 0 0 1px var(--reagent); }
+    .gp-stat.sel { background: rgba(53,217,155,.12); }
     .gp-stat .t, .gp-method .t { font-weight: 700; font-size: 14px; }
     .gp-stat .s, .gp-method .s { color: var(--muted); font-size: 12px; margin-top: 2px; }
     .gp-method .n { font-size: 12px; margin-top: 6px; font-family: var(--mono); }
@@ -644,8 +645,10 @@
 
                 <div id="gp-nat-opts" style="display:none;margin-bottom:10px;">
                     <div id="gp-nat-desc" style="font-size:13px;margin-bottom:8px;"></div>
+                    <div style="margin-bottom:10px;">
+                        <label style="display:inline-flex;align-items:center;gap:6px;font-size:13px;"><input type="checkbox" id="gp-refill" checked style="width:auto;"> Energy refill each day</label>
+                    </div>
                     <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-bottom:6px;">
-                        <label style="display:inline-flex;align-items:center;gap:6px;font-size:13px;margin-bottom:8px;"><input type="checkbox" id="gp-refill" checked style="width:auto;"> Energy refill each day</label>
                         <div class="field" style="margin:0;min-width:240px;"><label for="gp-can">Energy cans</label><select autocomplete="off" id="gp-can"></select></div>
                         <div class="field" style="margin:0;max-width:110px;"><label for="gp-can-n">Cans per day</label><input autocomplete="off" id="gp-can-n" type="number" min="0" max="6" value="0"></div>
                     </div>
