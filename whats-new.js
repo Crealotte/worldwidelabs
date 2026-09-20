@@ -9,12 +9,13 @@
 const WHATS_NEW = [
     {
         date: '2026-09-21',
-        title: 'Tailored training plan',
+        title: 'Tailored training plan and Gym stats',
         everyone: [
             'Energy planner: pick how you train (natural energy, Lollipop jump, Big Choco, EDVD…) and get a week plan — 4 training days, 2 war prep days and the war day — with tick boxes to track it.',
             'It also estimates the stat growth and the item cost of each method for one week, side by side, so you can see what a jump really buys you. These are estimates, since Torn adds a random amount to every train.',
             'Everything in the planner is now pulled from your own account (stat, max happy, energy bar, gym, and your gym bonuses like the faction Steadfast, candy bonus and cooldown perks) — you only pick the stat to train and how you train. Your total battle stats only set your weekly minimum: 4,400 energy at 1.5m+, 2,200 under.',
             'Natural energy comes as Soft (3 bars + 2 Xanax a day, 3 log-ins) or Hard (4 bars + 3 Xanax), each with the daily energy refill on by default, and you can add energy cans (every can has its own energy and price). Experienced players can set their own bars and Xanax.',
+            'New Gym stats page (Training menu): a graph of your own battle stats over time, your growth over the last weeks, and personal goals per stat with an estimate of when you will reach them. It builds up every day you open WWL.',
             'The stat to train is now a row of buttons: the two stats with the best faction (Steadfast) bonus are marked with a star. Every training method is a card that already shows its estimated stat gain and cost for a week, and both Soft and Hard natural energy are compared next to the jump methods.',
         ],
         leaders: [],

@@ -28,6 +28,7 @@ const { fetchWarHits, sleep } = require('../lib/warHits');
 const { fetchWarBadgeStats } = require('../lib/warBadgeStats');
 const { tornToDiscordIds, resolveDiscordIds } = require('../lib/discordMap');
 const { moHandle, moMe } = require('../lib/memberOverview');
+const { gymHandle } = require('../lib/gymStats');
 const { labsIsOwner, labsHasOwners, labsHandle, labsRecordReceipt } = require('../lib/labsLedger');
 
 const REDIS_URL = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL;
@@ -346,6 +347,9 @@ module.exports = async function handler(req, res) {
 
         // My standing (dashboard card) — open to every member; only ever describes the caller. See lib/memberOverview.js.
         if (action === 'mo-me') return res.status(200).json(await moMe({ redis, key, factionId, playerId, daysInFaction }));
+
+        // Gym stats page (history graph + goals) — open to every member, only ever about the caller. See lib/gymStats.js.
+        if (action.startsWith('gym-')) return res.status(200).json(await gymHandle(action, req.body, { redis, key, playerId }));
 
         // ---- Labs funds ------------------------------------------------------------------------
         // Every faction's war-pay history and the retained cut ("the 20%") each one keeps. Any
