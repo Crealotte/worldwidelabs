@@ -15,6 +15,7 @@ const WHATS_NEW = [
         version: '1.11', date: '2026-09-20',
         title: 'Availability overview for leaders and smarter bug reports',
         everyone: [
+            'The Lollipop jump is now the Candy jump: any candy worth 25 happy works, and the training planner lists all of them (the cost uses the cheapest).',
             'Bug reports: a report you send now also appears in the Known bugs list as "To review" (without your name), so others who run into the same thing can press "I have this too" instead of sending it again.',
         ],
         leaders: [
@@ -38,7 +39,7 @@ const WHATS_NEW = [
         version: '1.9', date: '2026-09-20',
         title: 'Tailored training plan (Energy planner)',
         everyone: [
-            'Pick the stat to train (the two stats with the best faction Steadfast bonus are starred) and how you train: natural energy — Soft or Hard — or a happy jump (Lollipop, Big Choco, 5 EDVD, 9 EDVD). Every method is a card that already shows its estimated stat gain and item cost for a week, and all methods are compared side by side.',
+            'Pick the stat to train (the two stats with the best faction Steadfast bonus are starred) and how you train: natural energy — Soft or Hard — or a happy jump (Candy, Big Choco, 5 EDVD, 9 EDVD). Every method is a card that already shows its estimated stat gain and item cost for a week, and all methods are compared side by side.',
             'You get a week plan — 4 training days, 2 war prep days and the war day — with a tick box for every step and a progress bar in energy.',
             'Everything is pulled from your own account: your stat, max happy, energy bar (donator or not), gym, and your gym bonuses (faction Steadfast, candy bonus, property and education perks, cooldowns). Your total battle stats only decide your weekly minimum: 4,400 energy at 1.5m+, 2,200 under. The estimates use the community gym formula, so they are estimates — Torn adds a random amount to every train.',
             'Natural energy: Soft is 3 bars + 2 Xanax a day (3 log-ins), Hard is 4 bars + 3 Xanax. The daily energy refill is on by default, you can add energy cans (each can has its own energy and price), and experienced players can set their own bars and Xanax per day.',

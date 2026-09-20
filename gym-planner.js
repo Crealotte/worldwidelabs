@@ -22,7 +22,7 @@ const GP_JUMP_BARS = 3; // natural bars per day trained on top of a jump (the so
 // Per-stat constants of the formula: [A, B]
 const GP_STAT_AB = { strength: [1600, 1700], defense: [2100, -600], speed: [1600, 2000], dexterity: [1800, 1500] };
 const GP_STAT_LABEL = { strength: 'Strength', defense: 'Defense', speed: 'Speed', dexterity: 'Dexterity' };
-const GP_ITEMS = { lollipop: 'Lollipop', choco: 'Big Box of Chocolate Bars', edvd: 'Erotic DVD', ecstasy: 'Ecstasy', xanax: 'Xanax' };
+const GP_ITEMS = { candy: 'Candy (25 happy)', choco: 'Big Box of Chocolate Bars', edvd: 'Erotic DVD', ecstasy: 'Ecstasy', xanax: 'Xanax' };
 
 // Each method: what it costs per jump session, how much happy the items add, how much energy the
 // session spends, and how many sessions fit in a normal week by default (editable on the page).
@@ -30,7 +30,7 @@ function gpMethods(fill, job, candy = 1) {
     return [
         { id: 'nat-soft', kind: 'natural', mode: 'soft', name: 'Natural energy — Soft', sub: '3 bars + 2 Xanax a day · 3 log-ins', sessions: 0, items: {}, addHappy: 0, energy: 0, ecstasy: false },
         { id: 'nat-hard', kind: 'natural', mode: 'hard', name: 'Natural energy — Hard', sub: '4 bars + 3 Xanax a day · 4 log-ins', sessions: 0, items: {}, addHappy: 0, energy: 0, ecstasy: false },
-        { id: 'lollipop', name: 'Lollipop jump', sub: 'Starter jump — 49 Lollipops + Ecstasy', sessions: 4, items: { lollipop: 49, ecstasy: 1 }, addHappy: 1225 * candy, energy: fill, ecstasy: true },
+        { id: 'candy', name: 'Candy jump', sub: 'Starter jump — 49 candies worth 25 happy each + Ecstasy', sessions: 4, items: { candy: 49, ecstasy: 1 }, addHappy: 1225 * candy, energy: fill, ecstasy: true },
         { id: 'choco1', name: 'Big Choco jump (1 Xanax)', sub: '49 Big Boxes + Ecstasy + 1 Xanax', sessions: 4, items: { choco: 49, ecstasy: 1, xanax: 1 }, addHappy: 1715 * candy, energy: fill + 250, ecstasy: true },
         { id: 'choco4', name: 'Big Choco jump (4 Xanax)', sub: '49 Big Boxes + Ecstasy + 4 Xanax + refill', sessions: 2, items: { choco: 49, ecstasy: 1, xanax: 4 }, addHappy: 1715 * candy, energy: fill + 1000, ecstasy: true, refill: true },
         { id: 'edvd5', name: 'Happy Jump (5 EDVD)', sub: 'The regular happy jump — 5 EDVD + Ecstasy + 4 Xanax', sessions: 1, items: { edvd: 5, ecstasy: 1, xanax: 4 }, addHappy: job ? 25000 : 12500, energy: fill + 1000, ecstasy: true, refill: true },
@@ -107,24 +107,34 @@ function gpGroup() {
 let gpPrices = {};
 let gpCans = []; // energy drinks: [{ name, energy, price }] — every can gives its own amount of energy
 let gpGyms = null;
+let gpCandy25 = []; // every candy worth 25 happy: [{ name, price }] — the candy jump can use any of them
 async function gpLoadPrices() {
-    try { const c = JSON.parse(sessionStorage.getItem('wwl_gym_prices2') || 'null'); if (c && Date.now() - c.at < 6 * 3600e3) { gpPrices = c.p; gpCans = c.cans; return; } } catch (e) { /* fetch fresh */ }
+    try { const c = JSON.parse(sessionStorage.getItem('wwl_gym_prices3') || 'null'); if (c && Date.now() - c.at < 6 * 3600e3) { gpPrices = c.p; gpCans = c.cans; gpCandy25 = c.candy; return; } } catch (e) { /* fetch fresh */ }
     try {
         const res = await fetch(`https://api.torn.com/torn/?selections=items&key=${encodeURIComponent(apiKey)}`);
         const d = await res.json();
         if (d.error) return;
         const want = new Set(Object.values(GP_ITEMS));
-        const p = {}, cans = [];
+        const p = {}, cans = [], candy = [];
         for (const it of Object.values(d.items || {})) {
             if (want.has(it.name)) p[it.name] = it.market_value || null;
             if (it.type === 'Energy Drink') { // "Increases energy by 25" or similar — the first number that goes with "energy"
                 const m = /energy[^0-9]*(\d+)/i.exec(it.effect || '') || /(\d+)[^.]*energy/i.exec(it.effect || '');
                 if (m) cans.push({ name: it.name, energy: Number(m[1]), price: it.market_value || null });
             }
+            if (it.type === 'Candy') { // "Increases happiness by 25" — keep the ones worth exactly 25 happy
+                const h = /happ[^0-9]*(\d+)/i.exec(it.effect || '');
+                if (h && Number(h[1]) === 25) candy.push({ name: it.name, price: it.market_value || null });
+            }
         }
         cans.sort((a, b) => b.energy - a.energy);
-        gpPrices = p; gpCans = cans;
-        try { sessionStorage.setItem('wwl_gym_prices2', JSON.stringify({ at: Date.now(), p, cans })); } catch (e) { /* not critical */ }
+        candy.sort((a, b) => (a.price ?? Infinity) - (b.price ?? Infinity));
+        // the candy jump is priced with the cheapest of the 25-happy candies (the Lollipop if none could be found)
+        const cheapest = candy.find(c => c.price != null);
+        if (cheapest) p[GP_ITEMS.candy] = cheapest.price;
+        else { const lol = Object.values(d.items || {}).find(it => it.name === 'Lollipop'); p[GP_ITEMS.candy] = lol?.market_value || null; }
+        gpPrices = p; gpCans = cans; gpCandy25 = candy;
+        try { sessionStorage.setItem('wwl_gym_prices3', JSON.stringify({ at: Date.now(), p, cans, candy })); } catch (e) { /* not critical */ }
     } catch (e) { /* prices stay unknown — costs shown as "?" */ }
 }
 // Every gym with its dots per stat (stored ×10) and the energy one train costs there.
@@ -288,6 +298,7 @@ function renderGymPlanner() {
     let sel = 'nat-soft';
     try { sel = localStorage.getItem(GP_METHOD_KEY) || 'nat-soft'; } catch (e) { /* default */ }
     if (sel === 'natural') sel = 'nat-soft'; // older saved choice
+    if (sel === 'lollipop') sel = 'candy'; // the Lollipop jump is now the Candy jump
     if (!methods.find(m => m.id === sel)) sel = 'nat-soft';
     // jumps per week the member set for a method (max 4: one per training day)
     let overrides = {};
@@ -313,6 +324,7 @@ function renderGymPlanner() {
         $('gp-sessions').dataset.method = ''; renderGymPlanner();
     }));
 
+    $('gp-candy-note').innerHTML = gpCandy25.length ? `Candy jump: any candy worth 25 happy works (49 of them = 1,225 happy) — <b style="color:var(--text);">${gpCandy25.map(c => esc(c.name)).join(', ')}</b>. The cost uses the cheapest one.` : 'Candy jump: any candy worth 25 happy works, for example the Lollipop.';
     // natural energy options: only when a natural method is the picked one
     const natState = gpNatState();
     const nat = chosen.kind === 'natural' ? gpNatFor(chosen.mode) : null;
@@ -427,7 +439,7 @@ function gpJumpSteps(m, inp) {
     else if (m.items.xanax) steps.push(`Stack ${m.items.xanax} Xanax back-to-back to reach 1,000 E, then wait out all the cooldowns`);
     else steps.push(`Wait until your energy bar is full (${gpN(inp.fill)} E)`);
     steps.push('Wait until just past a :00 / :15 / :30 / :45 reset');
-    const main = m.items.lollipop ? `all ${m.items.lollipop} Lollipops` : m.items.choco ? `all ${m.items.choco} Big Boxes of Chocolate Bars` : `all ${m.items.edvd} Erotic DVDs`;
+    const main = m.items.candy ? `all ${m.items.candy} candies worth 25 happy each (${gpCandy25.length ? gpCandy25.map(c => c.name).slice(0, 6).join(', ') : 'for example Lollipop'})` : m.items.choco ? `all ${m.items.choco} Big Boxes of Chocolate Bars` : `all ${m.items.edvd} Erotic DVDs`;
     steps.push(`Take ${main}`);
     steps.push(`Use the Ecstasy — it doubles your happy (about ${gpN(peak)})`);
     return steps;

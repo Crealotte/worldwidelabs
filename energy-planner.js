@@ -164,13 +164,13 @@
 
     const HAPPY_JUMPS = [
         {
-            name: 'Lollipop Jump', cost: '$89,000', property: 'Shack (no requirement)',
-            items: ['49x Lollipop — 1,225 Happy', '1x Ecstasy — doubles current Happy'],
+            name: 'Candy Jump', cost: '$89,000', property: 'Shack (no requirement)',
+            items: ['49x candy worth 25 Happy each (Lollipop and other 25-Happy candies — the training planner above lists them) — 1,225 Happy', '1x Ecstasy — doubles current Happy'],
             steps: [
                 'Buy all items',
                 'Wait for Energy to reach your max (100, or 150 for donators)',
                 'Wait until just past a 15-minute reset',
-                'Consume all 49 Lollipops',
+                'Consume all 49 candies',
                 'Use the Ecstasy to double your Happy',
                 'Spend your Energy training in the gym',
             ],
