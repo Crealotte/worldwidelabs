@@ -450,6 +450,7 @@
             <div class="nav-group-items" data-group-items="training">
                 <div class="nav-item" data-page="energy">Energy planner</div>
                 <div class="nav-item" data-page="gym-stats">Gym stats</div>
+                <div class="nav-item" data-page="energy-tracker">Energy tracker</div>
             </div>
         </div>
 
@@ -1538,6 +1539,26 @@
             <div class="panel"><div class="table-scroll" style="overflow:auto;"><div id="fr-table"></div></div></div>
         </section>
 
+        <section class="page" id="page-energy-tracker">
+            <div class="lab-label">WWL·23 / for everyone</div>
+            <h2>Energy tracker</h2>
+            <p class="pagedesc">The energy every member has trained in the gym, per stat and per day. Click a member to open the day-by-day rows. Your own row is highlighted, so you can follow yourself and the faction.</p>
+            <div class="status" id="et-status"></div>
+            <div class="panel"><div id="et-me"></div></div>
+            <div class="panel">
+                <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px;">
+                    <h3 style="margin:0;">Leaderboard</h3>
+                    <span style="margin-left:auto;font-size:13px;color:var(--muted);">Show:</span>
+                    <button class="ghost small et-range" data-days="7">7 days</button>
+                    <button class="ghost small et-range" data-days="30">30 days</button>
+                    <button class="ghost small et-range" data-days="60">60 days</button>
+                    <button class="ghost small et-range" data-days="90">90 days</button>
+                </div>
+                <div id="et-note" style="color:var(--muted);font-size:12px;margin-bottom:8px;"></div>
+                <div class="table-scroll" style="overflow:auto;"><div id="et-table"></div></div>
+            </div>
+        </section>
+
         <section class="page" id="page-availability">
             <div class="lab-label">WWL·13 / for everyone</div>
             <h2>War Availability</h2>
@@ -1879,6 +1900,7 @@
 <script src="energy-planner.js"></script>
 <script src="gym-planner.js"></script>
 <script src="gym-stats.js"></script>
+<script src="energy-tracker.js"></script>
 <script src="war-reports.js"></script>
 <script src="bug-report.js"></script>
 <script src="level-targets.js"></script>

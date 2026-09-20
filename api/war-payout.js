@@ -31,7 +31,7 @@ const { moHandle, moMe } = require('../lib/memberOverview');
 const { gymHandle } = require('../lib/gymStats');
 const { warReports } = require('../lib/warReports');
 const { sendBugReport, bugsHandle } = require('../lib/bugReport');
-const { steadfastHandle, steadfastImage } = require('../lib/steadfast');
+const { steadfastHandle, steadfastImage, energyDaily } = require('../lib/steadfast');
 const { nightlyHandle, nightlyRun } = require('../lib/nightly');
 const { labsIsOwner, labsHasOwners, labsHandle, labsRecordReceipt } = require('../lib/labsLedger');
 
@@ -377,6 +377,15 @@ module.exports = async function handler(req, res) {
         if (action === 'receipts-report') return res.status(200).json(await warReports({ redis, key, factionId, playerId, leader: await isLeader(key) }));
         // Bug reports page — posts a member's report (and screenshot) to a Discord channel. See lib/bugReport.js.
         if (action === 'bug-report') return res.status(200).json(await sendBugReport({ redis, playerId, name: playerName, factionName, body: req.body }));
+        // Energy tracker page — energy trained per member per day (like Torn Intel's leaderboard), open to every member.
+        if (action === 'energy-board') {
+            const days = Math.min(120, Math.max(7, Number(req.body.days) || 30));
+            const today = Math.floor(Date.now() / 1000 / 86400);
+            const r = await energyDaily(redis, factionId, today - days + 1, today);
+            const rosterRaw = await redis(['GET', `wwl:mo-roster:${factionId}`]); // names a leader's page saved, for members without one yet
+            for (const m of (rosterRaw ? JSON.parse(rosterRaw) : [])) if (r.members[m.id] && !r.members[m.id].name) r.members[m.id].name = m.name;
+            return res.status(200).json({ ...r, days, today, me: playerId });
+        }
         // Steadfast countdown — everyone can read the stored numbers; refreshing, the share link and the goals are for leaders.
         if (action.startsWith('steadfast-')) return res.status(200).json(await steadfastHandle(action, req.body, { redis, key, factionId, leader: action === 'steadfast-get' ? false : await isLeader(key) }));
         // Nightly saving switched on by a leader from the app (their key is kept encrypted for the cron job). See lib/nightly.js.
