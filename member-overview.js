@@ -26,7 +26,8 @@ async function moFetch(body) {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ key: apiKey, ...body }),
     });
-    return res.json();
+    const text = await res.text();
+    try { return JSON.parse(text); } catch (e) { return { error: `Server problem (${res.status}) — ${text.slice(0, 120)}` }; }
 }
 
 // ---- Periods. Weeks are Sunday 00:00 TCT (UTC) to Sunday 00:00. ----
@@ -93,15 +94,19 @@ async function loadMemberOverview() {
             moData = r;
         }
         renderMemberOverview();
-        // finish any war in this period not counted yet — one at a time, each is saved for good
+        // finish any of the last 5 wars not counted yet — one at a time, each is saved for good. A big
+        // war is read in pieces (the server remembers where it stopped), so keep asking until done.
+        // A war that fails must never stop the rest (the stats below), so problems are collected.
+        const problems = [];
         const todo = moWarsInPeriod().filter(w => !moData.hits[w.id]);
         for (let i = 0; i < todo.length; i++) {
-            st.className = 'status ok'; st.textContent = `Counting hits for a war you haven't opened here before (${i + 1} of ${todo.length})…`;
-            const w = await moFetch({ action: 'mo-war', warId: todo[i].id });
-            if (w.error) throw new Error(w.error);
-            if (w.partial) { st.className = 'status err'; st.textContent = `The war vs ${todo[i].opponent} was too big to count in one go — press Refresh to continue.`; }
-            else moData.hits[w.warId] = w.hits;
-            renderMemberOverview();
+            for (let round = 1; round <= 10; round++) {
+                st.className = 'status ok'; st.textContent = `Counting hits for the war vs ${todo[i].opponent} (${i + 1} of ${todo.length}${round > 1 ? `, part ${round}` : ''})…`;
+                const w = await moFetch({ action: 'mo-war', warId: todo[i].id });
+                if (w.error) { problems.push(`War vs ${todo[i].opponent}: ${w.error}`); break; }
+                if (!w.partial) { moData.hits[w.warId] = w.hits; renderMemberOverview(); break; }
+                if (round === 10) problems.push(`War vs ${todo[i].opponent} is still being counted — press Refresh to continue.`);
+            }
         }
         // consumption snapshots at the period's start and end, in rounds until everything is in
         const ids = moData.members.map(m => m.id);
@@ -109,15 +114,15 @@ async function loadMemberOverview() {
         let lastPending = Infinity;
         for (let round = 0; round < 40; round++) {
             const s = await moFetch({ action: 'mo-stats', ids, timestamps: [p.start, p.end] });
-            if (s.error) throw new Error(s.error);
+            if (s.error) { problems.push(`Stats: ${s.error}`); break; }
             Object.assign(moStats, s.values);
             renderMemberOverview();
             if (!s.pending) break;
-            if (s.pending >= lastPending && s.failed) { st.className = 'status err'; st.textContent = `Couldn't read Torn stats for ${s.pending} lookups. Torn said: ${s.firstError || 'nothing'}`; return; }
+            if (s.pending >= lastPending && s.failed) { problems.push(`Couldn't read Torn stats for ${s.pending} lookups. Torn said: ${s.firstError || 'nothing'}`); break; }
             lastPending = s.pending;
             st.className = 'status ok'; st.textContent = `Reading stats… ${s.pending} lookups left (first time for this period only)`;
         }
-        if (st.className !== 'status err') { st.textContent = ''; st.className = 'status'; }
+        if (problems.length) { st.className = 'status err'; st.textContent = problems.join(' • '); } else { st.textContent = ''; st.className = 'status'; }
     } catch (e) {
         st.className = 'status err'; st.textContent = e.message;
     } finally { moBusy = false; }
