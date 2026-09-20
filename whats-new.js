@@ -7,15 +7,27 @@
 // what is NEW since the last posted version, so nothing is announced twice (see wnBigPost below).
 //
 // TO ADD AN UPDATE: put a new object at the TOP of WHATS_NEW below with the next version number
-// (the last one is 1.11 → the next is 1.12). Plain text only (no HTML).
+// (the last one is 1.12 → the next is 1.13). Plain text only (no HTML).
 'use strict';
 
 const WHATS_NEW = [
     {
+        version: '1.12', date: '2026-09-20',
+        title: 'Energy tracker: energy trained in the gym per member',
+        everyone: [
+            'New Energy tracker page (Training menu): the energy every member trained in the gym per stat and per day, like Torn Intel — click a member for the day-by-day rows, pick any dates in the calendar (or "This newsletter month"), and follow your own row.',
+            '"Your standing" on the dashboard now shows your real energy trained this month and over the rolling 4-5 weeks.',
+        ],
+        leaders: [
+            'Energy trained in the gym is now counted for every member from the faction\'s own gym counters: an "Energy trained" column in Member Overview (with a winner for it, and the weekly minimum next to it).',
+            'The days before we started counting were filled in from Torn Intel (Member Overview → "Energy trained: fill in the past"). From now on the counter runs by itself.',
+            'You can switch on nightly saving on the dashboard card (Steadfast countdown) with your own key, kept encrypted — so nothing is missed on days nobody logs in.',
+        ],
+    },
+    {
         version: '1.11', date: '2026-09-20',
         title: 'Faction menu, Steadfast countdown, Availability overview and more',
         everyone: [
-            'New Energy tracker page (Training menu): the energy every member trained in the gym per stat and per day, like Torn Intel — click a member for the day-by-day rows, pick any dates in the calendar, and follow your own row. "Your standing" now shows your real energy trained too.',
             'New Faction menu → Steadfast planner: which stats get the top perk this month and next month (swapped on the first Sunday), the rotation for the whole year, and the countdown of the energy still to train per stat.',
             'New Faction menu → Perk roadmap: the order in which the faction unlocks its perks with respect. What we have is ticked off automatically from the real levels, the next perk is highlighted, and it shows how far behind schedule we are.',
             'New "Steadfast countdown" card on the dashboard: for every stat, how much energy the faction has trained towards the challenge to be able to upgrade to 9%, how much is still to go, and about when it will be done. We upgrade when all of them are done.',
@@ -23,7 +35,6 @@ const WHATS_NEW = [
             'Bug reports: a report you send now also appears in the Known bugs list as "To review" (without your name), so others who run into the same thing can press "I have this too" instead of sending it again.',
         ],
         leaders: [
-            'Energy trained in the gym is now counted for every member from the faction\'s own gym counters: an "Energy trained" column in Member Overview (with a winner for it). You can fill in the days before we started counting by pasting a member from Torn Intel (Member Overview → "Energy trained: fill in the past"), and switch on nightly saving on the dashboard card with your own key (kept encrypted), so nothing is missed on days nobody logs in.',
             'The Steadfast countdown updates by itself whenever a leader opens WWL. You can get a picture link (like YATA\'s posters) on the dashboard card, paste it in the faction announcement once, and the picture stays up to date for everyone, without logging in.',
             'Availability overview (Leadership menu): the leaders\' side of War Availability — the heatmap, who filled it in, overdoses, creating plans and the Discord settings — moved to its own page, so the War Availability page is just the grid for everyone.',
             'Known bugs: reports sent through the site arrive with the status "To review"; mark them known, being fixed or fixed, or delete them.',
@@ -158,7 +169,7 @@ const wnFmtDate = d => new Date(`${d}T12:00:00Z`).toLocaleDateString(undefined, 
 
 // ---- which version was last posted in Discord (per browser) ----
 const WN_POSTED_KEY = 'wwl_whatsnew_posted';
-const WN_POSTED_DEFAULT = '1.7'; // what the owner had already posted in Discord when versions were introduced (up to "Your standing")
+const WN_POSTED_DEFAULT = '1.11'; // what the owner had already posted in Discord (up to v1.11); a leader can move it with "Mark posted up to here"
 const wnPostedIndex = () => { // index in WHATS_NEW of the newest version already posted, -1 = none
     let v = null;
     try { v = localStorage.getItem(WN_POSTED_KEY); } catch (e) { /* none */ }
