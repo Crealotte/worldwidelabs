@@ -15,7 +15,7 @@ const WHATS_NEW = [
         version: '1.13', date: '2026-09-20',
         title: 'Timezone map',
         everyone: [
-            'New Timezone map (Faction menu): a world map with the timezone lines. Choose your country and it lights up — the more members from a country, the greener. The US is split into its states, and a magnifier button enlarges any spot you hover over. Nobody is shown by name.',
+            'New Timezone map (Faction menu): a world map with the timezone lines. Choose your country and it lights up — the more members from a country, the greener. The US is split into its states, and a magnifier button (2×, 4× or 8×) enlarges any spot you hover over. Nobody is shown by name.',
         ],
         leaders: [],
     },

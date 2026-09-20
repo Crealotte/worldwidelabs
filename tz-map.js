@@ -8,7 +8,7 @@
 let tzWorld = null;  // countries as GeoJSON features (id = ISO numeric code, properties.name), without the US
 let tzStates = null; // the US states as GeoJSON features (id = FIPS code)
 let tzLensOn = false;
-let tzLensZoom = 5;
+let tzLensZoom = 4; // 2, 4 or 8 times larger than the map itself
 let tzLast = null;   // the last data shown, so the magnifier can redraw
 
 async function tzFetch(body) {
@@ -101,7 +101,7 @@ function tzWireLens(W, H) {
     const move = (cx, cy) => {
         const b = svg.getBoundingClientRect(), sb = stage.getBoundingClientRect();
         const x = (cx - b.left) / b.width * W, y = (cy - b.top) / b.height * H;
-        const vw = W / tzLensZoom;
+        const vw = 200 / (b.width / W) / tzLensZoom; // the lens is 200 px wide: show that many map units, divided by the strength
         lsvg.setAttribute('viewBox', `${x - vw / 2} ${y - vw / 2} ${vw} ${vw}`);
         lens.style.left = `${cx - sb.left - 100}px`; lens.style.top = `${cy - sb.top - 100}px`;
         lens.style.display = 'block';
@@ -113,7 +113,7 @@ function tzWireLens(W, H) {
     svg.addEventListener('wheel', e => { // while the magnifier is on, the scroll wheel changes how strong it is
         if (!tzLensOn) return;
         e.preventDefault();
-        tzLensZoom = Math.max(2, Math.min(14, tzLensZoom + (e.deltaY < 0 ? 1 : -1)));
+        tzLensZoom = e.deltaY < 0 ? Math.min(8, tzLensZoom * 2) : Math.max(2, tzLensZoom / 2); tzMarkZoom();
         move(e.clientX, e.clientY);
     }, { passive: false });
 }
@@ -140,3 +140,10 @@ $('tz-clear').addEventListener('click', async () => {
     toast('Removed from the map');
     loadTzMap();
 });
+
+const tzMarkZoom = () => document.querySelectorAll('.tz-zoom').forEach(b => b.classList.toggle('active-toggle', Number(b.dataset.z) === tzLensZoom));
+document.querySelectorAll('.tz-zoom').forEach(b => b.addEventListener('click', () => {
+    tzLensZoom = Number(b.dataset.z); tzMarkZoom();
+    if (!tzLensOn) $('tz-lens-btn').click();
+}));
+tzMarkZoom();
