@@ -556,6 +556,34 @@
                 <div id="respect-goal-body"></div>
             </div>
 
+            <div class="panel" id="dash-steadfast-panel" style="display:none;">
+                <h3>⏳ Steadfast countdown</h3>
+                <p style="color:var(--muted);font-size:12px;margin:0 0 12px;">Energy the faction still has to train per stat before the next Steadfast level can be upgraded. It updates by itself.</p>
+                <div id="pc-rows"></div>
+                <div id="pc-summary" style="font-size:14px;margin:4px 0;"></div>
+                <div id="pc-updated" style="color:var(--muted);font-size:11px;"></div>
+                <div id="pc-leader" style="display:none;margin-top:12px;padding-top:12px;border-top:1px solid var(--line);">
+                    <div style="font-size:13px;font-weight:700;margin-bottom:6px;">Leaders: show it in the faction announcement</div>
+                    <p style="color:var(--muted);font-size:12px;margin:0 0 8px;">Get a picture link (like a YATA poster) and paste it in your announcement once. The picture updates itself with the newest numbers, and anyone can see it without logging in.</p>
+                    <button class="ghost small" id="pc-share">Get the picture link</button>
+                    <div id="pc-share-out" style="display:none;margin-top:8px;">
+                        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px;"><input id="pc-share-url" type="text" readonly style="flex:1;min-width:260px;font-size:12px;"><button class="ghost small" id="pc-copy">Copy link</button></div>
+                        <img id="pc-share-img" alt="Steadfast countdown picture" style="max-width:100%;border:1px solid var(--line);border-radius:var(--radius);">
+                    </div>
+                    <details style="margin-top:10px;">
+                        <summary class="av-sum"><span style="font-size:12px;">Set a goal by hand (only for a level whose goal isn't shown above)</span></summary>
+                        <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-top:8px;">
+                            <div class="field" style="margin:0;max-width:150px;"><label for="pc-goal-strength">Strength goal</label><input autocomplete="off" id="pc-goal-strength" type="text" inputmode="numeric"></div>
+                            <div class="field" style="margin:0;max-width:150px;"><label for="pc-goal-defense">Defense goal</label><input autocomplete="off" id="pc-goal-defense" type="text" inputmode="numeric"></div>
+                            <div class="field" style="margin:0;max-width:150px;"><label for="pc-goal-speed">Speed goal</label><input autocomplete="off" id="pc-goal-speed" type="text" inputmode="numeric"></div>
+                            <div class="field" style="margin:0;max-width:150px;"><label for="pc-goal-dexterity">Dexterity goal</label><input autocomplete="off" id="pc-goal-dexterity" type="text" inputmode="numeric"></div>
+                            <button class="ghost small" id="pc-goals-save">Save</button>
+                        </div>
+                        <p style="color:var(--muted);font-size:12px;margin:8px 0 0;">The goal is the number in the game's upgrade panel, e.g. "Spend 3,000,000 energy on speed training". Level IX (3,000,000) is already known.</p>
+                    </details>
+                </div>
+            </div>
+
             <div class="panel" id="dash-standing-panel" style="display:none;">
                 <h3>📈 Your standing</h3>
                 <div id="dash-standing-body"></div>
@@ -1816,6 +1844,7 @@
 <script src="member-overview.js"></script>
 <script src="whats-new.js"></script>
 <script src="my-standing.js"></script>
+<script src="perk-countdown.js"></script>
 <script src="armory-tracker.js"></script>
 <script src="app-init.js"></script>
 </body>

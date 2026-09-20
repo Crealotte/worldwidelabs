@@ -171,7 +171,7 @@
             setNavLock('armory-tracker', memberView);
             setNavLock('members-overview', memberView);
             setNavLock('availability-leaders', memberView);
-            if (!memberView) { loadAdoption();
+            if (!memberView) { if (typeof loadSteadfastCard === 'function') loadSteadfastCard(); loadAdoption();
             loadFactionSharing();
             loadRespectGoalPanel(); }
         } catch (e) {
@@ -324,7 +324,7 @@
             $('feedback-editor').style.display = isLeaderCached ? 'block' : 'none';
             if (isLeaderCached) loadFeedbackEditor();
         }
-        if (page === 'dashboard') { startCooldownTicker(); loadAnnouncement(); loadPolls(); loadRespectGoalPanel(); loadDashboardWarBadges(); loadMyStanding(); } else { stopCooldownTicker(); }
+        if (page === 'dashboard') { startCooldownTicker(); loadAnnouncement(); loadPolls(); loadRespectGoalPanel(); loadDashboardWarBadges(); loadMyStanding(); loadSteadfastCard(); } else { stopCooldownTicker(); }
         if (page === 'announce-edit') {
             $('announce-locked').style.display = isLeaderCached ? 'none' : 'block';
             $('announce-editor').style.display = isLeaderCached ? 'block' : 'none';

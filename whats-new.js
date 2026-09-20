@@ -7,10 +7,20 @@
 // what is NEW since the last posted version, so nothing is announced twice (see wnBigPost below).
 //
 // TO ADD AN UPDATE: put a new object at the TOP of WHATS_NEW below with the next version number
-// (the last one is 1.11 → the next is 1.12). Plain text only (no HTML).
+// (the last one is 1.12 → the next is 1.13). Plain text only (no HTML).
 'use strict';
 
 const WHATS_NEW = [
+    {
+        version: '1.12', date: '2026-09-20',
+        title: 'Steadfast countdown',
+        everyone: [
+            'New "Steadfast countdown" card on the dashboard: for every stat, how much energy the faction has trained towards the challenge for the next Steadfast level, how much is still to go, and about when it will be done. We upgrade to 9% when all of them are done.',
+        ],
+        leaders: [
+            'The countdown updates by itself whenever a leader opens WWL. You can get a picture link (like YATA\'s posters) on the dashboard card, paste it in the faction announcement once, and the picture stays up to date for everyone, without logging in.',
+        ],
+    },
     {
         version: '1.11', date: '2026-09-20',
         title: 'Availability overview for leaders and smarter bug reports',

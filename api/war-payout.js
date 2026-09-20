@@ -31,6 +31,7 @@ const { moHandle, moMe } = require('../lib/memberOverview');
 const { gymHandle } = require('../lib/gymStats');
 const { warReports } = require('../lib/warReports');
 const { sendBugReport, bugsHandle } = require('../lib/bugReport');
+const { steadfastHandle, steadfastImage } = require('../lib/steadfast');
 const { labsIsOwner, labsHasOwners, labsHandle, labsRecordReceipt } = require('../lib/labsLedger');
 
 const REDIS_URL = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL;
@@ -222,6 +223,15 @@ module.exports = async function handler(req, res) {
         if (!REDIS_URL || !REDIS_TOKEN) {
             return res.status(500).json({ error: 'Database not connected. In Vercel: Storage -> Create Database -> Upstash Redis, and connect it to this project.' });
         }
+        // The Steadfast countdown picture for a faction announcement: GET /api/war-payout?steadfast=<code> (no login;
+        // the long random code in the link is the "key"). See lib/steadfast.js.
+        if (req.method === 'GET' && req.query?.steadfast) {
+            const png = await steadfastImage(redis, req.query.steadfast);
+            if (!png) return res.status(404).send('Not found');
+            res.setHeader('Content-Type', 'image/png');
+            res.setHeader('Cache-Control', 'public, max-age=300, s-maxage=300');
+            return res.status(200).send(png);
+        }
         if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
         const { key, action } = req.body || {};
 
@@ -356,6 +366,8 @@ module.exports = async function handler(req, res) {
         if (action === 'receipts-report') return res.status(200).json(await warReports({ redis, key, factionId, playerId, leader: await isLeader(key) }));
         // Bug reports page — posts a member's report (and screenshot) to a Discord channel. See lib/bugReport.js.
         if (action === 'bug-report') return res.status(200).json(await sendBugReport({ redis, playerId, name: playerName, factionName, body: req.body }));
+        // Steadfast countdown — everyone can read the stored numbers; refreshing, the share link and the goals are for leaders.
+        if (action.startsWith('steadfast-')) return res.status(200).json(await steadfastHandle(action, req.body, { redis, key, factionId, leader: action === 'steadfast-get' ? false : await isLeader(key) }));
         // Known bugs list — anyone can read it and press "I have this too"; only leaders change the list.
         if (action.startsWith('bugs-')) {
             if (!['bugs-list', 'bugs-metoo'].includes(action) && !(await isLeader(key))) return res.status(403).json({ error: 'Leaders only' });
