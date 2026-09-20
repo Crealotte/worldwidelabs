@@ -630,9 +630,15 @@
                     <div class="field" style="margin:0;max-width:150px;"><label for="gp-s">That stat now</label><input id="gp-s" type="number" min="0"></div>
                     <div class="field" style="margin:0;max-width:130px;"><label for="gp-base">Max happy</label><input id="gp-base" type="number" min="0" value="5000"></div>
                     <div class="field" style="margin:0;max-width:130px;"><label for="gp-fill">Energy bar</label><input id="gp-fill" type="number" min="0" value="150"></div>
-                    <div class="field" style="margin:0;max-width:150px;"><label for="gp-weekly">Energy per week</label><input id="gp-weekly" type="number" min="0" value="2200"></div>
+                    <div class="field" style="margin:0;max-width:150px;"><label for="gp-weekly">Weekly minimum (E)</label><input id="gp-weekly" type="number" min="0" value="2200"></div>
                     <button class="ghost small" id="gp-autofill">Use my numbers</button>
                 </div>
+                <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-bottom:6px;">
+                    <div class="field" style="margin:0;max-width:170px;"><label for="gp-bars">Natural bars per day (1–4)</label><input id="gp-bars" type="number" min="1" max="4" value="3"></div>
+                    <div class="field" style="margin:0;max-width:150px;"><label for="gp-xan">Xanax per day (0–4)</label><input id="gp-xan" type="number" min="0" max="4" value="2"></div>
+                    <label style="display:inline-flex;align-items:center;gap:6px;font-size:13px;margin-bottom:8px;"><input type="checkbox" id="gp-refill" checked style="width:auto;"> Energy refill each day</label>
+                </div>
+                <p style="color:var(--muted);font-size:12px;margin:0 0 12px;">A normal training day is 3 natural bars (morning, lunch, evening), a Xanax with the morning and the evening bar, and 1 refill = 1,100 E for a donator. Energy regen: donators have a 150 bar and get +5 every 10 minutes; without donator status it is a 100 bar and +5 every 15 minutes (either way a full bar takes about 5 hours). Fewer bars for a quiet day, more for a busy one, and 3 Xanax if you use them.</p>
                 <details style="margin-bottom:12px;">
                     <summary class="av-sum"><span style="font-size:13px;">More settings</span></summary>
                     <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-top:10px;">

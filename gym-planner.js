@@ -58,7 +58,10 @@ function gpWeek(m, inp, prices) {
         S += r.gain; gain += r.gain; energyUsed += r.trains * inp.E;
         perSession.push({ peak, gain: r.gain, energy: r.trains * inp.E });
     }
-    const rest = Math.max(0, inp.weekly - energyUsed);
+    // natural method: the member's own day (bars + Xanax + refill) times 4 training days; with a jump, their natural bars
+    // on top of it. The weekly number is only a minimum to reach — the plan is never cut down to it.
+    const natDaily = inp.bars * inp.fill + inp.xan * 250 + inp.refill * inp.fill;
+    const rest = m.id === 'natural' ? 4 * natDaily : 4 * inp.bars * inp.fill;
     const r = gpSession(S, inp.base, rest, inp);
     gain += r.gain; energyUsed += r.trains * inp.E;
     let cost = 0, priced = true;
@@ -114,6 +117,7 @@ function gpInputs() {
         stat: $('gp-stat').value, S: num('gp-s', saved.S || 100000), base: num('gp-base', saved.base || 5000),
         E: num('gp-e', 10), G: num('gp-g', 7.3), perk: 1 + (Number($('gp-perk').value) || 0) / 100, // perks in %, 0 = none
         weekly: num('gp-weekly', 2200), fill: num('gp-fill', 150), job: $('gp-job').checked,
+        bars: Math.min(4, Math.max(1, Math.round(num('gp-bars', 3)))), xan: Math.min(4, Math.max(0, Math.round(Number($('gp-xan').value) || 0))), refill: $('gp-refill').checked ? 1 : 0,
     };
 }
 function gpSave() {
@@ -128,6 +132,8 @@ function gpAutofill() {
         if (profile?.personalstats?.[stat] != null) $('gp-s').value = Math.round(profile.personalstats[stat]);
         if (profile?.happy?.maximum) $('gp-base').value = profile.happy.maximum;
         if (profile?.energy?.maximum) $('gp-fill').value = profile.energy.maximum;
+        if (!$('gp-bars').value) $('gp-bars').value = 3;
+        if ($('gp-xan').value === '') $('gp-xan').value = 2;
         $('gp-weekly').value = gpGroup().group === 'a' ? 4400 : 2200;
     } catch (e) { /* the boxes just stay editable */ }
 }
@@ -143,7 +149,7 @@ function renderGymPlanner() {
     const high = grp.group === 'a';
     $('gp-group-note').innerHTML = grp.total === null && grp.source === 'unknown'
         ? 'Your battle stats couldn\'t be read, so pick your group with the buttons below.'
-        : `${grp.source === 'chosen' ? 'You picked' : 'From your own battle stats'}: <b style="color:var(--text);">${high ? '1.5m+' : 'under 1.5m'}</b>${grp.total ? ` (${(grp.total / 1e6).toFixed(2)}m total)` : ''} — <b style="color:var(--text);">${high ? '4,400' : '2,200'} energy a week</b>${high ? ', natural energy method (jumping is no longer normal at this level).' : ', and you can plan happy jumps below.'}`;
+        : `${grp.source === 'chosen' ? 'You picked' : 'From your own battle stats'}: <b style="color:var(--text);">${high ? '1.5m+' : 'under 1.5m'}</b>${grp.total ? ` (${(grp.total / 1e6).toFixed(2)}m total)` : ''} — <b style="color:var(--text);">at least ${high ? '4,400' : '2,200'} energy a week</b>${high ? ', natural energy method (jumping is no longer normal at this level).' : ', and you can plan happy jumps below.'}`;
     ['a', 'b'].forEach(g => { const b = $(`eg-group-${g}`); b.style.borderColor = grp.source === 'chosen' && grp.group === g ? 'var(--reagent)' : 'var(--line)'; b.style.color = grp.source === 'chosen' && grp.group === g ? 'var(--reagent)' : 'var(--text)'; });
     $('gp-group-auto').style.borderColor = grp.source === 'chosen' ? 'var(--line)' : 'var(--reagent)';
     $('gp-group-auto').style.color = grp.source === 'chosen' ? 'var(--text)' : 'var(--reagent)';
@@ -200,7 +206,7 @@ function renderGymPlanner() {
     // jump sessions spread over the 4 training days (1 -> day 1, 2 -> days 1 & 3, 3 -> days 1-3, 4 -> every day)
     const jumpDayOf = {}; // training day index (0-3) -> session number
     for (let k = 0; k < chosen.sessions; k++) jumpDayOf[Math.floor(k * 4 / chosen.sessions)] = k;
-    const restTotal = chosen.id === 'natural' ? inp.weekly : w.restEnergy;
+    const restTotal = w.restEnergy;
     const restPerDay = Math.round(restTotal / 4);
     const fillsFor = (energy) => { // natural energy split into bars, like the standard planner
         const out = [];
@@ -220,7 +226,20 @@ function renderGymPlanner() {
             items.push({ key: `${day}train`, label: `Train: spend ${gpN(jumpTrain)} E`, value: jumpTrain });
             if (chosen.refill) items.push({ key: `${day}refill`, label: `Spend 25 points on an energy refill and train again (${gpN(inp.fill)} E)`, value: inp.fill });
         }
-        fillsFor(restPerDay).forEach((it, n) => items.push({ key: `${day}n${n}`, label: it.label, value: it.value }));
+        if (chosen.id === 'natural') {
+            // The natural energy day: bars through the day (Xanax with the morning and evening ones first) plus a refill.
+            const names = ['Morning', 'Lunch', 'Evening', 'Night'];
+            const xanAt = [0, 2, 1, 3];
+            const withBar = new Set(xanAt.filter(b => b < inp.bars).slice(0, inp.xan));
+            for (let b = 0; b < inp.bars; b++) {
+                items.push({ key: `${day}b${b}`, label: `${names[b]}: natural energy bar (${gpN(inp.fill)} E)`, value: inp.fill });
+                if (withBar.has(b)) items.push({ key: `${day}x${b}`, label: `${names[b]}: Xanax (250 E)`, value: 250 });
+            }
+            for (let x = withBar.size; x < inp.xan; x++) items.push({ key: `${day}xe${x}`, label: 'Extra Xanax (250 E)', value: 250 });
+            if (inp.refill) items.push({ key: `${day}ref`, label: `Energy refill (${gpN(inp.fill)} E)`, value: inp.fill });
+        } else {
+            fillsFor(restPerDay).forEach((it, n) => items.push({ key: `${day}n${n}`, label: it.label, value: it.value }));
+        }
         blocks.push({ title: `Training day ${i + 1}`, note, items });
     }
     blocks.push({ title: 'War prep day 1', note: 'No gym in this ideal week — get ready for the war.', items: [] });
@@ -242,7 +261,9 @@ function renderGymPlanner() {
         renderGpProgress();
     }));
     renderGpProgress();
-    $('gp-summary').innerHTML = `<b>${esc(chosen.name)}</b> for a week: about <b style="color:var(--reagent);">+${gpN(w.gain)} ${inp.stat}</b> from ${gpN(w.energyUsed)} energy${w.priced ? `, jump items ≈ <b>${gpMoney(w.cost)}</b>` : ''}.`;
+    const gap = inp.weekly - w.energyUsed;
+    const reqNote = gap > 0 ? `<div style="color:var(--danger);font-size:13px;margin-top:4px;">That is ${gpN(gap)} E short of your minimum of ${gpN(inp.weekly)} E a week — add a bar, a Xanax or a refill.</div>` : `<div style="color:var(--reagent);font-size:13px;margin-top:4px;">Meets your minimum of ${gpN(inp.weekly)} E a week.</div>`;
+    $('gp-summary').innerHTML = `<b>${esc(chosen.name)}</b> for a week: about <b style="color:var(--reagent);">+${gpN(w.gain)} ${inp.stat}</b> from ${gpN(w.energyUsed)} energy${w.priced ? `, jump items ≈ <b>${gpMoney(w.cost)}</b>` : ''}.${reqNote}`;
 }
 
 // The steps before the training itself, per method (shortened from the jump guide below).
@@ -271,7 +292,7 @@ async function loadGymPlanner() {
     await gpLoadPrices();
     renderGymPlanner();
 }
-['gp-stat', 'gp-s', 'gp-base', 'gp-e', 'gp-g', 'gp-perk', 'gp-weekly', 'gp-fill', 'gp-job'].forEach(id => {
+['gp-stat', 'gp-s', 'gp-base', 'gp-e', 'gp-g', 'gp-perk', 'gp-weekly', 'gp-fill', 'gp-job', 'gp-bars', 'gp-xan', 'gp-refill'].forEach(id => {
     $(id).addEventListener('change', () => {
         if (id === 'gp-stat' && typeof profile !== 'undefined' && profile?.personalstats?.[$('gp-stat').value] != null) $('gp-s').value = Math.round(profile.personalstats[$('gp-stat').value]);
         gpSave(); renderGymPlanner();
