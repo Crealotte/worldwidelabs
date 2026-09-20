@@ -13,7 +13,8 @@ const WHATS_NEW = [
         everyone: [
             'Energy planner: pick how you train (natural energy, Lollipop jump, Big Choco, EDVD…) and get a week plan — 4 training days, 2 war prep days and the war day — with tick boxes to track it.',
             'It also estimates the stat growth and the item cost of each method for one week, side by side, so you can see what a jump really buys you. These are estimates, since Torn adds a random amount to every train.',
-            'Your energy group is now worked out automatically from your own total battle stats: 1.5m+ trains 4,400 energy a week on natural energy, under 1.5m trains 2,200 and can plan happy jumps. You can still switch it by hand.',
+            'Everything in the planner is now pulled from your own account (stat, max happy, energy bar, gym, and your gym bonuses like the faction Steadfast, candy bonus and cooldown perks) — you only pick the stat to train and how you train. Your total battle stats only set your weekly minimum: 4,400 energy at 1.5m+, 2,200 under.',
+            'Natural energy now comes as Soft (3 bars + 2 Xanax a day, 3 log-ins) or Hard (4 bars + 3 Xanax), each with the daily energy refill on by default; experienced players can set their own bars and Xanax.',
         ],
         leaders: [],
     },

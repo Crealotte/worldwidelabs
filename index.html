@@ -598,10 +598,9 @@
             <div class="panel">
                 <h3>Your energy group</h3>
                 <p id="gp-group-note" style="font-size:14px;margin:0 0 10px;color:var(--muted);">Checking your battle stats…</p>
-                <div class="row" style="display:flex;gap:12px;">
+                <div class="row" style="display:none;gap:12px;">
                     <button id="eg-group-a" class="ghost" style="flex:1;">1,500,000+ total battle stats</button>
                     <button id="eg-group-b" class="ghost" style="flex:1;">Under 1,500,000 total battle stats</button>
-                    <button id="gp-group-auto" class="ghost" style="flex:0 0 auto;">Automatic</button>
                 </div>
             </div>
 
@@ -622,36 +621,34 @@
 
             <div class="panel" id="gp-panel">
                 <h3>🎯 Your tailored training plan</h3>
-                <p class="pagedesc" style="margin-bottom:12px;">Pick how you train and get a week plan plus an <b>estimate</b> of your stat growth and item cost next to the other methods. The week is our ideal one: 4 training days, 2 war prep days and 1 war day (only with a termed war). Gains are estimates — Torn adds a random amount to every train.</p>
+                <p class="pagedesc" style="margin-bottom:12px;">Pick the stat you train and how you train — everything else is taken from your own account. You get a week plan plus an <b>estimate</b> of your stat growth and item cost next to the other methods. The week is our ideal one: 4 training days, 2 war prep days and 1 war day (only with a termed war). Gains are estimates — Torn adds a random amount to every train.</p>
 
-                <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-bottom:12px;">
+                <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-bottom:8px;">
                     <div class="field" style="margin:0;"><label for="gp-stat">Stat to train</label>
                         <select autocomplete="off" id="gp-stat"><option value="strength">Strength</option><option value="defense">Defense</option><option value="speed">Speed</option><option value="dexterity">Dexterity</option></select></div>
-                    <div class="field" style="margin:0;max-width:150px;"><label for="gp-s">That stat now</label><input autocomplete="off" id="gp-s" type="number" min="0"></div>
-                    <div class="field" style="margin:0;max-width:130px;"><label for="gp-base">Max happy</label><input autocomplete="off" id="gp-base" type="number" min="0" value="5000"></div>
-                    <div class="field" style="margin:0;max-width:130px;"><label for="gp-fill">Energy bar</label><input autocomplete="off" id="gp-fill" type="number" min="0" value="150"></div>
-                    <div class="field" style="margin:0;max-width:150px;"><label for="gp-weekly">Weekly minimum (E)</label><input autocomplete="off" id="gp-weekly" type="number" min="0" value="2200"></div>
-                    <button class="ghost small" id="gp-autofill">Use my numbers</button>
                 </div>
-                <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-bottom:6px;">
-                    <div class="field" style="margin:0;max-width:170px;"><label for="gp-bars">Natural bars per day (1–4)</label><input autocomplete="off" id="gp-bars" type="number" min="1" max="4" value="3"></div>
-                    <div class="field" style="margin:0;max-width:150px;"><label for="gp-xan">Xanax per day (0–4)</label><input autocomplete="off" id="gp-xan" type="number" min="0" max="4" value="2"></div>
-                    <label style="display:inline-flex;align-items:center;gap:6px;font-size:13px;margin-bottom:8px;"><input type="checkbox" id="gp-refill" checked style="width:auto;"> Energy refill each day</label>
-                </div>
-                <p style="color:var(--muted);font-size:12px;margin:0 0 12px;">A normal training day is 3 natural bars (morning, lunch, evening), a Xanax with the morning and the evening bar, and 1 refill = 1,100 E for a donator. Energy regen: donators have a 150 bar and get +5 every 10 minutes; without donator status it is a 100 bar and +5 every 15 minutes (either way a full bar takes about 5 hours). Fewer bars for a quiet day, more for a busy one, and 3 Xanax if you use them.</p>
-                <details style="margin-bottom:12px;">
-                    <summary class="av-sum"><span style="font-size:13px;">More settings</span></summary>
-                    <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-top:10px;">
-                        <div class="field" style="margin:0;max-width:140px;"><label for="gp-g">Gym multiplier</label><input autocomplete="off" id="gp-g" type="number" step="0.1" value="7.3"></div>
-                        <div class="field" style="margin:0;max-width:140px;"><label for="gp-e">Energy per train</label><input autocomplete="off" id="gp-e" type="number" min="1" value="10"></div>
-                        <div class="field" style="margin:0;max-width:140px;"><label for="gp-perk">Gym perks (%)</label><input autocomplete="off" id="gp-perk" type="number" step="1" value="0"></div>
-                        <label style="display:inline-flex;align-items:center;gap:6px;font-size:13px;"><input type="checkbox" id="gp-job" style="width:auto;"> 10★ Adult Novelties job (doubles EDVD happy)</label>
-                    </div>
-                    <p style="color:var(--muted);font-size:12px;margin:8px 0 0;">Uses the standard community gym formula. Happy is assumed to drop by about half of the energy of each train, and energy not used in jumps is trained at your normal max happy. Item costs use current market values and count only the jump items (not your normal Xanax use).</p>
-                </details>
+                <div id="gp-data-note" style="color:var(--muted);font-size:12px;margin-bottom:6px;line-height:1.5;"></div>
+                <div id="gp-perks-note" style="color:var(--muted);font-size:12px;margin-bottom:14px;line-height:1.5;"></div>
 
                 <div id="gp-how" style="font-size:13px;color:var(--muted);margin-bottom:6px;">How do you train?</div>
                 <div id="gp-methods" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;"></div>
+
+                <div id="gp-nat-opts" style="display:none;margin-bottom:10px;">
+                    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:6px;">
+                        <button class="ghost small" id="gp-nat-soft">Soft</button>
+                        <button class="ghost small" id="gp-nat-hard">Hard</button>
+                        <label style="display:inline-flex;align-items:center;gap:6px;font-size:13px;margin-left:8px;"><input type="checkbox" id="gp-refill" checked style="width:auto;"> Energy refill each day</label>
+                    </div>
+                    <div id="gp-nat-desc" style="color:var(--muted);font-size:12px;margin-bottom:6px;"></div>
+                    <details>
+                        <summary class="av-sum"><span style="font-size:12px;">Experienced players: set your own bars and Xanax per day</span></summary>
+                        <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-top:8px;">
+                            <div class="field" style="margin:0;max-width:170px;"><label for="gp-bars">Natural bars per day (1–4)</label><input autocomplete="off" id="gp-bars" type="number" min="1" max="4" value="3"></div>
+                            <div class="field" style="margin:0;max-width:150px;"><label for="gp-xan">Xanax per day (0–4)</label><input autocomplete="off" id="gp-xan" type="number" min="0" max="4" value="2"></div>
+                        </div>
+                        <p style="color:var(--muted);font-size:12px;margin:8px 0 0;">Energy regen: donators have a 150 bar and get +5 every 10 minutes; without donator status it is a 100 bar and +5 every 15 minutes — either way a full bar takes about 5 hours, so 3 bars a day is a normal, 4 a busy day.</p>
+                    </details>
+                </div>
                 <span id="gp-sessions-wrap" style="display:none;align-items:center;gap:6px;font-size:13px;margin-bottom:10px;">Jumps this week (max 4): <input autocomplete="off" id="gp-sessions" type="number" min="0" max="4" style="width:70px;"></span>
 
                 <div id="gp-summary" style="font-size:14px;margin:6px 0 12px;"></div>
@@ -664,7 +661,9 @@
 
                 <h3 id="gp-chart-head" style="margin:0 0 10px;">Compared over one week</h3>
                 <div id="gp-chart"></div>
+                <p style="color:var(--muted);font-size:12px;margin:10px 0 0;">Uses the standard community gym formula with your own stat, max happy, gym and gym bonuses. Happy is assumed to drop by about half of the energy of each train. Item costs use current market values and count only the jump items (not your normal Xanax use).</p>
             </div>
+
 
             <div class="panel" style="margin-top:16px;">
                 <h3>🎈 Happy Jumping</h3>
