@@ -39,7 +39,7 @@
     function planForGroupB(isDonator) {
         const fillSize = isDonator ? 150 : 100;
         const dayTotal = fillSize * 3 + 250; // 3 natural fills + 1 Xanax
-        const weeklyTotal = 1000 + dayTotal * 2; // stacking phase + days 3 & 4
+        const weeklyTotal = 2200; // the weekly requirement for under 1.5m (matches Member Overview and the dashboard card)
         return {
             title: `Under 1,500,000 total battle stats — ${fmtN(weeklyTotal)} E this week`,
             sub: `First bank up energy with Xanax, then spend it all in one big jump. Days 3 & 4 are lighter, since you're newer. Natural energy bar: ${fillSize} E ${isDonator ? '(donator)' : '(no donator status)'}.`,
