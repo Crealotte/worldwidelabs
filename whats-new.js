@@ -8,6 +8,15 @@
 
 const WHATS_NEW = [
     {
+        date: '2026-09-21',
+        title: 'Tailored training plan',
+        everyone: [
+            'Energy planner: pick how you train (natural energy, Lollipop jump, Big Choco, EDVD…) and get a week plan — 4 training days, 2 war prep days and the war day — with tick boxes to track it.',
+            'It also estimates the stat growth and the item cost of each method for one week, side by side, so you can see what a jump really buys you. These are estimates, since Torn adds a random amount to every train.',
+        ],
+        leaders: [],
+    },
+    {
         date: '2026-09-20',
         title: 'Sidebar tidy-up and war rule fix',
         everyone: [

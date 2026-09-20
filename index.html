@@ -617,6 +617,46 @@
                 <button class="ghost small" id="eg-reset" style="margin-top:16px;">Reset this week's checklist</button>
             </div>
 
+            <div class="panel" id="gp-panel">
+                <h3>🎯 Your tailored training plan</h3>
+                <p class="pagedesc" style="margin-bottom:12px;">Pick how you train and get a week plan plus an <b>estimate</b> of your stat growth and item cost next to the other methods. The week is our ideal one: 4 training days, 2 war prep days and 1 war day (only with a termed war). Gains are estimates — Torn adds a random amount to every train.</p>
+
+                <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-bottom:12px;">
+                    <div class="field" style="margin:0;"><label for="gp-stat">Stat to train</label>
+                        <select id="gp-stat"><option value="strength">Strength</option><option value="defense">Defense</option><option value="speed">Speed</option><option value="dexterity">Dexterity</option></select></div>
+                    <div class="field" style="margin:0;max-width:150px;"><label for="gp-s">That stat now</label><input id="gp-s" type="number" min="0"></div>
+                    <div class="field" style="margin:0;max-width:130px;"><label for="gp-base">Max happy</label><input id="gp-base" type="number" min="0" value="5000"></div>
+                    <div class="field" style="margin:0;max-width:130px;"><label for="gp-fill">Energy bar</label><input id="gp-fill" type="number" min="0" value="150"></div>
+                    <div class="field" style="margin:0;max-width:150px;"><label for="gp-weekly">Energy per week</label><input id="gp-weekly" type="number" min="0" value="2200"></div>
+                    <button class="ghost small" id="gp-autofill">Use my numbers</button>
+                </div>
+                <details style="margin-bottom:12px;">
+                    <summary class="av-sum"><span style="font-size:13px;">More settings</span></summary>
+                    <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-top:10px;">
+                        <div class="field" style="margin:0;max-width:140px;"><label for="gp-g">Gym multiplier</label><input id="gp-g" type="number" step="0.1" value="7.3"></div>
+                        <div class="field" style="margin:0;max-width:140px;"><label for="gp-e">Energy per train</label><input id="gp-e" type="number" min="1" value="10"></div>
+                        <div class="field" style="margin:0;max-width:140px;"><label for="gp-perk">Gym perks (%)</label><input id="gp-perk" type="number" step="1" value="0"></div>
+                        <label style="display:inline-flex;align-items:center;gap:6px;font-size:13px;"><input type="checkbox" id="gp-job" style="width:auto;"> 10★ Adult Novelties job (doubles EDVD happy)</label>
+                    </div>
+                    <p style="color:var(--muted);font-size:12px;margin:8px 0 0;">Uses the standard community gym formula. Happy is assumed to drop by about half of the energy of each train, and energy not used in jumps is trained at your normal max happy. Item costs use current market values and count only the jump items (not your normal Xanax use).</p>
+                </details>
+
+                <div style="font-size:13px;color:var(--muted);margin-bottom:6px;">How do you train?</div>
+                <div id="gp-methods" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;"></div>
+                <span id="gp-sessions-wrap" style="display:none;align-items:center;gap:6px;font-size:13px;margin-bottom:10px;">Jumps this week (max 4): <input id="gp-sessions" type="number" min="0" max="4" style="width:70px;"></span>
+
+                <div id="gp-summary" style="font-size:14px;margin:6px 0 12px;"></div>
+
+                <div class="bar-block" style="margin-bottom:6px;">
+                    <div class="bar-head"><span>This week's plan</span><span id="gp-progress"></span></div>
+                    <div class="bar-track"><div class="bar-fill" id="gp-progress-fill" style="background:var(--reagent);width:0%;"></div></div>
+                </div>
+                <div id="gp-plan" style="margin-bottom:18px;"></div>
+
+                <h3 style="margin:0 0 10px;">Compared over one week</h3>
+                <div id="gp-chart"></div>
+            </div>
+
             <div class="panel" style="margin-top:16px;">
                 <h3>🎈 Happy Jumping</h3>
                 <p class="pagedesc" style="margin-bottom:10px;">Boosting your Happy bar above your property's normal max before training — bigger Happy means bigger gym gains, and the relationship is exponential, not linear.</p>
@@ -1576,6 +1616,7 @@
 <script src="polls.js"></script>
 <script src="feedback.js"></script>
 <script src="energy-planner.js"></script>
+<script src="gym-planner.js"></script>
 <script src="level-targets.js"></script>
 <script src="tools-links.js"></script>
 <script src="player-profile.js"></script>
