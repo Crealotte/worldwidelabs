@@ -145,24 +145,30 @@ function moWarOk(p, s) { return !!p && (p.war >= s.minWarHits || (p.war === 0 &&
 function moRows() {
     const { hits, settings, tiers } = moData;
     const wars = moWarsInPeriod();
-    const counted = wars.filter(w => hits[w.id]);
+    const now = Math.floor(Date.now() / 1000);
     return moData.members.map(m => {
-        let war = 0, chain = 0, okWars = 0;
+        // Torn only gives "days in faction", so the join moment is "at least that many days ago". A war
+        // is only held against a member if they were definitely already in the faction when it started
+        // — anyone who might have joined after it began is left out of that war rather than penalised.
+        const joinedBy = m.daysInFaction === null ? 0 : now - m.daysInFaction * MO_DAY;
+        let war = 0, chain = 0, okWars = 0, eligible = 0;
         const perWar = wars.map(w => {
-            const h = hits[w.id]?.[m.id];
             if (!hits[w.id]) return null;
+            const h = hits[w.id]?.[m.id];
             const p = { war: h?.war || 0, chain: h?.chain || 0 };
             war += p.war; chain += p.chain;
+            if (joinedBy > w.start) { p.notIn = true; return p; } // not in the faction yet
+            eligible++;
             p.ok = moWarOk(p, settings);
             if (p.ok) okWars++;
             return p;
         });
-        const isNew = m.daysInFaction !== null && m.daysInFaction < 14;
-        // Pushed on warring when they met the rule in fewer than `needWars` of the last 5 wars.
+        // Needs to meet the rule in `needWars` of the wars they were around for (fewer if they joined recently).
+        const need = Math.min(settings.needWars, eligible);
         let light = 'grey';
-        if (counted.length && !isNew) light = okWars >= settings.needWars ? 'green' : 'red';
+        if (eligible) light = okWars >= need ? 'green' : 'red';
         return {
-            ...m, perWar, war, chain, okWars, counted: counted.length, light, isNew, tier: tiers[m.id] || '',
+            ...m, perWar, war, chain, okWars, need, counted: eligible, light, isNew: eligible < settings.needWars, tier: tiers[m.id] || '',
             used: Object.fromEntries(MO_KEYS.map(([k]) => [k, moUsed(m.id, k)])),
         };
     });
@@ -236,10 +242,10 @@ function renderMemberOverview() {
             </tr></thead>
             <tbody>${sorted.map(r => `
                 <tr style="border-top:1px solid var(--line);">
-                    <td style="padding:4px 8px;"><span title="${r.isNew ? 'New member (under 14 days) — not judged yet' : r.light}" style="display:inline-block;width:12px;height:12px;border-radius:50%;background:${MO_LIGHT[r.light]};"></span></td>
+                    <td style="padding:4px 8px;"><span title="${r.isNew && r.light === 'grey' ? 'Fewer than ' + moData.settings.needWars + ' wars since joining — judged on the wars they were here for' : r.light}" style="display:inline-block;width:12px;height:12px;border-radius:50%;background:${MO_LIGHT[r.light]};"></span></td>
                     <td style="padding:4px 8px;white-space:nowrap;"><a href="https://www.torn.com/profiles.php?XID=${esc(r.id)}" target="_blank" rel="noopener" style="color:var(--text);">${esc(r.name)}</a></td>
                     <td style="padding:4px 8px;color:var(--muted);white-space:nowrap;">${moAgo(r.lastAction)}</td>
-                    ${r.perWar.map(p => `<td style="padding:4px 8px;font-family:var(--mono);white-space:nowrap;${p ? `color:${p.ok ? MO_LIGHT.green : MO_LIGHT.red};` : ''}">${p ? `${p.war}${p.chain ? `<span style="color:var(--muted);">+${p.chain}</span>` : ''}` : '…'}</td>`).join('')}
+                    ${r.perWar.map(p => `<td style="padding:4px 8px;font-family:var(--mono);white-space:nowrap;${p ? `color:${p.notIn ? MO_LIGHT.grey : p.ok ? MO_LIGHT.green : MO_LIGHT.red};` : ''}" ${p?.notIn ? 'title="Not in the faction yet when this war started"' : ''}>${p ? (p.notIn ? '—' : `${p.war}${p.chain ? `<span style="color:var(--muted);">+${p.chain}</span>` : ''}`) : '…'}</td>`).join('')}
                     <td style="padding:4px 8px;font-family:var(--mono);font-weight:700;color:${MO_LIGHT[r.light]};">${r.counted ? `${r.okWars}/${r.counted}` : '…'}</td>
                     <td style="padding:4px 8px;"><select class="mo-tier" data-id="${esc(r.id)}" style="font-size:12px;padding:2px 4px;width:auto;">
                         <option value="">—</option><option value="high" ${r.tier === 'high' ? 'selected' : ''}>1.5m+ · ${moData.energyTarget.high}</option><option value="low" ${r.tier === 'low' ? 'selected' : ''}>&lt;1.5m · ${moData.energyTarget.low}</option></select></td>
