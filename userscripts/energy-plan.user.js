@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         WWL Energy plan
 // @namespace    https://worldwidelabs.vercel.app
-// @version      1.3
+// @version      1.4
 // @updateURL    __WWL_BASE__/wwl-energy-planner.user.js
 // @downloadURL  __WWL_BASE__/wwl-energy-planner.user.js
 // @description  Shows your WorldWideLabs weekly energy plan (the checklist from the Energy planner) inside Torn. On a computer it is a small window you can drag around and close; in TornPDA it is a menu. Ticks are shared with the WWL site.
@@ -67,7 +67,7 @@
     document.body.appendChild(root);
 
     const pill = document.createElement('div'); // the closed state: a small "WWL" button with the progress
-    pill.style.cssText = 'position:fixed;right:10px;bottom:70px;z-index:99998;display:flex;gap:6px;align-items:center;padding:8px 12px;background:#1b2029;border:1px solid #35d99b;border-radius:20px;cursor:pointer;box-shadow:0 2px 12px rgba(0,0,0,.5);user-select:none;';
+    pill.style.cssText = 'position:fixed;left:8px;top:8px;z-index:99998;display:flex;gap:6px;align-items:center;padding:8px 12px;background:#1b2029;border:1px solid #35d99b;border-radius:20px;cursor:pointer;box-shadow:0 2px 12px rgba(0,0,0,.5);user-select:none;';
     pill.innerHTML = '<b>WWL</b><span id="wwl-prog" style="color:#35d99b;font-family:monospace;"></span>';
     root.appendChild(pill);
     const prog = pill.querySelector('#wwl-prog');
@@ -95,7 +95,7 @@
     };
     function restorePos() {
         let p = null; try { p = JSON.parse(store.get(POS_NAME) || 'null'); } catch (e) { /* default */ }
-        place(p ? p.x : window.innerWidth - 350, p ? p.y : window.innerHeight - 460);
+        place(p ? p.x : 10, p ? p.y : 52);
     }
     if (!IS_PDA) {
         let drag = null;
