@@ -184,7 +184,7 @@ const wnFmtDate = d => new Date(`${d}T12:00:00Z`).toLocaleDateString(undefined, 
 
 // ---- which version was last posted in Discord (per browser) ----
 const WN_POSTED_KEY = 'wwl_whatsnew_posted';
-const WN_POSTED_DEFAULT = '1.12'; // what the owner had already posted in Discord (up to v1.12); a leader can move it with "Mark posted up to here"
+const WN_POSTED_DEFAULT = '1.13'; // what the owner had already posted in Discord (up to v1.13); a leader can move it with "Mark posted up to here"
 const wnPostedIndex = () => { // index in WHATS_NEW of the newest version already posted, -1 = none
     let v = null;
     try { v = localStorage.getItem(WN_POSTED_KEY); } catch (e) { /* none */ }
