@@ -207,13 +207,23 @@ async function getRoster(key) {
     return (d.members || []).map(m => ({ id: String(m.id), name: m.name }));
 }
 
+
+// A plan linked to a war (or given a start time by hand) only counts hours from that start on: a slot before it is
+// not open to tick, and ticks that were made there before are left out of every count.
+function slotBeforeStart(data, slotKey) {
+    const start = data?.war?.start;
+    if (!start || !data?.startDate) return false;
+    const [y, m, d] = String(data.startDate).split('-').map(Number);
+    const [day, hour] = String(slotKey).split('-').map(Number);
+    return Date.UTC(y, m - 1, d) / 1000 + (day * 24 + hour) * 3600 < Math.floor(start / 3600) * 3600;
+}
 // Everyone who has actually filled the tracker in for this war: ticked at least one slot, or
 // marked themselves not available. An entry left behind by ticking and then un-ticking
 // everything doesn't count as having responded.
 function respondedMap(data) {
     const out = {};
     for (const [id, entry] of Object.entries(data?.entries || {})) {
-        const vals = Object.values(entry.slots || {});
+        const vals = Object.entries(entry.slots || {}).filter(([k]) => !slotBeforeStart(data, k)).map(e => e[1]);
         const slotCount = vals.length, maybe = vals.filter(v => v === 'maybe').length; // green = the rest
         if (slotCount) out[id] = { id, name: entry.name, slotCount, green: slotCount - maybe, maybe, out: false };
     }
@@ -343,6 +353,7 @@ module.exports = async function handler(req, res) {
                 for (const [id, entry] of Object.entries(data?.entries || {})) {
                     if (unavailable[id]) continue; // marked themselves out — don't count their slots
                     for (const [slot, val] of Object.entries(entry.slots || {})) {
+                        if (slotBeforeStart(data, slot)) continue;
                         const s = summary[slot] || (summary[slot] = { count: 0, names: [], ids: [], maybe: 0, maybeNames: [], maybeIds: [] });
                         const name = entry.name || `#${id}`;
                         if (val === 'maybe') { s.maybe++; s.maybeNames.push(name); s.maybeIds.push(id); }
@@ -362,6 +373,7 @@ module.exports = async function handler(req, res) {
             const entry = data.entries[playerId] || (data.entries[playerId] = { name: playerName, slots: {} });
             entry.name = playerName; // keep it current in case of a name change
             const slotKey = `${day}-${hour}`;
+            if (slotBeforeStart(data, slotKey)) return res.status(400).json({ error: 'That hour is before the start — you can only tick hours from the start on.' });
             // state: 'yes' (green) | 'maybe' (yellow — likely, but might be busy) | '' (off).
             // Older clients sent a plain boolean `available`, which still means yes/off.
             const state = req.body.state !== undefined ? req.body.state : (available ? 'yes' : '');

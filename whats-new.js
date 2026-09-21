@@ -15,6 +15,7 @@ const WHATS_NEW = [
         version: '1.14', date: '2026-09-21',
         title: 'Availability hours vs hits, map fix',
         everyone: [
+            'War Availability: when a plan has a start time (a linked war, or a chain start typed in), the hours before that start are now greyed out and can\'t be ticked any more. Hours ticked there before are left out of the counts.',
             'Timezone map: fixed the stretched line across the map — the far east of Russia (and Alaska\'s far islands) now show up correctly on the other side of the map.',
         ],
         leaders: [

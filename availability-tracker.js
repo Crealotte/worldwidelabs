@@ -560,6 +560,9 @@ function renderAvTzBar() {
 function avBuildTable(cellHtml) {
     const offset = avOffset();
     const total = avConfig.days * 24;
+    // a plan with a start time (linked war, or one typed in) is only open from that hour on
+    const [sy, sm, sd] = avStartParts();
+    const startIdx = avConfig.war?.start ? Math.max(0, Math.floor((Math.floor(avConfig.war.start / 3600) * 3600 - Date.UTC(sy, sm - 1, sd) / 1000) / 3600)) : 0;
     const minCol = Math.floor(offset / 24);
     const maxCol = Math.floor((total - 1 + offset) / 24);
     let html = '<table class="av-table"><thead><tr><th></th>';
@@ -569,7 +572,7 @@ function avBuildTable(cellHtml) {
         html += `<tr><td class="av-hour-label">${avHourLabel(row)}</td>`;
         for (let c = minCol; c <= maxCol; c++) {
             const idx = c * 24 + row - offset; // absolute TCT hour index from the tracker's start
-            html += (idx < 0 || idx >= total) ? '<td class="av-cell av-cell-off"></td>' : cellHtml(Math.floor(idx / 24), idx % 24);
+            html += (idx < 0 || idx >= total || idx < startIdx) ? '<td class="av-cell av-cell-off"></td>' : cellHtml(Math.floor(idx / 24), idx % 24);
         }
         html += '</tr>';
     }
