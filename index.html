@@ -1562,6 +1562,33 @@
                 <div id="av-od-body"></div>
             </div>
 
+            <div class="panel" id="av-link-panel" style="display:none;">
+                <details open><summary class="av-sum"><h3>Leader: link a war to this plan</h3></summary>
+                <p style="color:var(--muted);font-size:12px;margin:0 0 10px;">Once we are matched, link the war to the plan picked above. Its start time is taken from Torn, hours before the start can no longer be ticked, and you can note whether it is termed and, for a termed war, how it ended.</p>
+                <div id="av-link-plan" style="font-size:13px;margin-bottom:10px;"></div>
+                <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-bottom:12px;">
+                    <div class="field" style="margin:0;min-width:280px;">
+                        <label for="av-link-war">Ranked war</label>
+                        <select id="av-link-war"><option value="">Loading matched wars…</option></select>
+                    </div>
+                    <div id="av-link-manual" style="display:none;gap:10px;flex-wrap:wrap;align-items:flex-end;">
+                        <div class="field" style="margin:0;"><label for="av-link-date">War start date (TCT)</label><input id="av-link-date" type="date"></div>
+                        <div class="field" style="margin:0;max-width:120px;"><label for="av-link-hour">Hour (TCT)</label><input id="av-link-hour" type="number" value="18" min="0" max="23"></div>
+                    </div>
+                </div>
+                <div style="margin-bottom:12px;">
+                    <label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;font-size:14px;"><input type="checkbox" id="av-link-termed" style="width:auto;"> This is a <b>termed</b> war</label>
+                </div>
+                <div id="av-link-result" style="display:none;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-bottom:12px;">
+                    <div class="field" style="margin:0;"><label for="av-link-outcome">How did it end?</label>
+                        <select id="av-link-outcome"><option value="">Not decided yet</option><option value="win">We won</option><option value="lose">We lost</option></select></div>
+                    <div class="field" style="margin:0;max-width:150px;"><label for="av-link-our">Our score</label><input id="av-link-our" type="number" min="0" placeholder="e.g. 250000"></div>
+                    <div class="field" style="margin:0;max-width:150px;"><label for="av-link-their">Their score</label><input id="av-link-their" type="number" min="0" placeholder="e.g. 231000"></div>
+                </div>
+                <button class="ghost small" id="av-link-save">Save the war for this plan</button>
+                </details>
+            </div>
+
             <div class="panel" id="av-start-panel" style="display:none;">
                 <details><summary class="av-sum"><h3>Leader: create a plan</h3></summary>
                 <p style="color:var(--muted);font-size:12px;margin:0 0 10px;">A plan is one tracker — e.g. this weekend, or next weekend. Plans sit side by side (pick between them with the dropdown), so creating a new one never touches the others.</p>

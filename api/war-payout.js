@@ -754,6 +754,36 @@ module.exports = async function handler(req, res) {
             return res.status(200).json({ ok: true, planId });
         }
 
+        // Links (or re-links) a plan to a matched war afterwards, and records what kind of war it is: termed or not and, for a
+        // termed war, how it ended (won / lost) and the score. The war itself comes from Torn (not trusted from the client);
+        // if the plan is already linked to that war, its saved details are kept. Leaders only.
+        if (action === 'availability-link-war') {
+            if (!(await isLeader(key))) return res.status(403).json({ error: 'Leaders only' });
+            const { warId, warStart, termed, result, ourScore, theirScore } = req.body;
+            const { plans, id: planId, data } = await resolvePlan(factionId, req.body.planId);
+            if (!data) return res.status(400).json({ error: 'There is no plan to link — create one first.' });
+            let war;
+            if (warId && String(data.war?.id) === String(warId)) war = { ...data.war };
+            else if (warId) {
+                let wars;
+                try { wars = await getUpcomingWars(key, factionId); } catch (e) { return res.status(403).json({ error: String(e.message || e) }); }
+                const w = wars.find(x => x.id === String(warId));
+                if (!w) return res.status(400).json({ error: "Couldn't find that war among your matched/upcoming wars — it may have already ended." });
+                war = { id: w.id, start: w.start, opponent: w.opponent };
+            } else if (Number(warStart) > 0) war = { id: null, start: Number(warStart), opponent: data.war?.opponent || '' };
+            else return res.status(400).json({ error: 'Pick a matched war, or enter the war start time.' });
+            war.termed = !!termed;
+            const score = n => (Number.isFinite(Number(n)) && n !== '' && n !== null && Number(n) >= 0 ? Math.round(Number(n)) : null);
+            war.result = war.termed && ['win', 'lose'].includes(result) ? result : '';
+            war.ourScore = war.termed ? score(ourScore) : null;
+            war.theirScore = war.termed ? score(theirScore) : null;
+            data.war = war;
+            await redis(['SET', availabilityKey(factionId, planId), JSON.stringify(data)]);
+            const meta = plans.find(p => p.id === planId);
+            if (meta) { meta.war = war; await redis(['SET', availabilityIndexKey(factionId), JSON.stringify(plans)]); }
+            return res.status(200).json({ ok: true, war });
+        }
+
         if (action === 'availability-delete') {
             const { planId } = req.body;
             const plans = await loadPlanIndex(factionId);

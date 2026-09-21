@@ -36,7 +36,7 @@ const AV_PLAN_KEY = 'wwl_av_plan';
 let avPlans = []; // light metadata for the dropdown: [{ id, name, startDate, days, war }]
 let avPlanId = null;
 try { avPlanId = localStorage.getItem(AV_PLAN_KEY) || null; } catch (e) { /* storage blocked */ }
-const AV_PLAN_ACTIONS = new Set(['availability-get', 'availability-set', 'availability-watch', 'availability-unavailable', 'availability-ping']);
+const AV_PLAN_ACTIONS = new Set(['availability-get', 'availability-set', 'availability-watch', 'availability-link-war', 'availability-unavailable', 'availability-ping']);
 let avOd = null; // leader-only: last overdose view from the backend
 let avOdIds = new Set(); // ids of members who've overdosed in the window (marked in the slot list)
 let avOdScanning = false;
@@ -141,7 +141,7 @@ function renderAvWarLine() {
     const local = (avLocal && avOffsetSupported())
         ? ` (${at.toLocaleString(undefined, { weekday: 'short', hour: '2-digit', minute: '2-digit' })} your time)` : '';
     el.style.display = 'block';
-    el.innerHTML = `🎯 ${war.opponent ? `War vs <b>${esc(war.opponent)}</b> — s` : 'S'}tarts <b>${esc(tct)}</b>${esc(local)}.${avWarStartSlot() ? ' The gold-outlined box in the grid is the start hour.' : ''}`;
+    el.innerHTML = `🎯 ${war.opponent ? `War vs <b>${esc(war.opponent)}</b> — s` : 'S'}tarts <b>${esc(tct)}</b>${esc(local)}.${avWarStartSlot() ? ' The gold-outlined box in the grid is the start hour.' : ''}${avWarKind(war)}`;
 }
 
 // ---- Overdoses (leader-only). The backend counts each member's "times overdosed" against the
@@ -273,6 +273,7 @@ async function loadAvWars() {
     sel.innerHTML = avWars.map(w => `<option value="${esc(w.id)}">vs ${esc(w.opponent)} — starts ${esc(fmt(w.start))}</option>`).join('')
         + `<option value="">${avWars.length ? 'No war / enter the start time manually' : 'No matched war found — enter the start time manually (optional)'}</option>`;
     avOnWarSelect();
+    renderAvLinkPanel();
 }
 function avOnWarSelect() {
     const war = (avWars || []).find(w => w.id === $('av-war-select').value);
@@ -327,6 +328,7 @@ function renderAvailabilityPage() {
     renderAvPlanBar();
     $('av-start-panel').style.display = avSummary !== null ? 'block' : 'none'; // leader-only, inferred from whether summary came back at all
     $('av-discord-panel').style.display = avSummary !== null ? 'block' : 'none';
+    renderAvLinkPanel();
     $('av-od-panel').style.display = avSummary !== null ? 'block' : 'none';
     if (!avConfig) {
         $('av-none-msg').style.display = 'block';
@@ -832,4 +834,51 @@ async function toggleAvWatch(day, hour, cellEl) {
         toast(`Couldn't save that: ${e.message}`);
         loadAvailability();
     }
+}
+
+// ---- Leader: link a war to the plan picked above, and note if it is termed / how it ended ----
+function renderAvLinkPanel() {
+    if (avSummary === null || !avConfig) { $('av-link-panel').style.display = 'none'; return; }
+    $('av-link-panel').style.display = 'block';
+    const war = avConfig.war || null;
+    const cur = avPlans.find(p => p.id === avPlanId);
+    $('av-link-plan').innerHTML = `Plan: <b>${esc(cur ? avPlanLabel(cur) : 'this plan')}</b>${war ? ` — linked to ${war.opponent ? `<b>${esc(war.opponent)}</b>` : 'a war start time'}` : ' — no war linked yet'}`;
+    const fmt = ts => new Date(ts * 1000).toLocaleString(undefined, { weekday: 'short', day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'UTC' }) + ' TCT';
+    const list = (avWars || []).slice();
+    if (war?.id && !list.some(w => w.id === String(war.id))) list.unshift({ id: String(war.id), opponent: war.opponent || 'linked war', start: war.start }); // a linked war that already ended
+    $('av-link-war').innerHTML = list.map(w => `<option value="${esc(w.id)}">vs ${esc(w.opponent)} — starts ${esc(fmt(w.start))}</option>`).join('')
+        + `<option value="">${list.length ? 'No ranked war / enter the start time by hand' : 'No matched war found — enter the start time by hand'}</option>`;
+    $('av-link-war').value = war?.id && list.some(w => w.id === String(war.id)) ? String(war.id) : (war?.start ? '' : (list[0]?.id || ''));
+    $('av-link-manual').style.display = $('av-link-war').value ? 'none' : 'flex';
+    if (!$('av-link-war').value && war?.start) { const d = new Date(war.start * 1000); $('av-link-date').value = d.toISOString().slice(0, 10); $('av-link-hour').value = d.getUTCHours(); }
+    $('av-link-termed').checked = !!war?.termed;
+    $('av-link-result').style.display = war?.termed ? 'flex' : 'none';
+    $('av-link-outcome').value = war?.result || '';
+    $('av-link-our').value = war?.ourScore ?? '';
+    $('av-link-their').value = war?.theirScore ?? '';
+}
+$('av-link-war').addEventListener('change', () => { $('av-link-manual').style.display = $('av-link-war').value ? 'none' : 'flex'; });
+$('av-link-termed').addEventListener('change', () => { $('av-link-result').style.display = $('av-link-termed').checked ? 'flex' : 'none'; });
+$('av-link-save').addEventListener('click', async () => {
+    const warId = $('av-link-war').value;
+    let warStart = 0;
+    if (!warId && $('av-link-date').value) warStart = Math.floor(Date.parse(`${$('av-link-date').value}T${avPad(Number($('av-link-hour').value) || 0)}:00:00Z`) / 1000);
+    const btn = $('av-link-save'); btn.disabled = true;
+    try {
+        const r = await avFetch({ action: 'availability-link-war', warId, warStart, termed: $('av-link-termed').checked, result: $('av-link-outcome').value, ourScore: $('av-link-our').value, theirScore: $('av-link-their').value });
+        if (r.error) throw new Error(r.error);
+        toast('War saved for this plan');
+        await loadAvailability();
+    } catch (e) { toast(`Couldn't save it: ${e.message}`); }
+    finally { btn.disabled = false; }
+});
+
+// " Termed war — we won 250,000 – 231,000." for the war line
+function avWarKind(war) {
+    if (!war || (!war.termed && war.termed !== false)) return '';
+    if (!war.termed) return ' <b>Not a termed war.</b>';
+    const n = v => Number(v).toLocaleString();
+    const score = war.ourScore != null && war.theirScore != null ? ` ${n(war.ourScore)} – ${n(war.theirScore)}` : '';
+    const res = war.result === 'win' ? ` ✅ We won${score}.` : war.result === 'lose' ? ` ❌ We lost${score}.` : score ? ` Score${score}.` : '';
+    return ` <b>Termed war.</b>${res}`;
 }
