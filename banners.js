@@ -1,5 +1,5 @@
 // banners.js — banners at the top of every page: a leader writes a short message in Leader settings (a new feature, a Torn event, a reminder),
-// everyone in the faction sees it until it expires. A member can close a banner; it stays closed for that text (a changed text comes back).
+// everyone in the faction sees it until it expires (several rotate like a slideshow). A member can close a banner; it stays closed for that text (a changed text comes back).
 // Backend: 'banners-get' / 'banners-save' / 'banners-delete' in api/war-payout.js.
 'use strict';
 
@@ -18,11 +18,26 @@ function banHtml(b, closable) {
     return `<div class="site-banner tone-${esc(b.tone || 'info')}" data-id="${esc(b.id)}"><span class="sb-text">${esc(b.text)}</span>${btn}${closable ? '<span class="sb-x" title="Close">×</span>' : ''}</div>`;
 }
 
+// The banners run across the whole top of the page. With more than one they slide to the next by themselves every few seconds (they stop while
+// the mouse is over them or a finger is on them), with dots, arrows and swipe to move by hand.
+let banTimer = null, banIndex = 0;
 function renderBanners(list) {
+    clearInterval(banTimer);
     const gone = banDismissed();
     const shown = list.filter(b => gone[b.id] !== banHash(b.text));
     const box = $('site-banners');
-    box.innerHTML = shown.map(b => banHtml(b, true)).join('');
+    if (!shown.length) { box.innerHTML = ''; return; }
+    banIndex = Math.min(banIndex, shown.length - 1);
+    const many = shown.length > 1;
+    box.innerHTML = `<div class="sb-track">${shown.map(b => banHtml(b, true)).join('')}</div>`
+        + (many ? `<button class="sb-arrow sb-prev" aria-label="Previous banner">‹</button><button class="sb-arrow sb-next" aria-label="Next banner">›</button><div class="sb-dots">${shown.map((b, i) => `<span class="sb-dot" data-i="${i}"></span>`).join('')}</div>` : '');
+    const track = box.querySelector('.sb-track');
+    const go = i => {
+        banIndex = (i + shown.length) % shown.length;
+        track.style.transform = `translateX(-${banIndex * 100}%)`;
+        box.querySelectorAll('.sb-dot').forEach((d, k) => d.classList.toggle('on', k === banIndex));
+    };
+    go(banIndex);
     box.querySelectorAll('.sb-x').forEach(x => x.addEventListener('click', () => {
         const id = x.closest('.site-banner').dataset.id, b = list.find(y => y.id === id);
         const d = banDismissed(); d[id] = banHash(b.text);
@@ -33,6 +48,22 @@ function renderBanners(list) {
         if (e.metaKey || e.ctrlKey || e.shiftKey) return;
         e.preventDefault(); goToPage(a.dataset.page);
     }));
+    if (!many) return;
+    let paused = false;
+    banTimer = setInterval(() => { if (!paused && !document.hidden) go(banIndex + 1); }, 7000);
+    box.addEventListener('mouseenter', () => { paused = true; });
+    box.addEventListener('mouseleave', () => { paused = false; });
+    box.querySelector('.sb-prev').addEventListener('click', () => go(banIndex - 1));
+    box.querySelector('.sb-next').addEventListener('click', () => go(banIndex + 1));
+    box.querySelectorAll('.sb-dot').forEach(d => d.addEventListener('click', () => go(Number(d.dataset.i))));
+    let x0 = null; // swipe
+    box.addEventListener('touchstart', e => { paused = true; x0 = e.touches[0].clientX; }, { passive: true });
+    box.addEventListener('touchend', e => {
+        paused = false;
+        if (x0 === null) return;
+        const dx = e.changedTouches[0].clientX - x0; x0 = null;
+        if (Math.abs(dx) > 40) go(banIndex + (dx < 0 ? 1 : -1));
+    }, { passive: true });
 }
 
 // Once after login (and again when the dashboard is opened): one cheap request answered from our own database.

@@ -337,8 +337,17 @@
     .av-cell-backup::after { background: #0b2a66; border-style: dashed; }
     .todo-dot { display: inline-block; margin-left: 6px; min-width: 16px; padding: 0 5px; border-radius: 9px; background: #e05555; color: #fff; font-size: 11px; font-weight: 700; line-height: 16px; text-align: center; }
     .wrap-text, .wrap-text * { overflow-wrap: anywhere; word-break: break-word; min-width: 0; }
-    #site-banners { display: flex; flex-direction: column; gap: 8px; margin: 0 0 16px; }
+    #site-banners { position: relative; margin: -28px -28px 18px; overflow: hidden; }
     #site-banners:empty { display: none; }
+    #site-banners .sb-track { display: flex; transition: transform .5s ease; }
+    #site-banners .site-banner { flex: 0 0 100%; box-sizing: border-box; border-radius: 0; border-width: 0 0 1px 0; padding: 12px 16px 16px; justify-content: center; text-align: center; }
+    #site-banners .sb-text { flex: 0 1 auto; }
+    #site-banners .sb-dots { position: absolute; left: 0; right: 0; bottom: 4px; display: flex; justify-content: center; gap: 6px; pointer-events: none; }
+    #site-banners .sb-dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; opacity: .3; pointer-events: auto; cursor: pointer; }
+    #site-banners .sb-dot.on { opacity: .9; }
+    #site-banners .sb-arrow { position: absolute; top: 50%; transform: translateY(-50%); width: 28px; height: 28px; border-radius: 50%; border: 0; background: rgba(0,0,0,.25); color: #fff; cursor: pointer; font-size: 16px; line-height: 1; padding: 0; }
+    #site-banners .sb-prev { left: 8px; } #site-banners .sb-next { right: 8px; }
+    @media (prefers-reduced-motion: reduce) { #site-banners .sb-track { transition: none; } }
     .site-banner { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 10px 14px; border-radius: var(--radius); border: 1px solid #4da3ff; background: rgba(77,163,255,.12); font-size: 14px; }
     .site-banner.tone-event { border-color: #35d99b; background: rgba(53,217,155,.12); }
     .site-banner.tone-warn { border-color: #f0b432; background: rgba(240,180,50,.14); }
@@ -410,6 +419,7 @@
         #nav-backdrop { display: block; }
         body.nav-open #nav-backdrop { opacity: 1; pointer-events: auto; }
         main { padding: 60px 18px 18px; }
+        #site-banners { margin: -8px -18px 14px; }
         .grid2, .grid3 { grid-template-columns: 1fr; }
         .crimes-grid { grid-template-columns: repeat(2, 1fr); }
     }
