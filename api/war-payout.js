@@ -27,7 +27,7 @@
 const { tornFetch } = require('../lib/tornFetch');
 const { fetchWarHits, sleep, fetchLiveChainHits } = require('../lib/warHits');
 const { fetchWarBadgeStats } = require('../lib/warBadgeStats');
-const { tornToDiscordIds, resolveDiscordIds } = require('../lib/discordMap');
+const { tornToDiscordIds, resolveDiscordIds, discordStatus } = require('../lib/discordMap');
 const { moHandle, moMe } = require('../lib/memberOverview');
 const { gymHandle } = require('../lib/gymStats');
 const { warReports } = require('../lib/warReports');
@@ -635,6 +635,16 @@ module.exports = async function handler(req, res) {
             return res.status(200).json({ ok: true });
         }
 
+        // Which members can be pinged on Discord (leaders): 'yes' / 'no' / 'unknown' per member id. Without `resolve` it only reads what is
+        // already remembered (no Torn calls); with it, up to 25 unknown members are looked up per call.
+        if (action === 'discord-status') {
+            if (!(await isLeader(key))) return res.status(403).json({ error: 'Leaders only' });
+            const ids = [...new Set((Array.isArray(req.body.ids) ? req.body.ids : []).map(String).filter(s => /^\d+$/.test(s)))].slice(0, 150);
+            let guildMap = null;
+            if (isSharedServerFaction(factionId)) { try { guildMap = await tornToDiscordIds(); } catch (e) { /* the remembered links still work */ } }
+            return res.status(200).json(await discordStatus(ids, { key, redis, guildMap, resolve: !!req.body.resolve }));
+        }
+
         // Posts an @mention message to Discord for everyone who signed up for a slot ('slot') or
         // hasn't filled the tracker in yet ('missing'). The mention list is built HERE from the
         // stored data — never taken from the client — and allowed_mentions is locked to exactly
@@ -759,7 +769,7 @@ module.exports = async function handler(req, res) {
         // if the plan is already linked to that war, its saved details are kept. Leaders only.
         if (action === 'availability-link-war') {
             if (!(await isLeader(key))) return res.status(403).json({ error: 'Leaders only' });
-            const { warId, warStart, termed, result, ourScore, theirScore } = req.body;
+            const { warId, warStart, termed, agreed, lead, loserPct, ourScore, theirScore } = req.body;
             const { plans, id: planId, data } = await resolvePlan(factionId, req.body.planId);
             if (!data) return res.status(400).json({ error: 'There is no plan to link — create one first.' });
             let war;
@@ -774,7 +784,9 @@ module.exports = async function handler(req, res) {
             else return res.status(400).json({ error: 'Pick a matched war, or enter the war start time.' });
             war.termed = !!termed;
             const score = n => (Number.isFinite(Number(n)) && n !== '' && n !== null && Number(n) >= 0 ? Math.round(Number(n)) : null);
-            war.result = war.termed && ['win', 'lose'].includes(result) ? result : '';
+            war.agreed = war.termed && ['win', 'lose'].includes(agreed) ? agreed : ''; // decided before the war starts
+            war.lead = war.termed ? score(lead) : null; war.loserPct = war.termed ? (Number.isFinite(Number(loserPct)) && Number(loserPct) >= 0 && Number(loserPct) <= 100 ? Number(loserPct) : 40) : null;
+            delete war.result;
             war.ourScore = war.termed ? score(ourScore) : null;
             war.theirScore = war.termed ? score(theirScore) : null;
             data.war = war;

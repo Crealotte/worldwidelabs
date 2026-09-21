@@ -852,20 +852,21 @@ function renderAvLinkPanel() {
     $('av-link-manual').style.display = $('av-link-war').value ? 'none' : 'flex';
     if (!$('av-link-war').value && war?.start) { const d = new Date(war.start * 1000); $('av-link-date').value = d.toISOString().slice(0, 10); $('av-link-hour').value = d.getUTCHours(); }
     $('av-link-termed').checked = !!war?.termed;
-    $('av-link-result').style.display = war?.termed ? 'flex' : 'none';
-    $('av-link-outcome').value = war?.result || '';
+    $('av-link-result').style.display = war?.termed ? 'block' : 'none';
+    $('av-link-agreed').value = war?.agreed || ''; $('av-link-lead').value = war?.lead ?? ''; $('av-link-pct').value = war?.loserPct ?? 40;
     $('av-link-our').value = war?.ourScore ?? '';
     $('av-link-their').value = war?.theirScore ?? '';
+    avLinkCompute(false);
 }
 $('av-link-war').addEventListener('change', () => { $('av-link-manual').style.display = $('av-link-war').value ? 'none' : 'flex'; });
-$('av-link-termed').addEventListener('change', () => { $('av-link-result').style.display = $('av-link-termed').checked ? 'flex' : 'none'; });
+$('av-link-termed').addEventListener('change', () => { $('av-link-result').style.display = $('av-link-termed').checked ? 'block' : 'none'; });
 $('av-link-save').addEventListener('click', async () => {
     const warId = $('av-link-war').value;
     let warStart = 0;
     if (!warId && $('av-link-date').value) warStart = Math.floor(Date.parse(`${$('av-link-date').value}T${avPad(Number($('av-link-hour').value) || 0)}:00:00Z`) / 1000);
     const btn = $('av-link-save'); btn.disabled = true;
     try {
-        const r = await avFetch({ action: 'availability-link-war', warId, warStart, termed: $('av-link-termed').checked, result: $('av-link-outcome').value, ourScore: $('av-link-our').value, theirScore: $('av-link-their').value });
+        const r = await avFetch({ action: 'availability-link-war', warId, warStart, termed: $('av-link-termed').checked, agreed: $('av-link-agreed').value, lead: $('av-link-lead').value, loserPct: $('av-link-pct').value, ourScore: $('av-link-our').value, theirScore: $('av-link-their').value });
         if (r.error) throw new Error(r.error);
         toast('War saved for this plan');
         await loadAvailability();
@@ -874,11 +875,29 @@ $('av-link-save').addEventListener('click', async () => {
 });
 
 // " Termed war — we won 250,000 – 231,000." for the war line
+
+// Termed war: from who wins, the lead needed and the loser's share, work out both scores (they stay editable) and say it in one line.
+// Example: lead 10,000, loser's share 40% -> the loser gets 4,000 and the winner needs 14,000.
+function avLinkCompute(fill) {
+    const agreed = $('av-link-agreed').value, lead = Number($('av-link-lead').value), pct = Number($('av-link-pct').value);
+    const n = v => Number(v).toLocaleString();
+    if (fill && agreed && lead > 0 && pct >= 0) {
+        const loser = Math.round(lead * pct / 100), winner = lead + loser;
+        $('av-link-our').value = agreed === 'win' ? winner : loser;
+        $('av-link-their').value = agreed === 'win' ? loser : winner;
+    }
+    const our = $('av-link-our').value, their = $('av-link-their').value;
+    $('av-link-sum').textContent = our !== '' && their !== '' ? `${agreed === 'win' ? 'We win' : agreed === 'lose' ? 'They win' : 'Scores'}: we need ${n(our)}, they get ${n(their)}${lead > 0 ? ` (a lead of ${n(lead)})` : ''}.` : '';
+}
+['av-link-agreed', 'av-link-lead', 'av-link-pct'].forEach(id => $(id).addEventListener('input', () => avLinkCompute(true)));
+['av-link-our', 'av-link-their'].forEach(id => $(id).addEventListener('input', () => avLinkCompute(false)));
+
+// " Termed war — agreed: we win. Lead 10,000: we need 14,000, they get 4,000." for the war line
 function avWarKind(war) {
     if (!war || (!war.termed && war.termed !== false)) return '';
     if (!war.termed) return ' <b>Not a termed war.</b>';
     const n = v => Number(v).toLocaleString();
-    const score = war.ourScore != null && war.theirScore != null ? ` ${n(war.ourScore)} – ${n(war.theirScore)}` : '';
-    const res = war.result === 'win' ? ` ✅ We won${score}.` : war.result === 'lose' ? ` ❌ We lost${score}.` : score ? ` Score${score}.` : '';
-    return ` <b>Termed war.</b>${res}`;
+    const agreed = war.agreed === 'win' ? ' Agreed: <b>we win</b>.' : war.agreed === 'lose' ? ' Agreed: <b>they win</b>.' : '';
+    const scores = war.ourScore != null && war.theirScore != null ? ` ${war.lead ? `Lead ${n(war.lead)}: ` : ''}we need <b>${n(war.ourScore)}</b>, they get <b>${n(war.theirScore)}</b>.` : '';
+    return ` <b>Termed war.</b>${agreed}${scores}`;
 }

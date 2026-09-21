@@ -1612,11 +1612,19 @@
                 <div style="margin-bottom:12px;">
                     <label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;font-size:14px;"><input type="checkbox" id="av-link-termed" style="width:auto;"> This is a <b>termed</b> war</label>
                 </div>
-                <div id="av-link-result" style="display:none;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-bottom:12px;">
-                    <div class="field" style="margin:0;"><label for="av-link-outcome">How did it end?</label>
-                        <select id="av-link-outcome"><option value="">Not decided yet</option><option value="win">We won</option><option value="lose">We lost</option></select></div>
-                    <div class="field" style="margin:0;max-width:150px;"><label for="av-link-our">Our score</label><input id="av-link-our" type="number" min="0" placeholder="e.g. 250000"></div>
-                    <div class="field" style="margin:0;max-width:150px;"><label for="av-link-their">Their score</label><input id="av-link-their" type="number" min="0" placeholder="e.g. 231000"></div>
+                <div id="av-link-result" style="display:none;margin-bottom:12px;">
+                    <p style="color:var(--muted);font-size:12px;margin:0 0 8px;">In a termed war the result and the scores are agreed before it starts. Fill in who wins by agreement, the lead that is needed and the share the losing side gets of it — the scores below are worked out for you and can still be changed by hand.</p>
+                    <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-bottom:8px;">
+                        <div class="field" style="margin:0;"><label for="av-link-agreed">Who wins (agreed)</label>
+                            <select id="av-link-agreed"><option value="">Not agreed yet</option><option value="win">We win</option><option value="lose">They win</option></select></div>
+                        <div class="field" style="margin:0;max-width:170px;"><label for="av-link-lead">Lead needed</label><input id="av-link-lead" type="number" min="0" placeholder="e.g. 10000"></div>
+                        <div class="field" style="margin:0;max-width:150px;"><label for="av-link-pct">Loser's share (%)</label><input id="av-link-pct" type="number" min="0" max="100" value="40"></div>
+                    </div>
+                    <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;">
+                        <div class="field" style="margin:0;max-width:170px;"><label for="av-link-our">Our score to reach</label><input id="av-link-our" type="number" min="0"></div>
+                        <div class="field" style="margin:0;max-width:170px;"><label for="av-link-their">Their score to reach</label><input id="av-link-their" type="number" min="0"></div>
+                    </div>
+                    <div id="av-link-sum" style="font-size:13px;color:var(--muted);margin-top:8px;"></div>
                 </div>
                 <button class="ghost small" id="av-link-save">Save the war for this plan</button>
                 </details>
