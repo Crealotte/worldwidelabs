@@ -36,6 +36,7 @@ const AV_PLAN_ACTIONS = new Set(['availability-get', 'availability-set', 'availa
 let avOd = null; // leader-only: last overdose view from the backend
 let avOdIds = new Set(); // ids of members who've overdosed in the window (marked in the slot list)
 let avOdScanning = false;
+let avVsChains = ''; // chain IDs / links typed in the hits comparison
 
 // Posts to /api/war-payout, not its own endpoint — merged in to stay under Vercel Hobby's
 // 12-Serverless-Function-per-deployment limit, same reason War Badges lives there too.
@@ -503,13 +504,16 @@ function renderAvOut() {
             <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">${chip(u.name)}
                 <span style="color:var(--muted);font-size:12px;">${u.note ? esc(u.note) : 'no reason given'}</span></div>`).join('')}</div>`
         : '<p style="color:var(--muted);font-size:13px;margin:0;">Nobody has said they can\'t make it.</p>';
-    // Leaders: check the hours people ticked against the hits they really made in the war this plan is linked to.
-    html += `<div style="margin-top:18px;padding-top:12px;border-top:1px solid var(--line);"><div style="font-weight:700;margin-bottom:6px;">📊 Hours ticked vs hits made</div>${avConfig?.war?.id
-        ? `<p style="color:var(--muted);font-size:13px;margin:0 0 8px;">Compares the hours each member ticked (green + yellow) with their real war hits against ${esc(avConfig.war.opponent || 'this war')}. Someone who ticked 40 hours and hit once is flagged.</p>
-           <button class="ghost small" id="av-vs-btn">Compare with the hits</button><div id="av-vs-out" style="margin-top:10px;"></div>`
-        : '<p style="color:var(--muted);font-size:13px;margin:0;">Link this plan to a ranked war (in "Create a plan") to compare the ticked hours with the hits that were really made.</p>'}</div>`;
+    // Leaders: check the hours people ticked against the hits they really made — in the war this plan is linked to, or in chains.
+    html += `<div style="margin-top:18px;padding-top:12px;border-top:1px solid var(--line);"><div style="font-weight:700;margin-bottom:6px;">📊 Hours ticked vs hits made</div>
+        <p style="color:var(--muted);font-size:13px;margin:0 0 8px;">Compares the hours each member ticked (green + yellow) with the hits they really made. Someone who ticked 40 hours and hit once is flagged.
+        ${avConfig?.war?.id ? `By default it uses the war hits against ${esc(avConfig.war.opponent || 'the linked war')}.` : 'This plan is not linked to a ranked war, so add chain reports below.'}</p>
+        <div class="field" style="margin:0 0 8px;max-width:560px;"><label for="av-vs-chains">Chain reports instead (optional) — chain IDs or report links, separated by spaces or commas. Use this when we are only chaining and not warring.</label>
+            <input autocomplete="off" id="av-vs-chains" type="text" value="${esc(avVsChains)}" placeholder="e.g. 1234567, https://www.torn.com/war.php?step=chainreport&chainID=1234568"></div>
+        <button class="ghost small" id="av-vs-btn">Compare with the hits</button><div id="av-vs-out" style="margin-top:10px;"></div></div>`;
     $('av-out-body').innerHTML = html;
     $('av-vs-btn')?.addEventListener('click', avCompareHits);
+    $('av-vs-chains')?.addEventListener('input', () => { avVsChains = $('av-vs-chains').value; });
 
     $('av-copy-missing')?.addEventListener('click', () => {
         navigator.clipboard.writeText(notResponded.map(m => m.name).join(', ')).then(() => toast('Names copied'));
@@ -711,24 +715,40 @@ async function avCompareHits() {
     const btn = $('av-vs-btn'), out = $('av-vs-out');
     btn.disabled = true;
     try {
-        let hits = null;
-        for (let round = 1; round <= 10 && !hits; round++) {
-            out.innerHTML = `<span style="color:var(--muted);font-size:13px;">Counting the hits of the war${round > 1 ? ` (part ${round})` : ''}…</span>`;
-            const r = await avFetch({ action: 'mo-war', warId: avConfig.war.id });
-            if (r.error) throw new Error(r.error);
-            if (!r.partial) hits = r.hits || {};
+        // where the hits come from: chain reports typed in (when we are only chaining), else the war this plan is linked to
+        const chainIds = [...new Set(String($('av-vs-chains').value).split(/[\s,;]+/).map(t => (/chainID=(\d+)/i.exec(t) || /^(\d+)$/.exec(t) || [])[1]).filter(Boolean))];
+        const hits = {}; // member id -> number of hits
+        let source;
+        if (chainIds.length) {
+            for (let i = 0; i < chainIds.length; i++) {
+                out.innerHTML = `<span style="color:var(--muted);font-size:13px;">Reading chain report ${i + 1} of ${chainIds.length}…</span>`;
+                const data = await tornV2(`/faction/${chainIds[i]}/chainreport`);
+                for (const att of (data.chainreport?.attackers || [])) hits[String(att.id)] = (hits[String(att.id)] || 0) + (att.attacks?.total ?? 0);
+            }
+            source = `${chainIds.length} chain report${chainIds.length === 1 ? '' : 's'}`;
+        } else {
+            if (!avConfig?.war?.id) throw new Error('Add at least one chain report above, or link this plan to a ranked war.');
+            let got = null;
+            for (let round = 1; round <= 10 && !got; round++) {
+                out.innerHTML = `<span style="color:var(--muted);font-size:13px;">Counting the hits of the war${round > 1 ? ` (part ${round})` : ''}…</span>`;
+                const r = await avFetch({ action: 'mo-war', warId: avConfig.war.id });
+                if (r.error) throw new Error(r.error);
+                if (!r.partial) got = r.hits || {};
+            }
+            if (!got) throw new Error('The war is still being counted — press the button again to carry on.');
+            for (const [id, h] of Object.entries(got)) hits[id] = h?.war || 0;
+            source = 'the war hits';
         }
-        if (!hits) throw new Error('The war is still being counted — press the button again to carry on.');
-        const rows = (avResponded || []).filter(r => !r.out).map(r => ({ name: r.name, green: r.green ?? r.slotCount, maybe: r.maybe || 0, hits: hits[r.id]?.war || 0 }))
+        const rows = (avResponded || []).filter(r => !r.out).map(r => ({ name: r.name, green: r.green ?? r.slotCount, maybe: r.maybe || 0, hits: hits[r.id] || 0 }))
             .map(r => ({ ...r, hours: r.green + r.maybe }));
         const totalHours = rows.reduce((s, r) => s + r.hours, 0), totalHits = rows.reduce((s, r) => s + r.hits, 0);
         const rate = totalHours ? totalHits / totalHours : 0; // the faction's hits per ticked hour
         rows.forEach(r => { r.expected = r.hours * rate; r.ratio = r.expected ? r.hits / r.expected : 1; r.flag = r.hours >= 10 && r.ratio < 0.25; });
         rows.sort((a, b) => a.ratio - b.ratio || b.hours - a.hours);
         const flagged = rows.filter(r => r.flag);
-        out.innerHTML = `<div style="font-size:12px;color:var(--muted);margin-bottom:6px;">The faction made about ${rate.toFixed(2)} hits per ticked hour. ⚠️ = ticked at least 10 hours but made under a quarter of what that would give — ${flagged.length} member${flagged.length === 1 ? '' : 's'} flagged.</div>
+        out.innerHTML = `<div style="font-size:12px;color:var(--muted);margin-bottom:6px;">Using ${source}: the faction made about ${rate.toFixed(2)} hits per ticked hour. ⚠️ = ticked at least 10 hours but made under a quarter of what that would give — ${flagged.length} member${flagged.length === 1 ? '' : 's'} flagged.</div>
             <div class="table-scroll" style="overflow:auto;"><table style="width:100%;font-size:13px;border-collapse:collapse;">
-                <thead><tr style="color:var(--muted);text-align:right;"><th style="padding:4px 8px;text-align:left;">Member</th><th style="padding:4px 8px;">Hours ticked</th><th style="padding:4px 8px;">War hits</th><th style="padding:4px 8px;">Hits per 10 h</th><th style="padding:4px 8px;"></th></tr></thead>
+                <thead><tr style="color:var(--muted);text-align:right;"><th style="padding:4px 8px;text-align:left;">Member</th><th style="padding:4px 8px;">Hours ticked</th><th style="padding:4px 8px;">Hits</th><th style="padding:4px 8px;">Hits per 10 h</th><th style="padding:4px 8px;"></th></tr></thead>
                 <tbody>${rows.map(r => `<tr style="border-top:1px solid var(--line);${r.flag ? 'background:rgba(224,85,85,.10);' : ''}">
                     <td style="padding:4px 8px;text-align:left;">${esc(r.name)}</td>
                     <td style="padding:4px 8px;text-align:right;font-family:var(--mono);"><b style="color:#35d99b;">${r.green}</b>${r.maybe ? ` <b style="color:#f0b432;">+${r.maybe}</b>` : ''}</td>
