@@ -330,6 +330,7 @@
     .av-cell:hover { border-color: var(--reagent); border-width: 2px; }
     .av-cell-mine { background: var(--reagent); }
     .av-cell-maybe { background: #f0b432; }
+    .av-cell-watch { outline: 3px solid #4da3ff; outline-offset: -3px; }
     .active-toggle { border-color: var(--reagent); color: var(--reagent); }
     #gp-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
     #gp-methods { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 10px; }
@@ -1679,6 +1680,12 @@
                 <div class="panel">
                     <h3>Your availability</h3>
                     <p style="color:var(--muted);font-size:12px;margin:0 0 10px;">Click a box to cycle it: <b style="color:var(--reagent);">green</b> = available, <b style="color:#f0b432;">yellow</b> = most likely available but maybe doing something else, third click = off. Saves instantly.</p>
+                    <div id="av-watch-bar" style="margin:0 0 10px;padding:8px 10px;border:1px solid #4da3ff;border-radius:var(--radius);font-size:13px;">
+                        <label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;font-weight:700;">
+                            <input type="checkbox" id="av-watch-toggle" style="width:auto;"> <span id="av-watch-label">🔵 Mark the hours I can watch the chain</span>
+                        </label>
+                        <div id="av-watch-hint" style="color:var(--muted);margin-top:4px;"></div>
+                    </div>
                     <div class="table-scroll" style="overflow:auto;max-height:75vh;">
                         <div id="av-grid-body"></div>
                     </div>

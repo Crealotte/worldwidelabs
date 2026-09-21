@@ -14,6 +14,8 @@
 
 let avConfig = null; // { startDate, days } from the backend, or null if no tracker is active
 let avMine = {}; // my own slots: "day-hour" (TCT) -> true
+let avMineWatch = {}; // my hours marked with the blue ring (chain watch / war coordinator)
+let avWatchMode = false; // the switch: clicking a box adds or removes the ring instead of cycling the colour
 let avSummary = null; // "day-hour" (TCT) -> { count, names } — present only when the caller is a leader
 let avMyUnavailable = null; // { name, note, at } if I marked myself as unable to make this war
 let avUnavailList = null; // leader-only: everyone who did — [{ id, name, note, at }]
@@ -32,7 +34,7 @@ const AV_PLAN_KEY = 'wwl_av_plan';
 let avPlans = []; // light metadata for the dropdown: [{ id, name, startDate, days, war }]
 let avPlanId = null;
 try { avPlanId = localStorage.getItem(AV_PLAN_KEY) || null; } catch (e) { /* storage blocked */ }
-const AV_PLAN_ACTIONS = new Set(['availability-get', 'availability-set', 'availability-unavailable', 'availability-ping']);
+const AV_PLAN_ACTIONS = new Set(['availability-get', 'availability-set', 'availability-watch', 'availability-unavailable', 'availability-ping']);
 let avOd = null; // leader-only: last overdose view from the backend
 let avOdIds = new Set(); // ids of members who've overdosed in the window (marked in the slot list)
 let avOdScanning = false;
@@ -61,6 +63,7 @@ async function loadAvailability() {
         try { if (avPlanId) localStorage.setItem(AV_PLAN_KEY, avPlanId); } catch (e) { /* not critical */ }
         avConfig = result.config;
         avMine = result.mine || {};
+        avMineWatch = result.mineWatch || {};
         avSummary = (typeof memberView !== "undefined" && memberView) ? null : result.summary || null; // only ever present for a leader-tier key
         avMyUnavailable = result.myUnavailable || null;
         avUnavailList = (typeof memberView !== "undefined" && memberView) ? null : result.unavailable || null;
@@ -336,6 +339,7 @@ function renderAvailabilityPage() {
     $('av-none-msg-l').style.display = 'none';
     $('av-grid-panel').style.display = 'block';
     renderAvWarLine();
+    renderAvWatchBar();
     renderAvTzBar();
     renderAvUnavailBar();
     renderAvGrid();
@@ -483,7 +487,7 @@ function renderAvOut() {
 
     let html = `<div style="font-weight:700;margin-bottom:6px;">✅ Filled in (${responded.length})</div>`;
     html += responded.length
-        ? `<div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px;">${responded.map(r => chip(r.name, r.out ? ' 🚫' : ` <span style="font-size:11px;"><b style="color:#35d99b;">${r.green ?? r.slotCount}</b>${r.maybe ? ` <b style="color:#f0b432;">+${r.maybe}</b>` : ''} <span style="color:var(--muted);">h</span></span>`)).join('')}</div>`
+        ? `<div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px;">${responded.map(r => chip(r.name, r.out ? ' 🚫' : ` <span style="font-size:11px;"><b style="color:#35d99b;">${r.green ?? r.slotCount}</b>${r.maybe ? ` <b style="color:#f0b432;">+${r.maybe}</b>` : ''} <span style="color:var(--muted);">h</span>${r.watch ? ` <b style="color:#4da3ff;">🔵${r.watch}</b>` : ''}</span>`)).join('')}</div>`
         : '<p style="color:var(--muted);font-size:13px;margin:0 0 16px;">Nobody has filled it in yet.</p>';
 
     html += `<div style="font-weight:700;margin-bottom:6px;">⏳ Not filled in yet${notResponded ? ` (${notResponded.length})` : ''}</div>`;
@@ -507,7 +511,7 @@ function renderAvOut() {
         : '<p style="color:var(--muted);font-size:13px;margin:0;">Nobody has said they can\'t make it.</p>';
     // Leaders: check the hours people ticked against the hits they really made — in the war this plan is linked to, or in chains.
     html += `<div style="margin-top:18px;padding-top:12px;border-top:1px solid var(--line);"><div style="font-weight:700;margin-bottom:6px;">📊 Hours ticked vs hits made</div>
-        <p style="color:var(--muted);font-size:13px;margin:0 0 8px;">Compares the hours each member ticked (green + yellow) with the hits they really made. Someone who ticked 40 hours and hit once is flagged.
+        <p style="color:var(--muted);font-size:13px;margin:0 0 8px;">Compares the hours each member ticked (green + yellow) with the hits they really made. Someone who ticked 40 hours and hit once is flagged. Hours with a blue ring (chain watch / war coordinator) are not counted against them.
         ${avConfig?.war?.id ? `By default it uses the war hits against ${esc(avConfig.war.opponent || 'the linked war')}.` : 'This plan is not linked to a ranked war, so add chain reports below.'}</p>
         <div class="field" style="margin:0 0 8px;max-width:560px;"><label for="av-vs-chains">Chain reports instead (optional) — chain IDs or report links, separated by spaces or commas. Use this when we are only chaining and not warring.</label>
             <input autocomplete="off" id="av-vs-chains" type="text" value="${esc(avVsChains)}" placeholder="e.g. 1234567, https://www.torn.com/war.php?step=chainreport&chainID=1234568"></div>
@@ -587,11 +591,12 @@ function renderAvGrid() {
     $('av-grid-body').innerHTML = avBuildTable((day, hour) => {
         const v = avMine[`${day}-${hour}`];
         const mine = v === 'maybe' ? ' av-cell-maybe' : v ? ' av-cell-mine' : '';
+        const ring = avMineWatch[`${day}-${hour}`] ? ' av-cell-watch' : '';
         const war = avIsWarSlot(day, hour);
-        return `<td class="av-cell${mine}${war ? ' av-cell-war' : ''}" data-day="${day}" data-hour="${hour}" title="${esc(avTctLabel(day, hour))}${war ? ' — WAR STARTS' : ''}"></td>`;
+        return `<td class="av-cell${mine}${ring}${war ? ' av-cell-war' : ''}" data-day="${day}" data-hour="${hour}" title="${esc(avTctLabel(day, hour))}${war ? ' — WAR STARTS' : ''}"></td>`;
     });
     $('av-grid-body').querySelectorAll('.av-cell:not(.av-cell-off)').forEach(cell => {
-        cell.addEventListener('click', () => toggleAvCell(Number(cell.dataset.day), Number(cell.dataset.hour), cell));
+        cell.addEventListener('click', () => (avWatchMode ? toggleAvWatch : toggleAvCell)(Number(cell.dataset.day), Number(cell.dataset.hour), cell));
     });
 }
 
@@ -607,7 +612,7 @@ async function toggleAvCell(day, hour, cellEl) {
     const key = `${day}-${hour}`;
     const prev = avMine[key];
     const next = !prev ? true : prev === true ? 'maybe' : undefined;
-    if (next) avMine[key] = next; else delete avMine[key];
+    if (next) avMine[key] = next; else { delete avMine[key]; delete avMineWatch[key]; cellEl.classList.remove('av-cell-watch'); }
     avApplyCell(cellEl, next);
     try {
         const result = await avFetch({ action: 'availability-set', day, hour, state: next === true ? 'yes' : next === 'maybe' ? 'maybe' : '' });
@@ -630,7 +635,9 @@ function renderAvSummaryGrid() {
         const maybe = s ? s.maybe : 0;
         const bg = count ? `rgba(53,217,155,${(0.15 + (count / maxCount) * 0.65).toFixed(2)})` : maybe ? 'rgba(240,180,50,.25)' : 'transparent';
         const title = `${avTctLabel(day, hour)} — ${s ? s.names.join(', ') || 'nobody sure yet' : 'nobody yet'}${maybe ? ` (maybe: ${s.maybeNames.join(', ')})` : ''}`;
-        const label = count || maybe ? `${count || ''}${maybe ? `<span style="color:#f0b432;font-size:11px;">${count ? ' +' : ''}${maybe}?</span>` : ''}` : '';
+        const watchN = s ? s.watch || 0 : 0;
+        const watchTag = watchN ? `<span style="color:#4da3ff;font-size:11px;"> 🔵${watchN}</span>` : '';
+        const label = count || maybe ? `${count || ''}${maybe ? `<span style="color:#f0b432;font-size:11px;">${count ? ' +' : ''}${maybe}?</span>` : ''}${watchTag}` : '';
         const sel = avSelected && avSelected.day === day && avSelected.hour === hour ? ' av-cell-selected' : '';
         const war = avIsWarSlot(day, hour) ? ' av-cell-war' : '';
         return `<td class="av-cell av-summary-cell${count || maybe ? ' av-clickable' : ''}${sel}${war}" style="background:${bg};" data-day="${day}" data-hour="${hour}" title="${esc(title)}">${label}</td>`;
@@ -666,6 +673,10 @@ function renderAvDetail() {
             ${s.maybe ? `<div style="color:var(--muted);font-size:12px;margin:0 0 6px;">Maybe (${s.maybe}) — likely available, but might be busy:</div>
             <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px;">
                 ${s.maybeNames.map((n, i) => `<span class="chip" style="cursor:default;border-color:#f0b432;">${esc(n)}${avOdIds.has(String(s.maybeIds?.[i])) ? ' 💊' : ''}</span>`).join('')}
+            </div>` : ''}
+            ${s.watch ? `<div style="color:#4da3ff;font-size:12px;margin:0 0 6px;">🔵 ${avIsWarPlan() ? 'War coordinators' : 'Chain watchers'} (${s.watch}):</div>
+            <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px;">
+                ${s.watchNames.map(n => `<span class="chip" style="cursor:default;border-color:#4da3ff;">${esc(n)}</span>`).join('')}
             </div>` : ''}
             ${s.names.some((n, i) => avOdIds.has(String(s.ids?.[i]))) ? '<div style="color:var(--muted);font-size:12px;margin-bottom:10px;">💊 = overdosed in the tracking window, so may take part less.</div>' : ''}
             <button class="ghost small" id="av-ping-slot">📣 Ping everyone here on Discord</button>
@@ -760,11 +771,11 @@ async function avCompareHits() {
             for (const [id, h] of Object.entries(got)) hits[id] = h?.war || 0;
             source = 'the war hits';
         }
-        const rows = (avResponded || []).filter(r => !r.out).map(r => ({ name: r.name, green: r.green ?? r.slotCount, maybe: r.maybe || 0, hits: hits[r.id] || 0 }))
-            .map(r => ({ ...r, hours: r.green + r.maybe }));
-        const totalHours = rows.reduce((s, r) => s + r.hours, 0), totalHits = rows.reduce((s, r) => s + r.hits, 0);
+        const rows = (avResponded || []).filter(r => !r.out).map(r => ({ name: r.name, green: r.green ?? r.slotCount, maybe: r.maybe || 0, watch: r.watch || 0, hits: hits[r.id] || 0 }))
+            .map(r => ({ ...r, hours: r.green + r.maybe, own: Math.max(0, r.green + r.maybe - r.watch) })); // own = hours not spent watching / coordinating
+        const totalHours = rows.reduce((s, r) => s + r.own, 0), totalHits = rows.reduce((s, r) => s + r.hits, 0);
         const rate = totalHours ? totalHits / totalHours : 0; // the faction's hits per ticked hour
-        rows.forEach(r => { r.expected = r.hours * rate; r.ratio = r.expected ? r.hits / r.expected : 1; r.flag = r.hours >= 10 && r.ratio < 0.25; });
+        rows.forEach(r => { r.expected = r.own * rate; r.ratio = r.expected ? r.hits / r.expected : 1; r.flag = r.own >= 10 && r.ratio < 0.25; });
         rows.sort((a, b) => a.ratio - b.ratio || b.hours - a.hours);
         const flagged = rows.filter(r => r.flag);
         out.innerHTML = `<div style="font-size:12px;color:var(--muted);margin-bottom:6px;">Using ${source}: the faction made about ${rate.toFixed(2)} hits per ticked hour. ⚠️ = ticked at least 10 hours but made under a quarter of what that would give — ${flagged.length} member${flagged.length === 1 ? '' : 's'} flagged.</div>
@@ -780,4 +791,38 @@ async function avCompareHits() {
         $('av-vs-copy').addEventListener('click', () => navigator.clipboard.writeText(flagged.map(r => `${r.name} (${r.hours}h ticked, ${r.hits} hits)`).join('\n')).then(() => toast('Copied')));
     } catch (e) { out.innerHTML = `<span style="color:var(--danger);font-size:13px;">${esc(e.message)}</span>`; }
     finally { btn.disabled = false; }
+}
+
+// ---- The blue ring: hours I can watch the chain (a plan without a war) or coordinate the war (a plan linked to a ranked war) ----
+// Coordinating = making the calls, changing plans, keeping the chat clear and motivating people. Same effort, different job.
+const avIsWarPlan = () => !!avConfig?.war?.id;
+const avRoleName = () => (avIsWarPlan() ? 'coordinate the war' : 'watch the chain');
+const avRoleShort = () => (avIsWarPlan() ? 'War coordinator' : 'Chain watcher');
+
+function renderAvWatchBar() {
+    $('av-watch-label').textContent = `🔵 Mark the hours I can ${avRoleName()}`;
+    $('av-watch-toggle').checked = avWatchMode;
+    $('av-watch-hint').textContent = avIsWarPlan()
+        ? 'This is a war plan. With the switch on, click an hour to add or remove a blue ring: you will make the calls, change plans, keep the chat clear and motivate people during it. An hour you had not ticked becomes green.'
+        : 'This is a chain plan. With the switch on, click an hour to add or remove a blue ring: you will keep an eye on the chain during it. An hour you had not ticked becomes green.';
+}
+$('av-watch-toggle').addEventListener('change', () => { avWatchMode = $('av-watch-toggle').checked; renderAvWatchBar(); });
+
+async function toggleAvWatch(day, hour, cellEl) {
+    const key = `${day}-${hour}`;
+    const wasWatch = !!avMineWatch[key], wasColour = avMine[key];
+    const on = !wasWatch;
+    if (on) { avMineWatch[key] = true; if (!avMine[key]) avMine[key] = true; } else delete avMineWatch[key];
+    cellEl.classList.toggle('av-cell-watch', on);
+    avApplyCell(cellEl, avMine[key]);
+    try {
+        const r = await avFetch({ action: 'availability-watch', day, hour, watch: on });
+        if (r.error) throw new Error(r.error);
+    } catch (e) {
+        if (wasWatch) avMineWatch[key] = true; else delete avMineWatch[key];
+        if (wasColour) avMine[key] = wasColour; else delete avMine[key];
+        cellEl.classList.toggle('av-cell-watch', wasWatch);
+        avApplyCell(cellEl, avMine[key]);
+        toast(`Couldn't save that: ${e.message}`);
+    }
 }

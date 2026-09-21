@@ -225,7 +225,8 @@ function respondedMap(data) {
     for (const [id, entry] of Object.entries(data?.entries || {})) {
         const vals = Object.entries(entry.slots || {}).filter(([k]) => !slotBeforeStart(data, k)).map(e => e[1]);
         const slotCount = vals.length, maybe = vals.filter(v => v === 'maybe').length; // green = the rest
-        if (slotCount) out[id] = { id, name: entry.name, slotCount, green: slotCount - maybe, maybe, out: false };
+        const watch = Object.keys(entry.watch || {}).filter(k => (entry.slots || {})[k] && !slotBeforeStart(data, k)).length;
+        if (slotCount) out[id] = { id, name: entry.name, slotCount, green: slotCount - maybe, maybe, watch, out: false };
     }
     for (const [id, u] of Object.entries(data?.unavailable || {})) out[id] = { id, name: u.name, slotCount: out[id]?.slotCount || 0, out: true };
     return out;
@@ -330,6 +331,7 @@ module.exports = async function handler(req, res) {
                 // war = the ranked war this tracker is linked to ({ id, start, opponent }), if any
                 config: data ? { startDate: data.startDate, days: data.days, war: data.war || null, name: data.name || '' } : null,
                 mine,
+                mineWatch: data?.entries?.[playerId]?.watch || {}, // hours I marked as chain watch / war coordinator
                 myUnavailable: unavailable[playerId] || null, // { name, note, at } if I marked myself out
             };
             if (await isLeader(key)) {
@@ -358,6 +360,7 @@ module.exports = async function handler(req, res) {
                         const name = entry.name || `#${id}`;
                         if (val === 'maybe') { s.maybe++; s.maybeNames.push(name); s.maybeIds.push(id); }
                         else { s.count++; s.names.push(name); s.ids.push(id); } // ids let the leader link each name to their Torn profile
+                        if (entry.watch?.[slot]) { s.watch = (s.watch || 0) + 1; (s.watchNames = s.watchNames || []).push(name); (s.watchIds = s.watchIds || []).push(id); }
                     }
                 }
                 result.summary = summary;
@@ -379,7 +382,7 @@ module.exports = async function handler(req, res) {
             const state = req.body.state !== undefined ? req.body.state : (available ? 'yes' : '');
             if (state === 'yes') entry.slots[slotKey] = true;
             else if (state === 'maybe') entry.slots[slotKey] = 'maybe';
-            else delete entry.slots[slotKey];
+            else { delete entry.slots[slotKey]; if (entry.watch) delete entry.watch[slotKey]; }
             await redis(['SET', availabilityKey(factionId, planId), JSON.stringify(data)]);
             return res.status(200).json({ ok: true });
         }
@@ -392,6 +395,23 @@ module.exports = async function handler(req, res) {
             if (!(from > 0) || from > to) return res.status(400).json({ error: 'Pick a start time that is in the past.' });
             return res.status(200).json(await fetchLiveChainHits(key, factionId, from, to));
         }
+        // The blue ring: an hour I can watch the chain (no war) or coordinate the war (calls, plan changes, keeping the chat clear).
+        // Marking an hour that was not ticked yet also makes it green; taking the ring off leaves the colour as it is.
+        if (action === 'availability-watch') {
+            const { day, hour, watch } = req.body;
+            if (day == null || hour == null) return res.status(400).json({ error: 'Missing day/hour' });
+            const { id: planId, data } = await resolvePlan(factionId, req.body.planId);
+            if (!data) return res.status(400).json({ error: 'No availability tracker is active for this faction right now — ask a leader to start one.' });
+            const entry = data.entries[playerId] || (data.entries[playerId] = { name: playerName, slots: {} });
+            entry.name = playerName;
+            const slotKey = `${day}-${hour}`;
+            if (slotBeforeStart(data, slotKey)) return res.status(400).json({ error: 'That hour is before the start — you can only tick hours from the start on.' });
+            entry.watch = entry.watch || {};
+            if (watch) { entry.watch[slotKey] = true; if (!entry.slots[slotKey]) entry.slots[slotKey] = true; } else delete entry.watch[slotKey];
+            await redis(['SET', availabilityKey(factionId, planId), JSON.stringify(data)]);
+            return res.status(200).json({ ok: true });
+        }
+
         // "I can't make this war" — real life happens, and there's a forum post for it too; this
         // puts the same thing in the tool so leaders see it next to the availability numbers.
         // Any member can set/undo their own. Cleared automatically when a new tracker starts.
