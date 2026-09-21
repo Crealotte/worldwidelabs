@@ -247,6 +247,15 @@ function respondedMap(data) {
     return out;
 }
 
+
+// ---- Banners: short messages a leader pins at the top of every page (a new feature, a Torn event, a reminder). One list per faction:
+// [{ id, text, page, linkLabel, audience: 'all'|'leaders', tone: 'info'|'event'|'warn', expires: 'YYYY-MM-DD'|'', createdAt }].
+const bannersKey = factionId => `wwl:banners:${factionId}`;
+async function loadBanners(factionId) {
+    const raw = await redis(['GET', bannersKey(factionId)]);
+    try { return raw ? JSON.parse(raw) : []; } catch (e) { return []; }
+}
+const bannerLive = b => !b.expires || b.expires >= new Date().toISOString().slice(0, 10); // the expiry day itself still counts
 // The leader to-do card on the dashboard: things only a leader can fix, worked out from what WWL already stores (plus the cached member list),
 // so it costs (almost) no Torn calls. Every item says where to go: { id, text, cta, page, anchor } — anchor is an element on that page to scroll to.
 async function leaderTodos(key, factionId) {
@@ -540,6 +549,37 @@ module.exports = async function handler(req, res) {
         }
         // How many calls WWL made to Torn with the caller's own key (see lib/tornFetch.js) — shown in Member Overview → Checks for the developer.
         if (action === 'torn-usage') return res.status(200).json(await usageFor(key));
+        // Banners at the top of every page. Everyone reads the ones meant for them; only leaders write them (Leader settings page).
+        if (action === 'banners-get') {
+            const all = await loadBanners(factionId);
+            const leader = await isLeader(key);
+            if (req.body.manage) {
+                if (!leader) return res.status(403).json({ error: 'Leaders only' });
+                return res.status(200).json({ banners: all, leader });
+            }
+            return res.status(200).json({ banners: all.filter(b => bannerLive(b) && (b.audience !== 'leaders' || leader)), leader });
+        }
+        if (action === 'banners-save') {
+            if (!(await isLeader(key))) return res.status(403).json({ error: 'Leaders only' });
+            const b = req.body;
+            const text = String(b.text || '').trim().slice(0, 280);
+            if (text.length < 3) return res.status(400).json({ error: 'Write the message for the banner first.' });
+            const page = /^[a-z0-9-]{1,40}$/.test(String(b.page || '')) ? String(b.page) : '';
+            const list = await loadBanners(factionId);
+            if (list.length >= 6) return res.status(400).json({ error: 'You already have 6 banners — delete an old one first.' });
+            list.push({ id: `n${Date.now().toString(36)}${Math.random().toString(36).slice(2, 5)}`, text, page,
+                linkLabel: page ? String(b.linkLabel || '').trim().slice(0, 30) || 'Open' : '',
+                audience: b.audience === 'leaders' ? 'leaders' : 'all', tone: ['event', 'warn'].includes(b.tone) ? b.tone : 'info',
+                expires: /^\d{4}-\d{2}-\d{2}$/.test(String(b.expires || '')) ? String(b.expires) : '', createdAt: Date.now() });
+            await redis(['SET', bannersKey(factionId), JSON.stringify(list)]);
+            return res.status(200).json({ ok: true, banners: list });
+        }
+        if (action === 'banners-delete') {
+            if (!(await isLeader(key))) return res.status(403).json({ error: 'Leaders only' });
+            const list = (await loadBanners(factionId)).filter(x => x.id !== String(req.body.id));
+            await redis(['SET', bannersKey(factionId), JSON.stringify(list)]);
+            return res.status(200).json({ ok: true, banners: list });
+        }
         // The leader to-do card (dashboard) — leaders only.
         if (action === 'leader-todos') {
             if (!(await isLeader(key))) return res.status(403).json({ error: 'Leaders only' });

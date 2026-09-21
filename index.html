@@ -336,6 +336,13 @@
     .av-cell-backup { outline-style: dashed; }
     .av-cell-backup::after { background: #0b2a66; border-style: dashed; }
     .todo-dot { display: inline-block; margin-left: 6px; min-width: 16px; padding: 0 5px; border-radius: 9px; background: #e05555; color: #fff; font-size: 11px; font-weight: 700; line-height: 16px; text-align: center; }
+    #site-banners { display: flex; flex-direction: column; gap: 8px; margin: 0 0 16px; }
+    #site-banners:empty { display: none; }
+    .site-banner { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 10px 14px; border-radius: var(--radius); border: 1px solid #4da3ff; background: rgba(77,163,255,.12); font-size: 14px; }
+    .site-banner.tone-event { border-color: #35d99b; background: rgba(53,217,155,.12); }
+    .site-banner.tone-warn { border-color: #f0b432; background: rgba(240,180,50,.14); }
+    .site-banner .sb-text { flex: 1; min-width: 200px; }
+    .site-banner .sb-x { cursor: pointer; font-size: 18px; line-height: 1; color: var(--muted); padding: 0 4px; }
     .chip-discord { background: rgba(53,217,155,.20); }
     .chip-nodiscord { opacity: .65; }
     .av-watch-badge { display: inline-block; margin-left: 3px; padding: 0 5px; border-radius: 9px; background: #0b2a66; border: 1px solid #7ab8ff; color: #fff; font-size: 11px; font-weight: 700; line-height: 16px; white-space: nowrap; }
@@ -567,6 +574,7 @@
     </nav>
 
     <main>
+        <div id="site-banners"></div>
         <!-- ========== DASHBOARD ========== -->
         <section class="page visible" id="page-dashboard">
             <div class="lab-label">WWL·01 / status report</div>
@@ -1519,6 +1527,24 @@
                     </div>
             </div>
 
+            <div class="panel" id="ls-banners-panel">
+                <h3 style="margin-top:0;">📢 Banners</h3>
+                <p style="color:var(--muted);font-size:12px;margin:0 0 10px;">A banner shows at the top of every page for your faction — for a new feature, a Torn event or a reminder. Members can close it; it is gone by itself after the expiry date. Up to 6 at a time.</p>
+                <div id="ls-ban-list" style="margin-bottom:12px;"></div>
+                <div style="border-top:1px solid var(--line);padding-top:12px;">
+                    <div class="field"><label for="ls-ban-text">Message (max 280 characters)</label><textarea autocomplete="off" id="ls-ban-text" rows="2" maxlength="280" style="width:100%;" placeholder="e.g. New: the Timezone map is live — pick your country and light it up!"></textarea></div>
+                    <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-bottom:10px;">
+                        <div class="field" style="margin:0;"><label for="ls-ban-audience">Who sees it</label><select id="ls-ban-audience"><option value="all">Everyone</option><option value="leaders">Leaders only</option></select></div>
+                        <div class="field" style="margin:0;"><label for="ls-ban-tone">Colour</label><select id="ls-ban-tone"><option value="info">Blue — news</option><option value="event">Green — event</option><option value="warn">Yellow — reminder</option></select></div>
+                        <div class="field" style="margin:0;"><label for="ls-ban-expires">Gone after (optional)</label><input id="ls-ban-expires" type="date"></div>
+                        <div class="field" style="margin:0;min-width:200px;"><label for="ls-ban-page">Button to a page (optional)</label><select id="ls-ban-page"><option value="">No button</option></select></div>
+                        <div class="field" style="margin:0;max-width:160px;"><label for="ls-ban-label">Button text</label><input id="ls-ban-label" type="text" maxlength="30" placeholder="Open"></div>
+                    </div>
+                    <button class="ghost small" id="ls-ban-add">Add the banner</button>
+                    <div id="ls-ban-preview" style="margin-top:10px;"></div>
+                </div>
+            </div>
+
             <div class="panel">
                 <h3 style="margin-top:0;">Other leader tools</h3>
                 <div style="font-size:13px;line-height:1.9;">
@@ -2091,6 +2117,7 @@
 <script src="tz-map.js"></script>
 <script src="newsletter.js"></script>
 <script src="leader-todos.js"></script>
+<script src="banners.js"></script>
 <script src="armory-tracker.js"></script>
 <script src="app-init.js"></script>
 </body>

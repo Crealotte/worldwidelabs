@@ -43,6 +43,7 @@ async function loadLeaderSettings() {
     $('av-discord-panel').style.display = 'block';
     loadAvDiscord();
     pcLoadNightly();
+    loadBannerSettings();
 }
 document.querySelectorAll('.ls-link').forEach(a => a.addEventListener('click', e => {
     if (e.metaKey || e.ctrlKey || e.shiftKey) return;

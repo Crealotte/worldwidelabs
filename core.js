@@ -117,6 +117,7 @@
         const parentGroup = navItem?.closest('.nav-group');
         if (parentGroup) parentGroup.classList.remove('collapsed'); // reveal it even if its group was left collapsed
         goToPage(lastPage);
+        if (typeof loadBanners === 'function') loadBanners();
         loadAnnouncement();
         loadPolls();
     }
