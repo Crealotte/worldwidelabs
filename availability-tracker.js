@@ -475,7 +475,7 @@ async function avPingDiscord(kind, defaultPushAt, extra = {}) {
             toast(`Posted to Discord — ${result.mentioned} @mentioned.${skipped}`);
         } else if (result.text) {
             await navigator.clipboard.writeText(result.text).catch(() => {});
-            toast(`${result.configured ? '' : 'Your faction\'s Discord isn\'t connected yet (see Discord settings on this page) — '}message copied instead, paste it into Discord.${skipped}`);
+            toast(`${result.configured ? '' : 'Your faction\'s Discord isn\'t connected yet (see Discord settings under Leader settings) — '}message copied instead, paste it into Discord.${skipped}`);
         }
         if (result.mapError) toast(`Discord lookup problem: ${result.mapError}`);
     } catch (e) {

@@ -535,6 +535,7 @@
                 <a class="nav-item" data-page="availability-leaders" href="/availability-leaders">Availability overview</a>
                 <a class="nav-item" data-page="members-overview" href="/members-overview">Member Overview</a>
                 <a class="nav-item" data-page="newsletter" href="/newsletter">Newsletter</a>
+                <a class="nav-item" data-page="leader-settings" href="/leader-settings">Leader settings</a>
                 <a class="nav-item" data-page="labs-funds" href="/labs-funds" style="display:none;">Labs Funds</a>
             </div>
         </div>
@@ -599,13 +600,6 @@
                 <div id="pc-rows"></div>
                 <div id="pc-summary" style="font-size:14px;margin:4px 0;"></div>
                 <div id="pc-updated" style="color:var(--muted);font-size:11px;"></div>
-                    <div id="pc-nightly" style="margin-bottom:14px;padding-bottom:14px;border-bottom:1px solid var(--line);">
-                        <div style="font-size:13px;font-weight:700;margin-bottom:6px;">Leaders: save the faction's gym counters every night</div>
-                        <p style="color:var(--muted);font-size:12px;margin:0 0 8px;">So the numbers keep building up (energy trained per member, the countdown) even on days nobody opens WWL. Turn it on once, with your own key — nobody has to share a key or touch anything else.</p>
-                        <div id="pc-nightly-status" style="font-size:13px;margin-bottom:8px;"></div>
-                        <button class="ghost small" id="pc-nightly-on">Turn on nightly saving</button>
-                        <button class="ghost small" id="pc-nightly-off" style="display:none;">Turn it off</button>
-                    </div>
                 <div id="pc-leader" style="display:none;margin-top:12px;padding-top:12px;border-top:1px solid var(--line);">
                     <div style="font-size:13px;font-weight:700;margin-bottom:6px;">Leaders: show it in the faction announcement</div>
                     <p style="color:var(--muted);font-size:12px;margin:0 0 8px;">Get a picture link (like a YATA poster) and paste it in your announcement once. The picture updates itself with the newest numbers, and anyone can see it without logging in.</p>
@@ -1497,6 +1491,45 @@
             </div>
         </section>
 
+        <section class="page" id="page-leader-settings">
+            <div class="lab-label">WWL·26 / leaders &amp; council</div>
+            <h2>Leader settings</h2>
+            <p class="pagedesc">The settings only leaders need, in one place: where the Discord pings go and the nightly saving. Below them is a list of where the other leader tools live.</p>
+            <div class="status" id="ls-status"></div>
+            <div class="panel" id="ls-locked" style="display:none;"><p style="color:var(--muted);margin:0;">🔒 Only leaders and council (faction API access) can see this page.</p></div>
+            <div id="ls-body" style="display:none;">
+            <div class="panel" id="av-discord-panel" style="display:none;">
+                <details open><summary class="av-sum"><h3>Discord settings</h3></summary>
+                <p style="color:var(--muted);font-size:12px;margin:0 0 10px;">Where <b>your faction's</b> war pings get posted — each faction sets its own, so factions using this app never post into each other's channels. Leaders/council only.</p>
+                <div id="av-discord-body"></div>
+                </details>
+            </div>
+
+            <div class="panel" id="ls-nightly-panel">
+                <h3 style="margin-top:0;">🌙 Nightly saving</h3>
+                    <div id="pc-nightly" style="margin-bottom:14px;padding-bottom:14px;border-bottom:1px solid var(--line);">
+                        <div style="font-size:13px;font-weight:700;margin-bottom:6px;">Leaders: save the faction's gym counters every night</div>
+                        <p style="color:var(--muted);font-size:12px;margin:0 0 8px;">So the numbers keep building up (energy trained per member, the countdown) even on days nobody opens WWL. Turn it on once, with your own key — nobody has to share a key or touch anything else.</p>
+                        <div id="pc-nightly-status" style="font-size:13px;margin-bottom:8px;"></div>
+                        <button class="ghost small" id="pc-nightly-on">Turn on nightly saving</button>
+                        <button class="ghost small" id="pc-nightly-off" style="display:none;">Turn it off</button>
+                    </div>
+            </div>
+
+            <div class="panel">
+                <h3 style="margin-top:0;">Other leader tools</h3>
+                <div style="font-size:13px;line-height:1.9;">
+                    <div><a href="/announce-edit" class="ls-link" data-page="announce-edit">Announcement</a> <span style="color:var(--muted);">— what everyone sees at the top of the dashboard</span></div>
+                    <div><a href="/members-overview" class="ls-link" data-page="members-overview">Member Overview</a> <span style="color:var(--muted);">— the war and chain hit rules, the energy tiers and the newsletter competitions</span></div>
+                    <div><a href="/availability-leaders" class="ls-link" data-page="availability-leaders">Availability overview</a> <span style="color:var(--muted);">— create plans, link a war, see who filled it in</span></div>
+                    <div><a href="/dashboard" class="ls-link" data-page="dashboard" data-anchor="pc-leader">Steadfast picture and goals</a> <span style="color:var(--muted);">— the announcement picture link and goals by hand (dashboard card)</span></div>
+                    <div><a href="/respect-edit" class="ls-link" data-page="respect-edit">Respect tracker settings</a> <span style="color:var(--muted);">— goals and the counting window</span></div>
+                    <div><a href="/feedback-edit" class="ls-link" data-page="feedback-edit">Feedback form</a> <span style="color:var(--muted);">— edit the questions</span></div>
+                </div>
+            </div>
+            </div>
+        </section>
+
         <section class="page" id="page-tz-map">
             <div class="lab-label">WWL·24 / for everyone</div>
             <h2>Timezone map</h2>
@@ -1516,7 +1549,7 @@
         <section class="page" id="page-availability-leaders">
             <div class="lab-label">WWL·20 / leaders &amp; council</div>
             <h2>Availability overview</h2>
-            <p class="pagedesc">The leaders' side of War Availability: how many people can play each hour, who filled it in, who has overdosed, and where you create plans and set up the Discord pings. Members fill in their own hours on the War Availability page (War menu).</p>
+            <p class="pagedesc">The leaders' side of War Availability: how many people can play each hour, who filled it in, who has overdosed, and where you create plans and send the Discord pings (the Discord settings are under Leader settings). Members fill in their own hours on the War Availability page (War menu).</p>
             <div class="status" id="av-status-l"></div>
 
             <div class="panel" id="av-leaders-locked" style="display:none;">
@@ -1623,13 +1656,6 @@
                     </div>
                     <button class="ghost small" id="av-start-btn">Create plan</button>
                 </div>
-                </details>
-            </div>
-
-            <div class="panel" id="av-discord-panel" style="display:none;">
-                <details><summary class="av-sum"><h3>Discord settings</h3></summary>
-                <p style="color:var(--muted);font-size:12px;margin:0 0 10px;">Where <b>your faction's</b> war pings get posted — each faction sets its own, so factions using this app never post into each other's channels. Leaders/council only.</p>
-                <div id="av-discord-body"></div>
                 </details>
             </div>
         </section>

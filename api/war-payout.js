@@ -256,16 +256,16 @@ async function leaderTodos(key, factionId) {
     // 1. Discord destination
     try {
         const poster = await getDiscordPoster(factionId);
-        if (!poster) add('discord', 'Discord is not connected yet, so the availability pings and reminders cannot be sent.', 'Set up Discord', 'availability-leaders', 'av-discord-panel');
-        else if (poster.error) add('discord', poster.error, 'Fix the Discord settings', 'availability-leaders', 'av-discord-panel');
+        if (!poster) add('discord', 'Discord is not connected yet, so the availability pings and reminders cannot be sent.', 'Set up Discord', 'leader-settings', 'av-discord-panel');
+        else if (poster.error) add('discord', poster.error, 'Fix the Discord settings', 'leader-settings', 'av-discord-panel');
     } catch (e) { /* skip this check */ }
 
     // 2. nightly saving
     try {
         const vault = await redis(['HGET', 'wwl:snapshot-vault', factionId]);
         const envKeys = String(process.env.WWL_SNAPSHOT_KEYS || '').split(',').map(s => s.trim()).filter(Boolean);
-        if (!vault && !envKeys.length) add('nightly', 'Nightly saving is off — on days nobody opens WWL the energy trained, respect and perk levels are not saved.', 'Turn it on', 'dashboard', 'pc-nightly');
-        else if (vault) { const v = JSON.parse(vault); if (v.lastOk === false) add('nightly', `Nightly saving failed the last time it ran (${v.lastError || 'unknown reason'}). ${v.name || 'The leader who switched it on'} may need to turn it on again.`, 'Check it', 'dashboard', 'pc-nightly'); }
+        if (!vault && !envKeys.length) add('nightly', 'Nightly saving is off — on days nobody opens WWL the energy trained, respect and perk levels are not saved.', 'Turn it on', 'leader-settings', 'pc-nightly');
+        else if (vault) { const v = JSON.parse(vault); if (v.lastOk === false) add('nightly', `Nightly saving failed the last time it ran (${v.lastError || 'unknown reason'}). ${v.name || 'The leader who switched it on'} may need to turn it on again.`, 'Check it', 'leader-settings', 'pc-nightly'); }
     } catch (e) { /* skip */ }
 
     // 3 + 4. availability plan: one for what is coming up, and everyone has filled it in

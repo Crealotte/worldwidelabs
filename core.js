@@ -171,6 +171,7 @@
             setNavLock('armory-tracker', memberView);
             setNavLock('members-overview', memberView);
             setNavLock('newsletter', memberView);
+            setNavLock('leader-settings', memberView);
             setNavLock('availability-leaders', memberView);
             if (!memberView) { setTimeout(() => { if (typeof loadSteadfastCard === 'function') loadSteadfastCard(); }, 8000); loadAdoption(); setTimeout(loadLeaderTodos, 2500);
             loadFactionSharing();
@@ -185,6 +186,7 @@
             setNavLock('armory-tracker', true);
             setNavLock('members-overview', true);
             setNavLock('newsletter', true);
+            setNavLock('leader-settings', true);
             setNavLock('availability-leaders', true);
         }
         if (document.querySelector('.nav-item[data-page="announce-edit"]').classList.contains('active')) {
@@ -323,6 +325,7 @@
         if (page === 'perk-roadmap') loadFactionRoadmap();
         if (page === 'tz-map') loadTzMap();
         if (page === 'newsletter') loadNewsletter();
+        if (page === 'leader-settings') loadLeaderSettings();
         if (page === 'bug-report') loadBugReport();
         if (page === 'labs-funds') loadLabsFunds();
         if (page === 'members-overview') loadMemberOverview();

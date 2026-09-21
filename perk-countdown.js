@@ -46,7 +46,6 @@ function renderSteadfastCard(leader) {
     $('pc-updated').textContent = `Numbers from ${new Date(cd.at * 1000).toLocaleString()}`;
     $('pc-leader').style.display = leader ? 'block' : 'none';
     if (leader) {
-        pcLoadNightly();
         cd.rows.forEach(r => { const el = $(`pc-goal-${r.stat}`); if (document.activeElement !== el) el.value = ''; el.placeholder = r.goal ? n(r.goal) : 'goal'; });
     }
 }

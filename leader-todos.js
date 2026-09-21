@@ -33,3 +33,20 @@ function renderLeaderTodos(todos) {
         if (todos.length) { const s = document.createElement('span'); s.className = 'todo-dot'; s.textContent = todos.length; s.title = 'Things for leaders to do'; nav.appendChild(s); }
     }
 }
+
+// ---- Leader settings page: the Discord settings and the nightly saving live here (moved panels, same handlers) ----
+async function loadLeaderSettings() {
+    const locked = typeof isLeaderCached === 'undefined' || !isLeaderCached;
+    $('ls-locked').style.display = locked ? 'block' : 'none';
+    $('ls-body').style.display = locked ? 'none' : 'block';
+    if (locked) return;
+    $('av-discord-panel').style.display = 'block';
+    loadAvDiscord();
+    pcLoadNightly();
+}
+document.querySelectorAll('.ls-link').forEach(a => a.addEventListener('click', e => {
+    if (e.metaKey || e.ctrlKey || e.shiftKey) return;
+    e.preventDefault();
+    goToPage(a.dataset.page);
+    if (a.dataset.anchor) setTimeout(() => document.getElementById(a.dataset.anchor)?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 400);
+}));
