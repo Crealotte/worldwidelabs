@@ -326,6 +326,7 @@
         if (page === 'perk-roadmap') loadFactionRoadmap();
         if (page === 'tz-map') loadTzMap();
         if (page === 'newsletter') loadNewsletter();
+        if (page === 'my-targets') loadMyTargets();
         if (page === 'leader-settings') loadLeaderSettings();
         if (page === 'bug-report') loadBugReport();
         if (page === 'labs-funds') loadLabsFunds();

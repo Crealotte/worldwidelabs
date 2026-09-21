@@ -145,6 +145,7 @@
         tfResults = rows;
         stopTfLive();
         drawTfRows();
+        if (typeof tfAutoStatus === 'function') tfAutoStatus();
         $('tf-results-panel').style.display = 'block';
         $('tf-results-panel').scrollIntoView({ behavior: 'smooth' });
     }

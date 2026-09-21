@@ -54,6 +54,7 @@
         if (btTickHandle) { clearInterval(btTickHandle); btTickHandle = null; }
         drawBaldrRows();
         $('bt-table-panel').style.display = btTargets.length ? 'block' : 'none';
+        if (btTargets.length && typeof btAutoStatus === 'function') btAutoStatus();
         if (!btTargets.length) btStatus('This list loaded but looks empty or in an unexpected format — tell WWLabs support so the parser can be adjusted.', true);
     }
 

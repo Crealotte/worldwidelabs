@@ -86,8 +86,9 @@ function renderEsResults() {
             <td class="num">${r.level ?? '—'}</td>
             <td class="num" style="font-family:var(--mono);">${r.ff != null ? r.ff.toFixed(2) : '—'}</td>
             <td class="num" style="font-family:var(--mono);">${esc(r.estHuman || '—')}</td>
-            <td style="font-size:12px;color:var(--muted);">${relativeTime(r.lastAction)}</td>
+            <td id="es-st-${r.id}" style="font-size:12px;color:var(--muted);">${relativeTime(r.lastAction)}</td>
             <td><a href="https://www.torn.com/page.php?sid=attack&user2ID=${r.id}" target="_blank" rel="noopener"
                    style="background:var(--reagent);color:#06130d;padding:4px 10px;border-radius:4px;text-decoration:none;font-weight:600;font-size:12px;">Attack</a></td>
         </tr>`).join('') : `<tr><td colspan="6" style="color:var(--muted)">No results.</td></tr>`;
+    if (typeof esAutoStatus === 'function') esAutoStatus();
 }

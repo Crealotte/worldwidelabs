@@ -353,6 +353,8 @@
     .site-banner.tone-warn { border-color: #f0b432; background: rgba(240,180,50,.14); }
     .site-banner .sb-text { flex: 1; min-width: 200px; }
     .site-banner .sb-x { cursor: pointer; font-size: 18px; line-height: 1; color: var(--muted); padding: 0 4px; }
+    tr.atk-done > td { background: rgba(53,217,155,.13); }
+    .mt-star { color: #f0b432; }
     .chip-discord { background: rgba(53,217,155,.20); }
     .chip-nodiscord { opacity: .65; }
     .av-watch-badge { display: inline-block; margin-left: 3px; padding: 0 5px; border-radius: 9px; background: #0b2a66; border: 1px solid #7ab8ff; color: #fff; font-size: 11px; font-weight: 700; line-height: 16px; white-space: nowrap; }
@@ -501,6 +503,7 @@
             <div class="nav-group-items" data-group-items="targets">
                 <a class="nav-item" data-page="targets" href="/targets">Level targets</a>
                 <a class="nav-item" data-page="targetfinder" href="/targetfinder">Target finder</a>
+                <a class="nav-item" data-page="my-targets" href="/my-targets">My targets</a>
             </div>
         </div>
 
@@ -1573,6 +1576,27 @@
             </div>
         </section>
 
+        <section class="page" id="page-my-targets">
+            <div class="lab-label">WWL·27 / for everyone</div>
+            <h2>My targets</h2>
+            <p class="pagedesc">Your own list of targets that were easy to beat and gave decent respect. Press ★ on a target in Level targets, Target finder or Extended search, or add a player ID here. The list follows you between your computer and TornPDA.</p>
+            <div class="status" id="mt-status"></div>
+            <div class="panel">
+                <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-bottom:12px;">
+                    <div class="field" style="margin:0;max-width:160px;"><label for="mt-id">Player ID</label><input autocomplete="off" id="mt-id" type="text" inputmode="numeric" placeholder="e.g. 123456"></div>
+                    <div class="field" style="margin:0;min-width:220px;flex:1;"><label for="mt-note">Note (optional)</label><input autocomplete="off" id="mt-note" type="text" maxlength="120" placeholder="e.g. easy, ~3 respect"></div>
+                    <button class="ghost small" id="mt-add">Add</button>
+                </div>
+                <div class="tg-bar" style="font-size:12px;color:var(--muted);margin:0 0 6px;">Faded green = you already pressed Attack (kept for 24 hours).</div>
+                <div class="table-scroll" style="overflow:auto;">
+                    <table style="width:100%;font-size:13px;border-collapse:collapse;">
+                        <thead><tr style="color:var(--muted);text-align:left;"><th style="padding:4px 8px;">Player</th><th style="padding:4px 8px;text-align:right;">Level</th><th style="padding:4px 8px;">Note</th><th style="padding:4px 8px;">Status</th><th style="padding:4px 8px;"></th></tr></thead>
+                        <tbody id="mt-body"></tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
         <section class="page" id="page-tz-map">
             <div class="lab-label">WWL·24 / for everyone</div>
             <h2>Timezone map</h2>
@@ -2132,6 +2156,7 @@
 <script src="newsletter.js"></script>
 <script src="leader-todos.js"></script>
 <script src="banners.js"></script>
+<script src="my-targets.js"></script>
 <script src="armory-tracker.js"></script>
 <script src="app-init.js"></script>
 </body>

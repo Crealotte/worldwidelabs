@@ -37,6 +37,7 @@ const { tzHandle } = require('../lib/tzMap');
 const { planHandle } = require('../lib/planSync');
 const { nightlyHandle, nightlyRun } = require('../lib/nightly');
 const { usageFor } = require('../lib/tornFetch');
+const { targetsHandle } = require('../lib/targets');
 const { labsIsOwner, labsHasOwners, labsHandle, labsRecordReceipt } = require('../lib/labsLedger');
 
 const REDIS_URL = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL;
@@ -547,6 +548,8 @@ module.exports = async function handler(req, res) {
             if (!(await isLeader(key))) return res.status(403).json({ error: 'Leaders only' });
             return res.status(200).json(await nightlyHandle(action, { redis, key, factionId, playerId, name: playerName }));
         }
+        // Target pages: shared, briefly remembered target statuses, and each member's own target list. See lib/targets.js.
+        if (action === 'target-status' || action.startsWith('mytargets-')) return res.status(200).json(await targetsHandle(action, req.body, { redis, key, playerId }));
         // How many calls WWL made to Torn with the caller's own key (see lib/tornFetch.js) — shown in Member Overview → Checks for the developer.
         if (action === 'torn-usage') return res.status(200).json(await usageFor(key));
         // Banners at the top of every page. Everyone reads the ones meant for them; leaders write them for THEIR OWN faction, and only an owner
