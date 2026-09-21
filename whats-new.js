@@ -7,10 +7,21 @@
 // what is NEW since the last posted version, so nothing is announced twice (see wnBigPost below).
 //
 // TO ADD AN UPDATE: put a new object at the TOP of WHATS_NEW below with the next version number
-// (the last one is 1.13 → the next is 1.14). Plain text only (no HTML).
+// (the last one is 1.14 → the next is 1.15). Plain text only (no HTML).
 'use strict';
 
 const WHATS_NEW = [
+    {
+        version: '1.14', date: '2026-09-21',
+        title: 'Availability hours vs hits, map fix',
+        everyone: [
+            'Timezone map: fixed the stretched line across the map — the far east of Russia (and Alaska\'s far islands) now show up correctly on the other side of the map.',
+        ],
+        leaders: [
+            'Availability overview: in the "Filled in" list every member now shows the hours they ticked, green for available and yellow for maybe (for example 43 +12).',
+            'Availability overview: new "Hours ticked vs hits made" — for a plan linked to a ranked war, compare each member\'s ticked hours with their real war hits. Someone who ticked 40 hours and hit once is flagged with a ⚠️, and you can copy the flagged names for the review.',
+        ],
+    },
     {
         version: '1.13', date: '2026-09-20',
         title: 'Timezone map, Newsletter and the energy plan inside Torn',

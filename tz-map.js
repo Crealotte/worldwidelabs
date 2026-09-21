@@ -45,18 +45,33 @@ const tzName = f => f.properties?.name || `#${f.id}`;
 function renderTzMap(r) {
     const S = 3, W = 360 * S, H = 180 * S; // equirectangular: 3 pixels per degree
     const X = lon => (lon + 180) * S, Y = lat => (90 - lat) * S;
-    const ring = pts => pts.map(([lo, la], i) => `${i ? 'L' : 'M'}${X(lo).toFixed(1)},${Y(la).toFixed(1)}`).join('') + 'Z';
-    const path = f => {
-        const g = f.geometry; if (!g) return '';
+    // A ring that crosses the ±180° line (Russia's far east, Fiji, Alaska's Aleutians) is unwrapped so it stays in one piece; the part that
+    // then sticks out past one edge is drawn a second time, shifted by one world width, so it shows up on the other side too.
+    const ring = pts => {
+        const xs = pts.map(p => p[0]);
+        if (!pts.some(p => p[1] < -80)) { // Antarctica's outline runs along the whole edge and is left alone
+            for (let i = 1; i < xs.length; i++) { while (xs[i] - xs[i - 1] > 180) xs[i] -= 360; while (xs[i] - xs[i - 1] < -180) xs[i] += 360; }
+        }
+        const d = xs.map((lo, i) => `${i ? 'L' : 'M'}${X(lo).toFixed(1)},${Y(pts[i][1]).toFixed(1)}`).join('') + 'Z';
+        const hi = Math.max(...xs), lo = Math.min(...xs);
+        return { d, shift: hi > 180 ? -W : lo < -180 ? W : 0 };
+    };
+    const rings = f => {
+        const g = f.geometry; if (!g) return [];
         const polys = g.type === 'Polygon' ? [g.coordinates] : g.type === 'MultiPolygon' ? g.coordinates : [];
-        return polys.map(p => p.map(ring).join('')).join('');
+        return polys.flatMap(p => p.map(ring));
     };
     const cCount = f => r.countries[tzId3(f)] || 0;
     const sCount = f => r.states[String(f.id).padStart(2, '0')] || 0;
     const max = Math.max(1, ...Object.entries(r.countries).filter(([id]) => id !== '840').map(e => e[1]), ...Object.values(r.states));
     const meC = r.me?.country, meS = r.me?.state;
     const fillFor = n => n ? `rgba(53,217,155,${(0.35 + 0.65 * n / max).toFixed(2)})` : '#39414f';
-    const shape = (f, n, mine, label) => `<path d="${path(f)}" fill="${fillFor(n)}"${mine ? ' stroke="#fff" stroke-width="1.4"' : ''}><title>${esc(label)}${n ? `: ${n} member${n === 1 ? '' : 's'}` : ''}${mine ? ' (you)' : ''}</title></path>`;
+    const shape = (f, n, mine, label) => {
+        const rs = rings(f), attrs = `fill="${fillFor(n)}"${mine ? ' stroke="#fff" stroke-width="1.4"' : ''}`;
+        const title = `<title>${esc(label)}${n ? `: ${n} member${n === 1 ? '' : 's'}` : ''}${mine ? ' (you)' : ''}</title>`;
+        const wrapped = rs.filter(x => x.shift).map(x => `<path d="${x.d}" transform="translate(${x.shift},0)" ${attrs}>${title}</path>`).join('');
+        return `<path d="${rs.map(x => x.d).join('')}" ${attrs}>${title}</path>${wrapped}`;
+    };
     const edges = Array.from({ length: 25 }, (_, i) => X(-180 + i * 15)).map(x => `<line x1="${x}" y1="0" x2="${x}" y2="${H}" stroke="#8a93a3" stroke-opacity=".35" stroke-width="1"/>`).join('');
     const labels = Array.from({ length: 25 }, (_, i) => `<text x="${X((i - 12) * 15)}" y="${H - 6}" text-anchor="middle" font-size="12" fill="#8a93a3" font-family="monospace">${i - 12 >= 0 ? '+' : ''}${i - 12}</text>`).join('');
     const countries = tzWorld.filter(f => tzId3(f) !== '840').map(f => shape(f, cCount(f), meC === tzId3(f), tzName(f))).join('');
