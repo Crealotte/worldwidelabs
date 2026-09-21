@@ -14,7 +14,7 @@
 
 let avConfig = null; // { startDate, days } from the backend, or null if no tracker is active
 let avMine = {}; // my own slots: "day-hour" (TCT) -> true
-let avMineWatch = {}; // my hours marked with the blue ring (chain watch / war coordinator)
+let avMineWatch = {}; // my hours marked with the blue ring (Chain saver / War guard)
 let avWatchMode = false; // the switch: clicking a box adds or removes the ring instead of cycling the colour
 let avSummary = null; // "day-hour" (TCT) -> { count, names } — present only when the caller is a leader
 let avMyUnavailable = null; // { name, note, at } if I marked myself as unable to make this war
@@ -511,7 +511,7 @@ function renderAvOut() {
         : '<p style="color:var(--muted);font-size:13px;margin:0;">Nobody has said they can\'t make it.</p>';
     // Leaders: check the hours people ticked against the hits they really made — in the war this plan is linked to, or in chains.
     html += `<div style="margin-top:18px;padding-top:12px;border-top:1px solid var(--line);"><div style="font-weight:700;margin-bottom:6px;">📊 Hours ticked vs hits made</div>
-        <p style="color:var(--muted);font-size:13px;margin:0 0 8px;">Compares the hours each member ticked (green + yellow) with the hits they really made. Someone who ticked 40 hours and hit once is flagged. Hours with a blue ring (chain watch / war coordinator) are not counted against them.
+        <p style="color:var(--muted);font-size:13px;margin:0 0 8px;">Compares the hours each member ticked (green + yellow) with the hits they really made. Someone who ticked 40 hours and hit once is flagged. Hours with a blue ring (Chain saver / War guard) are not counted against them.
         ${avConfig?.war?.id ? `By default it uses the war hits against ${esc(avConfig.war.opponent || 'the linked war')}.` : 'This plan is not linked to a ranked war, so add chain reports below.'}</p>
         <div class="field" style="margin:0 0 8px;max-width:560px;"><label for="av-vs-chains">Chain reports instead (optional) — chain IDs or report links, separated by spaces or commas. Use this when we are only chaining and not warring.</label>
             <input autocomplete="off" id="av-vs-chains" type="text" value="${esc(avVsChains)}" placeholder="e.g. 1234567, https://www.torn.com/war.php?step=chainreport&chainID=1234568"></div>
@@ -674,7 +674,7 @@ function renderAvDetail() {
             <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px;">
                 ${s.maybeNames.map((n, i) => `<span class="chip" style="cursor:default;border-color:#f0b432;">${esc(n)}${avOdIds.has(String(s.maybeIds?.[i])) ? ' 💊' : ''}</span>`).join('')}
             </div>` : ''}
-            ${s.watch ? `<div style="color:#4da3ff;font-size:12px;margin:0 0 6px;">🔵 ${avIsWarPlan() ? 'War coordinators' : 'Chain watchers'} (${s.watch}):</div>
+            ${s.watch ? `<div style="color:#4da3ff;font-size:12px;margin:0 0 6px;">🔵 ${avIsWarPlan() ? 'War guards' : 'Chain savers'} (${s.watch}):</div>
             <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px;">
                 ${s.watchNames.map(n => `<span class="chip" style="cursor:default;border-color:#4da3ff;">${esc(n)}</span>`).join('')}
             </div>` : ''}
@@ -796,15 +796,15 @@ async function avCompareHits() {
 // ---- The blue ring: hours I can watch the chain (a plan without a war) or coordinate the war (a plan linked to a ranked war) ----
 // Coordinating = making the calls, changing plans, keeping the chat clear and motivating people. Same effort, different job.
 const avIsWarPlan = () => !!avConfig?.war?.id;
-const avRoleName = () => (avIsWarPlan() ? 'coordinate the war' : 'watch the chain');
-const avRoleShort = () => (avIsWarPlan() ? 'War coordinator' : 'Chain watcher');
+const avRoleName = () => (avIsWarPlan() ? 'be a War guard' : 'be a Chain saver');
+const avRoleShort = () => (avIsWarPlan() ? 'War guard' : 'Chain saver');
 
 function renderAvWatchBar() {
     $('av-watch-label').textContent = `🔵 Mark the hours I can ${avRoleName()}`;
     $('av-watch-toggle').checked = avWatchMode;
     $('av-watch-hint').textContent = avIsWarPlan()
-        ? 'This is a war plan. With the switch on, click an hour to add or remove a blue ring: you will make the calls, change plans, keep the chat clear and motivate people during it. An hour you had not ticked becomes green.'
-        : 'This is a chain plan. With the switch on, click an hour to add or remove a blue ring: you will keep an eye on the chain during it. An hour you had not ticked becomes green.';
+        ? 'This is a war plan. A War guard is online and active, keeping an eye out for when things go wrong: making the calls, changing plans, keeping the chat clear and motivating people. With the switch on, click an hour to add or remove a blue ring. An hour you had not ticked becomes green.'
+        : 'This is a chain plan. A Chain saver is online and active, keeping an eye on the chain and stepping in when it is about to drop. With the switch on, click an hour to add or remove a blue ring. An hour you had not ticked becomes green.';
 }
 $('av-watch-toggle').addEventListener('change', () => { avWatchMode = $('av-watch-toggle').checked; renderAvWatchBar(); });
 

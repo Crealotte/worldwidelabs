@@ -4,6 +4,7 @@
 // faction-wide the same way OC Fit does: each member's own key reports their own status when they
 // visit, accumulating into a shared view over time.
 
+const { tornFetch } = require('../lib/tornFetch');
 const REDIS_URL = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL;
 const REDIS_TOKEN = process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN;
 const HONORS_CACHE_KEY = 'wwl:torn-honors-cache';
@@ -29,7 +30,7 @@ async function redis(command) {
 }
 
 async function getFactionId(key) {
-    const r = await fetch(`https://api.torn.com/user/?selections=profile&key=${encodeURIComponent(key)}`);
+    const r = await tornFetch(`https://api.torn.com/user/?selections=profile&key=${encodeURIComponent(key)}`);
     const profile = await r.json();
     if (profile.error || !profile.faction?.faction_id) return null;
     return String(profile.faction.faction_id);
@@ -42,7 +43,7 @@ async function getHonorDirectory(key) {
         const cached = raw ? JSON.parse(raw) : null;
         if (cached && Date.now() - cached.fetchedAt < HONORS_CACHE_TTL_MS) return cached.honors;
 
-        const res = await fetch(`https://api.torn.com/torn/?selections=honors&key=${encodeURIComponent(key)}`);
+        const res = await tornFetch(`https://api.torn.com/torn/?selections=honors&key=${encodeURIComponent(key)}`);
         const data = await res.json();
         if (data.error) throw new Error(data.error.error);
         await redis(['SET', HONORS_CACHE_KEY, JSON.stringify({ honors: data.honors, fetchedAt: Date.now() })]);
@@ -67,8 +68,8 @@ module.exports = async function handler(req, res) {
 
         const [honorDirectory, myHonorsRes, myProfileRes] = await Promise.all([
             getHonorDirectory(key),
-            fetch(`https://api.torn.com/user/?selections=honors&key=${encodeURIComponent(key)}`),
-            fetch(`https://api.torn.com/user/?selections=profile&key=${encodeURIComponent(key)}`),
+            tornFetch(`https://api.torn.com/user/?selections=honors&key=${encodeURIComponent(key)}`),
+            tornFetch(`https://api.torn.com/user/?selections=profile&key=${encodeURIComponent(key)}`),
         ]);
         const myHonorsData = await myHonorsRes.json();
         const myProfile = await myProfileRes.json();

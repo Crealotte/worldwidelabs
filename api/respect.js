@@ -31,6 +31,7 @@
 //                                                                to the list (multiple goals supported)
 // POST { key, action: 'remove-goal', id }                    -> leader-only
 
+const { tornFetch } = require('../lib/tornFetch');
 const REDIS_URL = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL;
 const REDIS_TOKEN = process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN;
 
@@ -55,14 +56,14 @@ async function redis(command) {
 }
 
 async function getFactionId(key) {
-    const r = await fetch(`https://api.torn.com/user/?selections=profile&key=${encodeURIComponent(key)}`);
+    const r = await tornFetch(`https://api.torn.com/user/?selections=profile&key=${encodeURIComponent(key)}`);
     const profile = await r.json();
     if (profile.error) return { error: profile.error.error || `Torn error code ${profile.error.code}` };
     if (!profile.faction?.faction_id) return { error: 'This key\'s account isn\'t in a faction right now' };
     return { factionId: String(profile.faction.faction_id) };
 }
 async function isLeader(key) {
-    const r = await fetch(`https://api.torn.com/v2/faction/balance?key=${encodeURIComponent(key)}`,
+    const r = await tornFetch(`https://api.torn.com/v2/faction/balance?key=${encodeURIComponent(key)}`,
         { headers: { accept: 'application/json' } });
     const d = await r.json();
     return !d.error;
@@ -150,7 +151,7 @@ async function processCrimesPage(crimesList, factionId, rewards, daily) {
 // "seen" dedup set as oc-fit.js, so whichever feature runs first claims each OC and the other
 // just skips it — no double-counting between the two. Single page — whatever's currently live.
 async function syncOc(key, factionId) {
-    const r = await fetch(`https://api.torn.com/v2/faction?selections=crimes&key=${encodeURIComponent(key)}`,
+    const r = await tornFetch(`https://api.torn.com/v2/faction?selections=crimes&key=${encodeURIComponent(key)}`,
         { headers: { accept: 'application/json' } });
     const data = await r.json();
     if (data.error) return { synced: 0, error: data.error.error };
@@ -189,7 +190,7 @@ async function deepSyncOc(key, factionId, maxPages = 15) {
 
     for (let page = 0; page < maxPages; page++) {
         if (page > 0) await sleep(1100); // stay well clear of Torn's rate limit across a multi-page loop
-        const r = await fetch(`https://api.torn.com/v2/faction?selections=crimes&to=${to}&key=${encodeURIComponent(key)}`,
+        const r = await tornFetch(`https://api.torn.com/v2/faction?selections=crimes&to=${to}&key=${encodeURIComponent(key)}`,
             { headers: { accept: 'application/json' } });
         const data = await r.json();
         if (data.error) {
@@ -219,7 +220,7 @@ async function deepSyncOc(key, factionId, maxPages = 15) {
 // timestamps) and buckets any not-yet-counted ones by the day the chain ended — genuinely
 // retroactive, unlike total respect, since this is real history Torn already retains.
 async function syncChains(key, factionId) {
-    const r = await fetch(`https://api.torn.com/faction/?selections=chains&key=${encodeURIComponent(key)}`);
+    const r = await tornFetch(`https://api.torn.com/faction/?selections=chains&key=${encodeURIComponent(key)}`);
     const data = await r.json();
     if (data.error) return { synced: 0, error: data.error.error };
 
@@ -250,7 +251,7 @@ async function syncChains(key, factionId) {
 // Bucketed by the day the war ended. Confirmed against a real sample: `factions` is an object
 // keyed by faction ID (e.g. {"51197": {...}}), and the bonus lives under factions[id].rewards.respect.
 async function syncWarBonus(key, factionId) {
-    const r = await fetch(`https://api.torn.com/v2/faction?selections=rankedwars&key=${encodeURIComponent(key)}`,
+    const r = await tornFetch(`https://api.torn.com/v2/faction?selections=rankedwars&key=${encodeURIComponent(key)}`,
         { headers: { accept: 'application/json' } });
     const data = await r.json();
     if (data.error) return { synced: 0, error: data.error.error };
@@ -272,7 +273,7 @@ async function syncWarBonus(key, factionId) {
         if (fetchedCount > 0) await sleep(1100); // one Torn call per war here — stay well clear of rate limits
         fetchedCount++;
         try {
-            const reportRes = await fetch(`https://api.torn.com/torn/${warId}?selections=rankedwarreport&key=${encodeURIComponent(key)}`);
+            const reportRes = await tornFetch(`https://api.torn.com/torn/${warId}?selections=rankedwarreport&key=${encodeURIComponent(key)}`);
             const report = await reportRes.json();
             if (report.error) {
                 if (isRateLimited(report)) { rateLimited = true; break; } // stop rather than burn through the rest
@@ -330,7 +331,7 @@ async function processAttacksPageAsync(attacks, factionId, daily) {
 // can be just a few hours, which is why a single sync often only catches a handful of a day's
 // hits — use deepSyncHits below to page further back and get the rest.
 async function syncHits(key, factionId) {
-    const r = await fetch(`https://api.torn.com/faction/?selections=attacksfull&key=${encodeURIComponent(key)}`);
+    const r = await tornFetch(`https://api.torn.com/faction/?selections=attacksfull&key=${encodeURIComponent(key)}`);
     const data = await r.json();
     if (data.error) return { synced: 0, error: data.error.error };
 
@@ -358,7 +359,7 @@ async function deepSyncHits(key, factionId, maxPages = 15) {
 
     for (let page = 0; page < maxPages; page++) {
         if (page > 0) await sleep(1100); // stay well clear of Torn's rate limit across a multi-page loop
-        const r = await fetch(`https://api.torn.com/faction/?selections=attacksfull&to=${to}&key=${encodeURIComponent(key)}`);
+        const r = await tornFetch(`https://api.torn.com/faction/?selections=attacksfull&to=${to}&key=${encodeURIComponent(key)}`);
         const data = await r.json();
         if (data.error) {
             if (isRateLimited(data)) rateLimited = true;
@@ -410,7 +411,7 @@ function processNewsPage(newsEntries, factionId, daily, seenIds) {
 }
 
 async function syncLosses(key, factionId) {
-    const r = await fetch(`https://api.torn.com/faction/?selections=attacknews&key=${encodeURIComponent(key)}`);
+    const r = await tornFetch(`https://api.torn.com/faction/?selections=attacknews&key=${encodeURIComponent(key)}`);
     const data = await r.json();
     if (data.error) return { synced: 0, error: data.error.error };
 
@@ -446,7 +447,7 @@ async function deepSyncLosses(key, factionId, maxPages = 15) {
     for (let page = 0; page < maxPages; page++) {
         if (page > 0) await sleep(1100);
         const from = to - CHUNK_SECONDS;
-        const r = await fetch(`https://api.torn.com/faction/?selections=attacknews&from=${from}&to=${to}&key=${encodeURIComponent(key)}`);
+        const r = await tornFetch(`https://api.torn.com/faction/?selections=attacknews&from=${from}&to=${to}&key=${encodeURIComponent(key)}`);
         const data = await r.json();
         if (data.error) {
             if (isRateLimited(data)) rateLimited = true;
@@ -578,7 +579,7 @@ module.exports = async function handler(req, res) {
             // Lightweight — just the live respect figure, no sync side effects. Used for repeat
             // reads within the same session so the Goal panel doesn't re-trigger a full sync
             // (OC/Chains/Hits/Losses/War) every time it's viewed.
-            const r = await fetch(`https://api.torn.com/faction/?selections=basic&key=${encodeURIComponent(key)}`);
+            const r = await tornFetch(`https://api.torn.com/faction/?selections=basic&key=${encodeURIComponent(key)}`);
             const data = await r.json();
             const totalRespect = data.error ? null : (data.respect ?? data.faction?.respect ?? null);
             return res.status(200).json({ ok: true, totalRespect });
@@ -590,7 +591,7 @@ module.exports = async function handler(req, res) {
             // source of truth for daily totals now. Still fetches the LIVE current respect figure
             // (for the Goal panel's progress bar) and still triggers all the auto-syncing — that
             // side effect is relied on by every other part of this tracker and must stay.
-            const r = await fetch(`https://api.torn.com/faction/?selections=basic&key=${encodeURIComponent(key)}`);
+            const r = await tornFetch(`https://api.torn.com/faction/?selections=basic&key=${encodeURIComponent(key)}`);
             const data = await r.json();
             const totalRespect = data.error ? null : (data.respect ?? data.faction?.respect ?? null);
 

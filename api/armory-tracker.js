@@ -34,6 +34,7 @@
 //                                                          10-hits-per-xanax check, from the same
 //                                                          [from, to] window (not tied to a war)
 
+const { tornFetch } = require('../lib/tornFetch');
 const { parseArmoryNewsEntry } = require('../lib/armoryNewsParser');
 const { fetchWarHits } = require('../lib/warHits');
 const { TRACKED_ITEMS, BLOOD_BAG_RE } = require('../lib/trackedItems');
@@ -44,13 +45,13 @@ function isRateLimited(data) {
 }
 
 async function getFactionId(key) {
-    const r = await fetch(`https://api.torn.com/user/?selections=profile&key=${encodeURIComponent(key)}`);
+    const r = await tornFetch(`https://api.torn.com/user/?selections=profile&key=${encodeURIComponent(key)}`);
     const profile = await r.json();
     if (profile.error || !profile.faction?.faction_id) return null;
     return String(profile.faction.faction_id);
 }
 async function isLeader(key) {
-    const r = await fetch(`https://api.torn.com/v2/faction/balance?key=${encodeURIComponent(key)}`,
+    const r = await tornFetch(`https://api.torn.com/v2/faction/balance?key=${encodeURIComponent(key)}`,
         { headers: { accept: 'application/json' } });
     const d = await r.json();
     return !d.error;
@@ -71,7 +72,7 @@ async function fetchAllArmoryNews(key, from, to) {
     const MAX_PAGES = 40;
     while (page < MAX_PAGES) {
         if (page > 0) await sleep(900);
-        const r = await fetch(`https://api.torn.com/v2/faction/news?striptags=false&limit=100&sort=DESC&to=${cursor}&from=${from}&cat=armoryAction&key=${encodeURIComponent(key)}`,
+        const r = await tornFetch(`https://api.torn.com/v2/faction/news?striptags=false&limit=100&sort=DESC&to=${cursor}&from=${from}&cat=armoryAction&key=${encodeURIComponent(key)}`,
             { headers: { accept: 'application/json' } });
         const data = await r.json();
         if (data.error) {
@@ -115,7 +116,7 @@ module.exports = async function handler(req, res) {
 
             const [newsResult, itemsRes] = await Promise.all([
                 fetchAllArmoryNews(key, from, to),
-                fetch(`https://api.torn.com/torn/?selections=items&key=${encodeURIComponent(key)}`),
+                tornFetch(`https://api.torn.com/torn/?selections=items&key=${encodeURIComponent(key)}`),
             ]);
             const itemsData = await itemsRes.json();
             const catalog = {}; // lowercased item name -> { type, price }

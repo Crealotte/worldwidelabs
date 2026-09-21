@@ -5,6 +5,7 @@
 // POST { key }                 -> verifies the key with Torn, records { id, name, last-seen }.
 // POST { key, action:'list' }  -> leaders only: returns the full login list.
 
+const { tornFetch } = require('../lib/tornFetch');
 const REDIS_URL = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL;
 const REDIS_TOKEN = process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN;
 const HASH = 'wwl:logins';
@@ -33,7 +34,7 @@ module.exports = async function handler(req, res) {
 
         // ---- Leaders read the list ----
         if (action === 'list') {
-            const r = await fetch(`https://api.torn.com/v2/faction/balance?key=${encodeURIComponent(key)}`,
+            const r = await tornFetch(`https://api.torn.com/v2/faction/balance?key=${encodeURIComponent(key)}`,
                 { headers: { accept: 'application/json' } });
             const check = await r.json();
             if (check.error) return res.status(403).json({ error: 'Leaders only' });
@@ -48,7 +49,7 @@ module.exports = async function handler(req, res) {
 
         // ---- Record a login ----
         // Identity comes from Torn itself, so it cannot be spoofed.
-        const r = await fetch(`https://api.torn.com/user/?selections=profile&key=${encodeURIComponent(key)}`);
+        const r = await tornFetch(`https://api.torn.com/user/?selections=profile&key=${encodeURIComponent(key)}`);
         const user = await r.json();
         if (user.error) return res.status(403).json({ error: 'Torn rejected the key' });
 

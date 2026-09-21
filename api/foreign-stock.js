@@ -13,6 +13,7 @@
 //
 // POST { key, action: 'read' } -> per-country stock lists with computed profit, and freshness
 
+const { tornFetch } = require('../lib/tornFetch');
 const REDIS_URL = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL;
 const REDIS_TOKEN = process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN;
 const ITEMS_CACHE_KEY = 'wwl:torn-items-cache';
@@ -42,7 +43,7 @@ async function getItemDirectory(key) {
         const cached = raw ? JSON.parse(raw) : null;
         if (cached && Date.now() - cached.fetchedAt < ITEMS_CACHE_TTL_MS) return cached.items;
 
-        const res = await fetch(`https://api.torn.com/torn/?selections=items&key=${encodeURIComponent(key)}`);
+        const res = await tornFetch(`https://api.torn.com/torn/?selections=items&key=${encodeURIComponent(key)}`);
         const data = await res.json();
         if (data.error) throw new Error(data.error.error);
         await redis(['SET', ITEMS_CACHE_KEY, JSON.stringify({ items: data.items, fetchedAt: Date.now() })]);

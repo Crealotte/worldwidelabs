@@ -15,11 +15,13 @@ const WHATS_NEW = [
         version: '1.14', date: '2026-09-21',
         title: 'Availability hours vs hits, map fix',
         everyone: [
-            'War Availability: new blue ring. Turn on the switch above your grid and click hours to mark when you can watch the chain (on a chain plan) or coordinate the war (on a war plan: making the calls, changing plans, keeping the chat clear, motivating people). Green and yellow still say how sure you are to be online; the blue ring says what you will do while you are. Leaders see the blue count per hour and who it is.',
+            'War Availability: new blue ring. Turn on the switch above your grid and click hours to mark when you will be a Chain saver (on a chain plan: online and active, keeping an eye on the chain) or a War guard (on a war plan: online and active, keeping an eye out for when things go wrong — making the calls, changing plans, keeping the chat clear, motivating people). Green and yellow still say how sure you are to be online; the blue ring says what you will do while you are. Leaders see the blue count per hour and who it is.',
+            'Behind the scenes: WWL now remembers answers from Torn that hardly ever change (who you are, faction access, the member list) for a few minutes instead of asking again on every page, waits and retries once when Torn says "too many requests", and counts its calls. Members will notice fewer "too many requests" errors.',
             'War Availability: when a plan has a start time (a linked war, or a chain start typed in), the hours before that start are now greyed out and can\'t be ticked any more. Hours ticked there before are left out of the counts.',
             'Timezone map: fixed the stretched line across the map — the far east of Russia (and Alaska\'s far islands) now show up correctly on the other side of the map.',
         ],
         leaders: [
+            'New "Torn API usage (my key)" button in Member Overview → Checks for the developer: shows how many calls WWL made with your key in the last two hours, the busiest minute and which kinds of calls are used most, so we can see where they go.',
             'Availability overview: in the "Filled in" list every member now shows the hours they ticked, green for available and yellow for maybe (for example 43 +12).',
             'Availability overview: new "Hours ticked vs hits made" — for a plan linked to a ranked war, compare each member\'s ticked hours with their real war hits. Someone who ticked 40 hours and hit once is flagged with a ⚠️, and you can copy the flagged names for the review. When we are only chaining and not warring, add chain report IDs or links there and it counts the chain hits instead. A chain that is still running works too: fill in when it started and it counts the chain hits from then until now.',
         ],

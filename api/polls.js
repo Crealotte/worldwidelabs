@@ -14,6 +14,7 @@
 // POST { key, action:'delete', pollId }                     -> leaders only: removes a poll entirely
 // POST { key, action:'vote', pollId, optionIndex }          -> any member: vote on the ACTIVE poll only
 
+const { tornFetch } = require('../lib/tornFetch');
 const REDIS_URL = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL;
 const REDIS_TOKEN = process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN;
 
@@ -29,7 +30,7 @@ async function redis(command) {
 }
 
 async function tornProfile(key) {
-    const r = await fetch(`https://api.torn.com/user/?selections=profile&key=${encodeURIComponent(key)}`);
+    const r = await tornFetch(`https://api.torn.com/user/?selections=profile&key=${encodeURIComponent(key)}`);
     return r.json();
 }
 async function getFactionId(key) {
@@ -38,7 +39,7 @@ async function getFactionId(key) {
     return String(p.faction.faction_id);
 }
 async function isLeader(key) {
-    const r = await fetch(`https://api.torn.com/v2/faction/balance?key=${encodeURIComponent(key)}`,
+    const r = await tornFetch(`https://api.torn.com/v2/faction/balance?key=${encodeURIComponent(key)}`,
         { headers: { accept: 'application/json' } });
     const d = await r.json();
     return !d.error;

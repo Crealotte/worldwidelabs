@@ -8,6 +8,7 @@
 // POST { key, title, formUrl, chartUrl } -> leaders only: set/replace THEIR faction's form
 // POST { key, action:'clear' }           -> leaders only: remove THEIR faction's form
 
+const { tornFetch } = require('../lib/tornFetch');
 const REDIS_URL = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL;
 const REDIS_TOKEN = process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN;
 
@@ -23,14 +24,14 @@ async function redis(command) {
 }
 
 async function getFactionId(key) {
-    const r = await fetch(`https://api.torn.com/user/?selections=profile&key=${encodeURIComponent(key)}`);
+    const r = await tornFetch(`https://api.torn.com/user/?selections=profile&key=${encodeURIComponent(key)}`);
     const profile = await r.json();
     if (profile.error || !profile.faction?.faction_id) return null;
     return String(profile.faction.faction_id);
 }
 
 async function isLeader(key) {
-    const r = await fetch(`https://api.torn.com/v2/faction/balance?key=${encodeURIComponent(key)}`,
+    const r = await tornFetch(`https://api.torn.com/v2/faction/balance?key=${encodeURIComponent(key)}`,
         { headers: { accept: 'application/json' } });
     const d = await r.json();
     return !d.error;

@@ -10,6 +10,7 @@
 // POST { key, action:'read' }             -> { mine: {enabled, ...snapshot}, others: [snapshot, ...] }
 // POST { key, action:'toggle', enabled }  -> leaders only: turn sharing on (builds+saves a fresh snapshot) or off
 
+const { tornFetch } = require('../lib/tornFetch');
 const REDIS_URL = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL;
 const REDIS_TOKEN = process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN;
 const LOGINS_HASH = 'wwl:logins';
@@ -27,7 +28,7 @@ async function redis(command) {
 }
 
 async function tornProfile(key) {
-    const r = await fetch(`https://api.torn.com/user/?selections=profile&key=${encodeURIComponent(key)}`);
+    const r = await tornFetch(`https://api.torn.com/user/?selections=profile&key=${encodeURIComponent(key)}`);
     return r.json();
 }
 async function getFactionId(key) {
@@ -36,7 +37,7 @@ async function getFactionId(key) {
     return String(p.faction.faction_id);
 }
 async function isLeader(key) {
-    const r = await fetch(`https://api.torn.com/v2/faction/balance?key=${encodeURIComponent(key)}`, { headers: { accept: 'application/json' } });
+    const r = await tornFetch(`https://api.torn.com/v2/faction/balance?key=${encodeURIComponent(key)}`, { headers: { accept: 'application/json' } });
     const d = await r.json();
     return !d.error;
 }
@@ -47,7 +48,7 @@ async function buildSnapshot(key, factionId) {
     const profile = await tornProfile(key);
     const factionName = profile.faction?.faction_name || 'Unknown faction';
 
-    const membersRes = await fetch(`https://api.torn.com/v2/faction/members?striptags=true&key=${encodeURIComponent(key)}`,
+    const membersRes = await tornFetch(`https://api.torn.com/v2/faction/members?striptags=true&key=${encodeURIComponent(key)}`,
         { headers: { accept: 'application/json' } });
     const membersData = await membersRes.json();
     if (membersData.error) throw new Error(membersData.error.error || 'Could not load this faction\'s roster.');

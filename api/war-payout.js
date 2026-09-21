@@ -24,6 +24,7 @@
 // it's a genuinely different concern (talking to Torn's raw attack log) from the chain-report
 // handling and payout math below.
 
+const { tornFetch } = require('../lib/tornFetch');
 const { fetchWarHits, sleep, fetchLiveChainHits } = require('../lib/warHits');
 const { fetchWarBadgeStats } = require('../lib/warBadgeStats');
 const { tornToDiscordIds, resolveDiscordIds } = require('../lib/discordMap');
@@ -35,6 +36,7 @@ const { steadfastHandle, steadfastImage, energyDaily } = require('../lib/steadfa
 const { tzHandle } = require('../lib/tzMap');
 const { planHandle } = require('../lib/planSync');
 const { nightlyHandle, nightlyRun } = require('../lib/nightly');
+const { usageFor } = require('../lib/tornFetch');
 const { labsIsOwner, labsHasOwners, labsHandle, labsRecordReceipt } = require('../lib/labsLedger');
 
 const REDIS_URL = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL;
@@ -91,13 +93,13 @@ async function resolvePlan(factionId, requestedId) {
 // Resolves faction + the caller's own identity in one profile fetch — the availability tracker
 // (any member, not just leaders) needs to know who's actually recording their own slots.
 async function getProfile(key) {
-    const r = await fetch(`https://api.torn.com/user/?selections=profile&key=${encodeURIComponent(key)}`);
+    const r = await tornFetch(`https://api.torn.com/user/?selections=profile&key=${encodeURIComponent(key)}`);
     const profile = await r.json();
     if (profile.error || !profile.faction?.faction_id) return null;
     return { factionId: String(profile.faction.faction_id), factionName: profile.faction.faction_name || '', daysInFaction: profile.faction.days_in_faction ?? null, playerId: String(profile.player_id), name: profile.name };
 }
 async function isLeader(key) {
-    const r = await fetch(`https://api.torn.com/v2/faction/balance?key=${encodeURIComponent(key)}`,
+    const r = await tornFetch(`https://api.torn.com/v2/faction/balance?key=${encodeURIComponent(key)}`,
         { headers: { accept: 'application/json' } });
     const d = await r.json();
     return !d.error;
@@ -107,7 +109,7 @@ async function isLeader(key) {
 // availability tracker links to, so the war's start time (and the overdose window derived from
 // it) comes straight from Torn instead of being typed in.
 async function getUpcomingWars(key, factionId) {
-    const r = await fetch(`https://api.torn.com/v2/faction?selections=rankedwars&key=${encodeURIComponent(key)}`,
+    const r = await tornFetch(`https://api.torn.com/v2/faction?selections=rankedwars&key=${encodeURIComponent(key)}`,
         { headers: { accept: 'application/json' } });
     const d = await r.json();
     if (d.error) throw new Error(d.error.error);
@@ -186,7 +188,7 @@ function odWindowFor(plans) {
 // one, or a name/value list — and returns null rather than 0 if it can't find the number, so a
 // parsing miss can never masquerade as "zero overdoses".
 async function fetchOverdosed(id, key, timestamp) {
-    const r = await fetch(`https://api.torn.com/user/${encodeURIComponent(id)}?selections=personalstats&stat=overdosed${timestamp ? `&timestamp=${timestamp}` : ''}&key=${encodeURIComponent(key)}`);
+    const r = await tornFetch(`https://api.torn.com/user/${encodeURIComponent(id)}?selections=personalstats&stat=overdosed${timestamp ? `&timestamp=${timestamp}` : ''}&key=${encodeURIComponent(key)}`);
     const d = await r.json();
     if (d.error) { const e = new Error(d.error.error); e.code = d.error.code; throw e; }
     const ps = d.personalstats;
@@ -200,7 +202,7 @@ async function fetchOverdosed(id, key, timestamp) {
 }
 
 async function getRoster(key) {
-    const r = await fetch(`https://api.torn.com/v2/faction/members?striptags=true&key=${encodeURIComponent(key)}`,
+    const r = await tornFetch(`https://api.torn.com/v2/faction/members?striptags=true&key=${encodeURIComponent(key)}`,
         { headers: { accept: 'application/json' } });
     const d = await r.json();
     if (d.error) throw new Error(d.error.error);
@@ -458,6 +460,8 @@ module.exports = async function handler(req, res) {
             if (!(await isLeader(key))) return res.status(403).json({ error: 'Leaders only' });
             return res.status(200).json(await nightlyHandle(action, { redis, key, factionId, playerId, name: playerName }));
         }
+        // How many calls WWL made to Torn with the caller's own key (see lib/tornFetch.js) — shown in Member Overview → Checks for the developer.
+        if (action === 'torn-usage') return res.status(200).json(await usageFor(key));
         // The weekly energy plan, shared between the Energy planner page and the userscript in Torn.
         if (action.startsWith('plan-')) return res.status(200).json(await planHandle(action, req.body, { redis, playerId }));
         // Timezone map — every member reports their own timezone; everyone reads anonymous counts.
@@ -756,7 +760,7 @@ module.exports = async function handler(req, res) {
 
         if (action === 'list-wars') {
             const [r, restockedRaw] = await Promise.all([
-                fetch(`https://api.torn.com/v2/faction?selections=rankedwars&key=${encodeURIComponent(key)}`, { headers: { accept: 'application/json' } }),
+                tornFetch(`https://api.torn.com/v2/faction?selections=rankedwars&key=${encodeURIComponent(key)}`, { headers: { accept: 'application/json' } }),
                 redis(['GET', restockedKey(factionId)]),
             ]);
             const data = await r.json();
@@ -823,7 +827,7 @@ module.exports = async function handler(req, res) {
             for (let i = 0; i < chains.length; i++) {
                 const chainId = chains[i];
                 if (i > 0) await sleep(1100); // stay well clear of Torn's rate limit across multiple chains
-                const r = await fetch(`https://api.torn.com/v2/faction/${chainId}/chainreport?key=${encodeURIComponent(key)}`,
+                const r = await tornFetch(`https://api.torn.com/v2/faction/${chainId}/chainreport?key=${encodeURIComponent(key)}`,
                     { headers: { accept: 'application/json' } });
                 const data = await r.json();
                 if (data.error) return res.status(403).json({ error: `Chain #${chainId}: ${data.error.error}` });
@@ -853,7 +857,7 @@ module.exports = async function handler(req, res) {
             // resolve. The name carried directly off the attack record (nameFromAttacks) is
             // preferred when available, since it doesn't depend on this separate lookup matching
             // up by ID at all.
-            const membersRes = await fetch(`https://api.torn.com/v2/faction/members?striptags=true&key=${encodeURIComponent(key)}`,
+            const membersRes = await tornFetch(`https://api.torn.com/v2/faction/members?striptags=true&key=${encodeURIComponent(key)}`,
                 { headers: { accept: 'application/json' } });
             const membersData = await membersRes.json();
             const nameById = {};
@@ -889,7 +893,7 @@ module.exports = async function handler(req, res) {
 
             const result = await fetchWarBadgeStats(key, factionId, String(enemyFactionId), warStart, warEnd);
 
-            const membersRes = await fetch(`https://api.torn.com/v2/faction/members?striptags=true&key=${encodeURIComponent(key)}`,
+            const membersRes = await tornFetch(`https://api.torn.com/v2/faction/members?striptags=true&key=${encodeURIComponent(key)}`,
                 { headers: { accept: 'application/json' } });
             const membersData = await membersRes.json();
             const nameById = {};
@@ -918,7 +922,7 @@ module.exports = async function handler(req, res) {
             if (receipt.warStart && receipt.warEnd && receipt.enemyFactionId) {
                 try {
                     const badgeResult = await fetchWarBadgeStats(key, factionId, String(receipt.enemyFactionId), receipt.warStart, receipt.warEnd);
-                    const membersRes = await fetch(`https://api.torn.com/v2/faction/members?striptags=true&key=${encodeURIComponent(key)}`,
+                    const membersRes = await tornFetch(`https://api.torn.com/v2/faction/members?striptags=true&key=${encodeURIComponent(key)}`,
                         { headers: { accept: 'application/json' } });
                     const membersData = await membersRes.json();
                     const nameById = {};

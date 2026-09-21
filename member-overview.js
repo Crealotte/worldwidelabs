@@ -352,3 +352,18 @@ $('mo-import-btn').addEventListener('click', async () => {
     } catch (e) { out.style.color = 'var(--danger)'; out.textContent = e.message; }
     finally { btn.disabled = false; btn.textContent = 'Import this member'; }
 });
+
+// How many calls WWL made to Torn with THIS key (kept by lib/tornFetch.js): the last two hours per minute, and today's calls per kind.
+$('mo-usage-btn').addEventListener('click', async () => {
+    const out = $('mo-usage-out');
+    out.style.display = 'block'; out.textContent = 'Loading…';
+    const r = await moFetch({ action: 'torn-usage' });
+    if (r.error) { out.textContent = r.error; return; }
+    const per = r.perMinute || [];
+    const total = per.reduce((s, m) => s + m.n, 0);
+    const peak = per.reduce((b, m) => (m.n > b.n ? m : b), { n: 0, minute: '' });
+    const busy = per.filter(m => m.n >= 60).length;
+    const at = m => (m ? `${m.slice(6, 8)}/${m.slice(4, 6)} ${m.slice(8, 10)}:${m.slice(10, 12)} UTC` : '—');
+    const kinds = o => Object.entries(o || {}).sort((a, b) => b[1] - a[1]).slice(0, 15).map(([k, n]) => `  ${String(n).padStart(5)}  ${k}`).join('\n') || '  (nothing yet)';
+    out.textContent = `Last 2 hours: ${total} calls with your key\nBusiest minute: ${peak.n} calls (${at(peak.minute)}) — Torn allows about 100 a minute for all your tools together\nMinutes with 60+ calls: ${busy}\n\nToday, per kind ("saved" = answered from memory, no call to Torn):\n${kinds(r.today)}\n\nYesterday:\n${kinds(r.yesterday)}`;
+});

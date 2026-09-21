@@ -9,6 +9,7 @@
 // "Verified" for any given person is always checked against THEIR OWN faction's role,
 // resolved server-side from their key — never something the client can choose.
 
+const { tornFetch } = require('../lib/tornFetch');
 const DISCORD_API = 'https://discord.com/api/v10';
 
 async function fetchAllMembers(guildId, token) {
@@ -32,7 +33,7 @@ async function fetchAllMembers(guildId, token) {
 }
 
 async function getFactionId(key) {
-    const r = await fetch(`https://api.torn.com/user/?selections=profile&key=${encodeURIComponent(key)}`);
+    const r = await tornFetch(`https://api.torn.com/user/?selections=profile&key=${encodeURIComponent(key)}`);
     const profile = await r.json();
     if (profile.error || !profile.faction?.faction_id) return null;
     return String(profile.faction.faction_id);
@@ -78,12 +79,12 @@ module.exports = async function handler(req, res) {
 
         // Every caller can see their own match — this only reveals info about themselves.
         let mine = null;
-        const profileRes = await fetch(`https://api.torn.com/user/?selections=profile&key=${encodeURIComponent(key)}`);
+        const profileRes = await tornFetch(`https://api.torn.com/user/?selections=profile&key=${encodeURIComponent(key)}`);
         const profile = await profileRes.json();
         if (!profile.error) mine = withVerified(byTornId[String(profile.player_id)]) || { discordName: null, verified: false };
 
         // The full faction roster is a leadership-overview feature — keep that part leader-gated.
-        const leaderRes = await fetch(`https://api.torn.com/v2/faction/balance?key=${encodeURIComponent(key)}`,
+        const leaderRes = await tornFetch(`https://api.torn.com/v2/faction/balance?key=${encodeURIComponent(key)}`,
             { headers: { accept: 'application/json' } });
         const leaderData = await leaderRes.json();
         const isLeader = !leaderData.error;

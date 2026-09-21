@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         WWL Energy plan
 // @namespace    https://worldwidelabs.vercel.app
-// @version      1.4
+// @version      1.5
 // @updateURL    __WWL_BASE__/wwl-energy-planner.user.js
 // @downloadURL  __WWL_BASE__/wwl-energy-planner.user.js
 // @description  Shows your WorldWideLabs weekly energy plan (the checklist from the Energy planner) inside Torn. On a computer it is a small window you can drag around and close; in TornPDA it is a menu. Ticks are shared with the WWL site.
@@ -151,7 +151,7 @@
     }
     async function load() {
         body.innerHTML = '<div style="padding:6px 0;color:#9aa4b5;">Loading…</div>';
-        try { plan = (await api({ action: 'plan-get' })).plan; render(); }
+        try { plan = (await api({ action: 'plan-get' })).plan; store.set('wwl_plan_cache', JSON.stringify({ at: Date.now(), plan })); render(); }
         catch (e) { body.innerHTML = `<div style="padding:6px 0;color:#e05555;">${esc(e.message)}</div>`; }
     }
 
@@ -159,5 +159,8 @@
     const onGym = /\/gym\.php/.test(location.pathname);
     const last = store.get(STATE_NAME);
     setOpen(last ? last === 'open' : onGym && !IS_PDA, false);
-    if (last !== 'open' && getKey(false)) api({ action: 'plan-get' }).then(r => { plan = r.plan; showProgress(); }).catch(() => {}); // quiet peek for the button's progress
+    // the small button only needs a peek: use what was saved in the last 10 minutes, so ordinary page loads cost no calls
+    let cached = null; try { cached = JSON.parse(store.get('wwl_plan_cache') || 'null'); } catch (e) { /* none */ }
+    if (cached?.plan) { plan = cached.plan; showProgress(); }
+    if (last !== 'open' && getKey(false) && !(cached && Date.now() - cached.at < 600000)) api({ action: 'plan-get' }).then(r => { plan = r.plan; showProgress(); store.set('wwl_plan_cache', JSON.stringify({ at: Date.now(), plan })); }).catch(() => {});
 })();

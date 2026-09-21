@@ -28,6 +28,7 @@
 // Completed-crime rewards are also captured (self-building, minimal first step toward a future
 // full reporting feature) whenever a leader loads the team catalog, to power rough payout estimates.
 
+const { tornFetch } = require('../lib/tornFetch');
 const REDIS_URL = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL;
 const REDIS_TOKEN = process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN;
 const ROLE_WEIGHTS_KEY = 'wwl:oc-role-weights';
@@ -47,13 +48,13 @@ async function redis(command) {
 const fitKey = (playerId) => `wwl:ocfit:${playerId}`;
 
 async function getFactionId(key) {
-    const r = await fetch(`https://api.torn.com/user/?selections=profile&key=${encodeURIComponent(key)}`);
+    const r = await tornFetch(`https://api.torn.com/user/?selections=profile&key=${encodeURIComponent(key)}`);
     const profile = await r.json();
     if (profile.error || !profile.faction?.faction_id) return null;
     return String(profile.faction.faction_id);
 }
 async function isLeader(key) {
-    const r = await fetch(`https://api.torn.com/v2/faction/balance?key=${encodeURIComponent(key)}`,
+    const r = await tornFetch(`https://api.torn.com/v2/faction/balance?key=${encodeURIComponent(key)}`,
         { headers: { accept: 'application/json' } });
     const d = await r.json();
     return !d.error;
@@ -224,7 +225,7 @@ module.exports = async function handler(req, res) {
             if (!factionId) return res.status(403).json({ error: 'Could not determine your faction from this key' });
 
             // One faction-crimes pull, reused for open-slot detection AND completed-crime capture.
-            const crimesRes = await fetch(`https://api.torn.com/v2/faction?selections=crimes&key=${encodeURIComponent(key)}`,
+            const crimesRes = await tornFetch(`https://api.torn.com/v2/faction?selections=crimes&key=${encodeURIComponent(key)}`,
                 { headers: { accept: 'application/json' } });
             const crimesData = await crimesRes.json();
             if (crimesData.error) return res.status(403).json({ error: crimesData.error.error || 'Could not load faction crimes' });
@@ -268,7 +269,7 @@ module.exports = async function handler(req, res) {
             const liveByKey = buildLiveRoleSkeleton(crimesList);
 
             // ---- Aggregate every member's own cached fit catalog into one faction-wide view ----
-            const membersRes = await fetch(`https://api.torn.com/v2/faction/members?striptags=true&key=${encodeURIComponent(key)}`,
+            const membersRes = await tornFetch(`https://api.torn.com/v2/faction/members?striptags=true&key=${encodeURIComponent(key)}`,
                 { headers: { accept: 'application/json' } });
             const membersData = await membersRes.json();
             const members = membersData.members || [];
@@ -359,7 +360,7 @@ module.exports = async function handler(req, res) {
         if (action !== 'read') return res.status(400).json({ error: 'Unknown action' });
 
         // Live pull: whatever this member's faction currently has spawned, from their own POV.
-        const liveRes = await fetch(`https://api.torn.com/v2/user?selections=organizedcrimes,profile&key=${encodeURIComponent(key)}`,
+        const liveRes = await tornFetch(`https://api.torn.com/v2/user?selections=organizedcrimes,profile&key=${encodeURIComponent(key)}`,
             { headers: { accept: 'application/json' } });
         const liveData = await liveRes.json();
         if (liveData.error) return res.status(403).json({ error: liveData.error.error || 'Torn rejected the key' });
@@ -385,7 +386,7 @@ module.exports = async function handler(req, res) {
         // doesn't have that access, this silently does nothing — no error shown to the member.
         let liveRoleSkeleton = {};
         try {
-            const crimesRes = await fetch(`https://api.torn.com/v2/faction?selections=crimes&key=${encodeURIComponent(key)}`,
+            const crimesRes = await tornFetch(`https://api.torn.com/v2/faction?selections=crimes&key=${encodeURIComponent(key)}`,
                 { headers: { accept: 'application/json' } });
             const crimesData = await crimesRes.json();
             if (!crimesData.error) liveRoleSkeleton = buildLiveRoleSkeleton(Object.values(crimesData.crimes || {}));
