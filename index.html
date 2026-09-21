@@ -336,6 +336,7 @@
     .av-cell-backup { outline-style: dashed; }
     .av-cell-backup::after { background: #0b2a66; border-style: dashed; }
     .todo-dot { display: inline-block; margin-left: 6px; min-width: 16px; padding: 0 5px; border-radius: 9px; background: #e05555; color: #fff; font-size: 11px; font-weight: 700; line-height: 16px; text-align: center; }
+    .wrap-text, .wrap-text * { overflow-wrap: anywhere; word-break: break-word; min-width: 0; }
     #site-banners { display: flex; flex-direction: column; gap: 8px; margin: 0 0 16px; }
     #site-banners:empty { display: none; }
     .site-banner { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 10px 14px; border-radius: var(--radius); border: 1px solid #4da3ff; background: rgba(77,163,255,.12); font-size: 14px; }
@@ -1437,7 +1438,7 @@
             <div class="panel" id="kb-panel">
                 <h3>🔎 Known bugs</h3>
                 <p style="color:var(--muted);font-size:12px;margin:0 0 10px;">Check here first — if your problem is on the list, just press <b>"I have this too"</b> instead of sending a new report. Reports sent through this page also show up here as "To review" (without your name) until a leader has looked at them.</p>
-                <div id="kb-list"></div>
+                <div id="kb-list" class="wrap-text"></div>
                 <div id="kb-leader" style="display:none;margin-top:12px;padding-top:12px;border-top:1px solid var(--line);">
                     <div style="font-size:13px;font-weight:700;margin-bottom:6px;">Leaders: add a known bug</div>
                     <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;">
@@ -1475,7 +1476,7 @@
             <div class="panel" id="sg-panel">
                 <h3 style="margin-top:0;">💡 Suggestions</h3>
                 <p style="color:var(--muted);font-size:12px;margin:0 0 10px;">Got an idea for WWL? Add it here and vote 👍 or 👎 on the ideas of others — the most wanted ones come first.</p>
-                <div id="sg-list"></div>
+                <div id="sg-list" class="wrap-text"></div>
                 <div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--line);">
                     <div class="field"><label for="sg-text">Your idea</label>
                         <textarea autocomplete="off" id="sg-text" rows="3" maxlength="600" placeholder="What should WWL do or do better?" style="width:100%;"></textarea></div>
