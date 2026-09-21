@@ -172,7 +172,7 @@
             setNavLock('members-overview', memberView);
             setNavLock('newsletter', memberView);
             setNavLock('availability-leaders', memberView);
-            if (!memberView) { setTimeout(() => { if (typeof loadSteadfastCard === 'function') loadSteadfastCard(); }, 8000); loadAdoption();
+            if (!memberView) { setTimeout(() => { if (typeof loadSteadfastCard === 'function') loadSteadfastCard(); }, 8000); loadAdoption(); setTimeout(loadLeaderTodos, 2500);
             loadFactionSharing();
             loadRespectGoalPanel(); }
         } catch (e) {
@@ -335,7 +335,7 @@
             $('feedback-editor').style.display = isLeaderCached ? 'block' : 'none';
             if (isLeaderCached) loadFeedbackEditor();
         }
-        if (page === 'dashboard') { startCooldownTicker(); loadAnnouncement(); loadPolls(); loadRespectGoalPanel(); loadDashboardWarBadges(); loadMyStanding(); setTimeout(() => { if (typeof loadSteadfastCard === 'function') loadSteadfastCard(); }, 8000); } else { stopCooldownTicker(); }
+        if (page === 'dashboard') { startCooldownTicker(); loadAnnouncement(); loadPolls(); loadRespectGoalPanel(); loadDashboardWarBadges(); loadMyStanding(); if (typeof loadLeaderTodos === 'function' && isLeaderCached) setTimeout(loadLeaderTodos, 1500); setTimeout(() => { if (typeof loadSteadfastCard === 'function') loadSteadfastCard(); }, 8000); } else { stopCooldownTicker(); }
         if (page === 'announce-edit') {
             $('announce-locked').style.display = isLeaderCached ? 'none' : 'block';
             $('announce-editor').style.display = isLeaderCached ? 'block' : 'none';

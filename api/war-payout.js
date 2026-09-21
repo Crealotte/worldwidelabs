@@ -247,6 +247,57 @@ function respondedMap(data) {
     return out;
 }
 
+// The leader to-do card on the dashboard: things only a leader can fix, worked out from what WWL already stores (plus the cached member list),
+// so it costs (almost) no Torn calls. Every item says where to go: { id, text, cta, page, anchor } — anchor is an element on that page to scroll to.
+async function leaderTodos(key, factionId) {
+    const todos = [];
+    const add = (id, text, cta, page, anchor) => todos.push({ id, text, cta, page, anchor });
+
+    // 1. Discord destination
+    try {
+        const poster = await getDiscordPoster(factionId);
+        if (!poster) add('discord', 'Discord is not connected yet, so the availability pings and reminders cannot be sent.', 'Set up Discord', 'availability-leaders', 'av-discord-panel');
+        else if (poster.error) add('discord', poster.error, 'Fix the Discord settings', 'availability-leaders', 'av-discord-panel');
+    } catch (e) { /* skip this check */ }
+
+    // 2. nightly saving
+    try {
+        const vault = await redis(['HGET', 'wwl:snapshot-vault', factionId]);
+        const envKeys = String(process.env.WWL_SNAPSHOT_KEYS || '').split(',').map(s => s.trim()).filter(Boolean);
+        if (!vault && !envKeys.length) add('nightly', 'Nightly saving is off — on days nobody opens WWL the energy trained, respect and perk levels are not saved.', 'Turn it on', 'dashboard', 'pc-nightly');
+        else if (vault) { const v = JSON.parse(vault); if (v.lastOk === false) add('nightly', `Nightly saving failed the last time it ran (${v.lastError || 'unknown reason'}). ${v.name || 'The leader who switched it on'} may need to turn it on again.`, 'Check it', 'dashboard', 'pc-nightly'); }
+    } catch (e) { /* skip */ }
+
+    // 3 + 4. availability plan: one for what is coming up, and everyone has filled it in
+    try {
+        const plans = await loadPlanIndex(factionId);
+        const today = new Date().toISOString().slice(0, 10);
+        const endOf = p => { const d = new Date(`${p.startDate}T00:00:00Z`); d.setUTCDate(d.getUTCDate() + p.days); return d.toISOString().slice(0, 10); };
+        const live = plans.filter(p => endOf(p) >= today).sort((a, b) => a.startDate.localeCompare(b.startDate));
+        if (!live.length) add('plan', 'There is no availability plan for an upcoming war or weekend yet.', 'Create a plan', 'availability-leaders', 'av-start-panel');
+        else {
+            const p = live[0];
+            const raw = await redis(['GET', availabilityKey(factionId, p.id)]);
+            const data = raw ? JSON.parse(raw) : null;
+            const soon = new Date(`${p.startDate}T00:00:00Z`).getTime() <= Date.now() + 4 * 86400e3; // it starts within four days, or is running
+            if (data && soon) {
+                const responded = respondedMap(data);
+                const roster = await getRoster(key);
+                const missing = roster.filter(m => !responded[m.id]);
+                if (missing.length) add('members', `${missing.length} of ${roster.length} members have not filled in ${p.name ? `"${p.name}"` : 'the availability plan'} yet.`, 'See who and ping them', 'availability-leaders', 'av-out-panel');
+            }
+        }
+    } catch (e) { /* skip */ }
+
+    // 5. Steadfast: every stat has reached its challenge
+    try {
+        const sf = await steadfastHandle('steadfast-get', {}, { redis, key, factionId, leader: false });
+        if (sf?.countdown?.allDone) add('steadfast', 'All the Steadfast challenges are done — time to upgrade.', 'Open the Steadfast planner', 'steadfast', null);
+    } catch (e) { /* skip */ }
+
+    return { todos };
+}
+
 
 module.exports = async function handler(req, res) {
     try {
@@ -489,6 +540,11 @@ module.exports = async function handler(req, res) {
         }
         // How many calls WWL made to Torn with the caller's own key (see lib/tornFetch.js) — shown in Member Overview → Checks for the developer.
         if (action === 'torn-usage') return res.status(200).json(await usageFor(key));
+        // The leader to-do card (dashboard) — leaders only.
+        if (action === 'leader-todos') {
+            if (!(await isLeader(key))) return res.status(403).json({ error: 'Leaders only' });
+            return res.status(200).json(await leaderTodos(key, factionId));
+        }
         // The weekly energy plan, shared between the Energy planner page and the userscript in Torn.
         if (action.startsWith('plan-')) return res.status(200).json(await planHandle(action, req.body, { redis, playerId }));
         // Timezone map — every member reports their own timezone; everyone reads anonymous counts.

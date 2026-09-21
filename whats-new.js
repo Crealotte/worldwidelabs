@@ -22,6 +22,7 @@ const WHATS_NEW = [
         ],
         leaders: [
             'New "Torn API usage (my key)" button in Member Overview → Checks for the developer: shows how many calls WWL made with your key in the last two hours, the busiest minute and which kinds of calls are used most, so we can see where they go.',
+            'New "For leaders: things to do" card at the top of the dashboard (and a red count next to Dashboard in the menu): it lists what needs a leader — Discord not connected, nightly saving off or failed, no availability plan for what is coming up, members who have not filled in the plan yet, and Steadfast challenges that are all done — each with a button that takes you to the right page and spot. It disappears when there is nothing to do.',
             'Availability overview: in the "Filled in" list every member now shows the hours they ticked, green for available and yellow for maybe (for example 43 +12).',
             'Availability overview: new "Hours ticked vs hits made" — for a plan linked to a ranked war, compare each member\'s ticked hours with their real war hits. Someone who ticked 40 hours and hit once is flagged with a ⚠️, and you can copy the flagged names for the review. When we are only chaining and not warring, add chain report IDs or links there and it counts the chain hits instead. A chain that is still running works too: fill in when it started and it counts the chain hits from then until now.',
         ],
