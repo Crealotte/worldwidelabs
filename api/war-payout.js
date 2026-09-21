@@ -213,8 +213,9 @@ async function getRoster(key) {
 function respondedMap(data) {
     const out = {};
     for (const [id, entry] of Object.entries(data?.entries || {})) {
-        const slotCount = Object.keys(entry.slots || {}).length;
-        if (slotCount) out[id] = { id, name: entry.name, slotCount, out: false };
+        const vals = Object.values(entry.slots || {});
+        const slotCount = vals.length, maybe = vals.filter(v => v === 'maybe').length; // green = the rest
+        if (slotCount) out[id] = { id, name: entry.name, slotCount, green: slotCount - maybe, maybe, out: false };
     }
     for (const [id, u] of Object.entries(data?.unavailable || {})) out[id] = { id, name: u.name, slotCount: out[id]?.slotCount || 0, out: true };
     return out;

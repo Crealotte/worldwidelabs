@@ -481,7 +481,7 @@ function renderAvOut() {
 
     let html = `<div style="font-weight:700;margin-bottom:6px;">✅ Filled in (${responded.length})</div>`;
     html += responded.length
-        ? `<div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px;">${responded.map(r => chip(r.name, r.out ? ' 🚫' : ` <span style="color:var(--muted);font-size:11px;">${r.slotCount}h</span>`)).join('')}</div>`
+        ? `<div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px;">${responded.map(r => chip(r.name, r.out ? ' 🚫' : ` <span style="font-size:11px;"><b style="color:#35d99b;">${r.green ?? r.slotCount}</b>${r.maybe ? ` <b style="color:#f0b432;">+${r.maybe}</b>` : ''} <span style="color:var(--muted);">h</span></span>`)).join('')}</div>`
         : '<p style="color:var(--muted);font-size:13px;margin:0 0 16px;">Nobody has filled it in yet.</p>';
 
     html += `<div style="font-weight:700;margin-bottom:6px;">⏳ Not filled in yet${notResponded ? ` (${notResponded.length})` : ''}</div>`;
@@ -503,7 +503,13 @@ function renderAvOut() {
             <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">${chip(u.name)}
                 <span style="color:var(--muted);font-size:12px;">${u.note ? esc(u.note) : 'no reason given'}</span></div>`).join('')}</div>`
         : '<p style="color:var(--muted);font-size:13px;margin:0;">Nobody has said they can\'t make it.</p>';
+    // Leaders: check the hours people ticked against the hits they really made in the war this plan is linked to.
+    html += `<div style="margin-top:18px;padding-top:12px;border-top:1px solid var(--line);"><div style="font-weight:700;margin-bottom:6px;">📊 Hours ticked vs hits made</div>${avConfig?.war?.id
+        ? `<p style="color:var(--muted);font-size:13px;margin:0 0 8px;">Compares the hours each member ticked (green + yellow) with their real war hits against ${esc(avConfig.war.opponent || 'this war')}. Someone who ticked 40 hours and hit once is flagged.</p>
+           <button class="ghost small" id="av-vs-btn">Compare with the hits</button><div id="av-vs-out" style="margin-top:10px;"></div>`
+        : '<p style="color:var(--muted);font-size:13px;margin:0;">Link this plan to a ranked war (in "Create a plan") to compare the ticked hours with the hits that were really made.</p>'}</div>`;
     $('av-out-body').innerHTML = html;
+    $('av-vs-btn')?.addEventListener('click', avCompareHits);
 
     $('av-copy-missing')?.addEventListener('click', () => {
         navigator.clipboard.writeText(notResponded.map(m => m.name).join(', ')).then(() => toast('Names copied'));
@@ -699,3 +705,38 @@ $('av-start-btn').addEventListener('click', async () => {
         btn.disabled = false;
     }
 });
+
+// ---- Hours ticked vs hits made (leaders): reads the war's hits per member (the same numbers as Member Overview) ----
+async function avCompareHits() {
+    const btn = $('av-vs-btn'), out = $('av-vs-out');
+    btn.disabled = true;
+    try {
+        let hits = null;
+        for (let round = 1; round <= 10 && !hits; round++) {
+            out.innerHTML = `<span style="color:var(--muted);font-size:13px;">Counting the hits of the war${round > 1 ? ` (part ${round})` : ''}…</span>`;
+            const r = await avFetch({ action: 'mo-war', warId: avConfig.war.id });
+            if (r.error) throw new Error(r.error);
+            if (!r.partial) hits = r.hits || {};
+        }
+        if (!hits) throw new Error('The war is still being counted — press the button again to carry on.');
+        const rows = (avResponded || []).filter(r => !r.out).map(r => ({ name: r.name, green: r.green ?? r.slotCount, maybe: r.maybe || 0, hits: hits[r.id]?.war || 0 }))
+            .map(r => ({ ...r, hours: r.green + r.maybe }));
+        const totalHours = rows.reduce((s, r) => s + r.hours, 0), totalHits = rows.reduce((s, r) => s + r.hits, 0);
+        const rate = totalHours ? totalHits / totalHours : 0; // the faction's hits per ticked hour
+        rows.forEach(r => { r.expected = r.hours * rate; r.ratio = r.expected ? r.hits / r.expected : 1; r.flag = r.hours >= 10 && r.ratio < 0.25; });
+        rows.sort((a, b) => a.ratio - b.ratio || b.hours - a.hours);
+        const flagged = rows.filter(r => r.flag);
+        out.innerHTML = `<div style="font-size:12px;color:var(--muted);margin-bottom:6px;">The faction made about ${rate.toFixed(2)} hits per ticked hour. ⚠️ = ticked at least 10 hours but made under a quarter of what that would give — ${flagged.length} member${flagged.length === 1 ? '' : 's'} flagged.</div>
+            <div class="table-scroll" style="overflow:auto;"><table style="width:100%;font-size:13px;border-collapse:collapse;">
+                <thead><tr style="color:var(--muted);text-align:right;"><th style="padding:4px 8px;text-align:left;">Member</th><th style="padding:4px 8px;">Hours ticked</th><th style="padding:4px 8px;">War hits</th><th style="padding:4px 8px;">Hits per 10 h</th><th style="padding:4px 8px;"></th></tr></thead>
+                <tbody>${rows.map(r => `<tr style="border-top:1px solid var(--line);${r.flag ? 'background:rgba(224,85,85,.10);' : ''}">
+                    <td style="padding:4px 8px;text-align:left;">${esc(r.name)}</td>
+                    <td style="padding:4px 8px;text-align:right;font-family:var(--mono);"><b style="color:#35d99b;">${r.green}</b>${r.maybe ? ` <b style="color:#f0b432;">+${r.maybe}</b>` : ''}</td>
+                    <td style="padding:4px 8px;text-align:right;font-family:var(--mono);">${r.hits}</td>
+                    <td style="padding:4px 8px;text-align:right;font-family:var(--mono);color:var(--muted);">${r.hours ? (r.hits / r.hours * 10).toFixed(1) : '—'}</td>
+                    <td style="padding:4px 8px;text-align:left;">${r.flag ? '⚠️' : ''}</td></tr>`).join('')}</tbody></table></div>
+            <button class="ghost small" id="av-vs-copy" style="margin-top:8px;">Copy the flagged names</button>`;
+        $('av-vs-copy').addEventListener('click', () => navigator.clipboard.writeText(flagged.map(r => `${r.name} (${r.hours}h ticked, ${r.hits} hits)`).join('\n')).then(() => toast('Copied')));
+    } catch (e) { out.innerHTML = `<span style="color:var(--danger);font-size:13px;">${esc(e.message)}</span>`; }
+    finally { btn.disabled = false; }
+}
