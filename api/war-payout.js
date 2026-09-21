@@ -690,7 +690,9 @@ module.exports = async function handler(req, res) {
             if (isSharedServerFaction(factionId)) {
                 try { guildMap = await tornToDiscordIds(); } catch (e) { mapError = String(e.message || e); }
             }
-            const idMap = await resolveDiscordIds(targets, { key, redis, guildMap });
+            // On the shared server the bot's own list decides (someone who is not in the server can't be reached anyway); only a faction on its own
+            // Discord server falls back to the account linked on Torn.
+            const idMap = guildMap ? Object.fromEntries(targets.filter(t => guildMap[t.id]).map(t => [t.id, guildMap[t.id]])) : await resolveDiscordIds(targets, { key, redis, guildMap });
             const mentions = [], noDiscord = [];
             for (const t of targets) {
                 const did = idMap[t.id];

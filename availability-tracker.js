@@ -491,8 +491,8 @@ function renderAvOut() {
     const notResponded = avNotResponded;
     const un = avUnavailList || [];
 
-    let html = `<div style="font-size:12px;color:var(--muted);margin-bottom:10px;line-height:1.7;"><span class="chip chip-discord" style="cursor:default;padding:1px 8px;">faded green</span> = on Discord, gets pinged. Members without a Discord account (or whose country blocks it) are skipped by the ping.
-        <button class="ghost small" id="av-dc-check" style="margin-left:6px;">Check who is on Discord</button> <span id="av-dc-note"></span></div>`;
+    let html = `<div style="font-size:12px;color:var(--muted);margin-bottom:10px;line-height:1.7;"><span class="chip chip-discord" style="cursor:default;padding:1px 8px;">faded green</span> = ${avDcSource === 'bot' ? 'on our Discord server (the bot checks this)' : 'has a Discord account linked on Torn'}, gets pinged. Everyone else is skipped by the ping.
+        ${avDcSource === 'bot' ? '' : '<button class="ghost small" id="av-dc-check" style="margin-left:6px;">Check who is on Discord</button> <span id="av-dc-note"></span>'}</div>`;
     html += `<div style="font-weight:700;margin-bottom:6px;">✅ Filled in (${responded.length})</div>`;
     html += responded.length
         ? `<div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px;">${responded.map(r => chip(r.name, r.out ? ' 🚫' : ` <span style="font-size:11px;"><b style="color:#35d99b;">${r.green ?? r.slotCount}</b>${r.maybe ? ` <b style="color:#f0b432;">+${r.maybe}</b>` : ''} <span style="color:var(--muted);">h</span>${r.watch ? ` <span class="av-watch-badge">🔵${r.watch}</span>` : ''}</span>`, r.id)).join('')}</div>`
@@ -908,6 +908,7 @@ function avWarKind(war) {
 
 // ---- Who is on Discord: name pills are tinted faded green for members who can be pinged (a Discord account is known); the ping only @mentions those ----
 let avDiscord = {}; // member id -> 'yes' | 'no' | 'unknown'
+let avDcSource = ''; // 'bot' = the Discord bot saw them on the server; 'torn' = the account linked on Torn
 const avDcClass = id => (avDiscord[String(id)] === 'yes' ? ' chip-discord' : avDiscord[String(id)] === 'no' ? ' chip-nodiscord' : '');
 const avDcTitle = id => (avDiscord[String(id)] === 'yes' ? 'On Discord — gets pinged' : avDiscord[String(id)] === 'no' ? 'No Discord linked — is not pinged' : 'Not checked yet');
 function avAllMemberIds() {
@@ -923,6 +924,7 @@ async function loadAvDiscordStatus(resolve = false) {
     const r = await avFetch({ action: 'discord-status', ids, resolve });
     if (r.error) return { error: r.error };
     avDiscord = { ...avDiscord, ...(r.status || {}) };
+    avDcSource = r.source || '';
     return { remaining: r.remaining || 0 };
 }
 async function avRefreshDiscordView(resolve = false) {
