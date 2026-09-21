@@ -863,7 +863,7 @@ module.exports = async function handler(req, res) {
                     const delta = latest.count - base;
                     if (delta <= 0) continue;
                     const last = [...(doc.events || [])].reverse().find(e => e.id === id);
-                    members.push({ id, name: doc.names?.[id] || `#${id}`, delta, total: latest.count, detectedAt: last?.at || null });
+                    const w = doc.when?.[id]; members.push({ id, name: doc.names?.[id] || `#${id}`, delta, total: latest.count, detectedAt: last?.at || null, when: w && w.count === latest.count ? w : null });
                 }
                 members.sort((a, b) => b.delta - a.delta);
             }
@@ -923,6 +923,42 @@ module.exports = async function handler(req, res) {
             doc.events = (doc.events || []).slice(-500);
             await redis(['SET', odDocKey(factionId), JSON.stringify(doc)]);
             return res.status(200).json({ done, nextCursor, total: (doc.roster || []).length, errors, rateLimited });
+        }
+
+        // When did each overdose show up? Torn keeps a member's stats history as snapshots, so we look up the count at a few moments between the
+        // window start and now (binary search) and find when it first went up: "seen in Torn's history by" that moment. A few members per call
+        // (each needs several lookups); the page keeps asking until `remaining` is 0. Leaders only.
+        if (action === 'od-when') {
+            if (!(await isLeader(key))) return res.status(403).json({ error: 'Leaders only' });
+            const plans = await loadPlanIndex(factionId);
+            const window = odWindowFor(plans);
+            const raw = await redis(['GET', odDocKey(factionId)]);
+            const doc = raw ? JSON.parse(raw) : null;
+            if (!doc || doc.windowStart !== window.start) return res.status(200).json({ remaining: 0, done: true });
+            const now = Math.floor(Date.now() / 1000);
+            doc.when = doc.when || {};
+            const need = Object.entries(doc.latest || {}).filter(([id, l]) => doc.base?.[id] != null && l.count > doc.base[id] && doc.when[id]?.count !== l.count);
+            const search = async (id, target, lo, hi) => { // smallest moment (about an hour exact) at which the recorded count is at least `target`
+                for (let step = 0; step < 8 && hi - lo > 3600; step++) {
+                    const mid = Math.floor((lo + hi) / 2);
+                    const v = await fetchOverdosed(id, key, mid); await sleep(500);
+                    if (v === null) break;
+                    if (v >= target) hi = mid; else lo = mid;
+                }
+                return { from: lo, to: hi };
+            };
+            let done = 0, rateLimited = false;
+            for (const [id, l] of need.slice(0, 3)) {
+                try {
+                    const base = doc.base[id];
+                    const first = await search(id, base + 1, window.start, now);
+                    const last = l.count - base > 1 ? await search(id, l.count, first.from, now) : first;
+                    doc.when[id] = { count: l.count, first, last };
+                    done++;
+                } catch (e) { if (e.code === 5) { rateLimited = true; break; } }
+            }
+            await redis(['SET', odDocKey(factionId), JSON.stringify(doc)]);
+            return res.status(200).json({ remaining: Math.max(0, need.length - done), rateLimited });
         }
 
         if (action === 'list-wars') {

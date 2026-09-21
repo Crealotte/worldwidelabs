@@ -15,6 +15,7 @@ const WHATS_NEW = [
         version: '1.14', date: '2026-09-21',
         title: 'Availability hours vs hits, map fix',
         everyone: [
+            'The tool now uses much more of a wide screen (it was limited to a narrow column).',
             'Bugs & suggestions: the full text of a bug report is now shown to everyone right under each known bug, so you can read it before pressing "I have this too" (long ones have a "Read the rest"; the name of the sender is only shown to leaders). Long titles are cut at a word with …, and long text wraps on a phone instead of running off the screen.',
             'New banners: a leader can pin a short message at the top of every page (Leader settings → Banners) — for a new feature, a Torn event or a reminder. Pick who sees it (everyone or leaders only), a colour, an end date and an optional button to a page. You can close a banner; it comes back only if the text is changed.',
             'War Availability: new blue ring. Turn on the switch above your grid and click hours to mark when you will be a Chain saver (on a chain plan: online and active, keeping an eye on the chain) or a War guard (on a war plan: online and active, keeping an eye out for when things go wrong — making the calls, changing plans, keeping the chat clear, motivating people). Green and yellow still say how sure you are to be online; the blue ring says what you will do while you are. Each hour has room for one, plus one backup, so not everyone piles into the same hour. Leaders see the blue count per hour and who it is.',
@@ -23,6 +24,7 @@ const WHATS_NEW = [
             'Timezone map: fixed the stretched line across the map — the far east of Russia (and Alaska\'s far islands) now show up correctly on the other side of the map.',
         ],
         leaders: [
+            'Availability overview: the overdoses are now a list — every member who overdosed, how many times, when it shows up in Torn history and how many hours before the war start that was (red = within 24 h, yellow = 24 to 48 h). Torn only saves stats as snapshots, so the time means it was in the record by then.',
             'Bugs & suggestions: a "Copy all bugs & suggestions" button copies every bug and suggestion with the full text (status, votes, who sent it, screenshot yes/no) in one go. New bug reports now keep their full text, which you can open under each known bug ("Full report").',
             'New "Torn API usage (my key)" button in Member Overview → Checks for the developer: shows how many calls WWL made with your key in the last two hours, the busiest minute and which kinds of calls are used most, so we can see where they go.',
             'Availability overview: new "Leader: link a war to this plan" panel — once we are matched, link the ranked war to the plan (its start time comes from Torn), mark it as termed or not, and for a termed war fill in what was agreed — who wins, the lead needed and the loser's share (for example a lead of 10,000 with 40% for the loser gives 14,000 for the winner and 4,000 for the loser). It shows in the war line above the grid.',

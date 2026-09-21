@@ -157,6 +157,7 @@ async function loadAvOd(autoScan = true) {
         renderAvOd();
         if (avConfig && $('av-summary-panel').style.display !== 'none' && avSelected) renderAvDetail(); // refresh the 💊 markers
         if (autoScan && r.needsScan && !avOdScanning) scanAvOd(); // never scanned for this window yet — do it now
+        else if (!avOdScanning) avOdFindWhen(); // the times of the overdoses that are already known
     } catch (e) {
         $('av-od-body').innerHTML = `<p style="color:var(--danger);font-size:13px;">Couldn't load overdoses: ${esc(e.message)}</p>`;
     }
@@ -193,7 +194,7 @@ function renderAvOd() {
     }
     if (d.scannedAt) {
         html += d.members.length
-            ? `<div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:8px;">${d.members.map(m => `<span class="chip" style="cursor:default;" title="${m.detectedAt ? esc(`noticed ${fmt(m.detectedAt)}`) : 'counted from the window start'}">${esc(m.name)} <span style="color:var(--danger);font-weight:700;">×${m.delta}</span></span>`).join('')}</div>`
+            ? avOdTable(d, fmt)
             : `<p style="color:var(--muted);font-size:13px;margin:0 0 8px;">Nobody has overdosed in this window (${d.scannedCount} members checked).</p>`;
     } else if (!avOdScanning) {
         html += '<p style="color:var(--muted);font-size:13px;margin:0 0 8px;">Not scanned yet for this window.</p>';
@@ -956,4 +957,43 @@ function avPingLabel(ids, plain) {
     if (!list.length || !known.length) return plain;
     const yes = list.filter(id => avDiscord[id] === 'yes').length, no = list.filter(id => avDiscord[id] === 'no').length;
     return `Ping the ${yes} on Discord${no ? ` (${no} without Discord skipped)` : ''}`;
+}
+
+// The overdose list: every member who overdosed, with when it showed up in Torn's history and how long before the war start that was.
+// Torn only keeps stat history as snapshots, so the time is "by then", not the exact minute.
+function avOdTable(d, fmt) {
+    const warStart = d.window.warStart;
+    const at = m => m.when?.first?.to ?? null; // the first overdose was in Torn's record by this moment
+    const rows = d.members.slice().sort((a, b) => (at(b) ?? 0) - (at(a) ?? 0) || b.delta - a.delta);
+    const hoursBefore = ts => (warStart && ts ? Math.round((warStart - ts) / 3600) : null);
+    const tone = h => (h === null ? 'var(--muted)' : h < 24 ? '#e05555' : h < 48 ? '#f0b432' : 'var(--muted)');
+    const missing = rows.filter(m => !m.when).length;
+    return `<div class="table-scroll" style="overflow:auto;"><table style="width:100%;font-size:13px;border-collapse:collapse;">
+        <thead><tr style="color:var(--muted);text-align:left;"><th style="padding:4px 8px;">Member</th><th style="padding:4px 8px;text-align:right;">Overdoses</th><th style="padding:4px 8px;">In Torn's history by</th><th style="padding:4px 8px;text-align:right;">${warStart ? 'Before the start' : ''}</th></tr></thead>
+        <tbody>${rows.map(m => {
+            const t = at(m), h = hoursBefore(t), last = m.when?.last?.to;
+            const rel = h === null ? '' : h >= 0 ? `${h} h before` : `${-h} h after`;
+            return `<tr style="border-top:1px solid var(--line);${h !== null && h < 24 ? 'background:rgba(224,85,85,.08);' : ''}">
+                <td style="padding:5px 8px;"><span class="chip${avDcClass(m.id)}" style="cursor:default;">${esc(m.name)} 💊</span></td>
+                <td style="padding:5px 8px;text-align:right;font-family:var(--mono);">${m.delta}×</td>
+                <td style="padding:5px 8px;">${t ? esc(fmt(t)) : `<span style="color:var(--muted);">${m.detectedAt ? `noticed ${esc(fmt(m.detectedAt))}` : 'looking it up…'}</span>`}${m.delta > 1 && last && last !== t ? `<div style="font-size:11px;color:var(--muted);">latest by ${esc(fmt(last))}</div>` : ''}</td>
+                <td style="padding:5px 8px;text-align:right;font-family:var(--mono);color:${tone(h)};font-weight:700;">${rel}</td></tr>`;
+        }).join('')}</tbody></table></div>
+        <div style="font-size:11px;color:var(--muted);margin:6px 0 8px;">Red = within 24 h of the start, yellow = 24–48 h before. Torn saves a member's stats as snapshots, so the time is "it was in Torn's history by then" — the overdose itself was at or a little before that.${missing ? ` Looking up the time for ${missing} member${missing === 1 ? '' : 's'}…` : ''}</div>`;
+}
+
+// Finds the times for members that don't have one yet (a few per round, until none are left).
+let avOdWhenBusy = false;
+async function avOdFindWhen() {
+    if (avOdWhenBusy || !avOd?.members?.some(m => !m.when)) return;
+    avOdWhenBusy = true;
+    try {
+        for (let round = 0; round < 12; round++) {
+            const r = await avFetch({ action: 'od-when' });
+            if (r.error || r.rateLimited) break;
+            if (!r.remaining) break;
+        }
+    } catch (e) { /* the list still shows what is known */ }
+    avOdWhenBusy = false;
+    try { const r = await avFetch({ action: 'od-get' }); if (!r.error) { avOd = r; renderAvOd(); } } catch (e) { /* keep what is shown */ }
 }
