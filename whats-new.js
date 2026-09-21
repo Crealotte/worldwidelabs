@@ -20,7 +20,7 @@ const WHATS_NEW = [
         ],
         leaders: [
             'Availability overview: in the "Filled in" list every member now shows the hours they ticked, green for available and yellow for maybe (for example 43 +12).',
-            'Availability overview: new "Hours ticked vs hits made" — for a plan linked to a ranked war, compare each member\'s ticked hours with their real war hits. Someone who ticked 40 hours and hit once is flagged with a ⚠️, and you can copy the flagged names for the review. When we are only chaining and not warring, add chain report IDs or links there and it counts the chain hits instead.',
+            'Availability overview: new "Hours ticked vs hits made" — for a plan linked to a ranked war, compare each member\'s ticked hours with their real war hits. Someone who ticked 40 hours and hit once is flagged with a ⚠️, and you can copy the flagged names for the review. When we are only chaining and not warring, add chain report IDs or links there and it counts the chain hits instead. A chain that is still running works too: fill in when it started and it counts the chain hits from then until now.',
         ],
     },
     {

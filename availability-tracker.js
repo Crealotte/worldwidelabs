@@ -37,6 +37,7 @@ let avOd = null; // leader-only: last overdose view from the backend
 let avOdIds = new Set(); // ids of members who've overdosed in the window (marked in the slot list)
 let avOdScanning = false;
 let avVsChains = ''; // chain IDs / links typed in the hits comparison
+let avVsLive = ''; // start (UTC, datetime-local) of a chain that is still running
 
 // Posts to /api/war-payout, not its own endpoint — merged in to stay under Vercel Hobby's
 // 12-Serverless-Function-per-deployment limit, same reason War Badges lives there too.
@@ -510,10 +511,13 @@ function renderAvOut() {
         ${avConfig?.war?.id ? `By default it uses the war hits against ${esc(avConfig.war.opponent || 'the linked war')}.` : 'This plan is not linked to a ranked war, so add chain reports below.'}</p>
         <div class="field" style="margin:0 0 8px;max-width:560px;"><label for="av-vs-chains">Chain reports instead (optional) — chain IDs or report links, separated by spaces or commas. Use this when we are only chaining and not warring.</label>
             <input autocomplete="off" id="av-vs-chains" type="text" value="${esc(avVsChains)}" placeholder="e.g. 1234567, https://www.torn.com/war.php?step=chainreport&chainID=1234568"></div>
+        <div class="field" style="margin:0 0 8px;max-width:560px;"><label for="av-vs-live">Chain still running? Its start (TCT, i.e. UTC) — counts the chain hits from then until now</label>
+            <input autocomplete="off" id="av-vs-live" type="datetime-local" value="${esc(avVsLive)}"></div>
         <button class="ghost small" id="av-vs-btn">Compare with the hits</button><div id="av-vs-out" style="margin-top:10px;"></div></div>`;
     $('av-out-body').innerHTML = html;
     $('av-vs-btn')?.addEventListener('click', avCompareHits);
     $('av-vs-chains')?.addEventListener('input', () => { avVsChains = $('av-vs-chains').value; });
+    $('av-vs-live')?.addEventListener('input', () => { avVsLive = $('av-vs-live').value; });
 
     $('av-copy-missing')?.addEventListener('click', () => {
         navigator.clipboard.writeText(notResponded.map(m => m.name).join(', ')).then(() => toast('Names copied'));
@@ -722,15 +726,29 @@ async function avCompareHits() {
         const chainIds = [...new Set(String($('av-vs-chains').value).split(/[\s,;]+/).map(t => (/chainID=(\d+)/i.exec(t) || /^(\d+)$/.exec(t) || [])[1]).filter(Boolean))];
         const hits = {}; // member id -> number of hits
         let source;
-        if (chainIds.length) {
+        const liveVal = $('av-vs-live').value;
+        if (chainIds.length || liveVal) {
             for (let i = 0; i < chainIds.length; i++) {
                 out.innerHTML = `<span style="color:var(--muted);font-size:13px;">Reading chain report ${i + 1} of ${chainIds.length}…</span>`;
                 const data = await tornV2(`/faction/${chainIds[i]}/chainreport`);
                 for (const att of (data.chainreport?.attackers || [])) hits[String(att.id)] = (hits[String(att.id)] || 0) + (att.attacks?.total ?? 0);
             }
-            source = `${chainIds.length} chain report${chainIds.length === 1 ? '' : 's'}`;
+            if (liveVal) { // a chain that is still running: read the attack log from its start until now
+                const from = Math.floor(Date.parse(`${liveVal}:00Z`) / 1000);
+                if (!(from > 0)) throw new Error('That start time is not valid.');
+                let cursor = from;
+                for (let round = 1; cursor && round <= 40; round++) {
+                    out.innerHTML = `<span style="color:var(--muted);font-size:13px;">Reading the running chain${round > 1 ? ` (part ${round})` : ''}…</span>`;
+                    const r = await avFetch({ action: 'av-live-hits', from: cursor });
+                    if (r.error) throw new Error(r.error);
+                    for (const [id, n] of Object.entries(r.perAttacker || {})) hits[id] = (hits[id] || 0) + n;
+                    cursor = r.next;
+                }
+                if (cursor) throw new Error('That chain is very long — it was only read partly. Try a later start time.');
+            }
+            source = [chainIds.length ? `${chainIds.length} chain report${chainIds.length === 1 ? '' : 's'}` : '', liveVal ? 'the running chain' : ''].filter(Boolean).join(' + ');
         } else {
-            if (!avConfig?.war?.id) throw new Error('Add at least one chain report above, or link this plan to a ranked war.');
+            if (!avConfig?.war?.id) throw new Error('Add a chain report or a running chain above, or link this plan to a ranked war.');
             let got = null;
             for (let round = 1; round <= 10 && !got; round++) {
                 out.innerHTML = `<span style="color:var(--muted);font-size:13px;">Counting the hits of the war${round > 1 ? ` (part ${round})` : ''}…</span>`;

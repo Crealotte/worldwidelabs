@@ -24,7 +24,7 @@
 // it's a genuinely different concern (talking to Torn's raw attack log) from the chain-report
 // handling and payout math below.
 
-const { fetchWarHits, sleep } = require('../lib/warHits');
+const { fetchWarHits, sleep, fetchLiveChainHits } = require('../lib/warHits');
 const { fetchWarBadgeStats } = require('../lib/warBadgeStats');
 const { tornToDiscordIds, resolveDiscordIds } = require('../lib/discordMap');
 const { moHandle, moMe } = require('../lib/memberOverview');
@@ -384,6 +384,14 @@ module.exports = async function handler(req, res) {
             return res.status(200).json({ ok: true });
         }
 
+        // Hits of a chain that is still running (leaders): read from the attack log in pieces; the page keeps asking with `from`
+        // set to the `next` it was given until that comes back empty. Used by the hits comparison on the Availability overview.
+        if (action === 'av-live-hits') {
+            if (!(await isLeader(key))) return res.status(403).json({ error: 'Leaders only' });
+            const from = Math.floor(Number(req.body.from)), to = Math.floor(Date.now() / 1000);
+            if (!(from > 0) || from > to) return res.status(400).json({ error: 'Pick a start time that is in the past.' });
+            return res.status(200).json(await fetchLiveChainHits(key, factionId, from, to));
+        }
         // "I can't make this war" — real life happens, and there's a forum post for it too; this
         // puts the same thing in the tool so leaders see it next to the availability numbers.
         // Any member can set/undo their own. Cleared automatically when a new tracker starts.
