@@ -78,6 +78,7 @@ async function loadAvailability() {
         if (avSummary !== null && avWars === null) loadAvWars(); // leaders only, once — feeds the "link to war" picker
         if (avSummary !== null) loadAvDiscord(); // leaders only — this faction's Discord destination
         if (avSummary !== null) loadAvOd(); // leaders only — who's overdosed in the window
+        if (avSummary !== null) avRefreshDiscordView(false); // leaders only — who can be pinged on Discord (remembered answers only, no Torn calls)
     } catch (e) {
         st.className = 'status err'; st.textContent = e.message;
     }
@@ -485,14 +486,16 @@ async function avPingDiscord(kind, defaultPushAt, extra = {}) {
 
 // Leader view: who has filled the tracker in, who hasn't yet, and who said they can't make it.
 function renderAvOut() {
-    const chip = (name, extra = '') => `<span class="chip" style="cursor:default;">${esc(name)}${extra}</span>`;
+    const chip = (name, extra = '', id = null) => `<span class="chip${id ? avDcClass(id) : ''}" style="cursor:default;"${id ? ` title="${esc(avDcTitle(id))}"` : ''}>${esc(name)}${extra}</span>`;
     const responded = avResponded || [];
     const notResponded = avNotResponded;
     const un = avUnavailList || [];
 
-    let html = `<div style="font-weight:700;margin-bottom:6px;">✅ Filled in (${responded.length})</div>`;
+    let html = `<div style="font-size:12px;color:var(--muted);margin-bottom:10px;line-height:1.7;"><span class="chip chip-discord" style="cursor:default;padding:1px 8px;">faded green</span> = on Discord, gets pinged. Members without a Discord account (or whose country blocks it) are skipped by the ping.
+        <button class="ghost small" id="av-dc-check" style="margin-left:6px;">Check who is on Discord</button> <span id="av-dc-note"></span></div>`;
+    html += `<div style="font-weight:700;margin-bottom:6px;">✅ Filled in (${responded.length})</div>`;
     html += responded.length
-        ? `<div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px;">${responded.map(r => chip(r.name, r.out ? ' 🚫' : ` <span style="font-size:11px;"><b style="color:#35d99b;">${r.green ?? r.slotCount}</b>${r.maybe ? ` <b style="color:#f0b432;">+${r.maybe}</b>` : ''} <span style="color:var(--muted);">h</span>${r.watch ? ` <span class="av-watch-badge">🔵${r.watch}</span>` : ''}</span>`)).join('')}</div>`
+        ? `<div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px;">${responded.map(r => chip(r.name, r.out ? ' 🚫' : ` <span style="font-size:11px;"><b style="color:#35d99b;">${r.green ?? r.slotCount}</b>${r.maybe ? ` <b style="color:#f0b432;">+${r.maybe}</b>` : ''} <span style="color:var(--muted);">h</span>${r.watch ? ` <span class="av-watch-badge">🔵${r.watch}</span>` : ''}</span>`, r.id)).join('')}</div>`
         : '<p style="color:var(--muted);font-size:13px;margin:0 0 16px;">Nobody has filled it in yet.</p>';
 
     html += `<div style="font-weight:700;margin-bottom:6px;">⏳ Not filled in yet${notResponded ? ` (${notResponded.length})` : ''}</div>`;
@@ -501,10 +504,10 @@ function renderAvOut() {
     } else if (!notResponded.length) {
         html += '<p style="color:var(--muted);font-size:13px;margin:0 0 16px;">Everyone has responded 🎉</p>';
     } else {
-        html += `<div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px;">${notResponded.map(m => chip(m.name)).join('')}</div>
+        html += `<div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px;">${notResponded.map(m => chip(m.name, '', m.id)).join('')}</div>
             <div style="margin-bottom:16px;">
                 <button class="ghost small" id="av-copy-missing">Copy names</button>
-                <button class="ghost small" id="av-ping-missing">📣 Ping them on Discord</button>
+                <button class="ghost small" id="av-ping-missing">📣 ${avPingLabel((notResponded || []).map(m => m.id), "Ping them on Discord")}</button>
             </div>`;
     }
 
@@ -525,6 +528,7 @@ function renderAvOut() {
         <button class="ghost small" id="av-vs-btn">Compare with the hits</button><div id="av-vs-out" style="margin-top:10px;"></div></div>`;
     $('av-out-body').innerHTML = html;
     $('av-vs-btn')?.addEventListener('click', avCompareHits);
+    $('av-dc-check')?.addEventListener('click', avCheckDiscord);
     $('av-vs-chains')?.addEventListener('input', () => { avVsChains = $('av-vs-chains').value; });
     $('av-vs-live')?.addEventListener('input', () => { avVsLive = $('av-vs-live').value; });
 
@@ -674,18 +678,18 @@ function renderAvDetail() {
         <div class="av-detail-box">
             <div style="font-weight:700;margin-bottom:8px;">${esc(avTctLabel(avSelected.day, avSelected.hour))}${localNote} — ${s.count} available${s.maybe ? `, ${s.maybe} maybe` : ""}</div>
             <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px;">
-                ${s.names.map((n, i) => `<span class="chip" style="cursor:default;">${esc(n)}${avOdIds.has(String(s.ids?.[i])) ? ' 💊' : ''}</span>`).join('')}
+                ${s.names.map((n, i) => `<span class="chip${avDcClass(s.ids?.[i])}" style="cursor:default;">${esc(n)}${avOdIds.has(String(s.ids?.[i])) ? ' 💊' : ''}</span>`).join('')}
             </div>
             ${s.maybe ? `<div style="color:var(--muted);font-size:12px;margin:0 0 6px;">Maybe (${s.maybe}) — likely available, but might be busy:</div>
             <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px;">
-                ${s.maybeNames.map((n, i) => `<span class="chip" style="cursor:default;border-color:#f0b432;">${esc(n)}${avOdIds.has(String(s.maybeIds?.[i])) ? ' 💊' : ''}</span>`).join('')}
+                ${s.maybeNames.map((n, i) => `<span class="chip${avDcClass(s.maybeIds?.[i])}" style="cursor:default;border-color:#f0b432;">${esc(n)}${avOdIds.has(String(s.maybeIds?.[i])) ? ' 💊' : ''}</span>`).join('')}
             </div>` : ''}
             ${s.watch ? `<div style="color:#4da3ff;font-size:12px;margin:0 0 6px;">🔵 ${avIsWarPlan() ? 'War guards' : 'Chain savers'} (${s.watch}):</div>
             <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px;">
-                ${s.watchNames.map((n, i) => `<span class="chip" style="cursor:default;border-color:#4da3ff;">${esc(n)} <span style="color:var(--muted);font-size:11px;">${i === 0 ? 'first' : 'backup'}</span></span>`).join('')}
+                ${s.watchNames.map((n, i) => `<span class="chip${avDcClass(s.watchIds?.[i])}" style="cursor:default;border-color:#4da3ff;">${esc(n)} <span style="color:var(--muted);font-size:11px;">${i === 0 ? 'first' : 'backup'}</span></span>`).join('')}
             </div>` : ''}
             ${s.names.some((n, i) => avOdIds.has(String(s.ids?.[i]))) ? '<div style="color:var(--muted);font-size:12px;margin-bottom:10px;">💊 = overdosed in the tracking window, so may take part less.</div>' : ''}
-            <button class="ghost small" id="av-ping-slot">📣 Ping everyone here on Discord</button>
+            <button class="ghost small" id="av-ping-slot">📣 ${avPingLabel(s.ids, "Ping everyone here on Discord")}</button>
             <button class="ghost small" id="av-copy-names">Copy names</button>
             <button class="ghost small" id="av-close-detail">Close</button>
         </div>`;
@@ -900,4 +904,54 @@ function avWarKind(war) {
     const agreed = war.agreed === 'win' ? ' Agreed: <b>we win</b>.' : war.agreed === 'lose' ? ' Agreed: <b>they win</b>.' : '';
     const scores = war.ourScore != null && war.theirScore != null ? ` ${war.lead ? `Lead ${n(war.lead)}: ` : ''}we need <b>${n(war.ourScore)}</b>, they get <b>${n(war.theirScore)}</b>.` : '';
     return ` <b>Termed war.</b>${agreed}${scores}`;
+}
+
+// ---- Who is on Discord: name pills are tinted faded green for members who can be pinged (a Discord account is known); the ping only @mentions those ----
+let avDiscord = {}; // member id -> 'yes' | 'no' | 'unknown'
+const avDcClass = id => (avDiscord[String(id)] === 'yes' ? ' chip-discord' : avDiscord[String(id)] === 'no' ? ' chip-nodiscord' : '');
+const avDcTitle = id => (avDiscord[String(id)] === 'yes' ? 'On Discord — gets pinged' : avDiscord[String(id)] === 'no' ? 'No Discord linked — is not pinged' : 'Not checked yet');
+function avAllMemberIds() {
+    const ids = new Set();
+    (avResponded || []).forEach(r => ids.add(String(r.id)));
+    (avNotResponded || []).forEach(m => ids.add(String(m.id)));
+    Object.values(avSummary || {}).forEach(s => [...(s.ids || []), ...(s.maybeIds || []), ...(s.watchIds || [])].forEach(i => ids.add(String(i))));
+    return [...ids];
+}
+async function loadAvDiscordStatus(resolve = false) {
+    const ids = avAllMemberIds();
+    if (!ids.length) return { remaining: 0 };
+    const r = await avFetch({ action: 'discord-status', ids, resolve });
+    if (r.error) return { error: r.error };
+    avDiscord = { ...avDiscord, ...(r.status || {}) };
+    return { remaining: r.remaining || 0 };
+}
+async function avRefreshDiscordView(resolve = false) {
+    const r = await loadAvDiscordStatus(resolve);
+    if (avSummary) { renderAvOut(); renderAvDetail(); }
+    return r;
+}
+
+// Looks up everyone not checked yet (a few per round, one Torn call each; answers are remembered), so the pills are right and the ping knows who it can reach.
+async function avCheckDiscord() {
+    const btn = $('av-dc-check'), note = $('av-dc-note');
+    btn.disabled = true;
+    try {
+        for (let round = 1; round <= 8; round++) {
+            note.textContent = round === 1 ? 'Checking…' : `Checking… (round ${round})`;
+            const r = await avRefreshDiscordView(true);
+            const again = $('av-dc-note'); // the view was redrawn, so pick the new elements up
+            if (r.error) { if (again) again.textContent = r.error; return; }
+            if (!r.remaining) { if (again) again.textContent = 'Done — everyone is checked.'; return; }
+            if (again) again.textContent = `${r.remaining} still to check…`;
+        }
+    } finally { $('av-dc-check') && ($('av-dc-check').disabled = false); }
+}
+
+// "Ping the 12 on Discord (3 skipped)" once we know who can be reached; otherwise the plain label.
+function avPingLabel(ids, plain) {
+    const list = (ids || []).map(String);
+    const known = list.filter(id => avDiscord[id] === 'yes' || avDiscord[id] === 'no');
+    if (!list.length || !known.length) return plain;
+    const yes = list.filter(id => avDiscord[id] === 'yes').length, no = list.filter(id => avDiscord[id] === 'no').length;
+    return `Ping the ${yes} on Discord${no ? ` (${no} without Discord skipped)` : ''}`;
 }
