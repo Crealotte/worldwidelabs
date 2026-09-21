@@ -1531,12 +1531,12 @@
 
             <div class="panel" id="ls-banners-panel">
                 <h3 style="margin-top:0;">📢 Banners</h3>
-                <p style="color:var(--muted);font-size:12px;margin:0 0 10px;">A banner shows at the top of every page for your faction — for a new feature, a Torn event or a reminder. Members can close it; it is gone by itself after the expiry date. Up to 6 at a time.</p>
+                <p style="color:var(--muted);font-size:12px;margin:0 0 10px;">A banner shows at the top of every page for your own faction — for a new feature, a Torn event or a reminder. (Owners can also show one to all factions.) Members can close it; it is gone by itself after the expiry date. Up to 6 at a time.</p>
                 <div id="ls-ban-list" style="margin-bottom:12px;"></div>
                 <div style="border-top:1px solid var(--line);padding-top:12px;">
                     <div class="field"><label for="ls-ban-text">Message (max 280 characters)</label><textarea autocomplete="off" id="ls-ban-text" rows="2" maxlength="280" style="width:100%;" placeholder="e.g. New: the Timezone map is live — pick your country and light it up!"></textarea></div>
                     <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-bottom:10px;">
-                        <div class="field" style="margin:0;"><label for="ls-ban-audience">Who sees it</label><select id="ls-ban-audience"><option value="all">Everyone</option><option value="leaders">Leaders only</option></select></div>
+                        <div class="field" style="margin:0;"><label for="ls-ban-audience">Who sees it</label><select id="ls-ban-audience"><option value="fac-all">My faction — everyone</option><option value="fac-leaders">My faction — leaders only</option></select></div>
                         <div class="field" style="margin:0;"><label for="ls-ban-tone">Colour</label><select id="ls-ban-tone"><option value="info">Blue — news</option><option value="event">Green — event</option><option value="warn">Yellow — reminder</option></select></div>
                         <div class="field" style="margin:0;"><label for="ls-ban-expires">Gone after (optional)</label><input id="ls-ban-expires" type="date"></div>
                         <div class="field" style="margin:0;min-width:200px;"><label for="ls-ban-page">Button to a page (optional)</label><select id="ls-ban-page"><option value="">No button</option></select></div>

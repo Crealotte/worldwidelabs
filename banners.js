@@ -42,36 +42,43 @@ async function loadBanners() {
 }
 
 // ---- Leader settings: write and remove banners ----
+// A leader writes banners for their OWN faction (everyone in it, or only its leaders). An owner can also write one for ALL factions.
 async function loadBannerSettings() {
     const sel = $('ls-ban-page');
     if (sel.options.length <= 1) {
         sel.insertAdjacentHTML('beforeend', [...document.querySelectorAll('.nav-item')].filter(n => n.style.display !== 'none').map(n => `<option value="${esc(n.dataset.page)}">${esc(n.textContent.replace(/[🔒●]/g, '').trim())}</option>`).join(''));
     }
     const r = await banFetch({ action: 'banners-get', manage: true });
-    renderBannerList(r.error ? [] : r.banners || [], r.error);
+    const keep = $('ls-ban-audience').value;
+    $('ls-ban-audience').innerHTML = '<option value="fac-all">My faction — everyone</option><option value="fac-leaders">My faction — leaders only</option>'
+        + (r.owner ? '<option value="all-all">ALL factions — everyone</option><option value="all-leaders">ALL factions — leaders only</option>' : '');
+    if ([...$('ls-ban-audience').options].some(o => o.value === keep)) $('ls-ban-audience').value = keep;
+    renderBannerList(r.error ? [] : r.banners || [], r.error, !!r.owner);
 }
-function renderBannerList(list, error) {
+function renderBannerList(list, error, owner) {
     const today = new Date().toISOString().slice(0, 10);
+    const who = b => `${b.scope === 'all' ? '<b>All factions</b>' : 'My faction'} · ${b.audience === 'leaders' ? 'leaders only' : 'everyone'}`;
     $('ls-ban-list').innerHTML = error ? `<p style="color:var(--danger);font-size:13px;">${esc(error)}</p>`
         : list.length ? list.map(b => `<div style="margin-bottom:8px;">${banHtml(b, false)}
-            <div style="font-size:12px;color:var(--muted);margin:3px 0 0 2px;">${b.audience === 'leaders' ? 'Leaders only' : 'Everyone'} · ${b.expires ? (b.expires < today ? `<span style="color:var(--danger);">expired ${esc(b.expires)}</span>` : `until ${esc(b.expires)}`) : 'no end date'} · <a href="#" class="ls-ban-del" data-id="${esc(b.id)}" style="color:var(--danger);">Delete</a></div></div>`).join('')
+            <div style="font-size:12px;color:var(--muted);margin:3px 0 0 2px;">${who(b)} · ${b.expires ? (b.expires < today ? `<span style="color:var(--danger);">expired ${esc(b.expires)}</span>` : `until ${esc(b.expires)}`) : 'no end date'}${b.scope === 'all' && !owner ? '' : ` · <a href="#" class="ls-ban-del" data-id="${esc(b.id)}" style="color:var(--danger);">Delete</a>`}</div></div>`).join('')
             : '<p style="color:var(--muted);font-size:13px;margin:0;">No banners right now.</p>';
     document.querySelectorAll('.ls-ban-del').forEach(a => a.addEventListener('click', async e => {
         e.preventDefault();
         if (!confirm('Delete this banner?')) return;
         const r = await banFetch({ action: 'banners-delete', id: a.dataset.id });
         if (r.error) { toast(r.error); return; }
-        renderBannerList(r.banners || []); loadBanners();
+        loadBannerSettings(); loadBanners();
     }));
 }
 
 $('ls-ban-add').addEventListener('click', async () => {
-    const r = await banFetch({ action: 'banners-save', text: $('ls-ban-text').value, audience: $('ls-ban-audience').value, tone: $('ls-ban-tone').value,
-        expires: $('ls-ban-expires').value, page: $('ls-ban-page').value, linkLabel: $('ls-ban-label').value });
+    const [scope, audience] = $('ls-ban-audience').value.split('-'); // 'fac-all' | 'fac-leaders' | 'all-all' | 'all-leaders'
+    const r = await banFetch({ action: 'banners-save', text: $('ls-ban-text').value, scope: scope === 'all' ? 'all' : 'faction', audience: audience === 'leaders' ? 'leaders' : 'all',
+        tone: $('ls-ban-tone').value, expires: $('ls-ban-expires').value, page: $('ls-ban-page').value, linkLabel: $('ls-ban-label').value });
     if (r.error) { toast(r.error); return; }
     $('ls-ban-text').value = ''; $('ls-ban-expires').value = ''; $('ls-ban-label').value = ''; $('ls-ban-page').value = ''; $('ls-ban-preview').innerHTML = '';
-    toast('Banner added — it shows at the top of every page');
-    renderBannerList(r.banners || []); loadBanners();
+    toast(scope === 'all' ? 'Banner added — it shows in ALL factions' : 'Banner added — it shows at the top of every page for your faction');
+    loadBannerSettings(); loadBanners();
 });
 // a live preview while typing
 ['ls-ban-text', 'ls-ban-tone', 'ls-ban-page', 'ls-ban-label'].forEach(id => $(id).addEventListener('input', () => {

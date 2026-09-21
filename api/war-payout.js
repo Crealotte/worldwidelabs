@@ -549,36 +549,45 @@ module.exports = async function handler(req, res) {
         }
         // How many calls WWL made to Torn with the caller's own key (see lib/tornFetch.js) — shown in Member Overview → Checks for the developer.
         if (action === 'torn-usage') return res.status(200).json(await usageFor(key));
-        // Banners at the top of every page. Everyone reads the ones meant for them; only leaders write them (Leader settings page).
+        // Banners at the top of every page. Everyone reads the ones meant for them; leaders write them for THEIR OWN faction, and only an owner
+        // (the same owners as Labs funds) can also write one for ALL factions (stored apart, under 'global').
         if (action === 'banners-get') {
-            const all = await loadBanners(factionId);
-            const leader = await isLeader(key);
+            const [facList, globList, leader, owner] = await Promise.all([loadBanners(factionId), loadBanners('global'), isLeader(key), labsIsOwner(redis, playerId)]);
             if (req.body.manage) {
                 if (!leader) return res.status(403).json({ error: 'Leaders only' });
-                return res.status(200).json({ banners: all, leader });
+                return res.status(200).json({ banners: [...facList.map(b => ({ ...b, scope: 'faction' })), ...globList.map(b => ({ ...b, scope: 'all' }))], leader, owner });
             }
-            return res.status(200).json({ banners: all.filter(b => bannerLive(b) && (b.audience !== 'leaders' || leader)), leader });
+            const mine = [...globList, ...facList].filter(b => bannerLive(b) && (b.audience !== 'leaders' || leader));
+            return res.status(200).json({ banners: mine, leader, owner });
         }
         if (action === 'banners-save') {
             if (!(await isLeader(key))) return res.status(403).json({ error: 'Leaders only' });
             const b = req.body;
+            const toAll = b.scope === 'all';
+            if (toAll && !(await labsIsOwner(redis, playerId))) return res.status(403).json({ error: 'Only an owner can show a banner to all factions.' });
             const text = String(b.text || '').trim().slice(0, 280);
             if (text.length < 3) return res.status(400).json({ error: 'Write the message for the banner first.' });
             const page = /^[a-z0-9-]{1,40}$/.test(String(b.page || '')) ? String(b.page) : '';
-            const list = await loadBanners(factionId);
-            if (list.length >= 6) return res.status(400).json({ error: 'You already have 6 banners — delete an old one first.' });
+            const target = toAll ? 'global' : factionId;
+            const list = await loadBanners(target);
+            if (list.length >= 6) return res.status(400).json({ error: `You already have 6 banners${toAll ? ' for all factions' : ''} — delete an old one first.` });
             list.push({ id: `n${Date.now().toString(36)}${Math.random().toString(36).slice(2, 5)}`, text, page,
                 linkLabel: page ? String(b.linkLabel || '').trim().slice(0, 30) || 'Open' : '',
                 audience: b.audience === 'leaders' ? 'leaders' : 'all', tone: ['event', 'warn'].includes(b.tone) ? b.tone : 'info',
                 expires: /^\d{4}-\d{2}-\d{2}$/.test(String(b.expires || '')) ? String(b.expires) : '', createdAt: Date.now() });
-            await redis(['SET', bannersKey(factionId), JSON.stringify(list)]);
-            return res.status(200).json({ ok: true, banners: list });
+            await redis(['SET', bannersKey(target), JSON.stringify(list)]);
+            return res.status(200).json({ ok: true });
         }
         if (action === 'banners-delete') {
             if (!(await isLeader(key))) return res.status(403).json({ error: 'Leaders only' });
-            const list = (await loadBanners(factionId)).filter(x => x.id !== String(req.body.id));
-            await redis(['SET', bannersKey(factionId), JSON.stringify(list)]);
-            return res.status(200).json({ ok: true, banners: list });
+            const id = String(req.body.id);
+            const facList = await loadBanners(factionId);
+            if (facList.some(x => x.id === id)) await redis(['SET', bannersKey(factionId), JSON.stringify(facList.filter(x => x.id !== id))]);
+            else {
+                if (!(await labsIsOwner(redis, playerId))) return res.status(403).json({ error: 'Only an owner can delete a banner for all factions.' });
+                await redis(['SET', bannersKey('global'), JSON.stringify((await loadBanners('global')).filter(x => x.id !== id))]);
+            }
+            return res.status(200).json({ ok: true });
         }
         // The leader to-do card (dashboard) — leaders only.
         if (action === 'leader-todos') {
