@@ -15,7 +15,8 @@ async function banFetch(body) {
 
 function banHtml(b, closable) {
     const btn = b.page ? `<a href="/${esc(b.page)}" class="ghost small sb-go" data-page="${esc(b.page)}" style="padding:5px 12px;border:1px solid currentColor;border-radius:var(--radius);text-decoration:none;white-space:nowrap;">${esc(b.linkLabel || 'Open')} →</a>` : '';
-    return `<div class="site-banner tone-${esc(b.tone || 'info')}" data-id="${esc(b.id)}"><span class="sb-text">${esc(b.text)}</span>${btn}${closable ? '<span class="sb-x" title="Close">×</span>' : ''}</div>`;
+    const count = b.countdownAt ? ` <span class="sb-count" data-until="${Number(b.countdownAt)}" style="font-family:var(--mono);font-weight:700;color:#ffb347;white-space:nowrap;"></span>` : '';
+    return `<div class="site-banner tone-${esc(b.tone || 'info')}" data-id="${esc(b.id)}">${b.icon ? `<span class="sb-icon" style="font-size:18px;">${esc(b.icon)}</span>` : ''}<span class="sb-text">${esc(b.text)}${count}</span>${btn}${closable ? '<span class="sb-x" title="Close">×</span>' : ''}</div>`;
 }
 
 // The banners run across the whole top of the page. With more than one they slide to the next by themselves every few seconds (they stop while
@@ -38,6 +39,7 @@ function renderBanners(list) {
         box.querySelectorAll('.sb-dot').forEach((d, k) => d.classList.toggle('on', k === banIndex));
     };
     go(banIndex);
+    banTick();
     box.querySelectorAll('.sb-x').forEach(x => x.addEventListener('click', () => {
         const id = x.closest('.site-banner').dataset.id, b = list.find(y => y.id === id);
         const d = banDismissed(); d[id] = banHash(b.text);
@@ -93,6 +95,7 @@ function renderBannerList(list, error, owner) {
         : list.length ? list.map(b => `<div style="margin-bottom:8px;">${banHtml(b, false)}
             <div style="font-size:12px;color:var(--muted);margin:3px 0 0 2px;">${who(b)} · ${b.expires ? (b.expires < today ? `<span style="color:var(--danger);">expired ${esc(b.expires)}</span>` : `until ${esc(b.expires)}`) : 'no end date'}${b.scope === 'all' && !owner ? '' : ` · <a href="#" class="ls-ban-del" data-id="${esc(b.id)}" style="color:var(--danger);">Delete</a>`}</div></div>`).join('')
             : '<p style="color:var(--muted);font-size:13px;margin:0;">No banners right now.</p>';
+    banTick();
     document.querySelectorAll('.ls-ban-del').forEach(a => a.addEventListener('click', async e => {
         e.preventDefault();
         if (!confirm('Delete this banner?')) return;
@@ -105,14 +108,28 @@ function renderBannerList(list, error, owner) {
 $('ls-ban-add').addEventListener('click', async () => {
     const [scope, audience] = $('ls-ban-audience').value.split('-'); // 'fac-all' | 'fac-leaders' | 'all-all' | 'all-leaders'
     const r = await banFetch({ action: 'banners-save', text: $('ls-ban-text').value, scope: scope === 'all' ? 'all' : 'faction', audience: audience === 'leaders' ? 'leaders' : 'all',
-        tone: $('ls-ban-tone').value, expires: $('ls-ban-expires').value, page: $('ls-ban-page').value, linkLabel: $('ls-ban-label').value });
+        tone: $('ls-ban-tone').value, expires: $('ls-ban-expires').value, page: $('ls-ban-page').value, linkLabel: $('ls-ban-label').value,
+        icon: $('ls-ban-icon').value, countdownAt: $('ls-ban-count').value ? Math.floor(Date.parse(`${$('ls-ban-count').value}:00Z`) / 1000) : 0 });
     if (r.error) { toast(r.error); return; }
-    $('ls-ban-text').value = ''; $('ls-ban-expires').value = ''; $('ls-ban-label').value = ''; $('ls-ban-page').value = ''; $('ls-ban-preview').innerHTML = '';
+    $('ls-ban-text').value = ''; $('ls-ban-expires').value = ''; $('ls-ban-label').value = ''; $('ls-ban-icon').value = ''; $('ls-ban-count').value = ''; $('ls-ban-page').value = ''; $('ls-ban-preview').innerHTML = '';
     toast(scope === 'all' ? 'Banner added — it shows in ALL factions' : 'Banner added — it shows at the top of every page for your faction');
     loadBannerSettings(); loadBanners();
 });
 // a live preview while typing
-['ls-ban-text', 'ls-ban-tone', 'ls-ban-page', 'ls-ban-label'].forEach(id => $(id).addEventListener('input', () => {
+['ls-ban-text', 'ls-ban-tone', 'ls-ban-page', 'ls-ban-label', 'ls-ban-icon', 'ls-ban-count'].forEach(id => $(id).addEventListener('input', () => {
     const text = $('ls-ban-text').value.trim();
-    $('ls-ban-preview').innerHTML = text ? `<div style="font-size:12px;color:var(--muted);margin-bottom:4px;">Preview:</div>${banHtml({ id: 'preview', text, tone: $('ls-ban-tone').value, page: $('ls-ban-page').value, linkLabel: $('ls-ban-label').value }, false)}` : '';
+    $('ls-ban-preview').innerHTML = text ? `<div style="font-size:12px;color:var(--muted);margin-bottom:4px;">Preview:</div>${banHtml({ id: 'preview', text, tone: $('ls-ban-tone').value, page: $('ls-ban-page').value, linkLabel: $('ls-ban-label').value, icon: $('ls-ban-icon').value, countdownAt: $('ls-ban-count').value ? Math.floor(Date.parse(`${$('ls-ban-count').value}:00Z`) / 1000) : 0 }, false)}` : '';
+    banTick();
 }));
+
+// Countdowns ("33d 18h 44m") in banners: updated every 20 seconds; once the moment has passed the countdown part disappears.
+function banTick() {
+    const now = Math.floor(Date.now() / 1000);
+    document.querySelectorAll('.sb-count').forEach(el => {
+        const left = Number(el.dataset.until) - now;
+        if (left <= 0) { el.textContent = ''; return; }
+        const d = Math.floor(left / 86400), h = Math.floor(left % 86400 / 3600), m = Math.floor(left % 3600 / 60);
+        el.textContent = `${d ? `${d}d ` : ''}${d || h ? `${h}h ` : ''}${m}m`;
+    });
+}
+setInterval(banTick, 20000);

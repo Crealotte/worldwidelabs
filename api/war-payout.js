@@ -573,6 +573,7 @@ module.exports = async function handler(req, res) {
             if (list.length >= 6) return res.status(400).json({ error: `You already have 6 banners${toAll ? ' for all factions' : ''} — delete an old one first.` });
             list.push({ id: `n${Date.now().toString(36)}${Math.random().toString(36).slice(2, 5)}`, text, page,
                 linkLabel: page ? String(b.linkLabel || '').trim().slice(0, 30) || 'Open' : '',
+                icon: String(b.icon || '').trim().slice(0, 4), countdownAt: Number(b.countdownAt) > 1e9 && Number(b.countdownAt) < 4e9 ? Math.floor(Number(b.countdownAt)) : 0,
                 audience: b.audience === 'leaders' ? 'leaders' : 'all', tone: ['event', 'warn'].includes(b.tone) ? b.tone : 'info',
                 expires: /^\d{4}-\d{2}-\d{2}$/.test(String(b.expires || '')) ? String(b.expires) : '', createdAt: Date.now() });
             await redis(['SET', bannersKey(target), JSON.stringify(list)]);
