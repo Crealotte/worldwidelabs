@@ -16,6 +16,8 @@ let avConfig = null; // { startDate, days } from the backend, or null if no trac
 let avMine = {}; // my own slots: "day-hour" (TCT) -> true
 let avMineWatch = {}; // my hours marked with the blue ring (Chain saver / War guard)
 let avWatchMode = false; // the switch: clicking a box adds or removes the ring instead of cycling the colour
+let avWatchTaken = {}; // hour -> how many of the two places (primary + backup) are taken
+let avMineRole = {}; // hour -> 'primary' or 'backup' for the hours I hold
 let avSummary = null; // "day-hour" (TCT) -> { count, names } — present only when the caller is a leader
 let avMyUnavailable = null; // { name, note, at } if I marked myself as unable to make this war
 let avUnavailList = null; // leader-only: everyone who did — [{ id, name, note, at }]
@@ -64,6 +66,7 @@ async function loadAvailability() {
         avConfig = result.config;
         avMine = result.mine || {};
         avMineWatch = result.mineWatch || {};
+        avWatchTaken = result.watchTaken || {}; avMineRole = result.mineRole || {};
         avSummary = (typeof memberView !== "undefined" && memberView) ? null : result.summary || null; // only ever present for a leader-tier key
         avMyUnavailable = result.myUnavailable || null;
         avUnavailList = (typeof memberView !== "undefined" && memberView) ? null : result.unavailable || null;
@@ -591,7 +594,8 @@ function renderAvGrid() {
     $('av-grid-body').innerHTML = avBuildTable((day, hour) => {
         const v = avMine[`${day}-${hour}`];
         const mine = v === 'maybe' ? ' av-cell-maybe' : v ? ' av-cell-mine' : '';
-        const ring = avMineWatch[`${day}-${hour}`] ? ' av-cell-watch' : '';
+        const k = `${day}-${hour}`;
+        const ring = avMineWatch[k] ? (avMineRole[k] === 'backup' ? ' av-cell-watch av-cell-backup' : ' av-cell-watch') : (avWatchMode && (avWatchTaken[k] || 0) >= 2 ? ' av-cell-full' : '');
         const war = avIsWarSlot(day, hour);
         return `<td class="av-cell${mine}${ring}${war ? ' av-cell-war' : ''}" data-day="${day}" data-hour="${hour}" title="${esc(avTctLabel(day, hour))}${war ? ' — WAR STARTS' : ''}"></td>`;
     });
@@ -676,7 +680,7 @@ function renderAvDetail() {
             </div>` : ''}
             ${s.watch ? `<div style="color:#4da3ff;font-size:12px;margin:0 0 6px;">🔵 ${avIsWarPlan() ? 'War guards' : 'Chain savers'} (${s.watch}):</div>
             <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px;">
-                ${s.watchNames.map(n => `<span class="chip" style="cursor:default;border-color:#4da3ff;">${esc(n)}</span>`).join('')}
+                ${s.watchNames.map((n, i) => `<span class="chip" style="cursor:default;border-color:#4da3ff;">${esc(n)} <span style="color:var(--muted);font-size:11px;">${i === 0 ? 'first' : 'backup'}</span></span>`).join('')}
             </div>` : ''}
             ${s.names.some((n, i) => avOdIds.has(String(s.ids?.[i]))) ? '<div style="color:var(--muted);font-size:12px;margin-bottom:10px;">💊 = overdosed in the tracking window, so may take part less.</div>' : ''}
             <button class="ghost small" id="av-ping-slot">📣 Ping everyone here on Discord</button>
@@ -803,8 +807,8 @@ function renderAvWatchBar() {
     $('av-watch-label').textContent = `🔵 Mark the hours I can ${avRoleName()}`;
     $('av-watch-toggle').checked = avWatchMode;
     $('av-watch-hint').textContent = avIsWarPlan()
-        ? 'This is a war plan. A War guard is online and active, keeping an eye out for when things go wrong: making the calls, changing plans, keeping the chat clear and motivating people. With the switch on, click an hour to add or remove a blue ring. An hour you had not ticked becomes green.'
-        : 'This is a chain plan. A Chain saver is online and active, keeping an eye on the chain and stepping in when it is about to drop. With the switch on, click an hour to add or remove a blue ring. An hour you had not ticked becomes green.';
+        ? 'This is a war plan. A War guard is online and active, keeping an eye out for when things go wrong: making the calls, changing plans, keeping the chat clear and motivating people. Each hour has room for one, plus one backup. With the switch on, click an hour to add or remove your blue ring (a solid ring is the first place, a dashed ring the backup). An hour you had not ticked becomes green.'
+        : 'This is a chain plan. A Chain saver is online and active, keeping an eye on the chain and stepping in when it is about to drop. Each hour has room for one, plus one backup. With the switch on, click an hour to add or remove your blue ring (a solid ring is the first place, a dashed ring the backup). An hour you had not ticked becomes green.';
 }
 $('av-watch-toggle').addEventListener('change', () => { avWatchMode = $('av-watch-toggle').checked; renderAvWatchBar(); });
 
@@ -812,11 +816,13 @@ async function toggleAvWatch(day, hour, cellEl) {
     const key = `${day}-${hour}`;
     const wasWatch = !!avMineWatch[key], wasColour = avMine[key];
     const on = !wasWatch;
+    if (on && (avWatchTaken[key] || 0) >= 2) { toast(`That hour already has ${avIsWarPlan() ? 'a War guard' : 'a Chain saver'} and a backup — pick another hour.`); return; }
     if (on) { avMineWatch[key] = true; if (!avMine[key]) avMine[key] = true; } else delete avMineWatch[key];
     cellEl.classList.toggle('av-cell-watch', on);
     avApplyCell(cellEl, avMine[key]);
     try {
         const r = await avFetch({ action: 'availability-watch', day, hour, watch: on });
+        if (!r.error) loadAvailability(); // refresh who holds what (a backup moves up when the first one leaves)
         if (r.error) throw new Error(r.error);
     } catch (e) {
         if (wasWatch) avMineWatch[key] = true; else delete avMineWatch[key];
@@ -824,5 +830,6 @@ async function toggleAvWatch(day, hour, cellEl) {
         cellEl.classList.toggle('av-cell-watch', wasWatch);
         avApplyCell(cellEl, avMine[key]);
         toast(`Couldn't save that: ${e.message}`);
+        loadAvailability();
     }
 }

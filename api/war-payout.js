@@ -219,6 +219,19 @@ function slotBeforeStart(data, slotKey) {
     const [day, hour] = String(slotKey).split('-').map(Number);
     return Date.UTC(y, m - 1, d) / 1000 + (day * 24 + hour) * 3600 < Math.floor(start / 3600) * 3600;
 }
+
+// Blue ring: one primary and one backup per hour. Who holds an hour, in the order they took it (a plain `true` from before is oldest);
+// members who said they can't make it, and marks on hours that are no longer ticked, don't count.
+const WATCH_MAX = 2;
+function watchOrder(data, slotKey) {
+    const list = [];
+    for (const [id, entry] of Object.entries(data?.entries || {})) {
+        if (data.unavailable?.[id]) continue;
+        const t = entry.watch?.[slotKey];
+        if (t && entry.slots?.[slotKey]) list.push({ id, name: entry.name || `#${id}`, at: t === true ? 0 : Number(t) || 0 });
+    }
+    return list.sort((a, b) => a.at - b.at || a.id.localeCompare(b.id));
+}
 // Everyone who has actually filled the tracker in for this war: ticked at least one slot, or
 // marked themselves not available. An entry left behind by ticking and then un-ticking
 // everything doesn't count as having responded.
@@ -336,6 +349,12 @@ module.exports = async function handler(req, res) {
                 mineWatch: data?.entries?.[playerId]?.watch || {}, // hours I marked as chain watch / war coordinator
                 myUnavailable: unavailable[playerId] || null, // { name, note, at } if I marked myself out
             };
+            { // how many of the two places (primary + backup) are taken per hour, and which one I hold
+                const taken = {}, role = {}, slots = new Set();
+                for (const entry of Object.values(data?.entries || {})) for (const k of Object.keys(entry.watch || {})) slots.add(k);
+                for (const k of slots) { const order = watchOrder(data, k); if (order.length) taken[k] = Math.min(WATCH_MAX, order.length); const i = order.findIndex(o => o.id === playerId); if (i >= 0) role[k] = i === 0 ? 'primary' : 'backup'; }
+                result.watchTaken = taken; result.mineRole = role;
+            }
             if (await isLeader(key)) {
                 // Everyone who hit "I can't make this war" (the forum-post equivalent) — listed
                 // for the leader, and their ticked slots are left out of the heatmap below so a
@@ -362,8 +381,11 @@ module.exports = async function handler(req, res) {
                         const name = entry.name || `#${id}`;
                         if (val === 'maybe') { s.maybe++; s.maybeNames.push(name); s.maybeIds.push(id); }
                         else { s.count++; s.names.push(name); s.ids.push(id); } // ids let the leader link each name to their Torn profile
-                        if (entry.watch?.[slot]) { s.watch = (s.watch || 0) + 1; (s.watchNames = s.watchNames || []).push(name); (s.watchIds = s.watchIds || []).push(id); }
                     }
+                }
+                for (const [slot, s] of Object.entries(summary)) { // the blue ring: primary first, then the backup
+                    const order = watchOrder(data, slot).slice(0, WATCH_MAX);
+                    if (order.length) { s.watch = order.length; s.watchNames = order.map(o => o.name); s.watchIds = order.map(o => o.id); }
                 }
                 result.summary = summary;
             }
@@ -409,7 +431,12 @@ module.exports = async function handler(req, res) {
             const slotKey = `${day}-${hour}`;
             if (slotBeforeStart(data, slotKey)) return res.status(400).json({ error: 'That hour is before the start — you can only tick hours from the start on.' });
             entry.watch = entry.watch || {};
-            if (watch) { entry.watch[slotKey] = true; if (!entry.slots[slotKey]) entry.slots[slotKey] = true; } else delete entry.watch[slotKey];
+            if (watch) {
+                if (entry.watch[slotKey]) return res.status(200).json({ ok: true });
+                const roleName = data.war?.id ? 'War guard' : 'Chain saver';
+                if (watchOrder(data, slotKey).length >= WATCH_MAX) return res.status(409).json({ error: `That hour already has a ${roleName} and a backup — pick another hour.` });
+                entry.watch[slotKey] = Date.now(); if (!entry.slots[slotKey]) entry.slots[slotKey] = true;
+            } else delete entry.watch[slotKey];
             await redis(['SET', availabilityKey(factionId, planId), JSON.stringify(data)]);
             return res.status(200).json({ ok: true });
         }
