@@ -22,6 +22,7 @@ const WHATS_NEW = [
             'Timezone map: fixed the stretched line across the map — the far east of Russia (and Alaska\'s far islands) now show up correctly on the other side of the map.',
         ],
         leaders: [
+            'Bugs & suggestions: a "Copy all bugs & suggestions" button copies every bug and suggestion with the full text (status, votes, who sent it, screenshot yes/no) in one go. New bug reports now keep their full text, which you can open under each known bug ("Full report").',
             'New "Torn API usage (my key)" button in Member Overview → Checks for the developer: shows how many calls WWL made with your key in the last two hours, the busiest minute and which kinds of calls are used most, so we can see where they go.',
             'Availability overview: new "Leader: link a war to this plan" panel — once we are matched, link the ranked war to the plan (its start time comes from Torn), mark it as termed or not, and for a termed war fill in what was agreed — who wins, the lead needed and the loser's share (for example a lead of 10,000 with 40% for the loser gives 14,000 for the winner and 4,000 for the loser). It shows in the war line above the grid.',
             'New Leader settings page (Leadership menu): the Discord settings and the nightly saving now live together in one place, with a list of where the other leader tools are. The Discord settings moved here from the Availability overview, and the nightly switch moved here from the dashboard card.',

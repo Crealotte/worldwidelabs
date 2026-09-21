@@ -106,6 +106,7 @@ function kbRow(b, leader) {
             ${b.status !== 'fixed' ? `<button class="ghost small kb-metoo" data-id="${esc(b.id)}" style="margin-left:auto;${b.mine ? 'border-color:var(--reagent);color:var(--reagent);' : ''}">${b.mine ? '✓ You have this too' : 'I have this too'} · ${b.count}</button>` : ''}
         </div>
         ${b.note ? `<div style="color:var(--muted);font-size:13px;margin-top:3px;">${esc(b.note)}</div>` : ''}
+        ${leader && b.detail ? `<details style="margin-top:6px;"><summary class="av-sum"><span style="font-size:12px;color:var(--muted);">Full report${b.by ? ` by ${esc(b.by)}` : ''}</span></summary><div style="white-space:pre-wrap;font-size:13px;margin-top:4px;">${esc(b.detail)}</div></details>` : ''}
         ${b.hasShot ? `<div style="margin-top:6px;"><button class="ghost small kb-shot" data-id="${esc(b.id)}">📷 View screenshot</button><div class="kb-shot-box" data-id="${esc(b.id)}" style="display:none;margin-top:6px;"></div></div>` : ''}
         ${leader ? `<div style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap;align-items:center;font-size:12px;color:var(--muted);">${b.count} reported ·
             ${['review', 'known', 'fixing', 'fixed'].filter(s => s !== b.status).map(s => `<button class="ghost small kb-status" data-id="${esc(b.id)}" data-status="${s}">Mark ${KB_STATUS[s][0].toLowerCase()}</button>`).join('')}
@@ -115,6 +116,7 @@ function kbRow(b, leader) {
 function renderKnownBugs() {
     const leader = typeof isLeaderCached !== 'undefined' && isLeaderCached;
     $('kb-leader').style.display = leader ? 'block' : 'none';
+    $('bs-export').style.display = leader ? 'block' : 'none';
     const open = kbBugs.filter(b => b.status !== 'fixed'), fixed = kbBugs.filter(b => b.status === 'fixed');
     $('kb-list').innerHTML = (open.length ? open.map(b => kbRow(b, leader)).join('') : '<p style="color:var(--muted);font-size:13px;margin:0;">No known bugs right now.</p>')
         + (fixed.length ? `<details style="margin-top:8px;"><summary class="av-sum"><span style="font-size:13px;">Fixed (${fixed.length})</span></summary>${fixed.map(b => kbRow(b, leader)).join('')}</details>` : '');
@@ -210,3 +212,17 @@ $('sg-send').addEventListener('click', async () => {
     loadSuggestions();
 });
 $('br-clear-video').addEventListener('click', brClearVideo);
+
+// ---- Leaders: copy every bug and suggestion (full text) as one block of text ----
+function bsExportText() {
+    const fmtDate = ms => (ms ? new Date(ms).toISOString().slice(0, 10) : '?');
+    const bugs = kbBugs.map(b => [`[${(KB_STATUS[b.status] || KB_STATUS.known)[0]}] ${b.title}`,
+        `  ${b.count} member${b.count === 1 ? '' : 's'} have this · reported ${fmtDate(b.createdAt)}${b.by ? ` by ${b.by}` : ''}${b.hasShot ? ' · has a screenshot' : ''}`,
+        b.note ? `  Note: ${b.note}` : '', b.detail ? `  Full report: ${b.detail.replace(/\n/g, '\n    ')}` : ''].filter(Boolean).join('\n'));
+    const sugs = sgList.map(s => [`[${(SG_STATUS[s.status] || SG_STATUS.open)[0]}] 👍${s.up} 👎${s.down} — ${fmtDate(s.createdAt)}${s.by ? ` — by ${s.by}` : ''}`, `  ${s.text.replace(/\n/g, '\n  ')}`].join('\n'));
+    return `WWL bugs & suggestions — exported ${new Date().toISOString().slice(0, 16).replace('T', ' ')} UTC\n\n=== KNOWN BUGS (${bugs.length}) ===\n${bugs.join('\n\n') || '(none)'}\n\n=== SUGGESTIONS (${sugs.length}) ===\n${sugs.join('\n\n') || '(none)'}\n`;
+}
+$('bs-copy').addEventListener('click', async () => {
+    try { await navigator.clipboard.writeText(bsExportText()); toast('Copied — paste it to Claude'); }
+    catch (e) { toast('Could not copy — try again'); }
+});
