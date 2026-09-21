@@ -106,7 +106,9 @@ function kbRow(b, leader) {
             ${b.status !== 'fixed' ? `<button class="ghost small kb-metoo" data-id="${esc(b.id)}" style="margin-left:auto;${b.mine ? 'border-color:var(--reagent);color:var(--reagent);' : ''}">${b.mine ? '✓ You have this too' : 'I have this too'} · ${b.count}</button>` : ''}
         </div>
         ${b.note ? `<div style="color:var(--muted);font-size:13px;margin-top:3px;">${esc(b.note)}</div>` : ''}
-        ${b.detail ? `<details style="margin-top:6px;"><summary class="av-sum"><span style="font-size:12px;color:var(--muted);">Full report${b.by ? ` by ${esc(b.by)}` : ''}</span></summary><div style="white-space:pre-wrap;font-size:13px;margin-top:4px;">${esc(b.detail)}</div></details>` : ''}
+        ${b.detail ? (b.detail.length <= 300
+            ? `<div style="white-space:pre-wrap;font-size:13px;margin-top:4px;">${esc(b.detail)}${b.by ? ` <span style="color:var(--muted);">— ${esc(b.by)}</span>` : ''}</div>`
+            : `<div style="white-space:pre-wrap;font-size:13px;margin-top:4px;">${esc(b.detail.slice(0, 300).replace(/\s+\S*$/, ''))}…</div><details style="margin-top:4px;"><summary class="av-sum"><span style="font-size:12px;color:var(--reagent);">Read the rest${b.by ? ` (sent by ${esc(b.by)})` : ''}</span></summary><div style="white-space:pre-wrap;font-size:13px;margin-top:4px;">${esc(b.detail)}</div></details>`) : ''}
         ${b.hasShot ? `<div style="margin-top:6px;"><button class="ghost small kb-shot" data-id="${esc(b.id)}">📷 View screenshot</button><div class="kb-shot-box" data-id="${esc(b.id)}" style="display:none;margin-top:6px;"></div></div>` : ''}
         ${leader ? `<div style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap;align-items:center;font-size:12px;color:var(--muted);">${b.count} reported ·
             ${['review', 'known', 'fixing', 'fixed'].filter(s => s !== b.status).map(s => `<button class="ghost small kb-status" data-id="${esc(b.id)}" data-status="${s}">Mark ${KB_STATUS[s][0].toLowerCase()}</button>`).join('')}
