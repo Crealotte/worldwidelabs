@@ -490,7 +490,7 @@ function renderAvOut() {
 
     let html = `<div style="font-weight:700;margin-bottom:6px;">✅ Filled in (${responded.length})</div>`;
     html += responded.length
-        ? `<div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px;">${responded.map(r => chip(r.name, r.out ? ' 🚫' : ` <span style="font-size:11px;"><b style="color:#35d99b;">${r.green ?? r.slotCount}</b>${r.maybe ? ` <b style="color:#f0b432;">+${r.maybe}</b>` : ''} <span style="color:var(--muted);">h</span>${r.watch ? ` <b style="color:#4da3ff;">🔵${r.watch}</b>` : ''}</span>`)).join('')}</div>`
+        ? `<div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px;">${responded.map(r => chip(r.name, r.out ? ' 🚫' : ` <span style="font-size:11px;"><b style="color:#35d99b;">${r.green ?? r.slotCount}</b>${r.maybe ? ` <b style="color:#f0b432;">+${r.maybe}</b>` : ''} <span style="color:var(--muted);">h</span>${r.watch ? ` <span class="av-watch-badge">🔵${r.watch}</span>` : ''}</span>`)).join('')}</div>`
         : '<p style="color:var(--muted);font-size:13px;margin:0 0 16px;">Nobody has filled it in yet.</p>';
 
     html += `<div style="font-weight:700;margin-bottom:6px;">⏳ Not filled in yet${notResponded ? ` (${notResponded.length})` : ''}</div>`;
@@ -640,7 +640,7 @@ function renderAvSummaryGrid() {
         const bg = count ? `rgba(53,217,155,${(0.15 + (count / maxCount) * 0.65).toFixed(2)})` : maybe ? 'rgba(240,180,50,.25)' : 'transparent';
         const title = `${avTctLabel(day, hour)} — ${s ? s.names.join(', ') || 'nobody sure yet' : 'nobody yet'}${maybe ? ` (maybe: ${s.maybeNames.join(', ')})` : ''}`;
         const watchN = s ? s.watch || 0 : 0;
-        const watchTag = watchN ? `<span style="color:#4da3ff;font-size:11px;"> 🔵${watchN}</span>` : '';
+        const watchTag = watchN ? `<span class="av-watch-badge">🔵${watchN}</span>` : '';
         const label = count || maybe ? `${count || ''}${maybe ? `<span style="color:#f0b432;font-size:11px;">${count ? ' +' : ''}${maybe}?</span>` : ''}${watchTag}` : '';
         const sel = avSelected && avSelected.day === day && avSelected.hour === hour ? ' av-cell-selected' : '';
         const war = avIsWarSlot(day, hour) ? ' av-cell-war' : '';

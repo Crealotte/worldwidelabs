@@ -331,7 +331,11 @@
     .av-cell-mine { background: var(--reagent); }
     .av-cell-maybe { background: #f0b432; }
     .av-cell-watch { outline: 3px solid #4da3ff; outline-offset: -3px; }
+    .av-cell-watch { position: relative; }
+    .av-cell-watch::after { content: ""; position: absolute; left: 50%; top: 50%; width: 11px; height: 11px; margin: -7px 0 0 -7px; border-radius: 50%; background: #1f6feb; border: 2px solid #fff; box-shadow: 0 0 0 1px #0b2a66; }
     .av-cell-backup { outline-style: dashed; }
+    .av-cell-backup::after { background: #0b2a66; border-style: dashed; }
+    .av-watch-badge { display: inline-block; margin-left: 3px; padding: 0 5px; border-radius: 9px; background: #0b2a66; border: 1px solid #7ab8ff; color: #fff; font-size: 11px; font-weight: 700; line-height: 16px; white-space: nowrap; }
     .av-cell-full { opacity: .45; cursor: not-allowed; }
     .active-toggle { border-color: var(--reagent); color: var(--reagent); }
     #gp-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
