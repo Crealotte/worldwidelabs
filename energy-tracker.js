@@ -54,9 +54,13 @@ function renderEnergyTracker() {
         </div>` : '<p style="color:var(--muted);margin:0;">No energy of yours has been counted in these days yet.</p>';
 
     const first = etData.firstSnapshotDay;
-    $('et-note').textContent = first
+    const base = first
         ? `Counted from Torn Intel up to ${new Date((first) * 86400e3).toLocaleDateString(undefined, { day: 'numeric', month: 'short', timeZone: 'UTC' })}, and from our own daily counters after that.`
         : 'Only what was imported from Torn Intel so far — our own daily counting starts soon.';
+    // Today's own number updates through the day (roughly hourly, whenever a leader has WWL open or the owner set up an hourly check) —
+    // this says how fresh it is right now, since "today" is the one row that keeps moving.
+    const upd = etData.todayUpdatedHour;
+    $('et-note').textContent = base + (upd ? ` Today's row is up to date as of ${new Date(upd * 3600e3).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', timeZone: 'UTC' })} TCT.` : '');
 
     $('et-table').innerHTML = rows.length ? `
         <table style="width:100%;font-size:13px;border-collapse:collapse;">

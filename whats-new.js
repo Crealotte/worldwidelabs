@@ -15,6 +15,7 @@ const WHATS_NEW = [
         version: '1.14', date: '2026-09-21',
         title: 'Availability hours vs hits, map fix',
         everyone: [
+            'Energy tracker: today\'s row now updates through the day (roughly every hour) instead of staying at zero until tomorrow, with a note saying how fresh it is ("up to date as of HH:MM TCT").',
             'Target pages: the hospital status is now shown by itself (Okay, or Hospital with the time left counting down) on Level targets, Target finder and the other target lists. A row you pressed Attack on turns faded green for 24 hours, so you know where you left off. New ★ button on every target adds the player to the new My targets page (Targets menu): your own list of easy targets with decent respect, with a note, their status and an Attack button. The list follows you between PC and TornPDA.',
             'The tool now uses much more of a wide screen (it was limited to a narrow column).',
             'Bugs & suggestions: the full text of a bug report is now shown to everyone right under each known bug, so you can read it before pressing "I have this too" (long ones have a "Read the rest"; the name of the sender is only shown to leaders). Long titles are cut at a word with …, and long text wraps on a phone instead of running off the screen.',
