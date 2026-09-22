@@ -325,6 +325,8 @@
     .av-cell-selected { outline: 3px solid var(--reagent); outline-offset: -3px; }
     .av-detail-box { background: var(--bench-2); border: 1px solid var(--reagent-dim); border-radius: var(--radius); padding: 12px 14px; margin: 0 0 12px; }
     .av-cell-war { box-shadow: inset 0 0 0 3px #f0b432; }
+    .av-cell-warlen { box-shadow: inset 0 0 0 2px rgba(240,180,50,.45); } /* every hour of a day the leader expects the war to run — a lighter ring than the exact start hour above */
+    .av-cell-war.av-cell-warlen { box-shadow: inset 0 0 0 3px #f0b432, inset 0 0 0 6px rgba(240,180,50,.35); }
     .av-cell-off { background: var(--bench-2); opacity: .35; cursor: not-allowed; }
     .av-cell-off:hover { border-color: var(--line); border-width: 1px; }
     .av-cell:hover { border-color: var(--reagent); border-width: 2px; }
@@ -1674,6 +1676,7 @@
             <div id="av-plan-bar-l" style="display:none;margin:0 0 8px;align-items:center;gap:10px;flex-wrap:wrap;">
                 <label for="av-plan-select-l" style="font-size:14px;font-weight:700;">Plan:</label>
                 <select id="av-plan-select-l" style="width:auto;min-width:280px;font-size:14px;"></select>
+                <button class="ghost small" id="av-plan-resize-l" style="display:none;">✎ Change days shown</button>
                 <button class="ghost small" id="av-plan-archive-l" style="display:none;">📦 Archive this plan</button>
                 <button class="ghost small" id="av-plan-delete-l" style="display:none;">Delete this plan</button>
             </div>
@@ -1716,11 +1719,16 @@
                         <div class="field" style="margin:0;max-width:170px;"><label for="av-link-lead">Lead needed</label><input id="av-link-lead" type="number" min="0" placeholder="e.g. 10000"></div>
                         <div class="field" style="margin:0;max-width:150px;"><label for="av-link-pct">Loser's share (%)</label><input id="av-link-pct" type="number" min="0" max="100" value="40"></div>
                     </div>
-                    <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;">
+                    <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-bottom:8px;">
                         <div class="field" style="margin:0;max-width:170px;"><label for="av-link-our">Our score to reach</label><input id="av-link-our" type="number" min="0"></div>
                         <div class="field" style="margin:0;max-width:170px;"><label for="av-link-their">Their score to reach</label><input id="av-link-their" type="number" min="0"></div>
                     </div>
-                    <div id="av-link-sum" style="font-size:13px;color:var(--muted);margin-top:8px;"></div>
+                    <div id="av-link-sum" style="font-size:13px;color:var(--muted);margin-bottom:10px;"></div>
+                    <div class="field" style="margin:0;max-width:220px;">
+                        <label for="av-link-expect">Expected to last about (days)</label>
+                        <input id="av-link-expect" type="number" min="1" max="14" placeholder="e.g. 1">
+                    </div>
+                    <p style="color:var(--muted);font-size:12px;margin:6px 0 0;">Optional — a termed war is often much shorter than the grid, and can also fall through and run long. This only highlights those days in the grid below (a soft gold wash, on top of the exact start hour's border) — it never stops anyone ticking a later day, so nothing is lost if it runs on. Change it any time.</p>
                 </div>
                 <button class="ghost small" id="av-link-save">Save the war for this plan</button>
                 </details>

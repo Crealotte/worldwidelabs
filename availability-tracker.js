@@ -38,7 +38,7 @@ let avArchivedPlans = []; // leader-only: archived plans, for the separate "pick
 let avViewingArchived = false; // true when avPlanId currently points at an archived plan
 let avPlanId = null;
 try { avPlanId = localStorage.getItem(AV_PLAN_KEY) || null; } catch (e) { /* storage blocked */ }
-const AV_PLAN_ACTIONS = new Set(['availability-get', 'availability-set', 'availability-watch', 'availability-link-war', 'availability-unavailable', 'availability-ping', 'availability-archive']);
+const AV_PLAN_ACTIONS = new Set(['availability-get', 'availability-set', 'availability-watch', 'availability-link-war', 'availability-unavailable', 'availability-ping', 'availability-archive', 'availability-resize']);
 let avOd = null; // leader-only: last overdose view from the backend
 let avOdIds = new Set(); // ids of members who've overdosed in the window (marked in the slot list)
 let avOdScanning = false;
@@ -136,6 +136,12 @@ function avIsWarSlot(day, hour) {
     const s = avWarStartSlot();
     return !!s && s.day === day && s.hour === hour;
 }
+// Whole days the leader expects the (often termed) war to run — a soft highlight across every hour of those
+// days, distinct from the single gold-bordered start hour above. Never affects which hours can be ticked.
+function avIsWarLenDay(day) {
+    const s = avWarStartSlot(), n = avConfig?.war?.expectDays;
+    return !!s && n > 0 && day >= s.day && day < s.day + n;
+}
 
 function renderAvWarLine() {
     const el = $('av-war-line');
@@ -146,7 +152,8 @@ function renderAvWarLine() {
     const local = (avLocal && avOffsetSupported())
         ? ` (${at.toLocaleString(undefined, { weekday: 'short', hour: '2-digit', minute: '2-digit' })} your time)` : '';
     el.style.display = 'block';
-    el.innerHTML = `🎯 ${war.opponent ? `War vs <b>${esc(war.opponent)}</b> — s` : 'S'}tarts <b>${esc(tct)}</b>${esc(local)}.${avWarStartSlot() ? ' The gold-outlined box in the grid is the start hour.' : ''}${avWarKind(war)}`;
+    const expectNote = war.expectDays > 0 ? ` Expected to last about <b>${war.expectDays} day${war.expectDays === 1 ? '' : 's'}</b> — the soft gold-ringed days in the grid.` : '';
+    el.innerHTML = `🎯 ${war.opponent ? `War vs <b>${esc(war.opponent)}</b> — s` : 'S'}tarts <b>${esc(tct)}</b>${esc(local)}.${avWarStartSlot() ? ' The gold-outlined box in the grid is the start hour.' : ''}${expectNote}${avWarKind(war)}`;
 }
 
 // ---- Overdoses (leader-only). The backend counts each member's "times overdosed" against the
@@ -308,6 +315,7 @@ function renderAvPlanBar() {
         bar.style.display = 'flex';
         $('av-plan-select' + sfx).innerHTML = options;
     }
+    $('av-plan-resize-l').style.display = avSummary !== null && !avViewingArchived && avPlanId ? 'inline-block' : 'none'; // leaders only
     $('av-plan-archive-l').style.display = avSummary !== null && !avViewingArchived && avPlanId ? 'inline-block' : 'none'; // leaders only
     $('av-plan-delete-l').style.display = avSummary !== null && !avViewingArchived ? 'inline-block' : 'none'; // leaders only
 
@@ -341,6 +349,21 @@ $('av-archived-back').addEventListener('click', () => {
     try { localStorage.removeItem(AV_PLAN_KEY); } catch (e) { /* not critical */ }
     avSelected = null;
     loadAvailability();
+});
+
+$('av-plan-resize-l').addEventListener('click', async () => {
+    const p = avPlans.find(x => x.id === avPlanId);
+    if (!p) return;
+    const v = prompt(`How many days should "${avPlanLabel(p)}" show? (1-14)\n\nMembers already on later days keep their ticks even if you shrink it — they just stop showing until you grow it again.`, String(p.days || avConfig?.days || 5));
+    if (v === null) return;
+    const days = Math.min(14, Math.max(1, Math.round(Number(v)) || 0));
+    if (!days) { toast('Enter a number between 1 and 14.'); return; }
+    try {
+        const r = await avFetch({ action: 'availability-resize', days });
+        if (r.error) throw new Error(r.error);
+        toast('Updated');
+        await loadAvailability();
+    } catch (e) { toast(`Couldn't change it: ${e.message}`); }
 });
 
 $('av-plan-archive-l').addEventListener('click', async () => {
@@ -655,8 +678,8 @@ function renderAvGrid() {
         const mine = v === 'maybe' ? ' av-cell-maybe' : v ? ' av-cell-mine' : '';
         const k = `${day}-${hour}`;
         const ring = avMineWatch[k] ? (avMineRole[k] === 'backup' ? ' av-cell-watch av-cell-backup' : ' av-cell-watch') : (avWatchMode && (avWatchTaken[k] || 0) >= 2 ? ' av-cell-full' : '');
-        const war = avIsWarSlot(day, hour);
-        return `<td class="av-cell${mine}${ring}${war ? ' av-cell-war' : ''}" data-day="${day}" data-hour="${hour}" title="${esc(avTctLabel(day, hour))}${war ? ' — WAR STARTS' : ''}"></td>`;
+        const war = avIsWarSlot(day, hour), warLen = avIsWarLenDay(day);
+        return `<td class="av-cell${mine}${ring}${war ? ' av-cell-war' : ''}${warLen ? ' av-cell-warlen' : ''}" data-day="${day}" data-hour="${hour}" title="${esc(avTctLabel(day, hour))}${war ? ' — WAR STARTS' : ''}${warLen && !war ? ' — expected war day' : ''}"></td>`;
     });
     $('av-grid-body').querySelectorAll('.av-cell:not(.av-cell-off)').forEach(cell => {
         cell.addEventListener('click', () => (avWatchMode ? toggleAvWatch : toggleAvCell)(Number(cell.dataset.day), Number(cell.dataset.hour), cell));
@@ -703,7 +726,8 @@ function renderAvSummaryGrid() {
         const label = count || maybe ? `${count || ''}${maybe ? `<span style="color:#f0b432;font-size:11px;">${count ? ' +' : ''}${maybe}?</span>` : ''}${watchTag}` : '';
         const sel = avSelected && avSelected.day === day && avSelected.hour === hour ? ' av-cell-selected' : '';
         const war = avIsWarSlot(day, hour) ? ' av-cell-war' : '';
-        return `<td class="av-cell av-summary-cell${count || maybe ? ' av-clickable' : ''}${sel}${war}" style="background:${bg};" data-day="${day}" data-hour="${hour}" title="${esc(title)}">${label}</td>`;
+        const warLen = avIsWarLenDay(day) ? ' av-cell-warlen' : '';
+        return `<td class="av-cell av-summary-cell${count || maybe ? ' av-clickable' : ''}${sel}${war}${warLen}" style="background:${bg};" data-day="${day}" data-hour="${hour}" title="${esc(title)}">${label}</td>`;
     });
     el.querySelectorAll('.av-clickable').forEach(cell => {
         cell.addEventListener('click', () => {
@@ -913,6 +937,7 @@ function renderAvLinkPanel() {
     $('av-link-agreed').value = war?.agreed || ''; $('av-link-lead').value = war?.lead ?? ''; $('av-link-pct').value = war?.loserPct ?? 40;
     $('av-link-our').value = war?.ourScore ?? '';
     $('av-link-their').value = war?.theirScore ?? '';
+    $('av-link-expect').value = war?.expectDays ?? '';
     avLinkCompute(false);
 }
 $('av-link-war').addEventListener('change', () => { $('av-link-manual').style.display = $('av-link-war').value ? 'none' : 'flex'; });
@@ -923,7 +948,7 @@ $('av-link-save').addEventListener('click', async () => {
     if (!warId && $('av-link-date').value) warStart = Math.floor(Date.parse(`${$('av-link-date').value}T${avPad(Number($('av-link-hour').value) || 0)}:00:00Z`) / 1000);
     const btn = $('av-link-save'); btn.disabled = true;
     try {
-        const r = await avFetch({ action: 'availability-link-war', warId, warStart, termed: $('av-link-termed').checked, agreed: $('av-link-agreed').value, lead: $('av-link-lead').value, loserPct: $('av-link-pct').value, ourScore: $('av-link-our').value, theirScore: $('av-link-their').value });
+        const r = await avFetch({ action: 'availability-link-war', warId, warStart, termed: $('av-link-termed').checked, agreed: $('av-link-agreed').value, lead: $('av-link-lead').value, loserPct: $('av-link-pct').value, ourScore: $('av-link-our').value, theirScore: $('av-link-their').value, expectDays: $('av-link-expect').value });
         if (r.error) throw new Error(r.error);
         toast('War saved for this plan');
         await loadAvailability();

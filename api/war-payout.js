@@ -834,7 +834,7 @@ module.exports = async function handler(req, res) {
         // if the plan is already linked to that war, its saved details are kept. Leaders only.
         if (action === 'availability-link-war') {
             if (!(await isLeader(key))) return res.status(403).json({ error: 'Leaders only' });
-            const { warId, warStart, termed, agreed, lead, loserPct, ourScore, theirScore } = req.body;
+            const { warId, warStart, termed, agreed, lead, loserPct, ourScore, theirScore, expectDays } = req.body;
             const { plans, id: planId, data } = await resolvePlan(factionId, req.body.planId, true);
             if (!data) return res.status(400).json({ error: 'There is no plan to link — create one first.' });
             let war;
@@ -854,11 +854,32 @@ module.exports = async function handler(req, res) {
             delete war.result;
             war.ourScore = war.termed ? score(ourScore) : null;
             war.theirScore = war.termed ? score(theirScore) : null;
+            // How many days this war is expected to run — a termed war especially can end much sooner than the grid's
+            // full width, or (if the terms break down) run longer than planned; just a guess to highlight in the
+            // grid, changeable any time, never used to lock anyone out of ticking a box.
+            const ed = Math.round(Number(expectDays));
+            war.expectDays = Number.isFinite(ed) && ed >= 1 && ed <= 14 ? ed : null;
             data.war = war;
             await redis(['SET', availabilityKey(factionId, planId), JSON.stringify(data)]);
             const meta = plans.find(p => p.id === planId);
             if (meta) { meta.war = war; await redis(['SET', availabilityIndexKey(factionId), JSON.stringify(plans)]); }
             return res.status(200).json({ ok: true, war });
+        }
+
+        // Changes how many days a plan's grid shows (and, optionally, its start date) after it was already created —
+        // a termed war is often shorter than the 5 days first guessed, so there's no need to delete and recreate the
+        // whole plan (and lose everyone's ticks) just to shrink or grow it. Leaders only.
+        if (action === 'availability-resize') {
+            if (!(await isLeader(key))) return res.status(403).json({ error: 'Leaders only' });
+            const { plans, id: planId, data } = await resolvePlan(factionId, req.body.planId, true);
+            if (!data) return res.status(400).json({ error: 'There is no plan to change — create one first.' });
+            const days = Math.min(14, Math.max(1, Math.round(Number(req.body.days)) || data.days));
+            const startDate = /^\d{4}-\d{2}-\d{2}$/.test(req.body.startDate) ? req.body.startDate : data.startDate;
+            data.days = days; data.startDate = startDate;
+            await redis(['SET', availabilityKey(factionId, planId), JSON.stringify(data)]);
+            const meta = plans.find(p => p.id === planId);
+            if (meta) { meta.days = days; meta.startDate = startDate; await redis(['SET', availabilityIndexKey(factionId), JSON.stringify(plans)]); }
+            return res.status(200).json({ ok: true, days, startDate });
         }
 
         if (action === 'availability-delete') {
