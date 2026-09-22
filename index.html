@@ -874,6 +874,23 @@
             <div id="fb-empty" class="panel" style="display:none;">
                 <p style="color:var(--muted);margin:0;">No open form right now — check back soon.</p>
             </div>
+
+            <!-- a form built into WWL itself -->
+            <div id="fb-native" style="display:none;">
+                <div class="panel">
+                    <p id="fb-native-desc" style="color:var(--muted);margin:0 0 14px;"></p>
+                    <div id="fb-native-questions"></div>
+                    <div class="status" id="fb-native-status"></div>
+                    <button class="ghost" id="fb-native-submit">Submit</button>
+                    <span id="fb-native-savednote" style="display:none;color:var(--muted);font-size:12px;margin-left:10px;">You already answered this — submitting again replaces your answer.</span>
+                </div>
+                <div class="panel" id="fb-native-results-panel" style="display:none;margin-top:16px;">
+                    <h3 style="margin-top:0;">Results so far</h3>
+                    <div id="fb-native-results"></div>
+                </div>
+            </div>
+
+            <!-- a linked Google Form -->
             <div id="fb-content" style="display:none;">
                 <div class="panel">
                     <h3>Fill it out</h3>
@@ -898,27 +915,58 @@
             </div>
 
             <div class="panel" id="feedback-editor" style="display:none;">
-                <div class="field">
-                    <label for="fb-title-input">Title</label>
-                    <input id="fb-title-input" placeholder="e.g. Leadership interest poll — July">
+                <div style="display:flex;gap:8px;margin-bottom:16px;">
+                    <button class="ghost small" id="fb-mode-native">📝 Build a form here</button>
+                    <button class="ghost small" id="fb-mode-google">🔗 Link a Google Form instead</button>
                 </div>
-                <div class="field">
-                    <label for="fb-form-url">Google Form embed URL</label>
-                    <input id="fb-form-url" placeholder="Paste the embed URL, or the whole <iframe> code Google gives you">
+
+                <!-- a form built into WWL: its own dark styling, its own charts, no Google account needed -->
+                <div id="fb-editor-native">
+                    <div class="field">
+                        <label for="fb-title-input">Title</label>
+                        <input id="fb-title-input" placeholder="e.g. Leadership interest poll — July">
+                    </div>
+                    <div class="field">
+                        <label for="fb-desc-input">Description (optional)</label>
+                        <input id="fb-desc-input" placeholder="A line explaining what this is for">
+                    </div>
+                    <div id="fb-questions"></div>
+                    <button class="ghost small" id="fb-q-add" style="margin-bottom:14px;">+ Add a question</button>
                 </div>
-                <div class="field">
-                    <label for="fb-chart-url">Results chart embed URL (optional)</label>
-                    <input id="fb-chart-url" placeholder="Paste the published Google Sheets chart embed URL">
+
+                <!-- the older way: link an outside Google Form -->
+                <div id="fb-editor-google" style="display:none;">
+                    <div class="field">
+                        <label for="fb-title-input-g">Title</label>
+                        <input id="fb-title-input-g" placeholder="e.g. Leadership interest poll — July">
+                    </div>
+                    <div class="field">
+                        <label for="fb-form-url">Google Form embed URL</label>
+                        <input id="fb-form-url" placeholder="Paste the embed URL, or the whole <iframe> code Google gives you">
+                    </div>
+                    <div class="field">
+                        <label for="fb-chart-url">Results chart embed URL (optional)</label>
+                        <input id="fb-chart-url" placeholder="Paste the published Google Sheets chart embed URL">
+                    </div>
+                    <p style="color:var(--muted);font-size:11px;line-height:1.6;">
+                        Form: in Google Forms, <b>Send → the &lt;&gt; icon → copy</b>.<br>
+                        Chart: link the form to a Sheet, make a chart there, then <b>File → Share → Publish to web → select the chart → Embed</b>.
+                    </p>
                 </div>
-                <p style="color:var(--muted);font-size:11px;line-height:1.6;">
-                    Form: in Google Forms, <b>Send → the &lt;&gt; icon → copy</b>.<br>
-                    Chart: link the form to a Sheet, make a chart there, then <b>File → Share → Publish to web → select the chart → Embed</b>.
-                </p>
+
                 <div class="row" style="margin-top:14px;display:flex;gap:10px;">
-                    <button id="fb-save">Save</button>
+                    <button id="fb-save">Save — replaces the live form</button>
                     <button class="ghost" id="fb-clear">Clear</button>
                 </div>
                 <div class="status" id="fb-editor-status"></div>
+            </div>
+
+            <div class="panel" id="fb-responses-panel" style="display:none;margin-top:16px;">
+                <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">
+                    <h3 style="margin:0;">Responses</h3>
+                    <button class="ghost small" id="fb-responses-copy" style="margin-left:auto;">📋 Copy all responses</button>
+                </div>
+                <div id="fb-responses-body"></div>
             </div>
         </section>
 

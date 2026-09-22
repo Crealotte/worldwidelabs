@@ -15,6 +15,8 @@ const WHATS_NEW = [
         version: '1.14', date: '2026-09-21',
         title: 'Availability hours vs hits, map fix',
         everyone: [
+            'Feedback form: leaders can now build a form right into WWL — no Google account needed — with short answer, paragraph, multiple choice and checkbox questions, and a live results chart (a donut for pick-one questions, bars for pick-several) for whichever questions the leader marks as public. Linking a Google Form is still there too, for whoever prefers that.',
+            'Member Overview and Your standing now also count what you have trained today so far, not just up to midnight — the same live number the Energy tracker shows.',
             'Energy tracker: today\'s row now updates through the day (roughly every hour) instead of staying at zero until tomorrow, with a note saying how fresh it is ("up to date as of HH:MM TCT").',
             'Target pages: the hospital status is now shown by itself (Okay, or Hospital with the time left counting down) on Level targets, Target finder and the other target lists. A row you pressed Attack on turns faded green for 24 hours, so you know where you left off. New ★ button on every target adds the player to the new My targets page (Targets menu): your own list of easy targets with decent respect, with a note, their status and an Attack button. The list follows you between PC and TornPDA.',
             'The tool now uses much more of a wide screen (it was limited to a narrow column).',
