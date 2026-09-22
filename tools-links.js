@@ -44,8 +44,21 @@
         renderRequiredLinks();
     }
 
+    // Torn Intel and CAT have no API of their own for WWL to ask "has this member joined/verified" — unlike Discord,
+    // so a leader ticks it by hand on the "Who's on board" list (dashboard / Member Overview). This just reads
+    // what was ticked for the caller, so their own card can show the same ✓ badge Discord gets.
+    async function checkManualVerifyStatus() {
+        try {
+            const res = await fetch('/api/war-payout', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key: apiKey, action: 'verify-mine' }) });
+            const data = await res.json();
+            if (!data.error) { requiredStatus.torn_intel = { verified: !!data.intel }; requiredStatus.cat = { verified: !!data.cat }; }
+        } catch (e) { /* leave the plain "Required" look */ }
+        renderRequiredLinks();
+    }
+
     async function loadRequiredToolStatus() {
-        checkDiscordStatus(); // add more checks here later, e.g. checkTornIntelStatus(), each updating requiredStatus + re-rendering
+        checkDiscordStatus();
+        checkManualVerifyStatus();
     }
 
     function renderLinks() {

@@ -55,6 +55,7 @@ async function redis(command) {
 }
 
 const restockedKey = (factionId) => `wwl:restocked-wars:${factionId}`;
+const manualVerifyKey = (factionId) => `wwl:manual-verify:${factionId}`; // hash: playerId -> { intel, cat, updatedAt } — Torn Intel / CAT have no API to check, so a leader ticks it by hand
 // Availability "plans": several trackers can exist at once (this weekend AND next weekend), each
 // with its own grid, entries and linked war, picked from a dropdown. 'main' is the original
 // single-tracker key from before plans existed, so an existing tracker keeps working untouched;
@@ -561,6 +562,15 @@ module.exports = async function handler(req, res) {
         if (action === 'target-status' || action.startsWith('mytargets-')) return res.status(200).json(await targetsHandle(action, req.body, { redis, key, playerId }));
         // How many calls WWL made to Torn with the caller's own key (see lib/tornFetch.js) — shown in Member Overview → Checks for the developer.
         if (action === 'torn-usage') return res.status(200).json(await usageFor(key));
+
+        // Manual verification for tools WWL can't check by itself (Torn Intel, CAT — no API to ask them whether a
+        // member has joined/verified there, unlike Discord). A leader ticks it by hand on the Who's on board list;
+        // 'verify-mine' just lets the Tools & Links page show the caller their own two badges.
+        if (action === 'verify-mine') {
+            const raw = await redis(['HGET', manualVerifyKey(factionId), playerId]);
+            const v = raw ? JSON.parse(raw) : {};
+            return res.status(200).json({ intel: !!v.intel, cat: !!v.cat });
+        }
         // Banners at the top of every page. Everyone reads the ones meant for them; leaders write them for THEIR OWN faction, and only an owner
         // (the same owners as Labs funds) can also write one for ALL factions (stored apart, under 'global').
         if (action === 'banners-get') {
@@ -650,6 +660,24 @@ module.exports = async function handler(req, res) {
 
         // Member Overview (who follows the rules / needs a push) — logic in lib/memberOverview.js.
         if (action.startsWith('mo-')) return res.status(200).json(await moHandle(action, req.body, { redis, key, factionId }));
+
+        // The leader's side of manual verification (see 'verify-mine' above): the whole faction's Intel/CAT
+        // status, and ticking one member's for either tool.
+        if (action === 'verify-get') {
+            const flat = (await redis(['HGETALL', manualVerifyKey(factionId)])) || [];
+            const map = {};
+            for (let i = 0; i < flat.length; i += 2) { try { map[flat[i]] = JSON.parse(flat[i + 1]); } catch (e) { /* skip */ } }
+            return res.status(200).json({ map });
+        }
+        if (action === 'verify-set') {
+            const { id, tool, value } = req.body;
+            if (!/^\d+$/.test(String(id)) || !['intel', 'cat'].includes(tool)) return res.status(400).json({ error: 'Bad request' });
+            const raw = await redis(['HGET', manualVerifyKey(factionId), String(id)]);
+            const v = raw ? JSON.parse(raw) : {};
+            v[tool] = !!value; v.updatedAt = Date.now();
+            await redis(['HSET', manualVerifyKey(factionId), String(id), JSON.stringify(v)]);
+            return res.status(200).json({ ok: true });
+        }
 
         // This faction's own Discord destination (see getDiscordPoster). Leader-only. The webhook
         // URL is a secret — it's never sent back, only a hint of which webhook is saved.

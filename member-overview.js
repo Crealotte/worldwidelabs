@@ -97,6 +97,7 @@ async function loadMemberOverview() {
     if (moBusy) return;
     if (!isLeaderCached) { $('mo-locked').style.display = 'block'; $('mo-body').style.display = 'none'; return; }
     $('mo-locked').style.display = 'none'; $('mo-body').style.display = 'block';
+    if (typeof loadAdoption === 'function') loadAdoption('-mo');
     moBusy = true;
     const st = $('mo-status');
     st.className = 'status ok'; st.textContent = 'Loading…';

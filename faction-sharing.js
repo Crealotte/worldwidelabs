@@ -1,12 +1,27 @@
-// faction-sharing.js — the leader-only "Who's on board" roster panel, plus the opt-in
-// snapshot-sharing toggle that lets other factions' leaders see it without a shared key.
+// faction-sharing.js — the leader-only "Who's on board" roster panel (shown on the dashboard AND, further
+// down, on Member Overview — same data, fetched once and reused so opening both in one session doesn't ask
+// Torn twice), plus the opt-in snapshot-sharing toggle that lets other factions' leaders see it without a
+// shared key.
 'use strict';
 
-    // Leaders only: who in the faction has logged into WWLabs, and who hasn't yet.
-    async function loadAdoption() {
-        const panel = $('adoption');
-        try {
-            const [trackData, membersData, discordData] = await Promise.all([
+let adoptionCache = null, adoptionCacheAt = 0; // { logins, members, discordMembers, verifyMap } — good for a few minutes
+
+async function fetchVerifyMap() {
+    try {
+        const res = await fetch('/api/war-payout', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key: apiKey, action: 'verify-get' }) });
+        const data = await res.json();
+        return data.error ? {} : (data.map || {});
+    } catch (e) { return {}; }
+}
+
+// Leaders only: who in the faction has logged into WWLabs, and who hasn't yet. `sfx` picks which set of
+// elements to fill in — '' for the dashboard's own panel, '-mo' for the copy on Member Overview.
+async function loadAdoption(sfx = '') {
+    const panel = $('adoption' + sfx);
+    try {
+        let data = adoptionCache;
+        if (!data || Date.now() - adoptionCacheAt > 3 * 60 * 1000) {
+            const [trackData, membersData, discordData, verifyMap] = await Promise.all([
                 fetch('/api/presence', {
                     method: 'POST', headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ key: apiKey, action: 'list' }),
@@ -16,48 +31,68 @@
                     method: 'POST', headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ key: apiKey }),
                 }).then(r => r.json()).catch(() => null),
+                fetchVerifyMap(),
             ]);
             if (trackData.error) throw new Error(trackData.error);
-            const logins = trackData.logins || {};
-            const members = (membersData.members || []).slice();
-            const discordMembers = (discordData && !discordData.error) ? discordData.members : null;
-
-            members.sort((a, b) =>
-                (logins[b.id]?.last || 0) - (logins[a.id]?.last || 0) || a.name.localeCompare(b.name));
-
-            const onboard = members.filter(m => logins[m.id]).length;
-            $('adoption-summary').textContent = discordMembers
-                ? `${onboard} of ${members.length} members have logged into WWLabs · ${members.filter(m => discordMembers[m.id]).length} of ${members.length} found in Discord.`
-                : `${onboard} of ${members.length} members have logged in. (Discord check not set up yet.)`;
-
-            $('adoption-body').innerHTML = members.map(m => {
-                const l = logins[m.id];
-                const when = l
-                    ? new Date(l.last).toLocaleDateString() + ' ' +
-                      new Date(l.last).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-                    : '';
-                let discordCell = '<span style="color:var(--muted);font-size:11px;">—</span>';
-                if (discordMembers) {
-                    const d = discordMembers[m.id];
-                    discordCell = d
-                        ? (d.verified
-                            ? '<span style="color:var(--reagent)">● verified</span>'
-                            : '<span style="color:var(--happy)">● in server</span>')
-                        : '<span style="color:var(--muted)">○ not found</span>';
-                }
-                return `<tr${l ? '' : ' style="opacity:.5"'}>
-                    <td>${esc(m.name)} [${m.id}]</td>
-                    <td>${l ? '<span style="color:var(--reagent)">● on board</span>' : '<span style="color:var(--muted)">○ not yet</span>'}</td>
-                    <td>${discordCell}</td>
-                    <td class="num" style="font-family:var(--mono);font-size:12px;">${when}</td>
-                </tr>`;
-            }).join('');
-            panel.style.display = 'block';
-        } catch (e) {
-            // No server (local file), no database yet, or not a leader — just keep the panel hidden.
-            panel.style.display = 'none';
+            data = { logins: trackData.logins || {}, members: (membersData.members || []).slice(), discordMembers: (discordData && !discordData.error) ? discordData.members : null, verifyMap };
+            adoptionCache = data; adoptionCacheAt = Date.now();
         }
+        const { logins, members, discordMembers, verifyMap } = data;
+
+        const sorted = members.slice().sort((a, b) =>
+            (logins[b.id]?.last || 0) - (logins[a.id]?.last || 0) || a.name.localeCompare(b.name));
+
+        const onboard = sorted.filter(m => logins[m.id]).length;
+        $('adoption-summary' + sfx).textContent = discordMembers
+            ? `${onboard} of ${sorted.length} members have logged into WWLabs · ${sorted.filter(m => discordMembers[m.id]).length} of ${sorted.length} found in Discord.`
+            : `${onboard} of ${sorted.length} members have logged in. (Discord check not set up yet.)`;
+
+        // Torn Intel and CAT can't be checked automatically — a leader clicks the ○/✓ badge to tick a member
+        // by hand once they've confirmed it themselves. Not tracked at all for someone not yet on WWLabs.
+        const manualBadge = (id, tool, on) => `<span class="adopt-verify" data-id="${esc(id)}" data-tool="${tool}" style="cursor:pointer;${on ? 'color:var(--reagent);' : 'color:var(--muted);'}" title="Click to mark ${on ? 'not verified' : 'verified'}">${on ? '✓ verified' : '○ not yet'}</span>`;
+
+        $('adoption-body' + sfx).innerHTML = sorted.map(m => {
+            const l = logins[m.id];
+            const when = l
+                ? new Date(l.last).toLocaleDateString() + ' ' +
+                  new Date(l.last).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                : '';
+            let discordCell = '<span style="color:var(--muted);font-size:11px;">—</span>';
+            if (discordMembers) {
+                const d = discordMembers[m.id];
+                discordCell = d
+                    ? (d.verified
+                        ? '<span style="color:var(--reagent)">● verified</span>'
+                        : '<span style="color:var(--happy)">● in server</span>')
+                    : '<span style="color:var(--muted)">○ not found</span>';
+            }
+            const v = verifyMap[m.id] || {};
+            return `<tr${l ? '' : ' style="opacity:.5"'}>
+                <td>${esc(m.name)} [${m.id}]</td>
+                <td>${l ? '<span style="color:var(--reagent)">● on board</span>' : '<span style="color:var(--muted)">○ not yet</span>'}</td>
+                <td>${discordCell}</td>
+                <td>${manualBadge(m.id, 'intel', !!v.intel)}</td>
+                <td>${manualBadge(m.id, 'cat', !!v.cat)}</td>
+                <td class="num" style="font-family:var(--mono);font-size:12px;">${when}</td>
+            </tr>`;
+        }).join('');
+        $('adoption-body' + sfx).querySelectorAll('.adopt-verify').forEach(el => el.addEventListener('click', async () => {
+            const id = el.dataset.id, tool = el.dataset.tool, next = !(adoptionCache?.verifyMap?.[id]?.[tool]);
+            el.style.pointerEvents = 'none';
+            try {
+                const res = await fetch('/api/war-payout', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key: apiKey, action: 'verify-set', id, tool, value: next }) });
+                const r = await res.json();
+                if (r.error) throw new Error(r.error);
+                if (adoptionCache) { adoptionCache.verifyMap = adoptionCache.verifyMap || {}; adoptionCache.verifyMap[id] = { ...(adoptionCache.verifyMap[id] || {}), [tool]: next }; }
+                loadAdoption(''); loadAdoption('-mo'); // both copies of the table share one cache — keep them in sync
+            } catch (e) { toast(`Couldn't update it: ${e.message}`); el.style.pointerEvents = ''; }
+        }));
+        panel.style.display = 'block';
+    } catch (e) {
+        // No server (local file), no database yet, or not a leader — just keep the panel hidden.
+        panel.style.display = 'none';
     }
+}
 
     // ================= FACTION SHARING (opt-in, no keys exchanged) =================
     // A leader flips a toggle to share their own faction's roster overview snapshot —

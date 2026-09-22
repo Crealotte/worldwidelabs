@@ -681,7 +681,7 @@
                 <p style="color:var(--muted);font-size:12px;margin:0 0 12px;" id="adoption-summary"></p>
                 <div class="table-scroll" style="max-height:340px;overflow-y:auto;">
                     <table>
-                        <thead><tr><th>Member</th><th>WWLabs</th><th>Discord</th><th class="num">Last login</th></tr></thead>
+                        <thead><tr><th>Member</th><th>WWLabs</th><th>Discord</th><th>Intel</th><th>CAT</th><th class="num">Last login</th></tr></thead>
                         <tbody id="adoption-body"></tbody>
                     </table>
                 </div>
@@ -882,7 +882,7 @@
                 <div class="panel" id="fb-native-desc-panel" style="display:none;">
                     <p id="fb-native-desc" style="color:var(--muted);margin:0;"></p>
                 </div>
-                <div id="fb-native-questions"></div>
+                <div id="fb-native-questions" class="wrap-text"></div>
                 <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin:4px 0 20px;">
                     <button class="ghost" id="fb-native-submit">Submit</button>
                     <span id="fb-native-savednote" style="display:none;color:var(--muted);font-size:12px;">You already answered this — submitting again replaces your answer.</span>
@@ -890,7 +890,7 @@
                 <div class="status" id="fb-native-status"></div>
                 <div id="fb-native-results-panel" style="display:none;margin-top:16px;">
                     <h3>Results so far</h3>
-                    <div id="fb-native-results"></div>
+                    <div id="fb-native-results" class="wrap-text"></div>
                 </div>
             </div>
 
@@ -934,7 +934,7 @@
                         <label for="fb-desc-input">Description (optional)</label>
                         <input id="fb-desc-input" placeholder="A line explaining what this is for">
                     </div>
-                    <div id="fb-questions"></div>
+                    <div id="fb-questions" class="wrap-text"></div>
                     <button class="ghost small" id="fb-q-add" style="margin-bottom:14px;">+ Add a question</button>
                 </div>
 
@@ -1378,6 +1378,18 @@
                     <div class="table-scroll" style="overflow:auto;max-height:75vh;">
                         <div id="mo-table"></div>
                     </div>
+                </div>
+
+                <div class="panel" id="adoption-mo" style="display:none;">
+                    <details><summary class="av-sum"><h3>Who's on board</h3></summary>
+                    <p style="color:var(--muted);font-size:12px;margin:0 0 12px;" id="adoption-summary-mo"></p>
+                    <div class="table-scroll" style="max-height:340px;overflow-y:auto;">
+                        <table>
+                            <thead><tr><th>Member</th><th>WWLabs</th><th>Discord</th><th>Intel</th><th>CAT</th><th class="num">Last login</th></tr></thead>
+                            <tbody id="adoption-body-mo"></tbody>
+                        </table>
+                    </div>
+                    </details>
                 </div>
 
                 <div class="panel">

@@ -18,8 +18,8 @@
 
     const REQUIRED_LINKS = [
         { title: 'Discord', url: 'https://discord.gg/HFmPUd2zyh', desc: 'Faction communication and coordination.', checkId: 'discord' },
-        { title: 'Torn Intel', url: 'https://torn-intel.com/', desc: 'Shared faction intelligence — activity, war analytics, enemy monitoring.' },
-        { title: 'CAT', url: 'https://cat-script.com/', desc: 'Required faction tool.' },
+        { title: 'Torn Intel', url: 'https://torn-intel.com/', desc: 'Shared faction intelligence — activity, war analytics, enemy monitoring.', checkId: 'torn_intel' },
+        { title: 'CAT', url: 'https://cat-script.com/', desc: 'Required faction tool.', checkId: 'cat' },
     ];
 
     // ================= HELPERS =================
