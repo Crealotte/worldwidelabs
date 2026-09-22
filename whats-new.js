@@ -7,33 +7,41 @@
 // what is NEW since the last posted version, so nothing is announced twice (see wnBigPost below).
 //
 // TO ADD AN UPDATE: put a new object at the TOP of WHATS_NEW below with the next version number
-// (the last one is 1.14 → the next is 1.15). Plain text only (no HTML).
+// (the last one is 1.15 → the next is 1.16). Plain text only (no HTML).
 'use strict';
 
 const WHATS_NEW = [
     {
-        version: '1.14', date: '2026-09-21',
-        title: 'Availability hours vs hits, map fix',
+        version: '1.15', date: '2026-09-22',
+        title: 'Mentoring Platform, native feedback forms',
         everyone: [
             'New Mentoring Platform: if a leader has paired you up as a mentor or a pupil, a new 🎓 Mentoring item appears in the menu with your pairing, a shared checklist (ticked separately per pair) and a private chat with your mentor or pupil. Your checklist also shows in the WWL energy-plan userscript inside Torn, under a new Mentoring tab.',
             'Fixed a bug in the feedback form editor where a multiple-choice/checkbox option got cut off if it was longer than 50 characters — the limit is now 120, with a wider box to type it in. Long text also wraps properly now instead of ever running past the edge.',
             'Feedback form: leaders can now build a form right into WWL — no Google account needed — with short answer, paragraph, multiple choice and checkbox questions, a new "several short items" question for an open list of quick answers, and an optional "Other: ___" choice on multiple choice / checkbox questions. A live results chart (a donut for pick-one, bars for pick-several) shows for whichever questions the leader marks as public — open text is never made public, only the leader ever sees it. Linking a Google Form is still there too, for whoever prefers that. Each question now sits in its own card, closer to how Google\'s forms look.',
             'Member Overview and Your standing now also count what you have trained today so far, not just up to midnight — the same live number the Energy tracker shows.',
             'Energy tracker: today\'s row now updates through the day (roughly every hour) instead of staying at zero until tomorrow, with a note saying how fresh it is ("up to date as of HH:MM TCT").',
+            '"Who\'s on board" (who has logged into WWLabs, Discord, Torn Intel and CAT) now also shows on Member Overview, under the member table, not just the dashboard. It also has two new columns: Torn Intel and CAT have no way for WWL to check automatically, so click the ○/✓ next to a member to tick them by hand once you\'ve confirmed it — their own "Tools & Links" page then shows the same ✓ badge Discord gets.',
+            'War Availability: you can now change how many days a plan\'s grid shows after creating it ("✎ Change days shown" next to the plan dropdown) — no need to delete and recreate it just because a termed war ran shorter than expected. A termed war can also get an "Expected to last about (days)" guess, which softly rings those whole days in the grid — it never stops anyone ticking a later day, so nothing is lost if the terms fall through and it runs long.',
+        ],
+        leaders: [
+            'Mentoring admin: adding a mentor or pupil is now a dropdown of your actual roster (pick the name) instead of typing a player ID and name by hand. Leaders can also now see "👁 All mentoring pairs" on the Mentoring page itself — every pairing\'s checklist and chat, read-only — even without being signed up as a mentor or pupil yourself.',
+            'Availability overview: you can now archive a plan (📦 Archive this plan, next to the plan dropdown). An archived plan stops showing to members and can\'t be filled in any more, but nothing on it is deleted — pick it later from the new "Archived plans" list to check it, its entries and its war result.',
+        ],
+    },
+    {
+        version: '1.14', date: '2026-09-21',
+        title: 'Availability hours vs hits, map fix',
+        everyone: [
             'Target pages: the hospital status is now shown by itself (Okay, or Hospital with the time left counting down) on Level targets, Target finder and the other target lists. A row you pressed Attack on turns faded green for 24 hours, so you know where you left off. New ★ button on every target adds the player to the new My targets page (Targets menu): your own list of easy targets with decent respect, with a note, their status and an Attack button. The list follows you between PC and TornPDA.',
             'The tool now uses much more of a wide screen (it was limited to a narrow column).',
             'Bugs & suggestions: the full text of a bug report is now shown to everyone right under each known bug, so you can read it before pressing "I have this too" (long ones have a "Read the rest"; the name of the sender is only shown to leaders). Long titles are cut at a word with …, and long text wraps on a phone instead of running off the screen.',
             'New banners: a leader can pin a short message at the top of every page (Leader settings → Banners) — for a new feature, a Torn event or a reminder. Pick who sees it (everyone in your faction or only its leaders; an owner can also show a banner to all factions), a colour, an end date, an optional icon, an optional live countdown (for example to a Torn event) and an optional button to a page. With more than one, they slide to the next by themselves (arrows, dots and swiping work too). You can close a banner; it comes back only if the text is changed.',
             'War Availability: new blue ring. Turn on the switch above your grid and click hours to mark when you will be a Chain saver (on a chain plan: online and active, keeping an eye on the chain) or a War guard (on a war plan: online and active, keeping an eye out for when things go wrong — making the calls, changing plans, keeping the chat clear, motivating people). Green and yellow still say how sure you are to be online; the blue ring says what you will do while you are. Each hour has room for one, plus one backup, so not everyone piles into the same hour. Leaders see the blue count per hour and who it is.',
-            '"Who\'s on board" (who has logged into WWLabs, Discord, Torn Intel and CAT) now also shows on Member Overview, under the member table, not just the dashboard. It also has two new columns: Torn Intel and CAT have no way for WWL to check automatically, so click the ○/✓ next to a member to tick them by hand once you\'ve confirmed it — their own "Tools & Links" page then shows the same ✓ badge Discord gets.',
             'Behind the scenes: WWL now remembers answers from Torn that hardly ever change (who you are, faction access, the member list) for a few minutes instead of asking again on every page, waits and retries once when Torn says "too many requests", and counts its calls. Members will notice fewer "too many requests" errors.',
-            'War Availability: you can now change how many days a plan\'s grid shows after creating it ("✎ Change days shown" next to the plan dropdown) — no need to delete and recreate it just because a termed war ran shorter than expected. A termed war can also get an "Expected to last about (days)" guess, which softly rings those whole days in the grid — it never stops anyone ticking a later day, so nothing is lost if the terms fall through and it runs long.',
             'War Availability: when a plan has a start time (a linked war, or a chain start typed in), the hours before that start are now greyed out and can\'t be ticked any more. Hours ticked there before are left out of the counts.',
             'Timezone map: fixed the stretched line across the map — the far east of Russia (and Alaska\'s far islands) now show up correctly on the other side of the map.',
         ],
         leaders: [
-            'Mentoring admin: adding a mentor or pupil is now a dropdown of your actual roster (pick the name) instead of typing a player ID and name by hand. Leaders can also now see "👁 All mentoring pairs" on the Mentoring page itself — every pairing\'s checklist and chat, read-only — even without being signed up as a mentor or pupil yourself.',
-            'Availability overview: you can now archive a plan (📦 Archive this plan, next to the plan dropdown). An archived plan stops showing to members and can\'t be filled in any more, but nothing on it is deleted — pick it later from the new "Archived plans" list to check it, its entries and its war result.',
             'Availability overview: the overdoses are now a list — every member who overdosed, how many times, when it shows up in Torn history and how many hours before the war start that was (red = within 24 h, yellow = 24 to 48 h). Torn only saves stats as snapshots, so the time means it was in the record by then.',
             'Bugs & suggestions: a "Copy all bugs & suggestions" button copies every bug and suggestion with the full text (status, votes, who sent it, screenshot yes/no) in one go. New bug reports now keep their full text, which you can open under each known bug ("Full report").',
             'New "Torn API usage (my key)" button in Member Overview → Checks for the developer: shows how many calls WWL made with your key in the last two hours, the busiest minute and which kinds of calls are used most, so we can see where they go.',
