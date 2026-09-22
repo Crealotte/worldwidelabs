@@ -83,9 +83,14 @@ function defaultPlanId(plans) {
     return (live[0] || plans[plans.length - 1]).id;
 }
 
-async function resolvePlan(factionId, requestedId) {
+// `allowArchived` (leaders only, and only when they explicitly picked one) lets an archived plan be opened —
+// otherwise a requested archived plan is ignored and the usual default (never archived) is used instead, so a
+// member whose browser still remembers an old plan id is never quietly shown one that was hidden from them.
+async function resolvePlan(factionId, requestedId, allowArchived = false) {
     const plans = await loadPlanIndex(factionId);
-    const id = plans.find(p => p.id === requestedId)?.id || defaultPlanId(plans);
+    let id = plans.find(p => p.id === requestedId)?.id;
+    if (id && plans.find(p => p.id === id)?.archived && !allowArchived) id = null;
+    id = id || defaultPlanId(plans.filter(p => !p.archived));
     if (!id) return { plans, id: null, data: null };
     const raw = await redis(['GET', availabilityKey(factionId, id)]);
     return { plans, id, data: raw ? JSON.parse(raw) : null };
@@ -399,11 +404,15 @@ module.exports = async function handler(req, res) {
         // normal length. Slots are keyed "day-hour" (day = 0-indexed offset from the tracker's
         // start date), one flat object per member for O(1) toggling.
         if (action === 'availability-get') {
-            const { plans, id: planId, data } = await resolvePlan(factionId, req.body.planId);
+            const leaderFlag = await isLeader(key);
+            const { plans: allPlans, id: planId, data } = await resolvePlan(factionId, req.body.planId, leaderFlag);
             const mine = data?.entries?.[playerId]?.slots || {};
             const unavailable = data?.unavailable || {};
+            const viewingArchived = !!allPlans.find(p => p.id === planId)?.archived;
             const result = {
-                plans, planId, // the dropdown's list, and which one this response is for
+                plans: allPlans.filter(p => !p.archived), // the everyday dropdown — archived plans never show here, for anyone
+                archivedPlans: leaderFlag ? allPlans.filter(p => p.archived) : [], // leaders only: the separate "pick one to view" list
+                planId, viewingArchived,
                 // war = the ranked war this tracker is linked to ({ id, start, opponent }), if any
                 config: data ? { startDate: data.startDate, days: data.days, war: data.war || null, name: data.name || '' } : null,
                 mine,
@@ -416,7 +425,7 @@ module.exports = async function handler(req, res) {
                 for (const k of slots) { const order = watchOrder(data, k); if (order.length) taken[k] = Math.min(WATCH_MAX, order.length); const i = order.findIndex(o => o.id === playerId); if (i >= 0) role[k] = i === 0 ? 'primary' : 'backup'; }
                 result.watchTaken = taken; result.mineRole = role;
             }
-            if (await isLeader(key)) {
+            if (leaderFlag) {
                 // Everyone who hit "I can't make this war" (the forum-post equivalent) — listed
                 // for the leader, and their ticked slots are left out of the heatmap below so a
                 // leader never counts on someone who already said they can't make it.
@@ -795,6 +804,7 @@ module.exports = async function handler(req, res) {
         // start (warStart, unix); neither is required. Capped at 10 plans so the dropdown and
         // storage can't grow forever.
         if (action === 'availability-create') {
+            if (!(await isLeader(key))) return res.status(403).json({ error: 'Leaders only' });
             const { startDate, days, warId, warStart, name } = req.body;
             const dayCount = Math.min(14, Math.max(1, Number(days) || 5));
             if (!startDate) return res.status(400).json({ error: 'Missing startDate' });
@@ -825,7 +835,7 @@ module.exports = async function handler(req, res) {
         if (action === 'availability-link-war') {
             if (!(await isLeader(key))) return res.status(403).json({ error: 'Leaders only' });
             const { warId, warStart, termed, agreed, lead, loserPct, ourScore, theirScore } = req.body;
-            const { plans, id: planId, data } = await resolvePlan(factionId, req.body.planId);
+            const { plans, id: planId, data } = await resolvePlan(factionId, req.body.planId, true);
             if (!data) return res.status(400).json({ error: 'There is no plan to link — create one first.' });
             let war;
             if (warId && String(data.war?.id) === String(warId)) war = { ...data.war };
@@ -852,12 +862,27 @@ module.exports = async function handler(req, res) {
         }
 
         if (action === 'availability-delete') {
+            if (!(await isLeader(key))) return res.status(403).json({ error: 'Leaders only' });
             const { planId } = req.body;
             const plans = await loadPlanIndex(factionId);
             if (!plans.find(p => p.id === planId)) return res.status(400).json({ error: 'That plan doesn\'t exist.' });
             await redis(['DEL', availabilityKey(factionId, planId)]);
             await redis(['SET', availabilityIndexKey(factionId), JSON.stringify(plans.filter(p => p.id !== planId))]);
             return res.status(200).json({ ok: true });
+        }
+
+        // Archives (or restores) a plan: it stops showing in the everyday plan dropdown (so members stop seeing it and can't fill it in),
+        // but everything already on it — the entries, the war link, the overdose history — stays, and a leader can still open it from the
+        // "Archived plans" list to check it later. Leaders only.
+        if (action === 'availability-archive') {
+            if (!(await isLeader(key))) return res.status(403).json({ error: 'Leaders only' });
+            const { planId, archived } = req.body;
+            const plans = await loadPlanIndex(factionId);
+            const meta = plans.find(p => p.id === planId);
+            if (!meta) return res.status(400).json({ error: 'That plan doesn\'t exist.' });
+            meta.archived = !!archived;
+            await redis(['SET', availabilityIndexKey(factionId), JSON.stringify(plans)]);
+            return res.status(200).json({ ok: true, archived: meta.archived });
         }
 
         // Overdose view: who's overdosed since the window start, from the last scan. Reads only

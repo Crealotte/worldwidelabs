@@ -25,6 +25,7 @@ const WHATS_NEW = [
             'Timezone map: fixed the stretched line across the map — the far east of Russia (and Alaska\'s far islands) now show up correctly on the other side of the map.',
         ],
         leaders: [
+            'Availability overview: you can now archive a plan (📦 Archive this plan, next to the plan dropdown). An archived plan stops showing to members and can\'t be filled in any more, but nothing on it is deleted — pick it later from the new "Archived plans" list to check it, its entries and its war result.',
             'Availability overview: the overdoses are now a list — every member who overdosed, how many times, when it shows up in Torn history and how many hours before the war start that was (red = within 24 h, yellow = 24 to 48 h). Torn only saves stats as snapshots, so the time means it was in the record by then.',
             'Bugs & suggestions: a "Copy all bugs & suggestions" button copies every bug and suggestion with the full text (status, votes, who sent it, screenshot yes/no) in one go. New bug reports now keep their full text, which you can open under each known bug ("Full report").',
             'New "Torn API usage (my key)" button in Member Overview → Checks for the developer: shows how many calls WWL made with your key in the last two hours, the busiest minute and which kinds of calls are used most, so we can see where they go.',

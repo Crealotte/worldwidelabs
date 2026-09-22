@@ -33,10 +33,12 @@ try { avLocal = localStorage.getItem(AV_TZ_KEY) === '1'; } catch (e) { /* storag
 // dropdown. The picked plan is remembered per browser, and attached to every request that reads
 // or writes a plan's data (the backend falls back to the sensible default if it no longer exists).
 const AV_PLAN_KEY = 'wwl_av_plan';
-let avPlans = []; // light metadata for the dropdown: [{ id, name, startDate, days, war }]
+let avPlans = []; // light metadata for the dropdown: [{ id, name, startDate, days, war }] — never includes archived plans
+let avArchivedPlans = []; // leader-only: archived plans, for the separate "pick one to view" list
+let avViewingArchived = false; // true when avPlanId currently points at an archived plan
 let avPlanId = null;
 try { avPlanId = localStorage.getItem(AV_PLAN_KEY) || null; } catch (e) { /* storage blocked */ }
-const AV_PLAN_ACTIONS = new Set(['availability-get', 'availability-set', 'availability-watch', 'availability-link-war', 'availability-unavailable', 'availability-ping']);
+const AV_PLAN_ACTIONS = new Set(['availability-get', 'availability-set', 'availability-watch', 'availability-link-war', 'availability-unavailable', 'availability-ping', 'availability-archive']);
 let avOd = null; // leader-only: last overdose view from the backend
 let avOdIds = new Set(); // ids of members who've overdosed in the window (marked in the slot list)
 let avOdScanning = false;
@@ -61,6 +63,8 @@ async function loadAvailability() {
         const result = await avFetch({ action: 'availability-get' });
         if (result.error) throw new Error(result.error);
         avPlans = result.plans || [];
+        avArchivedPlans = result.archivedPlans || [];
+        avViewingArchived = !!result.viewingArchived;
         avPlanId = result.planId || null;
         try { if (avPlanId) localStorage.setItem(AV_PLAN_KEY, avPlanId); } catch (e) { /* not critical */ }
         avConfig = result.config;
@@ -294,15 +298,26 @@ function avPlanLabel(p) {
 }
 
 function renderAvPlanBar() {
-    // the plan picker exists on the member page and (with the delete button) on the leaders' overview
+    // the plan picker exists on the member page and (with the delete/archive buttons) on the leaders' overview.
+    // While viewing an archived plan it is hidden — that plan isn't in `avPlans` any more, so it couldn't be
+    // shown as "selected" there anyway — and a note bar with a way back takes its place instead.
     const options = avPlans.map(p => `<option value="${esc(p.id)}"${p.id === avPlanId ? ' selected' : ''}>${esc(avPlanLabel(p))}</option>`).join('');
     for (const sfx of ['', '-l']) {
         const bar = $('av-plan-bar' + sfx);
-        if (!avPlans.length) { bar.style.display = 'none'; continue; }
+        if (!avPlans.length || avViewingArchived) { bar.style.display = 'none'; continue; }
         bar.style.display = 'flex';
         $('av-plan-select' + sfx).innerHTML = options;
     }
-    $('av-plan-delete-l').style.display = avSummary !== null ? 'inline-block' : 'none'; // leaders only
+    $('av-plan-archive-l').style.display = avSummary !== null && !avViewingArchived && avPlanId ? 'inline-block' : 'none'; // leaders only
+    $('av-plan-delete-l').style.display = avSummary !== null && !avViewingArchived ? 'inline-block' : 'none'; // leaders only
+
+    const arSel = $('av-archived-select-l');
+    $('av-archived-bar-l').style.display = avSummary !== null && avArchivedPlans.length ? 'flex' : 'none'; // leaders only
+    if (avSummary !== null) {
+        arSel.innerHTML = '<option value="">— pick one to view —</option>'
+            + avArchivedPlans.map(p => `<option value="${esc(p.id)}"${p.id === avPlanId && avViewingArchived ? ' selected' : ''}>${esc(avPlanLabel(p))}</option>`).join('');
+    }
+    $('av-archived-note-l').style.display = avSummary !== null && avViewingArchived ? 'flex' : 'none';
 }
 
 ['av-plan-select', 'av-plan-select-l'].forEach(id => $(id).addEventListener('change', () => {
@@ -311,6 +326,43 @@ function renderAvPlanBar() {
     avSelected = null;
     loadAvailability();
 }));
+
+$('av-archived-select-l').addEventListener('change', () => {
+    const id = $('av-archived-select-l').value;
+    if (!id) return;
+    avPlanId = id;
+    try { localStorage.setItem(AV_PLAN_KEY, avPlanId); } catch (e) { /* not critical */ }
+    avSelected = null;
+    loadAvailability();
+});
+
+$('av-archived-back').addEventListener('click', () => {
+    avPlanId = null; // let the server pick the usual (never archived) default
+    try { localStorage.removeItem(AV_PLAN_KEY); } catch (e) { /* not critical */ }
+    avSelected = null;
+    loadAvailability();
+});
+
+$('av-plan-archive-l').addEventListener('click', async () => {
+    const p = avPlans.find(x => x.id === avPlanId);
+    if (!p) return;
+    if (!confirm(`Archive "${avPlanLabel(p)}"? Members will no longer see it or be able to fill it in, but nothing on it is deleted — you can still open it later from "Archived plans".`)) return;
+    try {
+        const r = await avFetch({ action: 'availability-archive', planId: avPlanId, archived: true });
+        if (r.error) throw new Error(r.error);
+        toast('Plan archived');
+        await loadAvailability();
+    } catch (e) { toast(`Couldn't archive it: ${e.message}`); }
+});
+
+$('av-plan-unarchive-l').addEventListener('click', async () => {
+    try {
+        const r = await avFetch({ action: 'availability-archive', planId: avPlanId, archived: false });
+        if (r.error) throw new Error(r.error);
+        toast('Plan restored');
+        await loadAvailability();
+    } catch (e) { toast(`Couldn't restore it: ${e.message}`); }
+});
 
 $('av-plan-delete-l').addEventListener('click', async () => {
     const p = avPlans.find(x => x.id === avPlanId);

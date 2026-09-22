@@ -1623,10 +1623,20 @@
                 <p style="color:var(--muted);margin:0;">🔒 Only leaders and council (faction API access) can see this page.</p>
             </div>
 
-            <div id="av-plan-bar-l" style="display:none;margin:0 0 14px;align-items:center;gap:10px;flex-wrap:wrap;">
+            <div id="av-plan-bar-l" style="display:none;margin:0 0 8px;align-items:center;gap:10px;flex-wrap:wrap;">
                 <label for="av-plan-select-l" style="font-size:14px;font-weight:700;">Plan:</label>
                 <select id="av-plan-select-l" style="width:auto;min-width:280px;font-size:14px;"></select>
+                <button class="ghost small" id="av-plan-archive-l" style="display:none;">📦 Archive this plan</button>
                 <button class="ghost small" id="av-plan-delete-l" style="display:none;">Delete this plan</button>
+            </div>
+            <div id="av-archived-bar-l" style="display:none;margin:0 0 14px;align-items:center;gap:10px;flex-wrap:wrap;">
+                <label for="av-archived-select-l" style="font-size:13px;color:var(--muted);">📦 Archived plans:</label>
+                <select id="av-archived-select-l" style="width:auto;min-width:280px;font-size:13px;"><option value="">— pick one to view —</option></select>
+            </div>
+            <div id="av-archived-note-l" style="display:none;margin:0 0 14px;padding:10px 14px;border:1px solid #f0b432;border-radius:var(--radius);font-size:13px;align-items:center;gap:10px;flex-wrap:wrap;">
+                <span>📦 You are viewing an <b>archived</b> plan — members can't see it or fill it in any more.</span>
+                <button class="ghost small" id="av-archived-back">↩ Back to my active plans</button>
+                <button class="ghost small" id="av-plan-unarchive-l">Unarchive it</button>
             </div>
 
             <div class="panel" id="av-none-msg-l" style="display:none;">
