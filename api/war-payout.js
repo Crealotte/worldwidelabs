@@ -628,12 +628,14 @@ module.exports = async function handler(req, res) {
             if (['sug-status', 'sug-delete'].includes(action) && !leader) return res.status(403).json({ error: 'Leaders only' });
             return res.status(200).json(await suggestHandle(action, req.body, { redis, playerId, name: playerName, isLeader: leader }));
         }
-        // Mentoring Platform — everyone reads their own status/checklist/chat; only leaders run the program itself.
-        // See lib/mentoring.js. isLeader(key) is only called for the leader-run actions, not the everyday ones.
+        // Mentoring Platform — everyone reads their own status/checklist/chat; only leaders run the program itself,
+        // and a leader can look in on any pair for oversight. See lib/mentoring.js. `leaderLazy` only actually
+        // calls Torn the moment (and if) mentoringHandle needs to know — an ordinary mentor/pupil already found to
+        // belong to their own pair never triggers it, so polling a chat doesn't cost an extra call every time.
         if (action.startsWith('mentor-')) {
-            const openActions = ['mentor-my-status', 'mentor-todo-toggle', 'mentor-chat-read', 'mentor-chat-send'];
-            const leaderFlag = openActions.includes(action) ? false : await isLeader(key);
-            return res.status(200).json(await mentoringHandle(action, req.body, { redis, playerId, name: playerName, leader: leaderFlag, factionId }));
+            let leaderCache = null;
+            const leaderLazy = async () => { if (leaderCache === null) leaderCache = await isLeader(key); return leaderCache; };
+            return res.status(200).json(await mentoringHandle(action, req.body, { redis, playerId, name: playerName, leaderLazy, factionId }));
         }
         // Known bugs list — anyone can read it and press "I have this too"; only leaders change the list.
         if (action.startsWith('bugs-')) {

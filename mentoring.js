@@ -27,18 +27,37 @@ async function loadMentoring() {
         if (r.error) throw new Error(r.error);
         mtData = r;
         st.textContent = ''; st.className = 'status';
-        // showing up in the menu at all already means you're in a pair — but keep this as a safety net for a direct link
-        $('nav-mentoring').style.display = (r.isMentor || r.isPupil) ? '' : 'none';
-        $('mt-empty').style.display = r.pairs.length ? 'none' : 'block';
+        // showing up in the menu at all already means you're in a pair (or a leader) — kept as a safety net for a direct link
+        $('nav-mentoring').style.display = (r.isMentor || r.isPupil || r.allPairs !== undefined) ? '' : 'none';
+        $('mt-empty').style.display = (r.pairs.length || r.allPairs?.length) ? 'none' : 'block';
         renderMentoringPairs();
-        if (r.pairs.length) {
+        $('mt-oversight-wrap').style.display = r.allPairs !== undefined ? 'block' : 'none';
+        if (r.allPairs !== undefined) renderMentoringOversight();
+        const allPairIds = [...r.pairs.map(p => p.pairId), ...(r.allPairs || []).map(p => p.pairId)];
+        if (allPairIds.length) {
             mtPollTimer = setInterval(() => {
                 const page = document.getElementById('page-mentoring');
                 if (!page || !page.classList.contains('visible')) { clearInterval(mtPollTimer); mtPollTimer = null; return; }
-                mtData.pairs.forEach(p => mtRefreshChat(p.pairId, false));
+                allPairIds.forEach(id => mtRefreshChat(id, false));
             }, 8000);
         }
     } catch (e) { st.className = 'status err'; st.textContent = e.message; }
+}
+
+// Leader oversight: every OTHER pairing (their own, if any, already shows above via renderMentoringPairs), read
+// only — the checklist shows as plain done/not-done, and the chat has no box to type in.
+function renderMentoringOversight() {
+    $('mt-oversight').innerHTML = mtData.allPairs.map(p => `
+        <div class="panel" style="margin-bottom:16px;" data-pair="${esc(p.pairId)}">
+            <h3 style="margin-top:0;">${esc(p.mentorName)} ↔ ${esc(p.pupilName)}</h3>
+            ${mtData.todos.length ? `<div style="margin-bottom:16px;">
+                ${mtData.todos.map(t => `<div style="padding:3px 0;color:${p.done.includes(t.id) ? 'var(--reagent)' : 'var(--muted)'};">${p.done.includes(t.id) ? '✓' : '○'} ${esc(t.text)}</div>`).join('')}
+            </div>` : ''}
+            <div style="border-top:1px solid var(--line);padding-top:12px;">
+                <div class="mt-chat" style="max-height:200px;overflow-y:auto;display:flex;flex-direction:column;gap:6px;"></div>
+            </div>
+        </div>`).join('');
+    mtData.allPairs.forEach(p => mtRefreshChat(p.pairId, true));
 }
 
 function mtPairKey(p) { const [mentorId, pupilId] = p.pairId.split(':'); return { mentorId, pupilId }; }
@@ -90,7 +109,7 @@ function renderMentoringPairs() {
 }
 
 async function mtRefreshChat(pairId, scrollToEnd) {
-    const card = document.querySelector(`#mt-pairs .panel[data-pair="${CSS.escape(pairId)}"]`);
+    const card = document.querySelector(`.panel[data-pair="${CSS.escape(pairId)}"]`); // lives in #mt-pairs (mine) or #mt-oversight (a leader looking in)
     if (!card) return;
     const { mentorId, pupilId } = mtPairKey({ pairId });
     const r = await mtFetch({ action: 'mentor-chat-read', mentorId, pupilId });
@@ -112,7 +131,7 @@ const mtMyId = () => String((typeof profile !== 'undefined' && profile?.player_i
 // ==================================  LEADER: Mentoring admin  ===============================
 // ============================================================================================
 
-let mtaProgram = null, mtaTodos = [];
+let mtaProgram = null, mtaTodos = [], mtaRoster = [];
 
 async function loadMentoringAdmin() {
     const locked = typeof isLeaderCached === 'undefined' || !isLeaderCached;
@@ -122,12 +141,20 @@ async function loadMentoringAdmin() {
     const st = $('mta-status');
     st.className = 'status ok'; st.textContent = 'Loading…';
     try {
-        const r = await mtFetch({ action: 'mentor-program-get' });
+        const [r, rosterData] = await Promise.all([mtFetch({ action: 'mentor-program-get' }), tornV2('/faction/members?striptags=true')]);
         if (r.error) throw new Error(r.error);
         mtaProgram = r.program; mtaTodos = r.todos.map(t => ({ ...t }));
+        mtaRoster = (rosterData?.members || []).slice().sort((a, b) => a.name.localeCompare(b.name));
         st.textContent = ''; st.className = 'status';
         renderMta();
     } catch (e) { st.className = 'status err'; st.textContent = e.message; }
+}
+
+// Everyone on the roster who isn't already a mentor/pupil — so the dropdown only ever offers someone new to add.
+function renderMtaSelects() {
+    const opt = m => `<option value="${m.id}">${esc(m.name)}</option>`;
+    $('mta-m-select').innerHTML = mtaRoster.filter(m => !mtaProgram.mentors[String(m.id)]).map(opt).join('') || '<option value="">— everyone is already a mentor —</option>';
+    $('mta-p-select').innerHTML = mtaRoster.filter(m => !mtaProgram.pupils[String(m.id)]).map(opt).join('') || '<option value="">— everyone is already a pupil —</option>';
 }
 
 function mtaPupilCount(mentorId) { return Object.values(mtaProgram.pupils).filter(p => String(p.mentorId) === String(mentorId)).length; }
@@ -191,6 +218,7 @@ function renderMta() {
     }));
 
     renderMtaTodos();
+    renderMtaSelects();
 }
 
 function renderMtaTodos() {
@@ -218,21 +246,25 @@ $('mta-todo-save').addEventListener('click', async () => {
 });
 
 $('mta-m-add').addEventListener('click', async () => {
-    const id = $('mta-m-id').value.replace(/[^\d]/g, '');
-    if (!id) { toast('Type a player ID.'); return; }
-    const r = await mtFetch({ action: 'mentor-add', id, name: $('mta-m-name').value, capacity: $('mta-m-cap').value, note: $('mta-m-note').value });
+    const sel = $('mta-m-select');
+    const id = sel.value;
+    if (!id) { toast('Pick someone from the list.'); return; }
+    const name = sel.options[sel.selectedIndex].textContent;
+    const r = await mtFetch({ action: 'mentor-add', id, name, capacity: $('mta-m-cap').value, note: $('mta-m-note').value });
     if (r.error) { toast(r.error); return; }
     mtaProgram = r.program; renderMta();
-    $('mta-m-id').value = ''; $('mta-m-name').value = ''; $('mta-m-note').value = '';
+    $('mta-m-note').value = '';
     toast('Mentor added');
 });
 $('mta-p-add').addEventListener('click', async () => {
-    const id = $('mta-p-id').value.replace(/[^\d]/g, '');
-    if (!id) { toast('Type a player ID.'); return; }
-    const r = await mtFetch({ action: 'pupil-add', id, name: $('mta-p-name').value, note: $('mta-p-note').value });
+    const sel = $('mta-p-select');
+    const id = sel.value;
+    if (!id) { toast('Pick someone from the list.'); return; }
+    const name = sel.options[sel.selectedIndex].textContent;
+    const r = await mtFetch({ action: 'pupil-add', id, name, note: $('mta-p-note').value });
     if (r.error) { toast(r.error); return; }
     mtaProgram = r.program; renderMta();
-    $('mta-p-id').value = ''; $('mta-p-name').value = ''; $('mta-p-note').value = '';
+    $('mta-p-note').value = '';
     toast('Pupil added');
 });
 
@@ -242,6 +274,8 @@ async function checkMentoringAccess() {
     try {
         const r = await mtFetch({ action: 'mentor-my-status' });
         const nav = document.getElementById('nav-mentoring');
-        if (nav) nav.style.display = (!r.error && (r.isMentor || r.isPupil)) ? '' : 'none';
+        // `allPairs` only ever comes back for a leader (see lib/mentoring.js) — so a leader gets the menu item
+        // too, purely to look in on the program, even with no pairing of their own.
+        if (nav) nav.style.display = (!r.error && (r.isMentor || r.isPupil || r.allPairs !== undefined)) ? '' : 'none';
     } catch (e) { /* nav item just stays hidden */ }
 }

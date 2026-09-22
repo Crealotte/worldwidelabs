@@ -986,6 +986,10 @@
                 <p style="color:var(--muted);margin:0;">You are not in a mentoring pair right now — ask a leader if you would like to mentor someone, or get a mentor yourself.</p>
             </div>
             <div id="mt-pairs" class="wrap-text"></div>
+            <div id="mt-oversight-wrap" style="display:none;">
+                <h3 style="margin:22px 0 10px;">👁 All mentoring pairs <span style="font-weight:400;color:var(--muted);font-size:12px;">(leaders only — read-only)</span></h3>
+                <div id="mt-oversight" class="wrap-text"></div>
+            </div>
         </section>
 
         <!-- ========== MENTORING ADMIN (leaders only) ========== -->
@@ -1004,8 +1008,7 @@
                     <h3 style="margin-top:0;">Mentors</h3>
                     <div id="mta-mentors" class="wrap-text"></div>
                     <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-top:12px;padding-top:12px;border-top:1px solid var(--line);">
-                        <div class="field" style="margin:0;max-width:140px;"><label for="mta-m-id">Player ID</label><input id="mta-m-id" type="text" inputmode="numeric"></div>
-                        <div class="field" style="margin:0;min-width:160px;"><label for="mta-m-name">Name</label><input id="mta-m-name" type="text" maxlength="40"></div>
+                        <div class="field" style="margin:0;min-width:220px;"><label for="mta-m-select">Member</label><select id="mta-m-select"><option value="">Loading the roster…</option></select></div>
                         <div class="field" style="margin:0;max-width:100px;"><label for="mta-m-cap">Pupils</label>
                             <select id="mta-m-cap"><option value="1">1</option><option value="2">2</option><option value="3">3</option></select></div>
                         <div class="field" style="margin:0;min-width:180px;flex:1;"><label for="mta-m-note">Note (optional)</label><input id="mta-m-note" type="text" maxlength="200"></div>
@@ -1017,8 +1020,7 @@
                     <h3 style="margin-top:0;">Pupils</h3>
                     <div id="mta-pupils" class="wrap-text"></div>
                     <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-top:12px;padding-top:12px;border-top:1px solid var(--line);">
-                        <div class="field" style="margin:0;max-width:140px;"><label for="mta-p-id">Player ID</label><input id="mta-p-id" type="text" inputmode="numeric"></div>
-                        <div class="field" style="margin:0;min-width:160px;"><label for="mta-p-name">Name</label><input id="mta-p-name" type="text" maxlength="40"></div>
+                        <div class="field" style="margin:0;min-width:220px;"><label for="mta-p-select">Member</label><select id="mta-p-select"><option value="">Loading the roster…</option></select></div>
                         <div class="field" style="margin:0;min-width:180px;flex:1;"><label for="mta-p-note">Note (optional)</label><input id="mta-p-note" type="text" maxlength="200"></div>
                         <button class="ghost small" id="mta-p-add">+ Add pupil</button>
                     </div>
