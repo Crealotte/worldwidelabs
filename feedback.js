@@ -112,10 +112,11 @@ function renderFbNative(form, mine, results) {
     const liveIds = new Set(form.questions.map(q => q.id));
     for (const id of Object.keys(fbListState)) if (!liveIds.has(id)) delete fbListState[id];
 
+    $('fb-native-desc-panel').style.display = form.description ? 'block' : 'none';
     $('fb-native-desc').textContent = form.description || '';
     $('fb-native-questions').innerHTML = form.questions.map((q, i) => `
-        <div style="margin-bottom:18px;">
-            <div style="font-weight:700;margin-bottom:6px;">${i + 1}. ${esc(q.text)}${q.required ? ' <span style="color:var(--danger);">*</span>' : ''}</div>
+        <div class="panel" style="margin-bottom:14px;">
+            <div style="font-weight:700;margin-bottom:10px;">${i + 1}. ${esc(q.text)}${q.required ? ' <span style="color:var(--danger);">*</span>' : ''}</div>
             ${fbAnswerInput(q, mine)}
         </div>`).join('');
     fbWireOtherEvents(); fbWireListEvents();
@@ -126,7 +127,7 @@ function renderFbNative(form, mine, results) {
     $('fb-native-results-panel').style.display = publicQs.length ? 'block' : 'none';
     if (publicQs.length) {
         $('fb-native-results').innerHTML = publicQs.map(q => `
-            <div style="margin-bottom:22px;">
+            <div class="panel" style="margin-bottom:12px;">
                 <div style="font-weight:700;margin-bottom:8px;">${esc(q.text)}</div>
                 ${(results?.total || 0) === 0 ? '<p style="color:var(--muted);font-size:13px;margin:0;">No answers yet.</p>'
                     : q.type === 'choice' ? fbPieChart(q, results.counts[q.id], results.total) : fbBarChart(q, results.counts[q.id], results.total)}

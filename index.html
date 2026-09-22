@@ -877,17 +877,19 @@
                 <p style="color:var(--muted);margin:0;">No open form right now — check back soon.</p>
             </div>
 
-            <!-- a form built into WWL itself -->
+            <!-- a form built into WWL itself — one card per question, like Google Forms -->
             <div id="fb-native" style="display:none;">
-                <div class="panel">
-                    <p id="fb-native-desc" style="color:var(--muted);margin:0 0 14px;"></p>
-                    <div id="fb-native-questions"></div>
-                    <div class="status" id="fb-native-status"></div>
-                    <button class="ghost" id="fb-native-submit">Submit</button>
-                    <span id="fb-native-savednote" style="display:none;color:var(--muted);font-size:12px;margin-left:10px;">You already answered this — submitting again replaces your answer.</span>
+                <div class="panel" id="fb-native-desc-panel" style="display:none;">
+                    <p id="fb-native-desc" style="color:var(--muted);margin:0;"></p>
                 </div>
-                <div class="panel" id="fb-native-results-panel" style="display:none;margin-top:16px;">
-                    <h3 style="margin-top:0;">Results so far</h3>
+                <div id="fb-native-questions"></div>
+                <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin:4px 0 20px;">
+                    <button class="ghost" id="fb-native-submit">Submit</button>
+                    <span id="fb-native-savednote" style="display:none;color:var(--muted);font-size:12px;">You already answered this — submitting again replaces your answer.</span>
+                </div>
+                <div class="status" id="fb-native-status"></div>
+                <div id="fb-native-results-panel" style="display:none;margin-top:16px;">
+                    <h3>Results so far</h3>
                     <div id="fb-native-results"></div>
                 </div>
             </div>
