@@ -38,6 +38,7 @@ const { planHandle } = require('../lib/planSync');
 const { nightlyHandle, nightlyRun } = require('../lib/nightly');
 const { usageFor } = require('../lib/tornFetch');
 const { targetsHandle } = require('../lib/targets');
+const { mentoringHandle } = require('../lib/mentoring');
 const { labsIsOwner, labsHasOwners, labsHandle, labsRecordReceipt } = require('../lib/labsLedger');
 
 const REDIS_URL = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL;
@@ -626,6 +627,13 @@ module.exports = async function handler(req, res) {
             const leader = ['sug-list', 'sug-status', 'sug-delete'].includes(action) ? await isLeader(key) : false;
             if (['sug-status', 'sug-delete'].includes(action) && !leader) return res.status(403).json({ error: 'Leaders only' });
             return res.status(200).json(await suggestHandle(action, req.body, { redis, playerId, name: playerName, isLeader: leader }));
+        }
+        // Mentoring Platform — everyone reads their own status/checklist/chat; only leaders run the program itself.
+        // See lib/mentoring.js. isLeader(key) is only called for the leader-run actions, not the everyday ones.
+        if (action.startsWith('mentor-')) {
+            const openActions = ['mentor-my-status', 'mentor-todo-toggle', 'mentor-chat-read', 'mentor-chat-send'];
+            const leaderFlag = openActions.includes(action) ? false : await isLeader(key);
+            return res.status(200).json(await mentoringHandle(action, req.body, { redis, playerId, name: playerName, leader: leaderFlag, factionId }));
         }
         // Known bugs list — anyone can read it and press "I have this too"; only leaders change the list.
         if (action.startsWith('bugs-')) {

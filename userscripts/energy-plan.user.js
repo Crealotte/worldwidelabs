@@ -1,10 +1,10 @@
 // ==UserScript==
 // @name         WWL Energy plan
 // @namespace    https://worldwidelabs.vercel.app
-// @version      1.5
+// @version      1.6
 // @updateURL    __WWL_BASE__/wwl-energy-planner.user.js
 // @downloadURL  __WWL_BASE__/wwl-energy-planner.user.js
-// @description  Shows your WorldWideLabs weekly energy plan (the checklist from the Energy planner) inside Torn. On a computer it is a small window you can drag around and close; in TornPDA it is a menu. Ticks are shared with the WWL site.
+// @description  Shows your WorldWideLabs weekly energy plan (the checklist from the Energy planner) inside Torn, and — if you are in the Mentoring Platform — your mentoring checklist too. On a computer it is a small window you can drag around and close; in TornPDA it is a menu. Ticks are shared with the WWL site.
 // @match        https://www.torn.com/*
 // @grant        GM_xmlhttpRequest
 // @connect      __WWL_HOST__
@@ -85,7 +85,7 @@
         <div id="wwl-body" style="overflow:auto;padding:8px 12px 12px;"></div>`;
     root.appendChild(win);
     const body = win.querySelector('#wwl-body'), prog2 = win.querySelector('#wwl-prog2'), head = win.querySelector('#wwl-head');
-    let plan = null;
+    let plan = null, mtPairs = null, mtTodos = [], tab = 'energy'; // tab: 'energy' | 'mentoring' — the mentoring tab only appears once we know there's something to show there
 
     // position (PC): remembered, and always kept inside the screen
     const place = (x, y) => {
@@ -128,31 +128,71 @@
         const p = progress();
         prog.textContent = prog2.textContent = `${num(p.done)} / ${num(p.total)} E`;
     }
-    function render() {
+    function tabBar() {
+        if (!mtPairs || !mtPairs.length) return '';
+        return `<div style="display:flex;gap:6px;margin-bottom:10px;">
+            <button type="button" class="wwl-tab" data-tab="energy" style="flex:1;padding:6px;border-radius:6px;border:1px solid #3a4352;cursor:pointer;background:${tab === 'energy' ? '#2a2f3a' : 'transparent'};color:#e6e9ef;">⚡ Energy</button>
+            <button type="button" class="wwl-tab" data-tab="mentoring" style="flex:1;padding:6px;border-radius:6px;border:1px solid #3a4352;cursor:pointer;background:${tab === 'mentoring' ? '#2a2f3a' : 'transparent'};color:#e6e9ef;">🎓 Mentoring</button>
+        </div>`;
+    }
+    function wireTabs() {
+        body.parentElement.querySelectorAll('.wwl-tab').forEach(b => b.addEventListener('click', () => { tab = b.dataset.tab; render(); }));
+    }
+    function renderEnergyTab() {
         const footer = `<div style="margin-top:10px;padding-top:8px;border-top:1px solid #3a4352;color:#9aa4b5;">To change your settings (stat, method, candy, cans, refill), use the planner on the tool itself: <a href="${WWL}/energy" target="_blank" rel="noopener" style="color:#35d99b;">${esc(WWL)}/energy</a></div>`;
-        if (!plan) { body.innerHTML = `<div style="padding:6px 0;color:#9aa4b5;">You have no plan yet. Open the Energy planner on WWL once, pick your method, and it will show up here.</div>${footer}`; return; }
+        if (!plan) return `<div style="padding:6px 0;color:#9aa4b5;">You have no plan yet. Open the Energy planner on WWL once, pick your method, and it will show up here.</div>${footer}`;
         const p = progress();
-        showProgress();
         const old = plan.week !== Math.floor(Date.now() / (7 * 86400e3)) ? '<div style="color:#f0b432;margin-bottom:6px;">This plan is from a previous week — open the planner on WWL to make a plan for this week.</div>' : '';
         const nextIdx = plan.blocks.findIndex(b => b.items.some(it => !plan.checks[it.key]));
-        body.innerHTML = `${old}<div style="color:#9aa4b5;margin-bottom:6px;">${esc(plan.summary)}</div>
+        return `${old}<div style="color:#9aa4b5;margin-bottom:6px;">${esc(plan.summary)}</div>
             <div style="height:6px;background:#39414f;border-radius:3px;overflow:hidden;margin-bottom:8px;"><div style="height:100%;width:${p.total ? Math.min(100, p.done / p.total * 100) : 0}%;background:#35d99b;"></div></div>
             ${plan.blocks.map((b, i) => {
                 const all = b.items.length && b.items.every(it => plan.checks[it.key]);
                 return `<details ${i === nextIdx ? 'open' : ''} style="margin-bottom:4px;"><summary style="cursor:pointer;font-weight:700;padding:${IS_PDA ? 6 : 2}px 0;">${all ? '✅ ' : ''}${esc(b.title)}${i === nextIdx ? ' <span style="color:#35d99b;font-weight:400;">← next</span>' : ''}</summary>
                     ${b.note ? `<div style="color:#9aa4b5;margin:3px 0;">${esc(b.note)}</div>` : ''}
-                    ${b.items.map(it => `<label style="display:flex;gap:8px;align-items:flex-start;padding:${IS_PDA ? 8 : 4}px 0;cursor:pointer;"><input type="checkbox" data-k="${esc(it.key)}" ${plan.checks[it.key] ? 'checked' : ''} style="margin-top:2px;"><span>${esc(it.label)}</span></label>`).join('')}</details>`;
+                    ${b.items.map(it => `<label style="display:flex;gap:8px;align-items:flex-start;padding:${IS_PDA ? 8 : 4}px 0;cursor:pointer;"><input type="checkbox" class="wwl-e-check" data-k="${esc(it.key)}" ${plan.checks[it.key] ? 'checked' : ''} style="margin-top:2px;"><span>${esc(it.label)}</span></label>`).join('')}</details>`;
             }).join('')}${footer}`;
-        body.querySelectorAll('input[type=checkbox]').forEach(cb => cb.addEventListener('change', async () => {
+    }
+    // The mentoring to-dos: one section per pairing (a mentor with several pupils gets one each), each ticked
+    // separately — same shared checklist the WWL page itself shows, just without the chat (open the site for that).
+    function renderMentoringTab() {
+        if (!mtPairs.length) return '<div style="padding:6px 0;color:#9aa4b5;">Not in a mentoring pair right now.</div>';
+        return mtPairs.map(p => {
+            const items = mtTodos.filter(t => t.role === 'both' || t.role === p.role);
+            return `<div style="margin-bottom:14px;padding-bottom:10px;border-bottom:1px solid #3a4352;">
+                <div style="font-weight:700;margin-bottom:6px;">${p.role === 'mentor' ? `Mentoring ${esc(p.otherName)}` : `Your mentor: ${esc(p.otherName)}`}</div>
+                ${items.length ? items.map(t => `<label style="display:flex;gap:8px;align-items:flex-start;padding:${IS_PDA ? 8 : 4}px 0;cursor:pointer;"><input type="checkbox" class="wwl-m-check" data-pair="${esc(p.pairId)}" data-id="${esc(t.id)}" ${p.done.includes(t.id) ? 'checked' : ''} style="margin-top:2px;"><span>${esc(t.text)}</span></label>`).join('')
+                    : '<div style="color:#9aa4b5;">No checklist yet.</div>'}
+            </div>`;
+        }).join('') + `<div style="color:#9aa4b5;">Chat with them on the site: <a href="${WWL}/mentoring" target="_blank" rel="noopener" style="color:#35d99b;">${esc(WWL)}/mentoring</a></div>`;
+    }
+    function render() {
+        body.innerHTML = tabBar() + (tab === 'mentoring' ? renderMentoringTab() : renderEnergyTab());
+        showProgress();
+        wireTabs();
+        body.querySelectorAll('.wwl-e-check').forEach(cb => cb.addEventListener('change', async () => {
             if (cb.checked) plan.checks[cb.dataset.k] = true; else delete plan.checks[cb.dataset.k];
             showProgress();
             try { await api({ action: 'plan-check', step: cb.dataset.k, checked: cb.checked }); } catch (e) { /* shown on next load */ }
         }));
+        body.querySelectorAll('.wwl-m-check').forEach(cb => cb.addEventListener('change', async () => {
+            const [mentorId, pupilId] = cb.dataset.pair.split(':');
+            const p = mtPairs.find(x => x.pairId === cb.dataset.pair);
+            if (cb.checked) p.done = [...new Set([...p.done, cb.dataset.id])]; else p.done = p.done.filter(id => id !== cb.dataset.id);
+            try { await api({ action: 'mentor-todo-toggle', mentorId, pupilId, todoId: cb.dataset.id, checked: cb.checked }); } catch (e) { /* shown on next load */ }
+        }));
     }
     async function load() {
         body.innerHTML = '<div style="padding:6px 0;color:#9aa4b5;">Loading…</div>';
-        try { plan = (await api({ action: 'plan-get' })).plan; store.set('wwl_plan_cache', JSON.stringify({ at: Date.now(), plan })); render(); }
-        catch (e) { body.innerHTML = `<div style="padding:6px 0;color:#e05555;">${esc(e.message)}</div>`; }
+        try {
+            const [planR, mtR] = await Promise.all([
+                api({ action: 'plan-get' }),
+                api({ action: 'mentor-my-status' }).catch(() => null), // fine if this member isn't in the program at all
+            ]);
+            plan = planR.plan; store.set('wwl_plan_cache', JSON.stringify({ at: Date.now(), plan }));
+            mtPairs = mtR?.pairs || []; mtTodos = mtR?.todos || [];
+            render();
+        } catch (e) { body.innerHTML = `<div style="padding:6px 0;color:#e05555;">${esc(e.message)}</div>`; }
     }
 
     // start: closed as a small button (or open again if it was left open, and on the gym page the first time)

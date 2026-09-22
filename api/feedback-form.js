@@ -59,7 +59,7 @@ function sanitizeQuestions(input) {
         const text = String(q?.text || '').trim().slice(0, 200);
         const needsOptions = type === 'choice' || type === 'checkbox';
         const options = needsOptions
-            ? [...new Set((Array.isArray(q.options) ? q.options : []).map(o => String(o || '').trim().slice(0, 50)).filter(Boolean))].slice(0, 8)
+            ? [...new Set((Array.isArray(q.options) ? q.options : []).map(o => String(o || '').trim().slice(0, 120)).filter(Boolean))].slice(0, 8)
             : [];
         return {
             id: /^q[a-z0-9]{6,20}$/.test(q?.id) ? q.id : `q${Date.now().toString(36)}${i}${Math.random().toString(36).slice(2, 4)}`,

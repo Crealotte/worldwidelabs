@@ -269,7 +269,7 @@ function renderFbQuestions() {
             <div class="fb-q-opts" style="margin:0 0 10px 4px;">
                 ${q.options.map((o, j) => `<div style="display:flex;gap:8px;align-items:center;margin-bottom:6px;">
                     <span style="color:var(--muted);font-size:12px;width:16px;">${j + 1}.</span>
-                    <input class="fb-opt-text" data-j="${j}" value="${esc(o)}" placeholder="Option" style="flex:1;max-width:320px;" maxlength="50">
+                    <input class="fb-opt-text" data-j="${j}" value="${esc(o)}" placeholder="Option" style="flex:1;max-width:420px;" maxlength="120">
                     <button class="ghost small fb-opt-del" data-j="${j}" ${q.options.length <= 2 ? 'disabled title="At least 2 options"' : ''}>✕</button>
                 </div>`).join('')}
                 <button class="ghost small fb-opt-add" ${q.options.length >= 8 ? 'disabled' : ''}>+ Add option</button>

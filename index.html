@@ -484,6 +484,7 @@
         </div>
         <a class="nav-item active" data-page="dashboard" href="/dashboard">Dashboard</a>
         <a class="nav-item" data-page="profile" href="/profile">Player profile</a>
+        <a class="nav-item" data-page="mentoring" href="/mentoring" id="nav-mentoring" style="display:none;">🎓 Mentoring</a>
 
         <div class="nav-group">
             <div class="nav-group-header" data-group="training">
@@ -562,6 +563,7 @@
                 <a class="nav-item" data-page="members-overview" href="/members-overview">Member Overview</a>
                 <a class="nav-item" data-page="newsletter" href="/newsletter">Newsletter</a>
                 <a class="nav-item" data-page="leader-settings" href="/leader-settings">Leader settings</a>
+                <a class="nav-item" data-page="mentoring-admin" href="/mentoring-admin">Mentoring admin</a>
                 <a class="nav-item" data-page="labs-funds" href="/labs-funds" style="display:none;">Labs Funds</a>
             </div>
         </div>
@@ -971,6 +973,66 @@
                     <button class="ghost small" id="fb-responses-copy" style="margin-left:auto;">📋 Copy all responses</button>
                 </div>
                 <div id="fb-responses-body"></div>
+            </div>
+        </section>
+
+        <!-- ========== MENTORING (member-facing) ========== -->
+        <section class="page" id="page-mentoring">
+            <div class="lab-label">WWL·28 / for mentors &amp; pupils</div>
+            <h2>🎓 Mentoring</h2>
+            <p class="pagedesc">Your mentoring pairing(s): a shared checklist and a private chat with your mentor or pupil. A leader sets up who is paired with who — see them if you want to join in.</p>
+            <div class="status" id="mt-status"></div>
+            <div class="panel" id="mt-empty" style="display:none;">
+                <p style="color:var(--muted);margin:0;">You are not in a mentoring pair right now — ask a leader if you would like to mentor someone, or get a mentor yourself.</p>
+            </div>
+            <div id="mt-pairs" class="wrap-text"></div>
+        </section>
+
+        <!-- ========== MENTORING ADMIN (leaders only) ========== -->
+        <section class="page" id="page-mentoring-admin">
+            <div class="lab-label">WWL·29 / leadership tools</div>
+            <h2>Mentoring admin</h2>
+            <p class="pagedesc">Torn has no "who wants to mentor" list, so this is entirely hand-run: note who offered to mentor (and how many pupils they can take), who wants a mentor, then pair them up. Once paired, they get their own checklist and private chat under 🎓 Mentoring.</p>
+
+            <div class="panel" id="mta-locked" style="display:none;">
+                <p style="color:var(--muted);margin:0;">🔒 Only leaders and council (faction API access) can see this page.</p>
+            </div>
+            <div id="mta-body" style="display:none;">
+                <div class="status" id="mta-status"></div>
+
+                <div class="panel">
+                    <h3 style="margin-top:0;">Mentors</h3>
+                    <div id="mta-mentors" class="wrap-text"></div>
+                    <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-top:12px;padding-top:12px;border-top:1px solid var(--line);">
+                        <div class="field" style="margin:0;max-width:140px;"><label for="mta-m-id">Player ID</label><input id="mta-m-id" type="text" inputmode="numeric"></div>
+                        <div class="field" style="margin:0;min-width:160px;"><label for="mta-m-name">Name</label><input id="mta-m-name" type="text" maxlength="40"></div>
+                        <div class="field" style="margin:0;max-width:100px;"><label for="mta-m-cap">Pupils</label>
+                            <select id="mta-m-cap"><option value="1">1</option><option value="2">2</option><option value="3">3</option></select></div>
+                        <div class="field" style="margin:0;min-width:180px;flex:1;"><label for="mta-m-note">Note (optional)</label><input id="mta-m-note" type="text" maxlength="200"></div>
+                        <button class="ghost small" id="mta-m-add">+ Add mentor</button>
+                    </div>
+                </div>
+
+                <div class="panel">
+                    <h3 style="margin-top:0;">Pupils</h3>
+                    <div id="mta-pupils" class="wrap-text"></div>
+                    <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-top:12px;padding-top:12px;border-top:1px solid var(--line);">
+                        <div class="field" style="margin:0;max-width:140px;"><label for="mta-p-id">Player ID</label><input id="mta-p-id" type="text" inputmode="numeric"></div>
+                        <div class="field" style="margin:0;min-width:160px;"><label for="mta-p-name">Name</label><input id="mta-p-name" type="text" maxlength="40"></div>
+                        <div class="field" style="margin:0;min-width:180px;flex:1;"><label for="mta-p-note">Note (optional)</label><input id="mta-p-note" type="text" maxlength="200"></div>
+                        <button class="ghost small" id="mta-p-add">+ Add pupil</button>
+                    </div>
+                </div>
+
+                <div class="panel">
+                    <details>
+                        <summary class="av-sum"><h3>Shared checklist</h3></summary>
+                        <p style="color:var(--muted);font-size:12px;margin:10px 0;">One list for everyone — each pair ticks their own progress against it. Mark each item for mentors, pupils, or both.</p>
+                        <div id="mta-todos" class="wrap-text"></div>
+                        <button class="ghost small" id="mta-todo-add" style="margin-top:8px;">+ Add item</button>
+                        <button class="ghost small" id="mta-todo-save" style="margin-left:8px;">Save checklist</button>
+                    </details>
+                </div>
             </div>
         </section>
 
@@ -2235,6 +2297,7 @@
 <script src="tz-map.js"></script>
 <script src="newsletter.js"></script>
 <script src="leader-todos.js"></script>
+<script src="mentoring.js"></script>
 <script src="banners.js"></script>
 <script src="my-targets.js"></script>
 <script src="armory-tracker.js"></script>

@@ -106,6 +106,7 @@
         await pingTracker();
         checkFactionAccess();
         if (typeof checkLabsOwner === 'function') checkLabsOwner();
+        if (typeof checkMentoringAccess === 'function') checkMentoringAccess();
         if (typeof updateWhatsNewBadge === 'function') updateWhatsNewBadge();
 
         // A direct link like worldwidelabs.vercel.app/availability (for newsletters etc.) wins
@@ -173,6 +174,7 @@
             setNavLock('members-overview', memberView);
             setNavLock('newsletter', memberView);
             setNavLock('leader-settings', memberView);
+            setNavLock('mentoring-admin', memberView);
             setNavLock('availability-leaders', memberView);
             if (!memberView) { setTimeout(() => { if (typeof loadSteadfastCard === 'function') loadSteadfastCard(); }, 8000); loadAdoption(); setTimeout(loadLeaderTodos, 2500);
             loadFactionSharing();
@@ -188,6 +190,7 @@
             setNavLock('members-overview', true);
             setNavLock('newsletter', true);
             setNavLock('leader-settings', true);
+            setNavLock('mentoring-admin', true);
             setNavLock('availability-leaders', true);
         }
         if (document.querySelector('.nav-item[data-page="announce-edit"]').classList.contains('active')) {
@@ -328,6 +331,8 @@
         if (page === 'newsletter') loadNewsletter();
         if (page === 'my-targets') loadMyTargets();
         if (page === 'leader-settings') loadLeaderSettings();
+        if (page === 'mentoring') loadMentoring();
+        if (page === 'mentoring-admin') loadMentoringAdmin();
         if (page === 'bug-report') loadBugReport();
         if (page === 'labs-funds') loadLabsFunds();
         if (page === 'members-overview') loadMemberOverview();

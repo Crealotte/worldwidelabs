@@ -15,7 +15,8 @@ const WHATS_NEW = [
         version: '1.14', date: '2026-09-21',
         title: 'Availability hours vs hits, map fix',
         everyone: [
-            'Fixed a bug in the feedback form where long answer text could get cut off instead of wrapping onto a new line.',
+            'New Mentoring Platform: if a leader has paired you up as a mentor or a pupil, a new 🎓 Mentoring item appears in the menu with your pairing, a shared checklist (ticked separately per pair) and a private chat with your mentor or pupil. Your checklist also shows in the WWL energy-plan userscript inside Torn, under a new Mentoring tab.',
+            'Fixed a bug in the feedback form editor where a multiple-choice/checkbox option got cut off if it was longer than 50 characters — the limit is now 120, with a wider box to type it in. Long text also wraps properly now instead of ever running past the edge.',
             'Feedback form: leaders can now build a form right into WWL — no Google account needed — with short answer, paragraph, multiple choice and checkbox questions, a new "several short items" question for an open list of quick answers, and an optional "Other: ___" choice on multiple choice / checkbox questions. A live results chart (a donut for pick-one, bars for pick-several) shows for whichever questions the leader marks as public — open text is never made public, only the leader ever sees it. Linking a Google Form is still there too, for whoever prefers that. Each question now sits in its own card, closer to how Google\'s forms look.',
             'Member Overview and Your standing now also count what you have trained today so far, not just up to midnight — the same live number the Energy tracker shows.',
             'Energy tracker: today\'s row now updates through the day (roughly every hour) instead of staying at zero until tomorrow, with a note saying how fresh it is ("up to date as of HH:MM TCT").',
