@@ -44,7 +44,12 @@ async function isLeader(key) {
 
 const formKey = (factionId) => `wwl:feedback-form:${factionId}`;
 const responsesKey = (factionId) => `wwl:feedback-responses:${factionId}`;
-const QTYPES = ['text', 'paragraph', 'choice', 'checkbox'];
+const QTYPES = ['text', 'paragraph', 'choice', 'checkbox', 'list'];
+const OTHER_KEY = '__other__'; // the bucket an "Other: ___" answer is counted under — never a real option's own text
+
+// A member's "Other" answer is stored as { other: 'their typed text' } instead of a plain string, so it can
+// never be confused with a real, defined option (even one a leader happens to have literally called "Other").
+const isOther = v => v !== null && typeof v === 'object' && typeof v.other === 'string';
 
 // A leader's raw question list, turned into something safe to store and safe to trust later: every field is
 // re-typed and length-capped here — nothing from the request body is stored as-is.
@@ -61,27 +66,37 @@ function sanitizeQuestions(input) {
             type, text, options,
             required: !!q?.required,
             publicResults: needsOptions ? !!q?.publicResults : false, // only a choice/checkbox question can have a public chart
+            allowOther: needsOptions ? !!q?.allowOther : false, // an extra "Other: ___" choice, with a line to fill in
         };
-    }).filter(q => q.text && (!( q.type === 'choice' || q.type === 'checkbox') || q.options.length >= 2));
+    }).filter(q => q.text && (!(q.type === 'choice' || q.type === 'checkbox') || q.options.length >= 2));
     return list;
 }
 
 // A member's submitted answers, checked against the REAL question list (never trusting the shape the client sent) —
-// a text answer that isn't one of the options, or an answer to a question that doesn't exist, is simply dropped.
+// a text answer that isn't one of the options (and isn't a valid "Other"), or an answer to a question that
+// doesn't exist, is simply dropped.
 function sanitizeAnswers(questions, input) {
     const answers = {};
     const missing = [];
+    const other = raw => { const t = raw?.other; return typeof t === 'string' ? t.trim().slice(0, 100) : ''; };
     for (const q of questions) {
         const raw = input?.[q.id];
         if (q.type === 'text' || q.type === 'paragraph') {
             const v = String(raw ?? '').trim().slice(0, q.type === 'paragraph' ? 1500 : 200);
             if (v) answers[q.id] = v; else if (q.required) missing.push(q.text);
+        } else if (q.type === 'list') { // several short items, freely typed — e.g. "a few things you'd change"
+            const v = (Array.isArray(raw) ? raw : []).map(s => String(s || '').trim().slice(0, 100)).filter(Boolean).slice(0, 10);
+            if (v.length) answers[q.id] = v; else if (q.required) missing.push(q.text);
         } else if (q.type === 'choice') {
-            const v = q.options.includes(raw) ? raw : null;
+            let v = null;
+            if (q.options.includes(raw)) v = raw;
+            else if (q.allowOther) { const t = other(raw); if (t) v = { other: t }; }
             if (v) answers[q.id] = v; else if (q.required) missing.push(q.text);
         } else if (q.type === 'checkbox') {
-            const v = [...new Set((Array.isArray(raw) ? raw : []).filter(o => q.options.includes(o)))];
-            if (v.length) answers[q.id] = v; else if (q.required) missing.push(q.text);
+            const arr = Array.isArray(raw) ? raw : [];
+            const picked = [...new Set(arr.filter(o => typeof o === 'string' && q.options.includes(o)))];
+            if (q.allowOther) { const item = arr.find(isOther); const t = other(item); if (t) picked.push({ other: t }); }
+            if (picked.length) answers[q.id] = picked; else if (q.required) missing.push(q.text);
         }
     }
     if (missing.length) throw new Error(`Please answer: ${missing.join(', ')}`);
@@ -89,21 +104,51 @@ function sanitizeAnswers(questions, input) {
 }
 
 // Counts for every choice/checkbox question, from every stored answer — used for the public results (public
-// questions only) and the leader's full results view (every question).
+// questions only) and the leader's full results view (every question). Every "Other" answer counts as one
+// shared slice/bar (never each different typed text of its own — that could be almost anything and would
+// never fold into a readable chart); the raw text people actually typed still shows in the leader's Responses.
 function tally(questions, entries) {
     const counts = {};
-    for (const q of questions) if (q.type === 'choice' || q.type === 'checkbox') counts[q.id] = Object.fromEntries(q.options.map(o => [o, 0]));
+    for (const q of questions) if (q.type === 'choice' || q.type === 'checkbox') {
+        counts[q.id] = Object.fromEntries(q.options.map(o => [o, 0]));
+        if (q.allowOther) counts[q.id][OTHER_KEY] = 0;
+    }
     let total = 0;
     for (const e of Object.values(entries)) {
         if (!e.answers || !Object.keys(e.answers).length) continue;
         total++;
         for (const q of questions) {
             const v = e.answers[q.id];
-            if (q.type === 'choice' && v && counts[q.id]) counts[q.id][v] = (counts[q.id][v] || 0) + 1;
-            if (q.type === 'checkbox' && Array.isArray(v) && counts[q.id]) v.forEach(o => { if (o in counts[q.id]) counts[q.id][o]++; });
+            if (q.type === 'choice' && counts[q.id]) {
+                if (typeof v === 'string') counts[q.id][v] = (counts[q.id][v] || 0) + 1;
+                else if (isOther(v)) counts[q.id][OTHER_KEY]++;
+            }
+            if (q.type === 'checkbox' && Array.isArray(v) && counts[q.id]) v.forEach(o => {
+                if (typeof o === 'string' && o in counts[q.id]) counts[q.id][o]++;
+                else if (isOther(o)) counts[q.id][OTHER_KEY]++;
+            });
         }
     }
     return { counts, total };
+}
+
+// Leader-only, for 'list' questions: how often each distinct item comes up (case/space-insensitive), so a
+// pile of short free-typed answers is still skimmable instead of just a wall of rows. Not shown to members —
+// open text never feeds a public chart, same rule as the paragraph/short-answer types.
+function listFrequency(questions, rows) {
+    const out = {};
+    for (const q of questions) {
+        if (q.type !== 'list') continue;
+        const seen = new Map(); // lowercased -> { label: first-seen casing, n }
+        for (const row of rows) for (const item of (Array.isArray(row.answers[q.id]) ? row.answers[q.id] : [])) {
+            const k = String(item).trim().toLowerCase();
+            if (!k) continue;
+            const e = seen.get(k) || { label: item, n: 0 };
+            e.n++; seen.set(k, e);
+        }
+        out[q.id] = [...seen.values()].filter(e => e.n > 1).sort((a, b) => b.n - a.n).slice(0, 15);
+    }
+    return out;
 }
 
 module.exports = async function handler(req, res) {
@@ -163,7 +208,7 @@ module.exports = async function handler(req, res) {
             rows.sort((a, b) => b.submittedAt - a.submittedAt);
             const entries = Object.fromEntries(rows.map(r => [r.id, { answers: r.answers }]));
             const { counts, total } = tally(form.questions, entries);
-            return res.status(200).json({ form, rows, counts, total });
+            return res.status(200).json({ form, rows, counts, total, listFreq: listFrequency(form.questions, rows) });
         }
 
         // Saving a form (either kind) replaces whatever was there and starts its answers fresh — an old
