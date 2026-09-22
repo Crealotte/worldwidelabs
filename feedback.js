@@ -52,7 +52,7 @@ async function loadFeedback() {
 // the box is what makes it count, same as Google's; typing in the box checks it for you so nobody has to click both.
 function fbOtherRow(q, kind, checked, text) {
     return `<label style="display:flex;gap:8px;align-items:center;padding:4px 0;cursor:pointer;">
-        <input type="${kind}" ${kind === 'radio' ? `name="fbq_${esc(q.id)}"` : ''} class="fb-ans fb-ans-other" data-id="${esc(q.id)}" data-type="${q.type}" ${checked ? 'checked' : ''}>
+        <input type="${kind}" style="width:auto;" ${kind === 'radio' ? `name="fbq_${esc(q.id)}"` : ''} class="fb-ans fb-ans-other" data-id="${esc(q.id)}" data-type="${q.type}" ${checked ? 'checked' : ''}>
         Other: <input type="text" class="fb-ans-other-text" data-id="${esc(q.id)}" value="${esc(text || '')}" maxlength="100" placeholder="type your own" style="flex:1;max-width:260px;">
     </label>`;
 }
@@ -64,12 +64,12 @@ function fbAnswerInput(q, mine) {
     if (q.type === 'choice') {
         const otherChosen = isFbOther(v);
         return q.options.map(o => `<label style="display:flex;gap:8px;align-items:center;padding:4px 0;cursor:pointer;">
-            <input type="radio" name="fbq_${esc(q.id)}" class="fb-ans" data-id="${esc(q.id)}" data-type="choice" value="${esc(o)}" ${v === o ? 'checked' : ''}> ${esc(o)}</label>`).join('')
+            <input type="radio" style="width:auto;" name="fbq_${esc(q.id)}" class="fb-ans" data-id="${esc(q.id)}" data-type="choice" value="${esc(o)}" ${v === o ? 'checked' : ''}> ${esc(o)}</label>`).join('')
             + (q.allowOther ? fbOtherRow(q, 'radio', otherChosen, otherChosen ? v.other : '') : '');
     }
     const others = Array.isArray(v) ? v.filter(isFbOther) : [];
     return q.options.map(o => `<label style="display:flex;gap:8px;align-items:center;padding:4px 0;cursor:pointer;">
-        <input type="checkbox" class="fb-ans" data-id="${esc(q.id)}" data-type="checkbox" value="${esc(o)}" ${Array.isArray(v) && v.includes(o) ? 'checked' : ''}> ${esc(o)}</label>`).join('')
+        <input type="checkbox" style="width:auto;" class="fb-ans" data-id="${esc(q.id)}" data-type="checkbox" value="${esc(o)}" ${Array.isArray(v) && v.includes(o) ? 'checked' : ''}> ${esc(o)}</label>`).join('')
         + (q.allowOther ? fbOtherRow(q, 'checkbox', others.length > 0, others[0]?.other) : '');
 }
 
@@ -274,9 +274,9 @@ function renderFbQuestions() {
                 <button class="ghost small fb-opt-add" ${q.options.length >= 8 ? 'disabled' : ''}>+ Add option</button>
             </div>` : ''}
             <div style="display:flex;gap:16px;flex-wrap:wrap;font-size:13px;">
-                <label style="display:flex;gap:6px;align-items:center;cursor:pointer;"><input type="checkbox" class="fb-q-required" ${q.required ? 'checked' : ''}> Required</label>
-                ${q.type === 'choice' || q.type === 'checkbox' ? `<label style="display:flex;gap:6px;align-items:center;cursor:pointer;"><input type="checkbox" class="fb-q-other" ${q.allowOther ? 'checked' : ''}> Add an "Other: ___" choice</label>
-                <label style="display:flex;gap:6px;align-items:center;cursor:pointer;"><input type="checkbox" class="fb-q-public" ${q.publicResults ? 'checked' : ''}> Show results to everyone (a chart on the Feedback page)</label>` : ''}
+                <label style="display:flex;gap:6px;align-items:center;cursor:pointer;"><input type="checkbox" style="width:auto;" class="fb-q-required" ${q.required ? 'checked' : ''}> Required</label>
+                ${q.type === 'choice' || q.type === 'checkbox' ? `<label style="display:flex;gap:6px;align-items:center;cursor:pointer;"><input type="checkbox" style="width:auto;" class="fb-q-other" ${q.allowOther ? 'checked' : ''}> Add an "Other: ___" choice</label>
+                <label style="display:flex;gap:6px;align-items:center;cursor:pointer;"><input type="checkbox" style="width:auto;" class="fb-q-public" ${q.publicResults ? 'checked' : ''}> Show results to everyone (a chart on the Feedback page)</label>` : ''}
             </div>
             ${q.type === 'list' ? '<p style="color:var(--muted);font-size:12px;margin:6px 0 0;">Members get a "+ Add another" button, so they can list a few short things instead of one paragraph. Kept private like a normal short answer — no public chart.</p>' : ''}
         </div>`).join('') : '<p style="color:var(--muted);font-size:13px;margin:0 0 12px;">No questions yet — press "+ Add a question" below.</p>';
