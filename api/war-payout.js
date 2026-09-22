@@ -285,7 +285,7 @@ async function leaderTodos(key, factionId) {
 
     // 3 + 4. availability plan: one for what is coming up, and everyone has filled it in
     try {
-        const plans = await loadPlanIndex(factionId);
+        const plans = (await loadPlanIndex(factionId)).filter(p => !p.archived); // an archived plan is exactly the kind we don't want nagging leaders about any more
         const today = new Date().toISOString().slice(0, 10);
         const endOf = p => { const d = new Date(`${p.startDate}T00:00:00Z`); d.setUTCDate(d.getUTCDate() + p.days); return d.toISOString().slice(0, 10); };
         const live = plans.filter(p => endOf(p) >= today).sort((a, b) => a.startDate.localeCompare(b.startDate));
