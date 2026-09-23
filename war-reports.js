@@ -15,6 +15,7 @@ async function wrFetch(body) {
 }
 
 let wrLastResult = null; // kept so the add-report panel can re-render the list after saving without a full reload
+let wrMatchingId = null; // the report currently showing its inline "match to a war" picker, or null
 
 async function loadWarReports() {
     const st = $('wr-status');
@@ -37,8 +38,10 @@ function renderWarReports(r) {
         const result = x.won === true ? '<span style="color:var(--reagent);font-weight:700;">Win</span>' : x.won === false ? '<span style="color:var(--danger);font-weight:700;">Loss</span>' : '<span style="color:var(--muted);">Result unknown</span>';
         const score = x.scoreUs != null && x.scoreThem != null ? `<span style="color:var(--muted);font-family:var(--mono);font-size:12px;">${Math.round(x.scoreUs).toLocaleString()} – ${Math.round(x.scoreThem).toLocaleString()}</span>` : '';
         const rows = x.rows || [];
-        const restockRow = (r.leader && x.warId) ? `<label style="display:flex;align-items:center;gap:5px;font-size:12px;color:var(--muted);cursor:pointer;" title="Have you restocked the armory for this war yet?">
-                <input type="checkbox" class="wr-restock" data-warid="${esc(x.warId)}" ${x.restocked ? 'checked' : ''} style="width:auto;"> Restocked</label>` : '';
+        const restockRow = r.leader && x.warId ? `<label style="display:flex;align-items:center;gap:5px;font-size:12px;color:var(--muted);cursor:pointer;" title="Have you restocked the armory for this war yet?">
+                <input type="checkbox" class="wr-restock" data-warid="${esc(x.warId)}" ${x.restocked ? 'checked' : ''} style="width:auto;"> Restocked</label>`
+            : r.leader ? `<button class="ghost small wr-match-toggle" data-id="${esc(x.id)}" title="No restocked checkbox until this is matched to a real war">🔗 Match to a war</button>` : '';
+        const matchPicker = (r.leader && wrMatchingId === x.id) ? wrMiniWarPickerHtml(x.id) : '';
         const details = rows.length ? `
             <details style="margin-top:8px;">
                 <summary class="av-sum"><span style="font-size:13px;">Pay details${r.leader ? ` (${rows.length} members · ${wrMoney(x.totalPaid)} paid)` : ''}</span></summary>
@@ -63,6 +66,7 @@ function renderWarReports(r) {
                     ${deleteBtn}
                 </span>
             </div>
+            ${matchPicker}
             ${details}
         </div>`;
     }).join('');
@@ -70,7 +74,37 @@ function renderWarReports(r) {
         wrWireAddPanel();
         $('wr-list').querySelectorAll('.wr-restock').forEach(cb => cb.addEventListener('change', () => wrToggleRestocked(cb)));
         $('wr-list').querySelectorAll('.wr-delete').forEach(btn => btn.addEventListener('click', () => wrDeleteReport(btn.dataset.id, btn.dataset.opponent)));
+        $('wr-list').querySelectorAll('.wr-match-toggle').forEach(btn => btn.addEventListener('click', () => {
+            wrMatchingId = wrMatchingId === btn.dataset.id ? null : btn.dataset.id;
+            if (wrWars === null) wrLoadWarsForAdd();
+            renderWarReports(wrLastResult);
+        }));
+        $('wr-list').querySelectorAll('.wr-match-pick').forEach(row => row.addEventListener('click', () => {
+            wrMatchReportToWar(row.dataset.reportId, wrWars[Number(row.dataset.warI)].id);
+        }));
     }
+}
+
+// ---- matching an already-saved report (missing warId) to a real war, for its restocked checkbox ----
+function wrMiniWarPickerHtml(reportId) {
+    if (wrWars === null) return '<p style="color:var(--muted);font-size:12px;margin:8px 0 0;">Loading past wars…</p>';
+    if (!wrWars.length) return '<p style="color:var(--muted);font-size:12px;margin:8px 0 0;">No past wars found on this key.</p>';
+    return `<div class="table-scroll" style="max-height:160px;overflow:auto;border:1px solid var(--line);border-radius:6px;margin-top:8px;">${wrWars.map((w, i) => `
+        <div class="wr-match-pick" data-report-id="${esc(reportId)}" data-war-i="${i}" style="display:flex;gap:10px;align-items:center;padding:6px 10px;cursor:pointer;border-bottom:1px solid var(--line);">
+            <span style="flex:1;">${esc(w.them?.name || 'Unknown opponent')}</span>
+            <span style="font-size:12px;color:var(--muted);">${wrDate(w.end)}</span>
+            <span style="font-size:12px;color:${String(w.winner) === String(w.us?.id) ? 'var(--reagent)' : 'var(--danger)'};">${String(w.winner) === String(w.us?.id) ? 'Won' : 'Lost'}</span>
+        </div>`).join('')}</div>`;
+}
+
+async function wrMatchReportToWar(reportId, warId) {
+    try {
+        const result = await wrFetch({ action: 'set-receipt-war', id: reportId, warId });
+        if (result.error) throw new Error(result.error);
+        wrMatchingId = null;
+        toast('Matched — the restocked checkbox now shows on this report');
+        loadWarReports();
+    } catch (e) { toast(`Couldn't match that: ${e.message}`); }
 }
 
 async function wrDeleteReport(id, opponent) {
@@ -205,7 +239,7 @@ function wrWireAddRows() {
 async function wrLoadWarsForAdd() {
     const result = await wrFetch({ action: 'list-wars' });
     wrWars = result.error ? [] : (result.wars || []);
-    if (wrAddOpen) renderWarReports(wrLastResult);
+    if (wrAddOpen || wrMatchingId !== null) renderWarReports(wrLastResult);
 }
 
 // A receipt made and saved with WWL before this faction's War reports list existed still has its

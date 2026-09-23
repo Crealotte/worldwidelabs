@@ -1273,6 +1273,36 @@ module.exports = async function handler(req, res) {
             return res.status(200).json({ ok: true });
         }
 
+        // A receipt can be missing warId (and so has no restocked checkbox) for reasons the
+        // automatic backfill in lib/warReports.js can't fix on its own — the war it's from may have
+        // aged out of Torn's own rankedwars history, or the receipt predates enemyFactionId being
+        // stored at all. Letting a leader pick the war by hand here covers both: it also opportunistically
+        // fills in won/scores/enemyFactionId if the receipt doesn't have them yet.
+        if (action === 'set-receipt-war') {
+            const { id, warId } = req.body;
+            if (!id || !warId) return res.status(400).json({ error: 'Missing id or warId' });
+            const raw = await redis(['GET', `wwl:payout-receipt:${id}`]);
+            if (!raw) return res.status(404).json({ error: 'Receipt not found' });
+            const rc = JSON.parse(raw);
+            if (String(rc.factionId) !== factionId) return res.status(403).json({ error: 'That receipt belongs to a different faction.' });
+
+            const r = await tornFetch(`https://api.torn.com/v2/faction?selections=rankedwars&key=${encodeURIComponent(key)}`, { headers: { accept: 'application/json' } });
+            const data = await r.json();
+            if (data.error) return res.status(403).json({ error: data.error.error });
+            const w = Object.values(data.rankedwars || {}).find(x => String(x.id) === String(warId));
+            if (!w) return res.status(404).json({ error: 'That war was not found on this key.' });
+            const us = (w.factions || []).find(f => String(f.id) === factionId);
+            const them = (w.factions || []).find(f => String(f.id) !== factionId);
+            rc.warId = w.id;
+            rc.warStart = rc.warStart ?? w.start;
+            rc.enemyFactionId = rc.enemyFactionId ?? them?.id;
+            if (rc.won === undefined || rc.won === null) rc.won = w.winner != null ? String(w.winner) === factionId : null;
+            if (rc.scoreUs == null) rc.scoreUs = us?.score ?? null;
+            if (rc.scoreThem == null) rc.scoreThem = them?.score ?? null;
+            await redis(['SET', `wwl:payout-receipt:${id}`, JSON.stringify(rc)]);
+            return res.status(200).json({ ok: true });
+        }
+
         // Removing a wrongly-entered report: drops it from this faction's list and deletes the
         // receipt itself (its shareable link stops working), plus the Labs ledger entry saving it
         // created (lib/labsLedger.js keys its own entries "r:<receiptId>") — a bad payout number
