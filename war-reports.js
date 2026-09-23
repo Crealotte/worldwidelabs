@@ -160,13 +160,11 @@ function wrAddPanelHtml() {
             <button class="ghost small" id="wr-add-cancel">Cancel</button>
         </div>
         <div class="field">
-            <label>Already have the WWL receipt link (or just its id) from back then?</label>
-            <div style="display:flex;gap:8px;flex-wrap:wrap;">
-                <input id="wr-reindex-input" type="text" placeholder="https://worldwidelabs.vercel.app/?receipt=… or just the id" style="flex:1;min-width:220px;">
-                <button class="ghost small" id="wr-reindex-btn">Add from link</button>
-            </div>
+            <label>Already have WWL receipt links (or just their ids) from back then? Paste one or several, one per line</label>
+            <textarea id="wr-reindex-input" rows="3" placeholder="https://worldwidelabs.vercel.app/?receipt=…&#10;https://worldwidelabs.vercel.app/?receipt=…&#10;or just the ids, one per line" style="width:100%;font-family:var(--mono);font-size:12px;"></textarea>
+            <button class="ghost small" id="wr-reindex-btn" style="margin-top:6px;">Add from link(s)</button>
             <div class="status" id="wr-reindex-status" style="margin-top:6px;"></div>
-            <p style="color:var(--muted);font-size:12px;margin:6px 0 0;">The report page already exists — this just adds it to the list below. Nothing about the report itself changes.</p>
+            <p style="color:var(--muted);font-size:12px;margin:6px 0 0;">Each report page already exists — this just adds it to the list below. Nothing about the report itself changes. One that was saved before WWL stored reports on the site won't be found (nothing to add) — those need the manual form below instead.</p>
         </div>
         <p style="color:var(--muted);font-size:12px;margin:14px 0 6px;">No link for it? Fill in the details by hand instead:</p>
         <div class="field"><label>Match it to a past war (optional, but needed for the restocked checkbox)</label>${warPicker}${matchedNote}</div>
@@ -213,8 +211,7 @@ function wrWireAddPanel() {
     $('wr-add-toggle')?.addEventListener('click', () => { wrAddOpen = true; renderWarReports(wrLastResult); });
     $('wr-add-cancel')?.addEventListener('click', () => { wrAddOpen = false; wrPickedWar = null; wrAddRows = [{ name: '', warHits: '', overflowHits: '', gross: '', penalty: '', net: '' }]; renderWarReports(wrLastResult); });
     if (!$('wr-add-panel')) return;
-    $('wr-reindex-btn').addEventListener('click', wrReindexByLink);
-    $('wr-reindex-input').addEventListener('keydown', e => { if (e.key === 'Enter') wrReindexByLink(); });
+    $('wr-reindex-btn').addEventListener('click', wrReindexByLinks);
     if (wrWars === null) wrLoadWarsForAdd();
     document.querySelectorAll('.wr-warpick').forEach(row => row.addEventListener('click', () => {
         const w = wrWars[Number(row.dataset.i)];
@@ -251,21 +248,37 @@ function wrExtractReceiptId(input) {
     const trimmed = input.trim();
     return /^[a-z0-9]+$/i.test(trimmed) ? trimmed : null;
 }
-async function wrReindexByLink() {
+// Several links can be pasted at once, one per line — done one at a time (not in parallel) since
+// each add is a read-modify-write on the same shared index; running them together could drop one.
+async function wrReindexByLinks() {
     const input = $('wr-reindex-input'), st = $('wr-reindex-status'), btn = $('wr-reindex-btn');
-    const id = wrExtractReceiptId(input.value || '');
-    if (!id) { st.className = 'status err'; st.textContent = 'Paste the full link, or just the id after "?receipt=".'; return; }
-    btn.disabled = true; st.className = 'status ok'; st.textContent = 'Adding…';
-    try {
-        const result = await wrFetch({ action: 'reindex-receipt', id });
-        if (result.error) throw new Error(result.error);
-        toast(result.alreadyListed ? 'That report is already on this list' : 'Report added');
-        wrAddOpen = false;
-        loadWarReports();
-    } catch (e) {
-        st.className = 'status err'; st.textContent = e.message;
-        btn.disabled = false;
+    const lines = (input.value || '').split('\n').map(s => s.trim()).filter(Boolean);
+    if (!lines.length) { st.className = 'status err'; st.textContent = 'Paste at least one link, or just an id, after "?receipt=".'; return; }
+
+    btn.disabled = true;
+    let added = 0, already = 0; const failed = [];
+    for (let i = 0; i < lines.length; i++) {
+        st.className = 'status ok'; st.textContent = `Adding ${i + 1} of ${lines.length}…`;
+        const id = wrExtractReceiptId(lines[i]);
+        if (!id) { failed.push(`${lines[i]} — couldn't read an id from that`); continue; }
+        try {
+            const result = await wrFetch({ action: 'reindex-receipt', id });
+            if (result.error) throw new Error(result.error);
+            if (result.alreadyListed) already++; else added++;
+        } catch (e) { failed.push(`${id} — ${e.message}`); }
     }
+
+    const summaryHtml = [
+        added ? `${added} added` : '', already ? `${already} already on the list` : '',
+        failed.length ? `${failed.length} not found:<br>${failed.map(esc).join('<br>')}` : '',
+    ].filter(Boolean).join(' · ');
+    // A reload rebuilds this whole panel (fresh, empty textarea included) — reapply the summary
+    // to the new status element afterward, or it would flash and vanish under the fresh render.
+    if (added || already) await loadWarReports();
+    const stAfter = $('wr-reindex-status');
+    if (stAfter) { stAfter.className = failed.length ? 'status err' : 'status ok'; stAfter.innerHTML = summaryHtml; }
+    const btnAfter = $('wr-reindex-btn');
+    if (btnAfter) btnAfter.disabled = false;
 }
 
 async function wrSaveAddedReport() {
