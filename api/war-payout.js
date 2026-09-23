@@ -632,7 +632,7 @@ module.exports = async function handler(req, res) {
         // and a leader can look in on any pair for oversight. See lib/mentoring.js. `leaderLazy` only actually
         // calls Torn the moment (and if) mentoringHandle needs to know — an ordinary mentor/pupil already found to
         // belong to their own pair never triggers it, so polling a chat doesn't cost an extra call every time.
-        if (action.startsWith('mentor-')) {
+        if (action.startsWith('mentor-') || action.startsWith('pupil-')) {
             let leaderCache = null;
             const leaderLazy = async () => { if (leaderCache === null) leaderCache = await isLeader(key); return leaderCache; };
             return res.status(200).json(await mentoringHandle(action, req.body, { redis, playerId, name: playerName, leaderLazy, factionId }));
