@@ -53,7 +53,7 @@ function renderWarReports(r) {
                 </table></div>
             </details>`
             : (r.leader ? '' : '<div style="color:var(--muted);font-size:12px;margin-top:8px;">You weren\'t paid in this war.</div>');
-        const deleteBtn = r.leader ? `<button class="ghost small wr-delete" data-id="${esc(x.id)}" data-opponent="${esc(x.opponent)}" title="Delete this report" style="color:var(--danger);">🗑</button>` : '';
+        const removeBtn = r.leader ? `<button class="ghost small wr-remove" data-id="${esc(x.id)}" data-opponent="${esc(x.opponent)}" title="Remove from this list — the receipt itself and its link are kept, so pasting the link back in (above) brings it right back" style="color:var(--danger);">🗑</button>` : '';
         return `
         <div class="panel">
             <div style="display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;">
@@ -63,7 +63,7 @@ function renderWarReports(r) {
                 <span style="margin-left:auto;display:flex;gap:8px;align-items:center;">
                     ${restockRow}
                     <a href="/?receipt=${esc(x.id)}" target="_blank" rel="noopener" class="ghost small" style="text-decoration:none;padding:4px 10px;">Open report ↗</a>
-                    ${deleteBtn}
+                    ${removeBtn}
                 </span>
             </div>
             ${matchPicker}
@@ -73,7 +73,7 @@ function renderWarReports(r) {
     if (r.leader) {
         wrWireAddPanel();
         $('wr-list').querySelectorAll('.wr-restock').forEach(cb => cb.addEventListener('change', () => wrToggleRestocked(cb)));
-        $('wr-list').querySelectorAll('.wr-delete').forEach(btn => btn.addEventListener('click', () => wrDeleteReport(btn.dataset.id, btn.dataset.opponent)));
+        $('wr-list').querySelectorAll('.wr-remove').forEach(btn => btn.addEventListener('click', () => wrRemoveReport(btn.dataset.id, btn.dataset.opponent)));
         $('wr-list').querySelectorAll('.wr-match-toggle').forEach(btn => btn.addEventListener('click', () => {
             wrMatchingId = wrMatchingId === btn.dataset.id ? null : btn.dataset.id;
             if (wrWars === null) wrLoadWarsForAdd();
@@ -107,14 +107,14 @@ async function wrMatchReportToWar(reportId, warId) {
     } catch (e) { toast(`Couldn't match that: ${e.message}`); }
 }
 
-async function wrDeleteReport(id, opponent) {
-    if (!confirm(`Delete the report vs ${opponent}? This removes it and its shareable link for good.`)) return;
+async function wrRemoveReport(id, opponent) {
+    if (!confirm(`Remove the report vs ${opponent} from this list? The receipt itself and its link stay intact — paste the link back in above to bring it back.`)) return;
     try {
-        const result = await wrFetch({ action: 'delete-receipt', id });
+        const result = await wrFetch({ action: 'remove-receipt', id });
         if (result.error) throw new Error(result.error);
-        toast('Report deleted');
+        toast('Removed from the list');
         loadWarReports();
-    } catch (e) { toast(`Couldn't delete that: ${e.message}`); }
+    } catch (e) { toast(`Couldn't remove that: ${e.message}`); }
 }
 
 async function wrToggleRestocked(cb) {
