@@ -22,9 +22,11 @@
 // Only "used" events count as consumption — loans/deposits/retrieves/returns don't, since a
 // loaned weapon/armor piece is still faction property until it isn't returned. (There used to be
 // a separate "current outstanding loans" live view here too, but the leader doesn't want loaned
-// weapons/armor tracked here at all, so it was removed rather than fixed.) On top of that, only
-// items in lib/trackedItems.js's curated allowlist are counted at all — a hand-picked list (based
-// on Jimidy's own tracker, plus the leader's own additions), not "every item Torn types as
+// weapons/armor tracked here at all, so it was removed rather than fixed.) The one exception:
+// loaning a Temporary-tab item (single-use throwables) counts as consumption too, same as a real
+// "used" event — see the isConsumingLoan check below for why. On top of that, only items in
+// lib/trackedItems.js's curated allowlist are counted at all — a hand-picked list (based on
+// Jimidy's own tracker, plus the leader's own additions), not "every item Torn types as
 // Drug/Medical/etc." — that broader version turned out too noisy in practice.
 //
 // POST { key, action: 'consumption-report', from, to }  -> leader-only: everything consumed in a
@@ -134,8 +136,16 @@ module.exports = async function handler(req, res) {
                     if (unparsedSample.length < 10) unparsedSample.push(parsed.text);
                     continue;
                 }
-                if (parsed.action !== 'used') continue; // loans/deposits/retrieves/returns aren't consumption
                 const category = TRACKED_ITEMS[parsed.item.toLowerCase()];
+                // Loans/deposits/retrieves/returns normally aren't consumption — a loaned weapon or
+                // armor piece is still faction property until it isn't returned. Temporary-tab items
+                // are the one exception: they're single-use throwables, and once one is loaned out
+                // into a member's own inventory, using it in a fight never generates a "used one of
+                // the faction's items" news event at all (that wording only fires for using an item
+                // straight from the shared armory) — so the loan is the only signal it's ever gone,
+                // and counts as consumption exactly like a real "used" event.
+                const isConsumingLoan = parsed.action === 'loaned' && category === 'Temporary';
+                if (parsed.action !== 'used' && !isConsumingLoan) continue;
                 if (!category) continue; // not on the curated tracked-items list
                 const meta = catalog[parsed.item.toLowerCase()];
                 const price = meta?.price ?? null;
