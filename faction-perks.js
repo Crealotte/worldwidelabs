@@ -110,10 +110,13 @@ async function loadFactionRoadmap() {
         return { perk, level, respect, date, done, isNext, late, weeks };
     });
     const doneCount = items.filter(i => i.done).length, next = items.find(i => i.isNext);
-    const respectLine = fpData?.respect == null ? '' : next
+    // "Available" respect is the spendable balance left after everything already bought (any branch,
+    // peace or war) — NOT the lifetime total, which never goes down. See buildCountdown in lib/steadfast.js.
+    const available = fpData?.availableRespect;
+    const respectLine = fpData?.respect == null ? '' : next && available != null
         ? `<div style="margin-top:8px;max-width:320px;">
-            <div style="color:var(--muted);font-size:12px;">${fpNum(fpData.respect)} / ${fpNum(next.respect)} respect available</div>
-            <div style="background:var(--bench-2);border-radius:4px;height:6px;margin-top:4px;"><div style="width:${Math.min(100, fpData.respect / next.respect * 100).toFixed(1)}%;background:var(--reagent);height:6px;border-radius:4px;"></div></div>
+            <div style="color:var(--muted);font-size:12px;">${fpNum(available)} / ${fpNum(next.respect)} respect available</div>
+            <div style="background:var(--bench-2);border-radius:4px;height:6px;margin-top:4px;"><div style="width:${Math.min(100, available / next.respect * 100).toFixed(1)}%;background:var(--reagent);height:6px;border-radius:4px;"></div></div>
           </div>`
         : `<div style="color:var(--muted);font-size:12px;margin-top:8px;">Faction respect (total): ${fpNum(fpData.respect)}</div>`;
     $('fr-summary').innerHTML = ok ? `
