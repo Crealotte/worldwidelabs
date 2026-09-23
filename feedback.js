@@ -25,10 +25,22 @@ async function fbFetch(body) {
 
 let fbData = null; // { form, mine, results } from the last load — kept so a submit can re-render without a full reload
 
+// ---- "not filled in yet" marker on the sidebar item -----------------------------------------------
+// The item turns bold (with a dot) for as long as there's a native form and this member hasn't answered
+// it — unlike What's new, this isn't cleared by opening the page, only by actually submitting an answer
+// (a Google-linked form can't be checked this way, so it never lights up).
+function updateFeedbackBadge(data) {
+    const nav = $('nav-feedback');
+    if (!nav) return;
+    const needsFill = !!(data?.form && data.form.mode === 'native' && data.mine == null);
+    nav.classList.toggle('has-new', needsFill);
+}
+
 async function loadFeedback() {
     try {
         const data = await fbFetch({ action: 'read' });
         fbData = data;
+        updateFeedbackBadge(data);
         const form = data?.form;
         $('fb-empty').style.display = form ? 'none' : 'block';
         $('fb-native').style.display = form?.mode === 'native' ? 'block' : 'none';

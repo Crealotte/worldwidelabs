@@ -108,6 +108,8 @@
         if (typeof checkLabsOwner === 'function') checkLabsOwner();
         if (typeof checkMentoringAccess === 'function') checkMentoringAccess();
         if (typeof updateWhatsNewBadge === 'function') updateWhatsNewBadge();
+        if (typeof loadFeedback === 'function') loadFeedback(); // also lights up the Feedback nav badge if unanswered
+        if (typeof updateAvailabilityBadge === 'function') updateAvailabilityBadge();
 
         // A direct link like worldwidelabs.vercel.app/availability (for newsletters etc.) wins
         // over whatever page was last open in this session — that's the whole point of sharing

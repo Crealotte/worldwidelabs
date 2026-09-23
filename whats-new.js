@@ -7,10 +7,22 @@
 // what is NEW since the last posted version, so nothing is announced twice (see wnBigPost below).
 //
 // TO ADD AN UPDATE: put a new object at the TOP of WHATS_NEW below with the next version number
-// (the last one is 1.15 → the next is 1.16). Plain text only (no HTML).
+// (the last one is 1.16 → the next is 1.17). Plain text only (no HTML).
 'use strict';
 
 const WHATS_NEW = [
+    {
+        version: '1.16', date: '2026-09-23',
+        title: 'Unfilled-in reminders on Feedback and War Availability',
+        everyone: [
+            'Feedback: the Feedback item in the menu now turns bold with a dot for as long as there is a form (built inside WWL, not a linked Google Form) you have not answered yet — unlike What\'s new, opening the page does not clear it, only actually submitting an answer does.',
+            'War Availability: the same reminder now applies there too — the menu item turns bold with a dot for as long as you have not ticked a slot (or said you can\'t make it) on the next plan that has not finished yet.',
+            'Perk roadmap: now shows the faction\'s current respect as a fraction of what the next perk needs ("X / Y respect available", with a small progress bar) instead of just the bare total.',
+        ],
+        leaders: [
+            'Fixed a bug where adding a pupil in Mentoring admin returned an "Unknown action" error — adding a mentor already worked, adding a pupil now does too.',
+        ],
+    },
     {
         version: '1.15', date: '2026-09-22',
         title: 'Mentoring Platform, native feedback forms',

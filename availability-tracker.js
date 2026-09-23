@@ -45,6 +45,34 @@ let avOdScanning = false;
 let avVsChains = ''; // chain IDs / links typed in the hits comparison
 let avVsLive = ''; // start (UTC, datetime-local) of a chain that is still running
 
+// ---- "not filled in yet" marker on the sidebar item -----------------------------------------------
+// Mirrors the Feedback page's badge: stays lit for as long as this member hasn't ticked a slot (or
+// said they can't make it) on the FIRST plan that hasn't finished yet — not whichever plan they last
+// happened to be looking at — and, unlike What's new, isn't cleared just by opening the page.
+let avBadgeTargetPlanId = null; // the "first coming up" plan's id, recomputed whenever the plan list is refreshed
+function avComputeFirstUpcoming(plans) {
+    if (!plans || !plans.length) return null;
+    const today = new Date().toISOString().slice(0, 10);
+    const endOf = p => { const d = new Date(`${p.startDate}T00:00:00Z`); d.setUTCDate(d.getUTCDate() + p.days); return d.toISOString().slice(0, 10); };
+    const live = plans.filter(p => endOf(p) >= today).sort((a, b) => a.startDate.localeCompare(b.startDate));
+    return live[0]?.id ?? null;
+}
+function setAvailabilityBadge(responded) {
+    const nav = $('nav-availability');
+    if (nav) nav.classList.toggle('has-new', !responded);
+}
+// Called at login, before the Availability page has ever been opened — a standalone request (not
+// avFetch) so it is never redirected to whichever plan this browser last remembered viewing.
+async function updateAvailabilityBadge() {
+    try {
+        const res = await fetch('/api/war-payout', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key: apiKey, action: 'availability-get' }) });
+        const result = await res.json();
+        if (result.error) return;
+        avBadgeTargetPlanId = avComputeFirstUpcoming(result.plans || []);
+        setAvailabilityBadge(avBadgeTargetPlanId === null || Object.keys(result.mine || {}).length > 0 || !!result.myUnavailable);
+    } catch (e) { /* not critical */ }
+}
+
 // Posts to /api/war-payout, not its own endpoint — merged in to stay under Vercel Hobby's
 // 12-Serverless-Function-per-deployment limit, same reason War Badges lives there too.
 async function avFetch(body) {
@@ -79,6 +107,12 @@ async function loadAvailability() {
         avRosterError = (typeof memberView !== "undefined" && memberView) ? null : result.rosterError || null;
         st.textContent = ''; st.className = 'status';
         renderAvailabilityPage();
+        // Refresh the sidebar badge from this same load — but only trust it for whichever plan is
+        // ACTUALLY the first coming-up one; if this browser is viewing some other plan, its `mine`
+        // says nothing about that one, so the badge is left as whatever the last real check found.
+        avBadgeTargetPlanId = avComputeFirstUpcoming(avPlans);
+        if (avBadgeTargetPlanId === null) setAvailabilityBadge(true);
+        else if (avPlanId === avBadgeTargetPlanId) setAvailabilityBadge(Object.keys(avMine).length > 0 || !!avMyUnavailable);
         if (avSummary !== null && avWars === null) loadAvWars(); // leaders only, once — feeds the "link to war" picker
         if (avSummary !== null) loadAvDiscord(); // leaders only — this faction's Discord destination
         if (avSummary !== null) loadAvOd(); // leaders only — who's overdosed in the window
@@ -703,6 +737,7 @@ async function toggleAvCell(day, hour, cellEl) {
     try {
         const result = await avFetch({ action: 'availability-set', day, hour, state: next === true ? 'yes' : next === 'maybe' ? 'maybe' : '' });
         if (result.error) throw new Error(result.error);
+        if (avPlanId === avBadgeTargetPlanId) setAvailabilityBadge(Object.keys(avMine).length > 0 || !!avMyUnavailable);
     } catch (e) {
         if (prev) avMine[key] = prev; else delete avMine[key];
         avApplyCell(cellEl, prev);
