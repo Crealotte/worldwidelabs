@@ -248,6 +248,45 @@ module.exports = async function handler(req, res) {
             });
         }
 
+        // Live current armory stock, straight from Torn — no news-parsing, no date range, always
+        // exactly right. Only drugs/medical/boosters/temporary have their own selection (Candy and
+        // Alcohol don't, so those two categories can't be shown this way). Temporary items are also
+        // "loanable" in Torn's schema (available/loaned/loaned_to), which is genuinely useful here:
+        // a temp weapon someone's currently holding on loan hasn't been consumed yet, but it also
+        // isn't sitting ready in the armory, so seeing that split (and who has it) matters for a
+        // leader checking whether the armory is actually war-ready right now.
+        if (action === 'armory-stock') {
+            const [r, membersRes] = await Promise.all([
+                tornFetch(`https://api.torn.com/v2/faction?selections=drugs,medical,boosters,temporary&key=${encodeURIComponent(key)}`, { headers: { accept: 'application/json' } }),
+                tornFetch(`https://api.torn.com/v2/faction/members?striptags=true&key=${encodeURIComponent(key)}`, { headers: { accept: 'application/json' } }),
+            ]);
+            const data = await r.json();
+            if (data.error) return res.status(403).json({ error: data.error.error });
+            const membersData = await membersRes.json();
+            const nameById = {};
+            for (const m of (membersData.members || [])) nameById[String(m.id)] = m.name;
+
+            const categoriesMap = {};
+            const addItem = (name, fields) => {
+                const category = TRACKED_ITEMS[String(name).toLowerCase()];
+                if (!category) return; // not on the curated tracked-items list
+                const cat = categoriesMap[category] || (categoriesMap[category] = { category, items: [] });
+                cat.items.push({ item: name, ...fields });
+            };
+            for (const it of (data.drugs || [])) addItem(it.name, { quantity: it.quantity });
+            for (const it of (data.medical || [])) addItem(it.name, { quantity: it.quantity });
+            for (const it of (data.boosters || [])) addItem(it.name, { quantity: it.quantity });
+            for (const it of (data.temporary || [])) {
+                const loanedTo = String(it.loaned_to || '').split(',').map(s => s.trim()).filter(Boolean)
+                    .map(id => ({ id, name: nameById[id] || `#${id}` }));
+                addItem(it.name, { quantity: it.quantity, available: it.available, loaned: it.loaned, loanedTo });
+            }
+            const categories = Object.values(categoriesMap);
+            for (const c of categories) c.items.sort((a, b) => a.item.localeCompare(b.item));
+            categories.sort((a, b) => a.category.localeCompare(b.category));
+            return res.status(200).json({ categories });
+        }
+
         return res.status(400).json({ error: 'Unknown action' });
     } catch (e) {
         return res.status(500).json({ error: String(e.message || e) });

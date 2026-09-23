@@ -28,6 +28,7 @@ const WHATS_NEW = [
             'Consumption Tracker: the restock shopping list now shows a "Restocked" column pulled straight from real armory deposits over the same date range — no typing needed. Deposit less than was needed and it shows how much is still short; deposit more and it shows the spare surplus.',
             'Consumption Tracker: a temporary weapon (flash grenade, HEG, etc.) that gets loaned out now counts as consumption too, same as a real "used" event — Torn never logs a "used" event for one once it has already left the armory via a loan, so the loan itself was the only signal it was ever gone, and it was being missed entirely.',
             'Consumption Tracker: 23 more of Torn\'s real "Temporary type" weapons are now tracked (only 6 were before) — including Epinephrine, Melatonin, Serotonin and Tyrosine, the four combat stat-boost needles, which were very likely the biggest actual gap since they\'re heavily used in wars.',
+            'Consumption Tracker: new "Current armory stock" panel — a live snapshot straight from Torn (no date range) of Drugs, Medical, Boosters and Temporary items actually sitting in the armory right now, no news-parsing involved. Temporary items also show how many are ready versus out on loan, and to who — so a member holding onto a flash grenade shows up immediately, not just after they use it.',
         ],
     },
     {

@@ -1996,6 +1996,14 @@
             </div>
 
             <div id="at-editor" style="display:none;">
+                <div class="panel" id="at-stock-panel">
+                    <h3>Current armory stock</h3>
+                    <p style="color:var(--muted);font-size:12px;margin:0 0 10px;">Live quantities straight from Torn — no date range needed. Covers Drugs, Medical, Boosters and Temporary items (Candy and Alcohol aren't exposed this way by Torn's API). Temporary items also show who currently has one on loan.</p>
+                    <button id="at-stock-calc">Check now</button>
+                    <div class="status" id="at-stock-status" style="margin-top:8px;"></div>
+                    <div id="at-stock-body" style="margin-top:10px;"></div>
+                </div>
+
                 <div class="panel" id="at-report-panel">
                     <h3>Consumption report</h3>
                     <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:flex-end;">

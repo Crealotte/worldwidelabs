@@ -24,6 +24,46 @@ function loadArmoryTracker() {
     $('at-editor').style.display = isLeaderCached ? 'block' : 'none';
 }
 
+// ---- Current armory stock: a live snapshot straight from Torn, no date range — see
+// api/armory-tracker.js's 'armory-stock' action for why this is more reliable than reconstructing
+// it from news events. ----
+$('at-stock-calc').addEventListener('click', async () => {
+    const st = $('at-stock-status'), btn = $('at-stock-calc');
+    btn.disabled = true; st.className = 'status ok'; st.textContent = 'Checking…';
+    try {
+        const result = await atFetch({ action: 'armory-stock' });
+        if (result.error) throw new Error(result.error);
+        st.className = 'status'; st.textContent = '';
+        renderAtStock(result);
+    } catch (e) {
+        st.className = 'status err'; st.textContent = e.message;
+    } finally { btn.disabled = false; }
+});
+
+function renderAtStock(result) {
+    const el = $('at-stock-body');
+    if (!result.categories.length) { el.innerHTML = '<p style="color:var(--muted);font-size:13px;">Nothing on the tracked-items list found in the armory right now.</p>'; return; }
+    el.innerHTML = result.categories.map(cat => `
+        <div style="margin-bottom:12px;">
+            <div style="font-weight:700;margin-bottom:6px;">${AT_CATEGORY_ICONS[cat.category] || '📦'} ${esc(cat.category)}</div>
+            <table style="width:100%;font-size:13px;border-collapse:collapse;">
+                ${cat.items.map(it => {
+                    if (it.available === undefined) return `<tr style="border-top:1px solid var(--line);">
+                        <td style="padding:4px 8px;">${esc(it.item)}</td>
+                        <td style="padding:4px 8px;font-family:var(--mono);text-align:right;">${it.quantity.toLocaleString()}x</td>
+                    </tr>`;
+                    const loanLine = it.loanedTo.length ? `<div style="font-size:11px;color:var(--muted);margin-top:2px;">on loan: ${it.loanedTo.map(l => esc(l.name)).join(', ')}</div>` : '';
+                    return `<tr style="border-top:1px solid var(--line);">
+                        <td style="padding:4px 8px;">${esc(it.item)}${loanLine}</td>
+                        <td style="padding:4px 8px;font-family:var(--mono);text-align:right;">
+                            <span style="color:var(--reagent);">${it.available.toLocaleString()} ready</span>${it.loaned ? ` <span style="color:var(--danger);">· ${it.loaned.toLocaleString()} on loan</span>` : ''}
+                        </td>
+                    </tr>`;
+                }).join('')}
+            </table>
+        </div>`).join('');
+}
+
 // Cross-tool integration: push a cost line straight into the War Payout Calculator (its wpCosts
 // array / renderWpCosts, both globals from war-payout-tracker.js) rather than leaving the leader
 // to copy numbers by hand between tools.
