@@ -78,9 +78,10 @@ async function atCalculateReport(from, to, onProgress) {
 
         for (const cat of result.categories) {
             for (const it of cat.items) {
-                const m = byItem[it.item] || (byItem[it.item] = { item: it.item, category: it.category, quantity: 0, value: 0, hasPrice: false, players: {} });
+                const m = byItem[it.item] || (byItem[it.item] = { item: it.item, category: it.category, quantity: 0, value: 0, hasPrice: false, deposited: 0, players: {} });
                 m.quantity += it.quantity;
                 m.value += it.value;
+                m.deposited += it.deposited || 0;
                 if (it.hasPrice) m.hasPrice = true;
                 for (const p of it.players) {
                     const mp = m.players[p.name] || (m.players[p.name] = { name: p.name, quantity: 0, value: 0, hits: 0 });
@@ -92,9 +93,10 @@ async function atCalculateReport(from, to, onProgress) {
         }
         for (const extra of (result.shoppingExtras || [])) {
             const key = extra.category + '|' + extra.item;
-            const m = shoppingExtrasByKey[key] || (shoppingExtrasByKey[key] = { category: extra.category, item: extra.item, quantity: 0, value: 0, hasPrice: false });
+            const m = shoppingExtrasByKey[key] || (shoppingExtrasByKey[key] = { category: extra.category, item: extra.item, quantity: 0, value: 0, hasPrice: false, deposited: 0 });
             m.quantity += extra.quantity;
             m.value += extra.value;
+            m.deposited += extra.deposited || 0;
             if (extra.hasPrice) m.hasPrice = true;
         }
         meta.entriesScanned += result.meta.entriesScanned;
@@ -249,34 +251,53 @@ function renderAtShoppingList(report) {
         el.innerHTML = '<p style="color:var(--muted);font-size:13px;">Nothing to restock for this range.</p>';
         return;
     }
+    // "Restocked" pulls from real armory deposits over this same range (see
+    // api/armory-tracker.js's consumption-report) — not something typed in, and not always equal
+    // to "Buy back": deposit more than was needed and it shows a spare surplus, deposit less (or
+    // nothing yet) and it shows how much is still short.
+    const atRestockedCell = it => {
+        const deposited = it.deposited || 0;
+        if (!deposited) return '<span style="color:var(--muted);">—</span>';
+        const diff = deposited - it.quantity;
+        return diff >= 0
+            ? `<span style="color:var(--reagent);">${deposited.toLocaleString()}x ✓${diff > 0 ? ` (+${diff.toLocaleString()} spare)` : ''}</span>`
+            : `<span style="color:var(--danger);">${deposited.toLocaleString()}x (${Math.abs(diff).toLocaleString()} short)</span>`;
+    };
     el.innerHTML = `
         <table style="width:100%;font-size:13px;border-collapse:collapse;">
-            <thead><tr style="color:var(--muted);text-align:left;"><th style="padding:4px 8px;">Item</th><th style="padding:4px 8px;">Buy back</th><th style="padding:4px 8px;">Cost</th></tr></thead>
+            <thead><tr style="color:var(--muted);text-align:left;"><th style="padding:4px 8px;">Item</th><th style="padding:4px 8px;">Buy back</th><th style="padding:4px 8px;">Restocked</th><th style="padding:4px 8px;">Cost</th></tr></thead>
             ${report.categories.map(cat => {
                 const items = atShoppingItemsForCategory(report, cat);
                 const subtotal = items.reduce((s, it) => s + it.value, 0);
                 return `
             <tbody>
-                <tr><td colspan="3" style="padding:8px 8px 2px;font-weight:700;">${AT_CATEGORY_ICONS[cat.category] || '📦'} ${esc(cat.category)}</td></tr>
+                <tr><td colspan="4" style="padding:8px 8px 2px;font-weight:700;">${AT_CATEGORY_ICONS[cat.category] || '📦'} ${esc(cat.category)}</td></tr>
                 ${items.map(it => `
                 <tr style="border-top:1px solid var(--line);">
                     <td style="padding:4px 8px;">${esc(it.item)}</td>
                     <td style="padding:4px 8px;font-family:var(--mono);">${it.quantity}x</td>
+                    <td style="padding:4px 8px;font-family:var(--mono);">${atRestockedCell(it)}</td>
                     <td style="padding:4px 8px;font-family:var(--mono);${it.hasPrice ? '' : 'color:var(--muted);'}">${it.hasPrice ? `$${Math.round(it.value).toLocaleString()}` : '—'}</td>
                 </tr>`).join('')}
-                <tr><td colspan="2" style="padding:2px 8px;text-align:right;color:var(--muted);">Subtotal</td><td style="padding:2px 8px;font-family:var(--mono);font-weight:700;">$${Math.round(subtotal).toLocaleString()}</td></tr>
+                <tr><td colspan="3" style="padding:2px 8px;text-align:right;color:var(--muted);">Subtotal</td><td style="padding:2px 8px;font-family:var(--mono);font-weight:700;">$${Math.round(subtotal).toLocaleString()}</td></tr>
             </tbody>`;
             }).join('')}
-            <tfoot><tr><td colspan="2" style="padding:8px;font-weight:700;">Grand total</td><td style="padding:8px;font-weight:700;font-family:var(--mono);color:var(--reagent);">$${Math.round(grandTotal).toLocaleString()}</td></tr></tfoot>
+            <tfoot><tr><td colspan="3" style="padding:8px;font-weight:700;">Grand total</td><td style="padding:8px;font-weight:700;font-family:var(--mono);color:var(--reagent);">$${Math.round(grandTotal).toLocaleString()}</td></tr></tfoot>
         </table>
         <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;">
             <button class="ghost small" id="at-shop-copy">Copy as text</button>
             <button class="ghost small" id="at-shop-add-total">+ War cost (grand total)</button>
         </div>`;
     $('at-shop-copy').addEventListener('click', () => {
+        const restockedNote = it => {
+            const deposited = it.deposited || 0;
+            if (!deposited) return '';
+            const diff = deposited - it.quantity;
+            return ` [restocked ${deposited}x${diff >= 0 ? (diff > 0 ? `, +${diff} spare` : ', ✓') : `, ${Math.abs(diff)} short`}]`;
+        };
         const text = 'Restock shopping list:\n' + report.categories.map(cat => {
             const items = atShoppingItemsForCategory(report, cat);
-            return `\n${cat.category}:\n` + items.map(it => `  ${it.quantity}x ${it.item}${it.hasPrice ? ` — $${Math.round(it.value).toLocaleString()}` : ''}`).join('\n');
+            return `\n${cat.category}:\n` + items.map(it => `  ${it.quantity}x ${it.item}${it.hasPrice ? ` — $${Math.round(it.value).toLocaleString()}` : ''}${restockedNote(it)}`).join('\n');
         }).join('') + `\n\nGrand total: $${Math.round(grandTotal).toLocaleString()}`;
         navigator.clipboard.writeText(text).then(() => toast('Shopping list copied'));
     });

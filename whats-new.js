@@ -25,6 +25,9 @@ const WHATS_NEW = [
             'War reports: a "Restocked" checkbox now shows on each report too (whenever it is matched to a real war), the same shared marker as the one already on the War payout page\'s past-wars list — tick it in either place and it stays in sync.',
             'War reports: a 🗑 button next to each report removes it from this list (with a confirmation) — the receipt itself and its shareable link are left untouched, so pasting the same link back in brings it right back if it was removed by mistake.',
             'War reports: a report added by pasting an old link doesn\'t always come with enough to find its restocked checkbox automatically (it depends on whether Torn still lists that war). A new "🔗 Match to a war" button on any report missing it lets you pick the real war by hand instead — it also fills in the result and score if the report didn\'t have those either.',
+            'Consumption Tracker: the restock shopping list now shows a "Restocked" column pulled straight from real armory deposits over the same date range — no typing needed. Deposit less than was needed and it shows how much is still short; deposit more and it shows the spare surplus.',
+            'Consumption Tracker: a temporary weapon (flash grenade, HEG, etc.) that gets loaned out now counts as consumption too, same as a real "used" event — Torn never logs a "used" event for one once it has already left the armory via a loan, so the loan itself was the only signal it was ever gone, and it was being missed entirely.',
+            'Consumption Tracker: 23 more of Torn\'s real "Temporary type" weapons are now tracked (only 6 were before) — including Epinephrine, Melatonin, Serotonin and Tyrosine, the four combat stat-boost needles, which were very likely the biggest actual gap since they\'re heavily used in wars.',
         ],
     },
     {

@@ -128,7 +128,12 @@ module.exports = async function handler(req, res) {
 
             let unparsedCount = 0;
             const unparsedSample = [];
-            const byItem = {}; // item name -> { item, category, quantity, value, hasPrice, players: { name -> {quantity, value} } }
+            const byItem = {}; // item name -> { item, category, quantity, value, hasPrice, deposited, players: { name -> {quantity, value} } }
+            const ensureItem = (name, category) => byItem[name] || (byItem[name] = {
+                item: name, category, quantity: 0, value: 0,
+                hasPrice: (catalog[name.toLowerCase()]?.price ?? null) != null, deposited: 0, players: {},
+            });
+            let emptyBloodBagDeposited = 0; // "Empty Blood Bag" itself isn't a tracked item (see below), so it isn't in byItem at all
             for (const entry of newsResult.entries) {
                 const parsed = parseArmoryNewsEntry(String(entry.id), entry);
                 if (parsed.unparsed) {
@@ -136,21 +141,31 @@ module.exports = async function handler(req, res) {
                     if (unparsedSample.length < 10) unparsedSample.push(parsed.text);
                     continue;
                 }
+
+                // How much was actually bought back, alongside how much the report below says was
+                // needed — a deposit is real restocking, tracked separately from consumption so the
+                // two can be compared (e.g. "needed 2,000, deposited 10,000" for a surplus).
+                if (parsed.action === 'deposited') {
+                    if (parsed.item.toLowerCase() === 'empty blood bag') { emptyBloodBagDeposited += parsed.quantity; continue; }
+                    const category = TRACKED_ITEMS[parsed.item.toLowerCase()];
+                    if (category) ensureItem(parsed.item, category).deposited += parsed.quantity;
+                    continue;
+                }
+
                 const category = TRACKED_ITEMS[parsed.item.toLowerCase()];
-                // Loans/deposits/retrieves/returns normally aren't consumption — a loaned weapon or
-                // armor piece is still faction property until it isn't returned. Temporary-tab items
-                // are the one exception: they're single-use throwables, and once one is loaned out
-                // into a member's own inventory, using it in a fight never generates a "used one of
-                // the faction's items" news event at all (that wording only fires for using an item
+                // Loans/retrieves/returns normally aren't consumption — a loaned weapon or armor
+                // piece is still faction property until it isn't returned. Temporary-tab items are
+                // the one exception: they're single-use throwables, and once one is loaned out into
+                // a member's own inventory, using it in a fight never generates a "used one of the
+                // faction's items" news event at all (that wording only fires for using an item
                 // straight from the shared armory) — so the loan is the only signal it's ever gone,
                 // and counts as consumption exactly like a real "used" event.
                 const isConsumingLoan = parsed.action === 'loaned' && category === 'Temporary';
                 if (parsed.action !== 'used' && !isConsumingLoan) continue;
                 if (!category) continue; // not on the curated tracked-items list
-                const meta = catalog[parsed.item.toLowerCase()];
-                const price = meta?.price ?? null;
+                const price = catalog[parsed.item.toLowerCase()]?.price ?? null;
 
-                const item = byItem[parsed.item] || (byItem[parsed.item] = { item: parsed.item, category, quantity: 0, value: 0, hasPrice: price != null, players: {} });
+                const item = ensureItem(parsed.item, category);
                 item.quantity += parsed.quantity;
                 if (price != null) item.value += price * parsed.quantity;
                 const p = item.players[parsed.actor] || (item.players[parsed.actor] = { name: parsed.actor, quantity: 0, value: 0 });
@@ -185,9 +200,9 @@ module.exports = async function handler(req, res) {
             const bloodBagQty = Object.values(byItem)
                 .filter(it => BLOOD_BAG_RE.test(it.item))
                 .reduce((s, it) => s + it.quantity, 0);
-            if (bloodBagQty > 0) {
+            if (bloodBagQty > 0 || emptyBloodBagDeposited > 0) {
                 const price = catalog['empty blood bag']?.price ?? null;
-                shoppingExtras.push({ category: 'Medical', item: 'Empty Blood Bag', quantity: bloodBagQty, value: price != null ? price * bloodBagQty : 0, hasPrice: price != null });
+                shoppingExtras.push({ category: 'Medical', item: 'Empty Blood Bag', quantity: bloodBagQty, value: price != null ? price * bloodBagQty : 0, hasPrice: price != null, deposited: emptyBloodBagDeposited });
             }
 
             // Merge the 8 type-specific full blood bags (Blood Bag : A+, : O-, etc.) into one
@@ -196,10 +211,11 @@ module.exports = async function handler(req, res) {
             // its own top-level category, per the leader's preference.
             const bloodBagEntries = Object.values(byItem).filter(it => BLOOD_BAG_RE.test(it.item));
             if (bloodBagEntries.length) {
-                const merged = { item: 'Blood Bag', category: 'Medical', quantity: 0, value: 0, hasPrice: false, players: {} };
+                const merged = { item: 'Blood Bag', category: 'Medical', quantity: 0, value: 0, hasPrice: false, deposited: 0, players: {} };
                 for (const it of bloodBagEntries) {
                     merged.quantity += it.quantity;
                     merged.value += it.value;
+                    merged.deposited += it.deposited;
                     if (it.hasPrice) merged.hasPrice = true;
                     delete byItem[it.item];
                     for (const p of Object.values(it.players)) {
