@@ -1273,6 +1273,25 @@ module.exports = async function handler(req, res) {
             return res.status(200).json({ ok: true });
         }
 
+        // Removing a wrongly-entered report: drops it from this faction's list and deletes the
+        // receipt itself (its shareable link stops working), plus the Labs ledger entry saving it
+        // created (lib/labsLedger.js keys its own entries "r:<receiptId>") — a bad payout number
+        // shouldn't linger in the owner's totals just because the receipt it came from is gone.
+        if (action === 'delete-receipt') {
+            const { id } = req.body;
+            if (!id) return res.status(400).json({ error: 'Missing id' });
+            const raw = await redis(['GET', `wwl:payout-receipt:${id}`]);
+            if (raw && String(JSON.parse(raw).factionId) !== factionId) return res.status(403).json({ error: 'That receipt belongs to a different faction.' });
+
+            const indexKey = `wwl:receipts-index:${factionId}`;
+            const indexRaw = await redis(['GET', indexKey]);
+            const index = (indexRaw ? JSON.parse(indexRaw) : []).filter(e => e.id !== id);
+            await redis(['SET', indexKey, JSON.stringify(index)]);
+            await redis(['DEL', `wwl:payout-receipt:${id}`]);
+            try { await redis(['HDEL', 'wwl:labs-ledger', `r:${id}`]); } catch (e) { /* best-effort cleanup */ }
+            return res.status(200).json({ ok: true });
+        }
+
         return res.status(400).json({ error: 'Unknown action' });
     } catch (e) {
         return res.status(500).json({ error: String(e.message || e) });

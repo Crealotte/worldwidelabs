@@ -37,7 +37,7 @@ function renderWarReports(r) {
         const result = x.won === true ? '<span style="color:var(--reagent);font-weight:700;">Win</span>' : x.won === false ? '<span style="color:var(--danger);font-weight:700;">Loss</span>' : '<span style="color:var(--muted);">Result unknown</span>';
         const score = x.scoreUs != null && x.scoreThem != null ? `<span style="color:var(--muted);font-family:var(--mono);font-size:12px;">${Math.round(x.scoreUs).toLocaleString()} – ${Math.round(x.scoreThem).toLocaleString()}</span>` : '';
         const rows = x.rows || [];
-        const restockRow = (r.leader && x.warId) ? `<label style="display:flex;align-items:center;gap:5px;font-size:12px;color:var(--muted);cursor:pointer;margin-left:auto;" title="Have you restocked the armory for this war yet?">
+        const restockRow = (r.leader && x.warId) ? `<label style="display:flex;align-items:center;gap:5px;font-size:12px;color:var(--muted);cursor:pointer;" title="Have you restocked the armory for this war yet?">
                 <input type="checkbox" class="wr-restock" data-warid="${esc(x.warId)}" ${x.restocked ? 'checked' : ''} style="width:auto;"> Restocked</label>` : '';
         const details = rows.length ? `
             <details style="margin-top:8px;">
@@ -50,14 +50,18 @@ function renderWarReports(r) {
                 </table></div>
             </details>`
             : (r.leader ? '' : '<div style="color:var(--muted);font-size:12px;margin-top:8px;">You weren\'t paid in this war.</div>');
+        const deleteBtn = r.leader ? `<button class="ghost small wr-delete" data-id="${esc(x.id)}" data-opponent="${esc(x.opponent)}" title="Delete this report" style="color:var(--danger);">🗑</button>` : '';
         return `
         <div class="panel">
             <div style="display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;">
                 <h3 style="margin:0;">vs ${esc(x.opponent)}</h3>
                 ${result} ${score}
                 <span style="color:var(--muted);font-size:12px;">${wrDate(x.warEnd)}</span>
-                ${restockRow}
-                <a href="/?receipt=${esc(x.id)}" target="_blank" rel="noopener" class="ghost small" style="${restockRow ? '' : 'margin-left:auto;'}text-decoration:none;padding:4px 10px;">Open report ↗</a>
+                <span style="margin-left:auto;display:flex;gap:8px;align-items:center;">
+                    ${restockRow}
+                    <a href="/?receipt=${esc(x.id)}" target="_blank" rel="noopener" class="ghost small" style="text-decoration:none;padding:4px 10px;">Open report ↗</a>
+                    ${deleteBtn}
+                </span>
             </div>
             ${details}
         </div>`;
@@ -65,7 +69,18 @@ function renderWarReports(r) {
     if (r.leader) {
         wrWireAddPanel();
         $('wr-list').querySelectorAll('.wr-restock').forEach(cb => cb.addEventListener('change', () => wrToggleRestocked(cb)));
+        $('wr-list').querySelectorAll('.wr-delete').forEach(btn => btn.addEventListener('click', () => wrDeleteReport(btn.dataset.id, btn.dataset.opponent)));
     }
+}
+
+async function wrDeleteReport(id, opponent) {
+    if (!confirm(`Delete the report vs ${opponent}? This removes it and its shareable link for good.`)) return;
+    try {
+        const result = await wrFetch({ action: 'delete-receipt', id });
+        if (result.error) throw new Error(result.error);
+        toast('Report deleted');
+        loadWarReports();
+    } catch (e) { toast(`Couldn't delete that: ${e.message}`); }
 }
 
 async function wrToggleRestocked(cb) {
