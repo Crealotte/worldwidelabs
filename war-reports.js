@@ -110,6 +110,16 @@ function wrAddPanelHtml() {
             <h3 style="margin:0;">Add a report saved elsewhere</h3>
             <button class="ghost small" id="wr-add-cancel">Cancel</button>
         </div>
+        <div class="field">
+            <label>Already have the WWL receipt link (or just its id) from back then?</label>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                <input id="wr-reindex-input" type="text" placeholder="https://worldwidelabs.vercel.app/?receipt=… or just the id" style="flex:1;min-width:220px;">
+                <button class="ghost small" id="wr-reindex-btn">Add from link</button>
+            </div>
+            <div class="status" id="wr-reindex-status" style="margin-top:6px;"></div>
+            <p style="color:var(--muted);font-size:12px;margin:6px 0 0;">The report page already exists — this just adds it to the list below. Nothing about the report itself changes.</p>
+        </div>
+        <p style="color:var(--muted);font-size:12px;margin:14px 0 6px;">No link for it? Fill in the details by hand instead:</p>
         <div class="field"><label>Match it to a past war (optional, but needed for the restocked checkbox)</label>${warPicker}${matchedNote}</div>
         <div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:12px;">
             <div class="field" style="flex:1;min-width:180px;"><label>Opponent</label><input id="wr-add-opponent" type="text" value="${esc(wrPickedWar?.them?.name || '')}" ${wrPickedWar ? 'disabled' : ''}></div>
@@ -154,6 +164,8 @@ function wrWireAddPanel() {
     $('wr-add-toggle')?.addEventListener('click', () => { wrAddOpen = true; renderWarReports(wrLastResult); });
     $('wr-add-cancel')?.addEventListener('click', () => { wrAddOpen = false; wrPickedWar = null; wrAddRows = [{ name: '', warHits: '', overflowHits: '', gross: '', penalty: '', net: '' }]; renderWarReports(wrLastResult); });
     if (!$('wr-add-panel')) return;
+    $('wr-reindex-btn').addEventListener('click', wrReindexByLink);
+    $('wr-reindex-input').addEventListener('keydown', e => { if (e.key === 'Enter') wrReindexByLink(); });
     if (wrWars === null) wrLoadWarsForAdd();
     document.querySelectorAll('.wr-warpick').forEach(row => row.addEventListener('click', () => {
         const w = wrWars[Number(row.dataset.i)];
@@ -179,6 +191,32 @@ async function wrLoadWarsForAdd() {
     const result = await wrFetch({ action: 'list-wars' });
     wrWars = result.error ? [] : (result.wars || []);
     if (wrAddOpen) renderWarReports(wrLastResult);
+}
+
+// A receipt made and saved with WWL before this faction's War reports list existed still has its
+// own page at ?receipt=<id> — this just points that existing report at this list, it doesn't
+// recreate or change anything about it.
+function wrExtractReceiptId(input) {
+    const m = input.match(/receipt=([a-z0-9]+)/i);
+    if (m) return m[1];
+    const trimmed = input.trim();
+    return /^[a-z0-9]+$/i.test(trimmed) ? trimmed : null;
+}
+async function wrReindexByLink() {
+    const input = $('wr-reindex-input'), st = $('wr-reindex-status'), btn = $('wr-reindex-btn');
+    const id = wrExtractReceiptId(input.value || '');
+    if (!id) { st.className = 'status err'; st.textContent = 'Paste the full link, or just the id after "?receipt=".'; return; }
+    btn.disabled = true; st.className = 'status ok'; st.textContent = 'Adding…';
+    try {
+        const result = await wrFetch({ action: 'reindex-receipt', id });
+        if (result.error) throw new Error(result.error);
+        toast(result.alreadyListed ? 'That report is already on this list' : 'Report added');
+        wrAddOpen = false;
+        loadWarReports();
+    } catch (e) {
+        st.className = 'status err'; st.textContent = e.message;
+        btn.disabled = false;
+    }
 }
 
 async function wrSaveAddedReport() {

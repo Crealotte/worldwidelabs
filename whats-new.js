@@ -21,7 +21,7 @@ const WHATS_NEW = [
         ],
         leaders: [
             'Fixed a bug where adding a pupil in Mentoring admin returned an "Unknown action" error — adding a mentor already worked, adding a pupil now does too.',
-            'War reports: new "＋ Add a report saved elsewhere" button, for payout reports made with WWL back before it saved them on the site — match it to the actual past war (fills in opponent, date, result and score) or type those in by hand, then list who got paid what. It saves and shows exactly like any other report, with the same shareable link.',
+            'War reports: new "＋ Add a report saved elsewhere" button, for payout reports made with WWL that never made it onto this list. If you still have the old report\'s link (or just its id), paste it in and it\'s added straight away — nothing about the report changes, it just starts showing up here too. No link for it any more? Match it to the actual past war instead (fills in opponent, date, result and score) or type those in by hand, then list who got paid what.',
             'War reports: a "Restocked" checkbox now shows on each report too (whenever it is matched to a real war), the same shared marker as the one already on the War payout page\'s past-wars list — tick it in either place and it stays in sync.',
         ],
     },

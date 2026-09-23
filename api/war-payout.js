@@ -1251,6 +1251,28 @@ module.exports = async function handler(req, res) {
             return res.status(200).json({ ok: true, id });
         }
 
+        // A receipt made and saved with WWL before the War reports list existed still has its own
+        // page (get-receipt above works on any id, no faction check — that's what makes the link
+        // shareable outside the faction), but was never added to this faction's receipts-index, so
+        // it never showed up on War reports. Pasting its link/id back in just adds that missing
+        // index entry — nothing about the receipt itself changes.
+        if (action === 'reindex-receipt') {
+            const { id } = req.body;
+            if (!id) return res.status(400).json({ error: 'Missing id' });
+            const raw = await redis(['GET', `wwl:payout-receipt:${id}`]);
+            if (!raw) return res.status(404).json({ error: 'No receipt found with that link/id — check it was copied in full.' });
+            const rc = JSON.parse(raw);
+            if (String(rc.factionId) !== factionId) return res.status(403).json({ error: 'That receipt belongs to a different faction.' });
+
+            const indexKey = `wwl:receipts-index:${factionId}`;
+            const indexRaw = await redis(['GET', indexKey]);
+            const index = indexRaw ? JSON.parse(indexRaw) : [];
+            if (index.some(e => e.id === id)) return res.status(200).json({ ok: true, alreadyListed: true });
+            index.unshift({ id, opponent: rc.opponent, warEnd: rc.warEnd, hasBadges: !!rc.badgeStats, createdAt: rc.createdAt || Date.now() });
+            await redis(['SET', indexKey, JSON.stringify(index.slice(0, 200))]);
+            return res.status(200).json({ ok: true });
+        }
+
         return res.status(400).json({ error: 'Unknown action' });
     } catch (e) {
         return res.status(500).json({ error: String(e.message || e) });
