@@ -110,12 +110,18 @@ async function loadFactionRoadmap() {
         return { perk, level, respect, date, done, isNext, late, weeks };
     });
     const doneCount = items.filter(i => i.done).length, next = items.find(i => i.isNext);
+    const respectLine = fpData?.respect == null ? '' : next
+        ? `<div style="margin-top:8px;max-width:320px;">
+            <div style="color:var(--muted);font-size:12px;">${fpNum(fpData.respect)} / ${fpNum(next.respect)} respect available</div>
+            <div style="background:var(--bench-2);border-radius:4px;height:6px;margin-top:4px;"><div style="width:${Math.min(100, fpData.respect / next.respect * 100).toFixed(1)}%;background:var(--reagent);height:6px;border-radius:4px;"></div></div>
+          </div>`
+        : `<div style="color:var(--muted);font-size:12px;margin-top:8px;">Faction respect (total): ${fpNum(fpData.respect)}</div>`;
     $('fr-summary').innerHTML = ok ? `
         <div class="grid3">
             <div class="stat"><div class="k">Unlocked</div><div class="v good">${doneCount} / ${items.length}</div><div class="s">perks of the roadmap</div></div>
             <div class="stat"><div class="k">Next up</div><div class="v" style="font-size:18px;">${next ? `${esc(next.perk)} ${fpRoman(next.level)}` : 'All done'}</div><div class="s">${next ? `needs ${fpNum(next.respect)} respect · planned ${fpDateLabel(next.date)}` : ''}</div></div>
             <div class="stat"><div class="k">Schedule</div><div class="v ${next && next.late ? 'bad' : 'good'}" style="font-size:18px;">${next ? (next.late ? `${next.weeks || '<1'} week${next.weeks === 1 ? '' : 's'} behind` : 'on schedule') : 'done'}</div><div class="s">the order stays the same when behind</div></div>
-        </div>${fpData.respect != null ? `<div style="color:var(--muted);font-size:12px;margin-top:8px;">Faction respect (total): ${fpNum(fpData.respect)}</div>` : ''}`
+        </div>${respectLine}`
         : '<p style="color:var(--muted);">The levels appear as soon as a leader has opened WWL.</p>';
     $('fr-table').innerHTML = `<table style="width:100%;font-size:13px;border-collapse:collapse;text-align:left;">
         <thead><tr style="color:var(--muted);"><th style="padding:4px 8px;">Perk</th><th style="padding:4px 8px;">Required respect</th><th style="padding:4px 8px;">Planned</th><th style="padding:4px 8px;">Status</th></tr></thead>
