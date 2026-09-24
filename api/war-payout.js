@@ -646,7 +646,12 @@ module.exports = async function handler(req, res) {
             const items = [];
 
             try {
-                const r = await tornFetch(`https://api.torn.com/v2/user/?selections=profile&key=${encodeURIComponent(key)}`, { headers: { accept: 'application/json' } });
+                // lib/tornFetch.js caches any /user/?selections=profile& call for 10 minutes, keyed by
+                // the exact URL — great for the routine "who is this key" identity lookups every action
+                // does, but wrong here: this needs THIS member's actual current setting, not whatever
+                // it was up to 10 minutes ago. The extra _fresh param makes every call here a distinct
+                // URL, so it always misses that cache and hits Torn live.
+                const r = await tornFetch(`https://api.torn.com/v2/user/?selections=profile&key=${encodeURIComponent(key)}&_fresh=${Date.now()}`, { headers: { accept: 'application/json' } });
                 const d = await r.json();
                 // v2's response nests everything under "profile" (confirmed against a real reference
                 // userscript's own code, `data.profile.revivable`) — reading `d.revivable` directly
