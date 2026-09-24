@@ -50,7 +50,7 @@ async function loadMyStanding() {
 
         // --- the smaller tiles: each with the number big and the place under it ---
         const small = [['bloodwithdrawn', '🩸 Blood bags filled'], ['candyused', '🍬 Candy'], ['alcoholused', '🍺 Alcohol'],
-            ['energydrinkused', '🥤 Energy drinks'], ['war', '⚔ War hits (last 5 wars)'], ['chain', '⛓ Chain hits (last 5 wars)']].map(([k, label]) => {
+            ['war', '⚔ War hits (last 5 wars)'], ['chain', '⛓ Chain hits (last 5 wars)']].map(([k, label]) => {
             const p = r.places[k];
             return `
             <div class="stat">

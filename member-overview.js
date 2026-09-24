@@ -7,20 +7,20 @@
 // out on the first Sunday of each month, so a "newsletter period" runs from the previous first
 // Sunday to this one — 4 or 5 weeks depending on the month. A custom "last N weeks" is there too.
 // Shows: hits per member for the wars that ended in the period (war + chain), a traffic light from
-// the hits rule, blood bags filled / candy / alcohol / energy drinks used (total or per week),
-// energy tier, and a winners list. Energy trained needs Torn data that isn't connected yet.
+// the hits rule, blood bags filled / candy / alcohol used (total or per week), energy tier, and a
+// winners list. Energy trained needs Torn data that isn't connected yet.
 'use strict';
 
 let moData = null; // { members, wars, hits, tiers, energyTarget, settings }
 let moEnergy = null; // { perMember: { id: energy }, partial, sinceDay } — energy trained in the gym over the period, from the daily contributor snapshots
-let moStats = {}; // "<id>:<timestamp>" -> { candyused, alcoholused, energydrinkused, bloodwithdrawn }
+let moStats = {}; // "<id>:<timestamp>" -> { candyused, alcoholused, bloodwithdrawn }
 let moPeriodId = null; // which option of the period dropdown is picked
 let moCustomWeeks = 4;
 let moDates = null; // { from, to } as YYYY-MM-DD, to = last whole day included — for matching another tool's dates
 let moPerWeek = false; // false = totals over the period, true = average per week
 let moSort = 'war';
 let moBusy = false;
-const MO_KEYS = [['energytrained', 'Energy trained'], ['bloodwithdrawn', 'Blood bags filled'], ['candyused', 'Candy'], ['alcoholused', 'Alcohol'], ['energydrinkused', 'Energy drinks']];
+const MO_KEYS = [['energytrained', 'Energy trained'], ['bloodwithdrawn', 'Blood bags filled'], ['candyused', 'Candy'], ['alcoholused', 'Alcohol']]; // Energy drinks dropped per the leader's request — removing it from here also drops it from the table columns, sorting and the competitions list below, all driven off this one array
 const MO_DAY = 86400;
 
 async function moFetch(body) {
