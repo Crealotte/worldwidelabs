@@ -2,12 +2,13 @@
 // @name         World Wide Labs
 // @namespace    https://worldwidelabs.vercel.app
 // @author       CreaLotte
-// @version      1.12
+// @version      1.14
 // @updateURL    __WWL_BASE__/worldwidelabs.user.js
 // @downloadURL  __WWL_BASE__/worldwidelabs.user.js
-// @description  Shows your WorldWideLabs weekly energy plan (the checklist from the Energy planner) inside Torn, a To do tab with small personal reminders (revive setting, feedback, timezone map), and — if you are in the Mentoring Platform — your mentoring checklist too. Also shows faction banners at the top of every Torn page. On a computer it is a small window you can drag around and close; in TornPDA it is a menu. Ticks are shared with the WWL site.
+// @description  Shows your WorldWideLabs weekly energy plan (the checklist from the Energy planner) inside Torn, a To do tab with small personal reminders (revive setting, feedback, timezone map), and — if you are in the Mentoring Platform — your mentoring checklist too. Also shows faction banners at the top of every Torn page. A small ⚙ in the header shows the installed version, flags when a newer one is out, lets you set/replace your API key, and — for a leader — add or remove your faction's banners right from Torn. On a computer it is a small window you can drag around and close; in TornPDA it is a menu. Ticks are shared with the WWL site.
 // @match        https://www.torn.com/*
 // @grant        GM_xmlhttpRequest
+// @grant        GM_info
 // @connect      __WWL_HOST__
 // ==/UserScript==
 
@@ -17,10 +18,21 @@
 
     // The address of the WWL site (filled in when the script is installed from the WWL site).
     const WWL = ('__WWL_BASE__'.startsWith('http') ? '__WWL_BASE__' : 'https://worldwidelabs.vercel.app').replace(/\/$/, '');
-    // TornPDA fills this in with your own API key; on a computer the script asks for it once and remembers it.
+    // TornPDA fills this in with your own API key; on a computer it's entered once via ⚙ Settings and remembered.
     const PDA_KEY = '###PDA-APIKEY###';
     const IS_PDA = !!PDA_KEY && !PDA_KEY.startsWith('#');
     const KEY_NAME = 'wwl_api_key', POS_NAME = 'wwl_plan_pos', STATE_NAME = 'wwl_plan_state';
+    // GM_info gives the version Tampermonkey actually has installed right now — falls back to a
+    // hardcoded copy (kept in sync with @version above) for TornPDA, which doesn't grant GM_info.
+    const SCRIPT_VERSION = (typeof GM_info !== 'undefined' && GM_info.script?.version) || '1.14';
+    const versionGreater = (a, b) => {
+        const pa = String(a).split('.').map(Number), pb = String(b).split('.').map(Number);
+        for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+            const x = pa[i] || 0, y = pb[i] || 0;
+            if (x !== y) return x > y;
+        }
+        return false;
+    };
 
     const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
     const num = n => Math.round(n).toLocaleString();
@@ -29,14 +41,13 @@
         set(k, v) { try { localStorage.setItem(k, v); } catch (e) { /* not saved */ } },
     };
 
-    function getKey(ask = true) {
+    // Only ever a lookup — setting/changing the key is a deliberate action via ⚙ Settings → Change
+    // API key (its own prompt() there), never automatic. A blocking prompt() firing the instant the
+    // script loads used to catch people in screens where they have no way to get to their key at all
+    // (e.g. right after adding the script in TornPDA).
+    function getKey() {
         if (IS_PDA) return PDA_KEY;
-        let k = store.get(KEY_NAME) || '';
-        if (!k && ask) {
-            k = (prompt('WWL Energy plan: paste your Torn API key (the same one you use on WWL). It is only sent to WWL.') || '').trim();
-            if (k) store.set(KEY_NAME, k);
-        }
-        return k;
+        return store.get(KEY_NAME) || '';
     }
     // Sends the request through the userscript manager (Tampermonkey's GM_xmlhttpRequest, or TornPDA's own call), because Torn's page
     // is not always allowed to talk to another site directly. A plain fetch is only the last resort.
@@ -55,7 +66,7 @@
     }
     async function api(body) {
         const key = getKey();
-        if (!key) throw new Error('No API key');
+        if (!key) throw new Error('NO_KEY');
         const r = await post(`${WWL}/api/war-payout`, { key, ...body });
         if (r.error) throw new Error(r.error);
         return r;
@@ -82,11 +93,13 @@
     win.innerHTML = `<div id="wwl-head" style="display:flex;align-items:center;gap:8px;padding:9px 12px;border-bottom:1px solid #3a4352;${IS_PDA ? '' : 'cursor:move;'}user-select:none;touch-action:none;">
             <b style="flex:1;">WWL energy plan${IS_PDA ? '' : ' <span style="color:#9aa4b5;font-weight:400;font-size:11px;">— drag to move</span>'}</b>
             <span id="wwl-prog2" style="color:#35d99b;font-family:monospace;"></span>
+            <span id="wwl-settings" title="Settings" style="cursor:pointer;font-size:16px;line-height:1;padding:0 4px;color:#9aa4b5;position:relative;">⚙<span id="wwl-settings-dot" style="display:none;position:absolute;top:-2px;right:-1px;width:7px;height:7px;border-radius:50%;background:#f0b432;"></span></span>
             <span id="wwl-close" title="Close" style="cursor:pointer;font-size:20px;line-height:1;padding:0 4px;">×</span></div>
         <div id="wwl-body" style="overflow:auto;padding:8px 12px 12px;"></div>`;
     root.appendChild(win);
     const body = win.querySelector('#wwl-body'), prog2 = win.querySelector('#wwl-prog2'), head = win.querySelector('#wwl-head');
-    let plan = null, mtPairs = null, mtTodos = [], todoItems = null, tab = 'todo'; // tab: 'energy' | 'mentoring' | 'todo' — the mentoring tab only appears once we know there's something to show there
+    let plan = null, mtPairs = null, mtTodos = [], todoItems = null, tab = 'todo', lastTab = 'todo'; // tab: 'energy' | 'mentoring' | 'todo' | 'settings' — the mentoring tab only appears once we know there's something to show there
+    let settingsData = null, updateAvailable = null; // settingsData: { banners, leader, owner } once the Settings tab has been opened
 
     // A daily ritual checkbox, always first on the To do tab, unlike the automated checks below it:
     // purely local (no server round trip needed for something this simple), and resets itself every
@@ -129,6 +142,11 @@
     }
     pill.addEventListener('click', () => setOpen(true));
     win.querySelector('#wwl-close').addEventListener('click', () => setOpen(false));
+    win.querySelector('#wwl-settings').addEventListener('click', () => {
+        tab = 'settings';
+        render();
+        if (settingsData === null) loadSettings();
+    });
 
     function progress() {
         let done = 0, total = 0;
@@ -153,7 +171,7 @@
         ).join('')}</div>`;
     }
     function wireTabs() {
-        body.parentElement.querySelectorAll('.wwl-tab').forEach(b => b.addEventListener('click', () => { tab = b.dataset.tab; render(); }));
+        body.parentElement.querySelectorAll('.wwl-tab').forEach(b => b.addEventListener('click', () => { tab = lastTab = b.dataset.tab; render(); }));
     }
     function renderEnergyTab() {
         const footer = `<div style="margin-top:10px;padding-top:8px;border-top:1px solid #3a4352;color:#9aa4b5;">To change your settings (stat, method, candy, cans, refill), use the planner on the tool itself: <a href="${WWL}/energy" target="_blank" rel="noopener" style="color:#35d99b;">${esc(WWL)}/energy</a></div>`;
@@ -199,7 +217,90 @@
             </div>`).join('');
         return daily + rest;
     }
+    // The ⚙ view: version + update flag + API key, and — for a leader — the faction's own banners
+    // (add/delete), reusing the exact same banners-get/save/delete actions Leader settings on the
+    // site uses. Not in the main tab row (reached via the gear icon only); a "← Back" returns to
+    // whichever real tab was open before.
+    function renderBanEditList() {
+        const list = settingsData?.banners || [];
+        if (!list.length) return '<div style="color:#9aa4b5;font-size:12px;padding:4px 0;">No banners right now.</div>';
+        return list.map(b => `<div style="display:flex;gap:8px;align-items:center;padding:5px 0;border-top:1px solid #3a4352;font-size:12px;">
+            <span style="flex:1;">${esc(b.text)}</span>
+            <span style="color:#9aa4b5;white-space:nowrap;">${b.scope === 'all' ? 'All factions' : 'My faction'} · ${b.audience === 'leaders' ? 'leaders' : 'everyone'}</span>
+            <span class="wwl-ban-del" data-id="${esc(b.id)}" title="Delete" style="cursor:pointer;color:#e05555;">✕</span>
+        </div>`).join('');
+    }
+    function renderSettingsTab() {
+        const updateHtml = updateAvailable ? `<div style="color:#f0b432;margin:6px 0;">⬆ Update available: v${esc(updateAvailable)} — <a href="${WWL}/worldwidelabs.user.js" target="_blank" rel="noopener" style="color:#f0b432;">open the install link</a> and Tampermonkey will offer to update.</div>` : '';
+        let html = `<button type="button" id="wwl-back" style="margin-bottom:10px;padding:4px 10px;border-radius:6px;border:1px solid #3a4352;background:transparent;color:#e6e9ef;cursor:pointer;">← Back</button>
+            <div style="font-weight:700;margin-bottom:4px;">World Wide Labs v${esc(SCRIPT_VERSION)}</div>
+            ${updateHtml}
+            ${!IS_PDA ? `<button type="button" id="wwl-change-key" style="margin-top:4px;padding:6px 12px;border-radius:6px;border:1px solid #3a4352;background:transparent;color:#e6e9ef;cursor:pointer;">Change API key</button>`
+                : '<div style="color:#9aa4b5;font-size:12px;">Your API key is managed by TornPDA.</div>'}`;
+        if (settingsData === null) {
+            html += '<div style="padding:10px 0;color:#9aa4b5;">Loading…</div>';
+        } else if (settingsData.leader) {
+            html += `<div style="border-top:1px solid #3a4352;margin-top:12px;padding-top:10px;">
+                <div style="font-weight:700;margin-bottom:6px;">Banners</div>
+                <div id="wwl-ban-list">${renderBanEditList()}</div>
+                <div style="margin-top:10px;">
+                    <textarea id="wwl-ban-text" placeholder="Banner text" rows="2" maxlength="280" style="width:100%;box-sizing:border-box;background:#11141a;color:#e6e9ef;border:1px solid #3a4352;border-radius:6px;padding:6px;margin-bottom:6px;resize:vertical;"></textarea>
+                    <div style="display:flex;gap:6px;margin-bottom:6px;">
+                        <select id="wwl-ban-tone" style="flex:1;background:#11141a;color:#e6e9ef;border:1px solid #3a4352;border-radius:6px;padding:4px;">
+                            <option value="info">Info</option><option value="event">Event</option><option value="warn">Warning</option>
+                        </select>
+                        <select id="wwl-ban-audience" style="flex:1;background:#11141a;color:#e6e9ef;border:1px solid #3a4352;border-radius:6px;padding:4px;">
+                            <option value="all">Everyone</option><option value="leaders">Leaders only</option>
+                        </select>
+                    </div>
+                    <label style="display:block;font-size:11px;color:#9aa4b5;margin-bottom:2px;">Ends (optional)</label>
+                    <input id="wwl-ban-expires" type="date" style="width:100%;box-sizing:border-box;background:#11141a;color:#e6e9ef;border:1px solid #3a4352;border-radius:6px;padding:4px;margin-bottom:8px;">
+                    <button type="button" id="wwl-ban-add" style="width:100%;padding:6px;border-radius:6px;border:1px solid #35d99b;background:transparent;color:#35d99b;cursor:pointer;">+ Add banner</button>
+                    <div id="wwl-ban-status" style="margin-top:6px;font-size:12px;"></div>
+                </div>
+            </div>`;
+        }
+        return html;
+    }
+    async function loadSettings() {
+        try { settingsData = await api({ action: 'banners-get', manage: true }); }
+        catch (e) { settingsData = { banners: [], leader: false, owner: false }; } // not a leader, or a hiccup — just hide the banner section
+        if (tab === 'settings') render();
+    }
+    function wireSettingsTab() {
+        body.querySelector('#wwl-back')?.addEventListener('click', () => { tab = lastTab; render(); });
+        body.querySelector('#wwl-change-key')?.addEventListener('click', () => {
+            const current = store.get(KEY_NAME) || '';
+            const masked = current ? `${current.slice(0, 4)}…${current.slice(-4)}` : 'not set';
+            const input = prompt(`World Wide Labs v${SCRIPT_VERSION}\n\nCurrent API key: ${masked}\n\nPaste a new key to replace it, or leave blank to keep the current one.`, '');
+            if (input === null) return;
+            const trimmed = input.trim();
+            if (!trimmed) return;
+            store.set(KEY_NAME, trimmed);
+            load();
+        });
+        body.querySelectorAll('.wwl-ban-del').forEach(x => x.addEventListener('click', async () => {
+            if (!confirm('Delete this banner?')) return;
+            try { await api({ action: 'banners-delete', id: x.dataset.id }); loadSettings(); }
+            catch (e) { alert(`Couldn't delete that: ${e.message}`); }
+        }));
+        body.querySelector('#wwl-ban-add')?.addEventListener('click', async () => {
+            const st = body.querySelector('#wwl-ban-status'), btn = body.querySelector('#wwl-ban-add');
+            const text = body.querySelector('#wwl-ban-text').value.trim();
+            if (text.length < 3) { st.style.color = '#e05555'; st.textContent = 'Write the banner text first.'; return; }
+            btn.disabled = true;
+            try {
+                await api({
+                    action: 'banners-save', text, scope: 'faction',
+                    tone: body.querySelector('#wwl-ban-tone').value, audience: body.querySelector('#wwl-ban-audience').value,
+                    expires: body.querySelector('#wwl-ban-expires').value, page: '', linkLabel: '', icon: '', countdownAt: 0,
+                });
+                loadSettings();
+            } catch (e) { st.style.color = '#e05555'; st.textContent = e.message; btn.disabled = false; }
+        });
+    }
     function render() {
+        if (tab === 'settings') { body.innerHTML = renderSettingsTab(); wireSettingsTab(); return; }
         body.innerHTML = tabBar() + (tab === 'mentoring' ? renderMentoringTab() : tab === 'todo' ? renderTodoTab() : renderEnergyTab());
         showProgress();
         wireTabs();
@@ -228,7 +329,15 @@
             mtPairs = mtR?.pairs || []; mtTodos = mtR?.todos || [];
             todoItems = todoR?.items || [];
             render();
-        } catch (e) { body.innerHTML = `<div style="padding:6px 0;color:#e05555;">${esc(e.message)}</div>`; }
+        } catch (e) {
+            if (e.message === 'NO_KEY') {
+                body.innerHTML = `<div style="padding:6px 0;color:#9aa4b5;">No API key set yet.</div>
+                    <button type="button" id="wwl-setup-key" style="padding:6px 12px;border-radius:6px;border:1px solid #35d99b;background:transparent;color:#35d99b;cursor:pointer;">⚙ Set up API key</button>`;
+                body.querySelector('#wwl-setup-key').addEventListener('click', () => { tab = 'settings'; render(); if (settingsData === null) loadSettings(); });
+                return;
+            }
+            body.innerHTML = `<div style="padding:6px 0;color:#e05555;">${esc(e.message)}</div>`;
+        }
     }
 
     // start: closed as a small button (or open again if it was left open, and on the gym page the first time)
@@ -238,7 +347,7 @@
     // the small button only needs a peek: use what was saved in the last 10 minutes, so ordinary page loads cost no calls
     let cached = null; try { cached = JSON.parse(store.get('wwl_plan_cache') || 'null'); } catch (e) { /* none */ }
     if (cached?.plan) { plan = cached.plan; showProgress(); }
-    if (last !== 'open' && getKey(false) && !(cached && Date.now() - cached.at < 600000)) {
+    if (last !== 'open' && getKey() && !(cached && Date.now() - cached.at < 600000)) {
         Promise.all([api({ action: 'plan-get' }), api({ action: 'member-todo' }).catch(() => null)])
             .then(([r, todoR]) => {
                 plan = r.plan; if (todoR) todoItems = todoR.items || [];
@@ -251,9 +360,35 @@
     // once an hour per browser so it reflects actual use, not just having installed it once.
     const CHECKIN_NAME = 'wwl_script_checkin_at';
     const lastCheckin = Number(store.get(CHECKIN_NAME) || 0);
-    if (getKey(false) && Date.now() - lastCheckin > 3600000) {
+    if (getKey() && Date.now() - lastCheckin > 3600000) {
         store.set(CHECKIN_NAME, String(Date.now()));
         api({ action: 'script-checkin' }).catch(() => {});
+    }
+
+    // Tampermonkey's own @updateURL check only runs on its own schedule in the background and never
+    // surfaces anything inside the script itself. This flags a newer version proactively (checked
+    // every ~6 hours) by reading the live file's own @version line — actually applying the update
+    // still needs Tampermonkey (or the install link), this just makes it visible sooner.
+    const UPDATE_CHECK_NAME = 'wwl_update_check';
+    function markUpdateAvailable(v) {
+        updateAvailable = v;
+        const dot = win.querySelector('#wwl-settings-dot');
+        if (dot) dot.style.display = v ? 'block' : 'none';
+        if (tab === 'settings') render();
+    }
+    let updateCached = null; try { updateCached = JSON.parse(store.get(UPDATE_CHECK_NAME) || 'null'); } catch (e) { /* none */ }
+    if (updateCached?.remote && versionGreater(updateCached.remote, SCRIPT_VERSION)) markUpdateAvailable(updateCached.remote);
+    if (!IS_PDA && typeof GM_xmlhttpRequest === 'function' && !(updateCached && Date.now() - updateCached.at < 6 * 3600000)) {
+        GM_xmlhttpRequest({
+            method: 'GET', url: `${WWL}/worldwidelabs.user.js`, timeout: 15000,
+            onload: r => {
+                const m = /@version\s+([\d.]+)/.exec(r.responseText);
+                const remote = m ? m[1] : null;
+                store.set(UPDATE_CHECK_NAME, JSON.stringify({ at: Date.now(), remote }));
+                if (remote && versionGreater(remote, SCRIPT_VERSION)) markUpdateAvailable(remote);
+            },
+            onerror: () => {}, ontimeout: () => {},
+        });
     }
 
     // ---- Torn-wide banners: the same ones a leader sets in Leader settings → Banners on the WWL
@@ -269,16 +404,26 @@
     banBar.style.cssText = 'display:none;position:relative;z-index:99990;font:13px/1.4 Arial,sans-serif;';
     document.body.insertBefore(banBar, document.body.firstChild);
     let banList = [], banIdx = 0, banTimer = null;
+    // The pill (and, on a computer, the floating window's remembered position) use a fixed "top" —
+    // they don't know the banner is there, so once it renders they'd otherwise sit half-covered by
+    // it. Repositioned to sit just below the banner's actual height every time it changes.
+    function repositionForBanner() {
+        const h = banBar.style.display === 'none' ? 0 : banBar.offsetHeight;
+        pill.style.top = `${h + 8}px`;
+    }
     function renderTornBanner() {
         const gone = banDismissed();
         const shown = banList.filter(b => gone[b.id] !== banHash(b.text));
         clearInterval(banTimer);
-        if (!shown.length) { banBar.style.display = 'none'; banBar.innerHTML = ''; return; }
+        if (!shown.length) { banBar.style.display = 'none'; banBar.innerHTML = ''; repositionForBanner(); return; }
         banIdx = Math.min(banIdx, shown.length - 1);
         const b = shown[banIdx];
         const color = BAN_TONE_COLORS[b.tone] || BAN_TONE_COLORS.info;
         banBar.style.display = 'block';
-        banBar.innerHTML = `<div style="display:flex;align-items:center;justify-content:center;text-align:center;gap:10px;padding:8px 14px;background:${color}22;border-bottom:2px solid ${color};color:#e6e9ef;flex-wrap:wrap;">
+        // A fixed min-height (~3 lines at this font-size/line-height, plus padding) so swapping
+        // between a short one-line banner and a long three-line one doesn't shift the whole page
+        // down and back up again on every rotation — short text just centers in the extra room.
+        banBar.innerHTML = `<div style="display:flex;align-items:center;justify-content:center;text-align:center;gap:10px;padding:8px 14px;min-height:56px;box-sizing:border-box;background:${color}22;border-bottom:2px solid ${color};color:#e6e9ef;flex-wrap:wrap;">
             ${b.icon ? `<span style="font-size:16px;">${esc(b.icon)}</span>` : ''}
             <span style="flex:1;min-width:200px;">${esc(b.text)}</span>
             ${shown.length > 1 ? `<span style="font-size:11px;color:#9aa4b5;">${banIdx + 1}/${shown.length}</span>` : ''}
@@ -291,11 +436,12 @@
             renderTornBanner();
         });
         if (shown.length > 1) banTimer = setInterval(() => { banIdx = (banIdx + 1) % shown.length; renderTornBanner(); }, 7000);
+        repositionForBanner();
     }
     const BAN_CACHE_NAME = 'wwl_torn_banners_cache';
     let banCached = null; try { banCached = JSON.parse(store.get(BAN_CACHE_NAME) || 'null'); } catch (e) { /* none */ }
     if (banCached?.banners) { banList = banCached.banners; renderTornBanner(); }
-    if (getKey(false) && !(banCached && Date.now() - banCached.at < 600000)) {
+    if (getKey() && !(banCached && Date.now() - banCached.at < 600000)) {
         api({ action: 'banners-get' }).then(r => {
             banList = r.banners || [];
             store.set(BAN_CACHE_NAME, JSON.stringify({ at: Date.now(), banners: banList }));

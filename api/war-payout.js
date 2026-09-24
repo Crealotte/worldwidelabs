@@ -648,7 +648,12 @@ module.exports = async function handler(req, res) {
             try {
                 const r = await tornFetch(`https://api.torn.com/v2/user/?selections=profile&key=${encodeURIComponent(key)}`, { headers: { accept: 'application/json' } });
                 const d = await r.json();
-                if (!d.error && d.revivable) {
+                // v2's response nests everything under "profile" (confirmed against a real reference
+                // userscript's own code, `data.profile.revivable`) — reading `d.revivable` directly
+                // was always undefined regardless of the real setting, which is why neither "Friends
+                // and faction" nor "Everyone" ever showed up in testing. Fixed; still only a boolean,
+                // so still only "Everyone" vs "not Everyone" at best until confirmed otherwise live.
+                if (!d.error && d.profile?.revivable) {
                     items.push({ id: 'revive', text: 'Your revive setting is "Everyone" — anyone can revive you, not just friends and faction.', cta: 'Open Preferences', url: 'https://www.torn.com/preferences.php#tab=privacy' });
                 }
             } catch (e) { /* skip this check on failure, don't fail the others */ }
