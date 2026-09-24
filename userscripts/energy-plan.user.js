@@ -258,7 +258,7 @@
         const b = shown[banIdx];
         const color = BAN_TONE_COLORS[b.tone] || BAN_TONE_COLORS.info;
         banBar.style.display = 'block';
-        banBar.innerHTML = `<div style="display:flex;align-items:center;gap:10px;padding:8px 14px;background:${color}22;border-bottom:2px solid ${color};color:#e6e9ef;flex-wrap:wrap;">
+        banBar.innerHTML = `<div style="display:flex;align-items:center;justify-content:center;text-align:center;gap:10px;padding:8px 14px;background:${color}22;border-bottom:2px solid ${color};color:#e6e9ef;flex-wrap:wrap;">
             ${b.icon ? `<span style="font-size:16px;">${esc(b.icon)}</span>` : ''}
             <span style="flex:1;min-width:200px;">${esc(b.text)}</span>
             ${shown.length > 1 ? `<span style="font-size:11px;color:#9aa4b5;">${banIdx + 1}/${shown.length}</span>` : ''}
