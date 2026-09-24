@@ -14,6 +14,17 @@ async function fetchVerifyMap() {
     } catch (e) { return {}; }
 }
 
+// Stamped by the userscript itself (see 'script-checkin'), at most about once an hour per browser —
+// a real "has this member actually opened it recently" signal, not just "installed it once ever".
+async function fetchUserscriptMap() {
+    try {
+        const res = await fetch('/api/war-payout', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key: apiKey, action: 'userscript-get' }) });
+        const data = await res.json();
+        return data.error ? {} : (data.map || {});
+    } catch (e) { return {}; }
+}
+const US_STALE_MS = 30 * 24 * 60 * 60 * 1000; // seen once but not in the last 30 days — probably uninstalled or stopped using it
+
 // Leaders only: who in the faction has logged into WWLabs, and who hasn't yet. `sfx` picks which set of
 // elements to fill in — '' for the dashboard's own panel, '-mo' for the copy on Member Overview.
 async function loadAdoption(sfx = '') {
@@ -21,7 +32,7 @@ async function loadAdoption(sfx = '') {
     try {
         let data = adoptionCache;
         if (!data || Date.now() - adoptionCacheAt > 3 * 60 * 1000) {
-            const [trackData, membersData, discordData, verifyMap] = await Promise.all([
+            const [trackData, membersData, discordData, verifyMap, userscriptMap] = await Promise.all([
                 fetch('/api/presence', {
                     method: 'POST', headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ key: apiKey, action: 'list' }),
@@ -32,12 +43,13 @@ async function loadAdoption(sfx = '') {
                     body: JSON.stringify({ key: apiKey }),
                 }).then(r => r.json()).catch(() => null),
                 fetchVerifyMap(),
+                fetchUserscriptMap(),
             ]);
             if (trackData.error) throw new Error(trackData.error);
-            data = { logins: trackData.logins || {}, members: (membersData.members || []).slice(), discordMembers: (discordData && !discordData.error) ? discordData.members : null, verifyMap };
+            data = { logins: trackData.logins || {}, members: (membersData.members || []).slice(), discordMembers: (discordData && !discordData.error) ? discordData.members : null, verifyMap, userscriptMap };
             adoptionCache = data; adoptionCacheAt = Date.now();
         }
-        const { logins, members, discordMembers, verifyMap } = data;
+        const { logins, members, discordMembers, verifyMap, userscriptMap } = data;
 
         const sorted = members.slice().sort((a, b) =>
             (logins[b.id]?.last || 0) - (logins[a.id]?.last || 0) || a.name.localeCompare(b.name));
@@ -67,12 +79,18 @@ async function loadAdoption(sfx = '') {
                     : '<span style="color:var(--muted)">○ not found</span>';
             }
             const v = verifyMap[m.id] || {};
+            const usAt = userscriptMap[m.id] || 0;
+            const usCell = !usAt ? '<span style="color:var(--muted)">○ not seen</span>'
+                : Date.now() - usAt > US_STALE_MS
+                    ? `<span style="color:var(--happy)" title="Last seen ${new Date(usAt).toLocaleDateString()}">● seen, quiet lately</span>`
+                    : '<span style="color:var(--reagent)">● installed</span>';
             return `<tr${l ? '' : ' style="opacity:.5"'}>
                 <td>${esc(m.name)} [${m.id}]</td>
                 <td>${l ? '<span style="color:var(--reagent)">● on board</span>' : '<span style="color:var(--muted)">○ not yet</span>'}</td>
                 <td>${discordCell}</td>
                 <td>${manualBadge(m.id, 'intel', !!v.intel)}</td>
                 <td>${manualBadge(m.id, 'cat', !!v.cat)}</td>
+                <td>${usCell}</td>
                 <td class="num" style="font-family:var(--mono);font-size:12px;">${when}</td>
             </tr>`;
         }).join('');

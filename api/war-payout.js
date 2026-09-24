@@ -57,6 +57,7 @@ async function redis(command) {
 
 const restockedKey = (factionId) => `wwl:restocked-wars:${factionId}`;
 const manualVerifyKey = (factionId) => `wwl:manual-verify:${factionId}`; // hash: playerId -> { intel, cat, updatedAt } — Torn Intel / CAT have no API to check, so a leader ticks it by hand
+const userscriptSeenKey = (factionId) => `wwl:userscript-seen:${factionId}`; // hash: playerId -> last-seen epoch ms, stamped by the userscript itself (see 'script-checkin') for Who's on board
 // Availability "plans": several trackers can exist at once (this weekend AND next weekend), each
 // with its own grid, entries and linked war, picked from a dropdown. 'main' is the original
 // single-tracker key from before plans existed, so an existing tracker keeps working untouched;
@@ -622,6 +623,47 @@ module.exports = async function handler(req, res) {
         if (action.startsWith('plan-')) return res.status(200).json(await planHandle(action, req.body, { redis, playerId }));
         // Timezone map — every member reports their own timezone; everyone reads anonymous counts.
         if (action.startsWith('tz-')) return res.status(200).json(await tzHandle(action, req.body, { redis, factionId, playerId }));
+
+        // The userscript's own "To do" tab — small personal reminders for the calling member, not
+        // faction-wide like leader-todos above. Each check is independent and best-effort: one
+        // failing (e.g. Torn hiccups on the profile call) must not hide the others.
+        //   - Revive setting: Torn's `revivable` field on a self-queried profile reflects the
+        //     privacy setting itself (not momentary reviv-ability), per Torn's own API docs — "When
+        //     querying for yourself, it will not check for the revive ability and show 1 when
+        //     enabled." Unverified against a live key by us; if it turns out not to behave this way,
+        //     this is the one check to revisit.
+        //   - Feedback / timezone: exact same data the Feedback and Timezone map pages already use
+        //     (see api/feedback-form.js's 'read' action and lib/tzMap.js's 'tz-get'), just read
+        //     directly here instead of a second round trip.
+        if (action === 'member-todo') {
+            const host = String(req.headers['x-forwarded-host'] || req.headers.host || '').replace(/[^\w.:-]/g, '');
+            const site = host ? `https://${host}` : '';
+            const items = [];
+
+            try {
+                const r = await tornFetch(`https://api.torn.com/v2/user/?selections=profile&key=${encodeURIComponent(key)}`, { headers: { accept: 'application/json' } });
+                const d = await r.json();
+                if (!d.error && d.revivable) {
+                    items.push({ id: 'revive', text: 'Your revive setting isn\'t "No one" — a fresh look never hurts.', cta: 'Open Preferences', url: 'https://www.torn.com/preferences.php#tab=privacy' });
+                }
+            } catch (e) { /* skip this check on failure, don't fail the others */ }
+
+            try {
+                const formRaw = await redis(['GET', `wwl:feedback-form:${factionId}`]);
+                const form = formRaw ? JSON.parse(formRaw) : null;
+                if (form?.mode === 'native') {
+                    const mineRaw = await redis(['HGET', `wwl:feedback-responses:${factionId}`, playerId]);
+                    if (!mineRaw) items.push({ id: 'feedback', text: `Fill in the "${form.title || 'Feedback'}" form.`, cta: 'Open Feedback', url: site ? `${site}/feedback` : null });
+                }
+            } catch (e) { /* skip */ }
+
+            try {
+                const tz = await tzHandle('tz-get', {}, { redis, factionId, playerId });
+                if (!tz.me) items.push({ id: 'timezone', text: 'Pick your country on the Timezone map.', cta: 'Open Timezone map', url: site ? `${site}/tz-map` : null });
+            } catch (e) { /* skip */ }
+
+            return res.status(200).json({ items });
+        }
         // Suggestions — everyone can read, add and vote; only leaders set a status or delete.
         if (action.startsWith('sug-')) {
             const leader = ['sug-list', 'sug-status', 'sug-delete'].includes(action) ? await isLeader(key) : false;
@@ -687,6 +729,21 @@ module.exports = async function handler(req, res) {
             v[tool] = !!value; v.updatedAt = Date.now();
             await redis(['HSET', manualVerifyKey(factionId), String(id), JSON.stringify(v)]);
             return res.status(200).json({ ok: true });
+        }
+        // The userscript stamping "I'm here" — called from Torn itself, at most about once an hour
+        // per browser (throttled client-side), so this is a real signal of actual use, not just of
+        // having installed it once and never opening it again. Self-reported like Discord/Intel/CAT
+        // above; nothing sensitive, just a timestamp keyed by the caller's own verified playerId.
+        if (action === 'script-checkin') {
+            await redis(['HSET', userscriptSeenKey(factionId), playerId, String(Date.now())]);
+            return res.status(200).json({ ok: true });
+        }
+        // Who's on board's "Userscript" column: the whole faction's last-seen timestamps.
+        if (action === 'userscript-get') {
+            const flat = (await redis(['HGETALL', userscriptSeenKey(factionId)])) || [];
+            const map = {};
+            for (let i = 0; i < flat.length; i += 2) map[flat[i]] = Number(flat[i + 1]) || 0;
+            return res.status(200).json({ map });
         }
 
         // This faction's own Discord destination (see getDiscordPoster). Leader-only. The webhook

@@ -1,10 +1,10 @@
 // ==UserScript==
 // @name         WWL Energy plan
 // @namespace    https://worldwidelabs.vercel.app
-// @version      1.6
+// @version      1.7
 // @updateURL    __WWL_BASE__/wwl-energy-planner.user.js
 // @downloadURL  __WWL_BASE__/wwl-energy-planner.user.js
-// @description  Shows your WorldWideLabs weekly energy plan (the checklist from the Energy planner) inside Torn, and — if you are in the Mentoring Platform — your mentoring checklist too. On a computer it is a small window you can drag around and close; in TornPDA it is a menu. Ticks are shared with the WWL site.
+// @description  Shows your WorldWideLabs weekly energy plan (the checklist from the Energy planner) inside Torn, a To do tab with small personal reminders (revive setting, feedback, timezone map), and — if you are in the Mentoring Platform — your mentoring checklist too. Also shows faction banners at the top of every Torn page. On a computer it is a small window you can drag around and close; in TornPDA it is a menu. Ticks are shared with the WWL site.
 // @match        https://www.torn.com/*
 // @grant        GM_xmlhttpRequest
 // @connect      __WWL_HOST__
@@ -85,7 +85,7 @@
         <div id="wwl-body" style="overflow:auto;padding:8px 12px 12px;"></div>`;
     root.appendChild(win);
     const body = win.querySelector('#wwl-body'), prog2 = win.querySelector('#wwl-prog2'), head = win.querySelector('#wwl-head');
-    let plan = null, mtPairs = null, mtTodos = [], tab = 'energy'; // tab: 'energy' | 'mentoring' — the mentoring tab only appears once we know there's something to show there
+    let plan = null, mtPairs = null, mtTodos = [], todoItems = null, tab = 'energy'; // tab: 'energy' | 'mentoring' | 'todo' — the mentoring tab only appears once we know there's something to show there
 
     // position (PC): remembered, and always kept inside the screen
     const place = (x, y) => {
@@ -124,16 +124,20 @@
         return { done, total };
     }
     function showProgress() {
-        if (!plan) return;
-        const p = progress();
-        prog.textContent = prog2.textContent = `${num(p.done)} / ${num(p.total)} E`;
+        const p = plan ? progress() : null;
+        const energyText = p ? `${num(p.done)} / ${num(p.total)} E` : '';
+        const todoBadge = todoItems && todoItems.length ? `<span style="color:#f0b432;" title="${todoItems.length} to do">●${todoItems.length}</span>` : '';
+        const html = [energyText, todoBadge].filter(Boolean).join(' ');
+        prog.innerHTML = prog2.innerHTML = html;
     }
     function tabBar() {
-        if (!mtPairs || !mtPairs.length) return '';
-        return `<div style="display:flex;gap:6px;margin-bottom:10px;">
-            <button type="button" class="wwl-tab" data-tab="energy" style="flex:1;padding:6px;border-radius:6px;border:1px solid #3a4352;cursor:pointer;background:${tab === 'energy' ? '#2a2f3a' : 'transparent'};color:#e6e9ef;">⚡ Energy</button>
-            <button type="button" class="wwl-tab" data-tab="mentoring" style="flex:1;padding:6px;border-radius:6px;border:1px solid #3a4352;cursor:pointer;background:${tab === 'mentoring' ? '#2a2f3a' : 'transparent'};color:#e6e9ef;">🎓 Mentoring</button>
-        </div>`;
+        const tabs = [['energy', '⚡ Energy']];
+        if (mtPairs && mtPairs.length) tabs.push(['mentoring', '🎓 Mentoring']);
+        tabs.push(['todo', `✅ To do${todoItems && todoItems.length ? ` (${todoItems.length})` : ''}`]);
+        if (tabs.length < 2) return '';
+        return `<div style="display:flex;gap:6px;margin-bottom:10px;">${tabs.map(([id, label]) =>
+            `<button type="button" class="wwl-tab" data-tab="${id}" style="flex:1;padding:6px;border-radius:6px;border:1px solid #3a4352;cursor:pointer;background:${tab === id ? '#2a2f3a' : 'transparent'};color:#e6e9ef;">${label}</button>`
+        ).join('')}</div>`;
     }
     function wireTabs() {
         body.parentElement.querySelectorAll('.wwl-tab').forEach(b => b.addEventListener('click', () => { tab = b.dataset.tab; render(); }));
@@ -166,8 +170,19 @@
             </div>`;
         }).join('') + `<div style="color:#9aa4b5;">Chat with them on the site: <a href="${WWL}/mentoring" target="_blank" rel="noopener" style="color:#35d99b;">${esc(WWL)}/mentoring</a></div>`;
     }
+    // Small personal reminders — revive setting, feedback, timezone map — from api/war-payout.js's
+    // 'member-todo' action. Each has an optional link (some open WWL in a new tab, the revive one
+    // opens Torn's own Preferences page directly).
+    function renderTodoTab() {
+        if (todoItems === null) return '<div style="padding:6px 0;color:#9aa4b5;">Loading…</div>';
+        if (!todoItems.length) return '<div style="padding:6px 0;color:#9aa4b5;">Nothing outstanding — nice.</div>';
+        return todoItems.map(t => `<div style="display:flex;gap:8px;align-items:center;padding:${IS_PDA ? 10 : 7}px 0;border-bottom:1px solid #3a4352;">
+            <span style="flex:1;">${esc(t.text)}</span>
+            ${t.url ? `<a href="${esc(t.url)}" target="_blank" rel="noopener" style="color:#35d99b;white-space:nowrap;text-decoration:none;border:1px solid #35d99b;border-radius:6px;padding:4px 8px;font-size:12px;">${esc(t.cta)}</a>` : ''}
+        </div>`).join('');
+    }
     function render() {
-        body.innerHTML = tabBar() + (tab === 'mentoring' ? renderMentoringTab() : renderEnergyTab());
+        body.innerHTML = tabBar() + (tab === 'mentoring' ? renderMentoringTab() : tab === 'todo' ? renderTodoTab() : renderEnergyTab());
         showProgress();
         wireTabs();
         body.querySelectorAll('.wwl-e-check').forEach(cb => cb.addEventListener('change', async () => {
@@ -185,12 +200,14 @@
     async function load() {
         body.innerHTML = '<div style="padding:6px 0;color:#9aa4b5;">Loading…</div>';
         try {
-            const [planR, mtR] = await Promise.all([
+            const [planR, mtR, todoR] = await Promise.all([
                 api({ action: 'plan-get' }),
                 api({ action: 'mentor-my-status' }).catch(() => null), // fine if this member isn't in the program at all
+                api({ action: 'member-todo' }).catch(() => null),
             ]);
             plan = planR.plan; store.set('wwl_plan_cache', JSON.stringify({ at: Date.now(), plan }));
             mtPairs = mtR?.pairs || []; mtTodos = mtR?.todos || [];
+            todoItems = todoR?.items || [];
             render();
         } catch (e) { body.innerHTML = `<div style="padding:6px 0;color:#e05555;">${esc(e.message)}</div>`; }
     }
@@ -202,5 +219,68 @@
     // the small button only needs a peek: use what was saved in the last 10 minutes, so ordinary page loads cost no calls
     let cached = null; try { cached = JSON.parse(store.get('wwl_plan_cache') || 'null'); } catch (e) { /* none */ }
     if (cached?.plan) { plan = cached.plan; showProgress(); }
-    if (last !== 'open' && getKey(false) && !(cached && Date.now() - cached.at < 600000)) api({ action: 'plan-get' }).then(r => { plan = r.plan; showProgress(); store.set('wwl_plan_cache', JSON.stringify({ at: Date.now(), plan })); }).catch(() => {});
+    if (last !== 'open' && getKey(false) && !(cached && Date.now() - cached.at < 600000)) {
+        Promise.all([api({ action: 'plan-get' }), api({ action: 'member-todo' }).catch(() => null)])
+            .then(([r, todoR]) => {
+                plan = r.plan; if (todoR) todoItems = todoR.items || [];
+                showProgress();
+                store.set('wwl_plan_cache', JSON.stringify({ at: Date.now(), plan }));
+            }).catch(() => {});
+    }
+
+    // "I'm here" check-in for Who's on board's Userscript column — a real signal, throttled to about
+    // once an hour per browser so it reflects actual use, not just having installed it once.
+    const CHECKIN_NAME = 'wwl_script_checkin_at';
+    const lastCheckin = Number(store.get(CHECKIN_NAME) || 0);
+    if (getKey(false) && Date.now() - lastCheckin > 3600000) {
+        store.set(CHECKIN_NAME, String(Date.now()));
+        api({ action: 'script-checkin' }).catch(() => {});
+    }
+
+    // ---- Torn-wide banners: the same ones a leader sets in Leader settings → Banners on the WWL
+    // site, shown here too since faction messages posted in Torn's own event feed get lost. Inserted
+    // in normal document flow (not a fixed overlay) at the very top of the page, so it pushes Torn's
+    // own content down rather than risking covering anything. Re-checked every ~10 minutes.
+    const BAN_DISMISS_NAME = 'wwl_tornban_dismissed'; // { bannerId: hash of its text }
+    const banHash = s => { let h = 0; for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0; return String(h); };
+    const banDismissed = () => { try { return JSON.parse(store.get(BAN_DISMISS_NAME) || '{}'); } catch (e) { return {}; } };
+    const BAN_TONE_COLORS = { info: '#4da3ff', event: '#35d99b', warn: '#f0b432' };
+    const banBar = document.createElement('div');
+    banBar.id = 'wwl-torn-banner';
+    banBar.style.cssText = 'display:none;position:relative;z-index:99990;font:13px/1.4 Arial,sans-serif;';
+    document.body.insertBefore(banBar, document.body.firstChild);
+    let banList = [], banIdx = 0, banTimer = null;
+    function renderTornBanner() {
+        const gone = banDismissed();
+        const shown = banList.filter(b => gone[b.id] !== banHash(b.text));
+        clearInterval(banTimer);
+        if (!shown.length) { banBar.style.display = 'none'; banBar.innerHTML = ''; return; }
+        banIdx = Math.min(banIdx, shown.length - 1);
+        const b = shown[banIdx];
+        const color = BAN_TONE_COLORS[b.tone] || BAN_TONE_COLORS.info;
+        banBar.style.display = 'block';
+        banBar.innerHTML = `<div style="display:flex;align-items:center;gap:10px;padding:8px 14px;background:${color}22;border-bottom:2px solid ${color};color:#e6e9ef;flex-wrap:wrap;">
+            ${b.icon ? `<span style="font-size:16px;">${esc(b.icon)}</span>` : ''}
+            <span style="flex:1;min-width:200px;">${esc(b.text)}</span>
+            ${shown.length > 1 ? `<span style="font-size:11px;color:#9aa4b5;">${banIdx + 1}/${shown.length}</span>` : ''}
+            ${b.page ? `<a href="${WWL}/${esc(b.page)}" target="_blank" rel="noopener" style="color:${color};text-decoration:none;border:1px solid ${color};border-radius:6px;padding:3px 10px;font-size:12px;white-space:nowrap;">${esc(b.linkLabel || 'Open')} ↗</a>` : ''}
+            <span class="wwl-ban-x" title="Close" style="cursor:pointer;font-size:16px;line-height:1;color:#9aa4b5;padding:0 2px;">×</span>
+        </div>`;
+        banBar.querySelector('.wwl-ban-x').addEventListener('click', () => {
+            const d = banDismissed(); d[b.id] = banHash(b.text);
+            store.set(BAN_DISMISS_NAME, JSON.stringify(d));
+            renderTornBanner();
+        });
+        if (shown.length > 1) banTimer = setInterval(() => { banIdx = (banIdx + 1) % shown.length; renderTornBanner(); }, 7000);
+    }
+    const BAN_CACHE_NAME = 'wwl_torn_banners_cache';
+    let banCached = null; try { banCached = JSON.parse(store.get(BAN_CACHE_NAME) || 'null'); } catch (e) { /* none */ }
+    if (banCached?.banners) { banList = banCached.banners; renderTornBanner(); }
+    if (getKey(false) && !(banCached && Date.now() - banCached.at < 600000)) {
+        api({ action: 'banners-get' }).then(r => {
+            banList = r.banners || [];
+            store.set(BAN_CACHE_NAME, JSON.stringify({ at: Date.now(), banners: banList }));
+            renderTornBanner();
+        }).catch(() => {});
+    }
 })();

@@ -12,6 +12,18 @@
 
 const WHATS_NEW = [
     {
+        version: '1.17', date: '2026-09-24',
+        title: 'Userscript to-do list and Torn-wide banners',
+        everyone: [
+            'WWL energy-plan userscript: new "To do" tab with small personal reminders — right now: your revive setting if it isn\'t "No one", the Feedback form if you haven\'t answered it, and the Timezone map if you haven\'t picked your country — each with a button straight to where you fix it. The little WWL button in Torn shows a dot with the count when there\'s something outstanding.',
+            'WWL energy-plan userscript: banners a leader posts (Leader settings → Banners) now also show at the top of every Torn page, not just on the WWL site — so a faction message doesn\'t get lost in Torn\'s own event feed. Closing one only dismisses it in Torn; the WWL site\'s own copy is unaffected.',
+            'Member Overview and Your standing no longer track Energy drinks, and it\'s dropped off the list of competitions.',
+        ],
+        leaders: [
+            '"Who\'s on board" has a new "Userscript" column — whether a member actually has the WWL energy-plan script open in Torn (checked in within about the last hour), not just installed once and forgotten.',
+        ],
+    },
+    {
         version: '1.16', date: '2026-09-23',
         title: 'Unfilled-in reminders on Feedback and War Availability',
         everyone: [
