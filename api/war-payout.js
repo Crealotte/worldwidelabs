@@ -640,6 +640,8 @@ module.exports = async function handler(req, res) {
         //   - Feedback / timezone: exact same data the Feedback and Timezone map pages already use
         //     (see api/feedback-form.js's 'read' action and lib/tzMap.js's 'tz-get'), just read
         //     directly here instead of a second round trip.
+        //   - Availability: same "live" + "soon" plan and respondedMap() the leader to-do card
+        //     (leaderTodos above) uses to find who's missing, just checked against one player's own id.
         if (action === 'member-todo') {
             const host = String(req.headers['x-forwarded-host'] || req.headers.host || '').replace(/[^\w.:-]/g, '');
             const site = host ? `https://${host}` : '';
@@ -662,6 +664,26 @@ module.exports = async function handler(req, res) {
                     items.push({ id: 'revive', text: 'Your revive setting is "Everyone" — anyone can revive you, not just friends and faction.', cta: 'Open Preferences', url: 'https://www.torn.com/preferences.php#tab=privacy' });
                 }
             } catch (e) { /* skip this check on failure, don't fail the others */ }
+
+            try {
+                // Same "live" + "soon" rule as the leader to-do card (leaderTodos above): only nag once
+                // there is an upcoming plan and it is close enough to matter, not for one three weeks out.
+                const plans = (await loadPlanIndex(factionId)).filter(p => !p.archived);
+                const today = new Date().toISOString().slice(0, 10);
+                const endOf = p => { const d = new Date(`${p.startDate}T00:00:00Z`); d.setUTCDate(d.getUTCDate() + p.days); return d.toISOString().slice(0, 10); };
+                const live = plans.filter(p => endOf(p) >= today).sort((a, b) => a.startDate.localeCompare(b.startDate));
+                if (live.length) {
+                    const p = live[0];
+                    const soon = new Date(`${p.startDate}T00:00:00Z`).getTime() <= Date.now() + 4 * 86400e3;
+                    if (soon) {
+                        const raw = await redis(['GET', availabilityKey(factionId, p.id)]);
+                        const data = raw ? JSON.parse(raw) : null;
+                        if (data && !respondedMap(data)[playerId]) {
+                            items.push({ id: 'availability', text: `Fill in your availability for ${p.name ? `"${p.name}"` : 'the upcoming war/weekend'}.`, cta: 'Open Availability', url: site ? `${site}/availability` : null });
+                        }
+                    }
+                }
+            } catch (e) { /* skip */ }
 
             try {
                 const formRaw = await redis(['GET', `wwl:feedback-form:${factionId}`]);

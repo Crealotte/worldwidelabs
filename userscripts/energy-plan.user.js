@@ -2,7 +2,7 @@
 // @name         World Wide Labs
 // @namespace    https://worldwidelabs.vercel.app
 // @author       CreaLotte
-// @version      1.17
+// @version      1.18
 // @updateURL    __WWL_BASE__/worldwidelabs.user.js
 // @downloadURL  __WWL_BASE__/worldwidelabs.user.js
 // @description  Shows your WorldWideLabs weekly energy plan (the checklist from the Energy planner) inside Torn, a To do tab with small personal reminders (revive setting, feedback, timezone map), and — if you are in the Mentoring Platform — your mentoring checklist too. Also shows faction banners at the top of every Torn page. A small ⚙ in the header shows the installed version, flags when a newer one is out, lets you set/replace your API key, and — for a leader — add or remove your faction's banners right from Torn. On a computer it is a small window you can drag around and close; in TornPDA it is a menu. Ticks are shared with the WWL site.
@@ -18,13 +18,15 @@
 
     // The address of the WWL site (filled in when the script is installed from the WWL site).
     const WWL = ('__WWL_BASE__'.startsWith('http') ? '__WWL_BASE__' : 'https://worldwidelabs.vercel.app').replace(/\/$/, '');
-    // TornPDA fills this in with your own API key; on a computer it's entered once via ⚙ Settings and remembered.
-    const PDA_KEY = '###PDA-APIKEY###';
-    const IS_PDA = !!PDA_KEY && !PDA_KEY.startsWith('#');
+    // Detected via TornPDA's own request bridge (which it injects regardless of any permission), not
+    // an API-key placeholder — that placeholder made TornPDA ask to hand over the key the moment it
+    // scans the script (effectively at install), before there's any normal page to explain why. The
+    // key itself is now entered once via ⚙ Settings and remembered, same as on a computer.
+    const IS_PDA = typeof PDA_httpPost === 'function';
     const KEY_NAME = 'wwl_api_key', POS_NAME = 'wwl_plan_pos', STATE_NAME = 'wwl_plan_state';
     // GM_info gives the version Tampermonkey actually has installed right now — falls back to a
     // hardcoded copy (kept in sync with @version above) for TornPDA, which doesn't grant GM_info.
-    const SCRIPT_VERSION = (typeof GM_info !== 'undefined' && GM_info.script?.version) || '1.17';
+    const SCRIPT_VERSION = (typeof GM_info !== 'undefined' && GM_info.script?.version) || '1.18';
     const versionGreater = (a, b) => {
         const pa = String(a).split('.').map(Number), pb = String(b).split('.').map(Number);
         for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
@@ -34,6 +36,8 @@
         return false;
     };
 
+    // The WWL "brand" icon (a flask), used everywhere the launcher shows itself, instead of a generic emoji.
+    const VIAL_SVG = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="#35d99b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;flex:none;"><line x1="9" y1="2" x2="15" y2="2"/><polyline points="9,2 9,8 4,20 20,20 15,8 15,2"/><line x1="6.3" y1="15" x2="17.7" y2="15"/></svg>';
     const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
     const num = n => Math.round(n).toLocaleString();
     const store = {
@@ -46,7 +50,6 @@
     // script loads used to catch people in screens where they have no way to get to their key at all
     // (e.g. right after adding the script in TornPDA).
     function getKey() {
-        if (IS_PDA) return PDA_KEY;
         return store.get(KEY_NAME) || '';
     }
     // Sends the request through the userscript manager (Tampermonkey's GM_xmlhttpRequest, or TornPDA's own call), because Torn's page
@@ -82,7 +85,7 @@
     // Parked bottom-right, alongside where Torn's own chat boxes float, instead of top-left — easier to
     // find on TornPDA (no drag-to-discover needed) and out of the way of the banner up top.
     pill.style.cssText = 'position:fixed;right:12px;bottom:12px;z-index:99998;display:flex;gap:6px;align-items:center;padding:8px 12px;background:#1b2029;border:1px solid #35d99b;border-radius:20px;cursor:pointer;box-shadow:0 2px 12px rgba(0,0,0,.5);user-select:none;';
-    pill.innerHTML = '<span style="font-size:15px;line-height:1;">🧪</span><b>WWL</b><span id="wwl-prog" style="color:#35d99b;font-family:monospace;"></span>';
+    pill.innerHTML = `${VIAL_SVG}<b>WWL</b><span id="wwl-prog" style="color:#35d99b;font-family:monospace;"></span>`;
     root.appendChild(pill);
     const prog = pill.querySelector('#wwl-prog');
 
@@ -167,7 +170,7 @@
         btn.id = 'wwl-chatbar-btn';
         btn.title = 'World Wide Labs';
         btn.style.cssText = `width:${cs.width};height:${cs.height};margin:${cs.margin};display:flex;align-items:center;justify-content:center;position:relative;box-sizing:border-box;background:#1b2029;border:2px solid #35d99b;border-radius:8px;cursor:pointer;padding:0;`;
-        btn.innerHTML = '<span style="font-size:16px;line-height:1;">🧪</span>' +
+        btn.innerHTML = VIAL_SVG +
             '<span id="wwl-chatbar-badge" style="display:none;position:absolute;top:-4px;right:-4px;min-width:14px;height:14px;padding:0 3px;border-radius:8px;background:#f0b432;color:#1b2029;font:700 10px/14px Arial,sans-serif;text-align:center;"></span>';
         btn.addEventListener('click', e => { e.stopPropagation(); setOpen(true); });
         anchor.parentElement.insertBefore(btn, anchor);
@@ -268,8 +271,7 @@
         let html = `<button type="button" id="wwl-back" style="margin-bottom:10px;padding:4px 10px;border-radius:6px;border:1px solid #3a4352;background:transparent;color:#e6e9ef;cursor:pointer;">← Back</button>
             <div style="font-weight:700;margin-bottom:4px;">World Wide Labs v${esc(SCRIPT_VERSION)}</div>
             ${updateHtml}
-            ${!IS_PDA ? `<button type="button" id="wwl-change-key" style="margin-top:4px;padding:6px 12px;border-radius:6px;border:1px solid #3a4352;background:transparent;color:#e6e9ef;cursor:pointer;">Change API key</button>`
-                : '<div style="color:#9aa4b5;font-size:12px;">Your API key is managed by TornPDA.</div>'}`;
+            <button type="button" id="wwl-change-key" style="margin-top:4px;padding:6px 12px;border-radius:6px;border:1px solid #3a4352;background:transparent;color:#e6e9ef;cursor:pointer;">Change API key</button>`;
         if (settingsData === null) {
             html += '<div style="padding:10px 0;color:#9aa4b5;">Loading…</div>';
         } else if (settingsData.leader) {
