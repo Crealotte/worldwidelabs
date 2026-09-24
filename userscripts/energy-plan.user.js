@@ -2,7 +2,7 @@
 // @name         World Wide Labs
 // @namespace    https://worldwidelabs.vercel.app
 // @author       CreaLotte
-// @version      1.14
+// @version      1.15
 // @updateURL    __WWL_BASE__/worldwidelabs.user.js
 // @downloadURL  __WWL_BASE__/worldwidelabs.user.js
 // @description  Shows your WorldWideLabs weekly energy plan (the checklist from the Energy planner) inside Torn, a To do tab with small personal reminders (revive setting, feedback, timezone map), and — if you are in the Mentoring Platform — your mentoring checklist too. Also shows faction banners at the top of every Torn page. A small ⚙ in the header shows the installed version, flags when a newer one is out, lets you set/replace your API key, and — for a leader — add or remove your faction's banners right from Torn. On a computer it is a small window you can drag around and close; in TornPDA it is a menu. Ticks are shared with the WWL site.
@@ -24,7 +24,7 @@
     const KEY_NAME = 'wwl_api_key', POS_NAME = 'wwl_plan_pos', STATE_NAME = 'wwl_plan_state';
     // GM_info gives the version Tampermonkey actually has installed right now — falls back to a
     // hardcoded copy (kept in sync with @version above) for TornPDA, which doesn't grant GM_info.
-    const SCRIPT_VERSION = (typeof GM_info !== 'undefined' && GM_info.script?.version) || '1.14';
+    const SCRIPT_VERSION = (typeof GM_info !== 'undefined' && GM_info.script?.version) || '1.15';
     const versionGreater = (a, b) => {
         const pa = String(a).split('.').map(Number), pb = String(b).split('.').map(Number);
         for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
@@ -79,8 +79,10 @@
     document.body.appendChild(root);
 
     const pill = document.createElement('div'); // the closed state: a small "WWL" button with the progress
-    pill.style.cssText = 'position:fixed;left:8px;top:8px;z-index:99998;display:flex;gap:6px;align-items:center;padding:8px 12px;background:#1b2029;border:1px solid #35d99b;border-radius:20px;cursor:pointer;box-shadow:0 2px 12px rgba(0,0,0,.5);user-select:none;';
-    pill.innerHTML = '<b>WWL</b><span id="wwl-prog" style="color:#35d99b;font-family:monospace;"></span>';
+    // Parked bottom-right, alongside where Torn's own chat boxes float, instead of top-left — easier to
+    // find on TornPDA (no drag-to-discover needed) and out of the way of the banner up top.
+    pill.style.cssText = 'position:fixed;right:12px;bottom:12px;z-index:99998;display:flex;gap:6px;align-items:center;padding:8px 12px;background:#1b2029;border:1px solid #35d99b;border-radius:20px;cursor:pointer;box-shadow:0 2px 12px rgba(0,0,0,.5);user-select:none;';
+    pill.innerHTML = '<span style="font-size:15px;line-height:1;">🧪</span><b>WWL</b><span id="wwl-prog" style="color:#35d99b;font-family:monospace;"></span>';
     root.appendChild(pill);
     const prog = pill.querySelector('#wwl-prog');
 
@@ -90,7 +92,7 @@
     } else { // computer: a floating window you can drag around and close
         win.style.cssText = 'position:fixed;z-index:99999;width:330px;max-width:94vw;max-height:75vh;display:none;flex-direction:column;background:#1b2029;border:1px solid #3a4352;border-radius:8px;box-shadow:0 6px 24px rgba(0,0,0,.55);';
     }
-    win.innerHTML = `<div id="wwl-head" style="display:flex;align-items:center;gap:8px;padding:9px 12px;border-bottom:1px solid #3a4352;${IS_PDA ? '' : 'cursor:move;'}user-select:none;touch-action:none;">
+    win.innerHTML = `<div id="wwl-head" style="display:flex;align-items:center;gap:8px;padding:9px 12px;border-bottom:1px solid #3a4352;${IS_PDA ? '' : 'cursor:move;touch-action:none;'}user-select:none;">
             <b style="flex:1;">WWL energy plan${IS_PDA ? '' : ' <span style="color:#9aa4b5;font-weight:400;font-size:11px;">— drag to move</span>'}</b>
             <span id="wwl-prog2" style="color:#35d99b;font-family:monospace;"></span>
             <span id="wwl-settings" title="Settings" style="cursor:pointer;font-size:16px;line-height:1;padding:0 4px;color:#9aa4b5;position:relative;">⚙<span id="wwl-settings-dot" style="display:none;position:absolute;top:-2px;right:-1px;width:7px;height:7px;border-radius:50%;background:#f0b432;"></span></span>
@@ -399,44 +401,53 @@
     const banHash = s => { let h = 0; for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0; return String(h); };
     const banDismissed = () => { try { return JSON.parse(store.get(BAN_DISMISS_NAME) || '{}'); } catch (e) { return {}; } };
     const BAN_TONE_COLORS = { info: '#4da3ff', event: '#35d99b', warn: '#f0b432' };
+    const BAN_HEIGHT = 40; // fixed single-line height — the whole point is this never changes, so the page never shifts
+    const marqueeStyle = document.createElement('style');
+    marqueeStyle.textContent = '@keyframes wwl-marquee { from { transform: translateX(0); } to { transform: translateX(var(--wwl-dist)); } }';
+    document.head.appendChild(marqueeStyle);
     const banBar = document.createElement('div');
     banBar.id = 'wwl-torn-banner';
     banBar.style.cssText = 'display:none;position:relative;z-index:99990;font:13px/1.4 Arial,sans-serif;';
     document.body.insertBefore(banBar, document.body.firstChild);
     let banList = [], banIdx = 0, banTimer = null;
-    // The pill (and, on a computer, the floating window's remembered position) use a fixed "top" —
-    // they don't know the banner is there, so once it renders they'd otherwise sit half-covered by
-    // it. Repositioned to sit just below the banner's actual height every time it changes.
-    function repositionForBanner() {
-        const h = banBar.style.display === 'none' ? 0 : banBar.offsetHeight;
-        pill.style.top = `${h + 8}px`;
-    }
     function renderTornBanner() {
         const gone = banDismissed();
         const shown = banList.filter(b => gone[b.id] !== banHash(b.text));
         clearInterval(banTimer);
-        if (!shown.length) { banBar.style.display = 'none'; banBar.innerHTML = ''; repositionForBanner(); return; }
+        if (!shown.length) { banBar.style.display = 'none'; banBar.innerHTML = ''; return; }
         banIdx = Math.min(banIdx, shown.length - 1);
         const b = shown[banIdx];
         const color = BAN_TONE_COLORS[b.tone] || BAN_TONE_COLORS.info;
         banBar.style.display = 'block';
-        // A fixed min-height (~3 lines at this font-size/line-height, plus padding) so swapping
-        // between a short one-line banner and a long three-line one doesn't shift the whole page
-        // down and back up again on every rotation — short text just centers in the extra room.
-        banBar.innerHTML = `<div style="display:flex;align-items:center;justify-content:center;text-align:center;gap:10px;padding:8px 14px;min-height:56px;box-sizing:border-box;background:${color}22;border-bottom:2px solid ${color};color:#e6e9ef;flex-wrap:wrap;">
-            ${b.icon ? `<span style="font-size:16px;">${esc(b.icon)}</span>` : ''}
-            <span style="flex:1;min-width:200px;">${esc(b.text)}</span>
-            ${shown.length > 1 ? `<span style="font-size:11px;color:#9aa4b5;">${banIdx + 1}/${shown.length}</span>` : ''}
-            ${b.page ? `<a href="${WWL}/${esc(b.page)}" target="_blank" rel="noopener" style="color:${color};text-decoration:none;border:1px solid ${color};border-radius:6px;padding:3px 10px;font-size:12px;white-space:nowrap;">${esc(b.linkLabel || 'Open')} ↗</a>` : ''}
-            <span class="wwl-ban-x" title="Close" style="cursor:pointer;font-size:16px;line-height:1;color:#9aa4b5;padding:0 2px;">×</span>
+        // Always exactly one line, height fixed — a banner that's too long to fit scrolls sideways
+        // instead of wrapping, so rotating between a short and a long banner (or between different
+        // TornPDA screen widths) never shifts the page. Overflow itself is measured and the scroll
+        // distance/speed set below, once this is actually in the DOM.
+        banBar.innerHTML = `<div style="display:flex;align-items:center;gap:10px;padding:0 14px;height:${BAN_HEIGHT}px;box-sizing:border-box;overflow:hidden;background:${color}22;border-bottom:2px solid ${color};color:#e6e9ef;">
+            ${b.icon ? `<span style="flex:none;font-size:16px;">${esc(b.icon)}</span>` : ''}
+            <div class="wwl-ban-textwrap" style="flex:1;min-width:0;overflow:hidden;height:100%;display:flex;align-items:center;">
+                <span class="wwl-ban-textinner" style="white-space:nowrap;">${esc(b.text)}</span>
+            </div>
+            ${shown.length > 1 ? `<span style="flex:none;font-size:11px;color:#9aa4b5;">${banIdx + 1}/${shown.length}</span>` : ''}
+            ${b.page ? `<a href="${WWL}/${esc(b.page)}" target="_blank" rel="noopener" style="flex:none;color:${color};text-decoration:none;border:1px solid ${color};border-radius:6px;padding:3px 10px;font-size:12px;white-space:nowrap;">${esc(b.linkLabel || 'Open')} ↗</a>` : ''}
+            <span class="wwl-ban-x" title="Close" style="flex:none;cursor:pointer;font-size:16px;line-height:1;color:#9aa4b5;padding:0 2px;">×</span>
         </div>`;
+        const textWrap = banBar.querySelector('.wwl-ban-textwrap'), textInner = banBar.querySelector('.wwl-ban-textinner');
+        if (textInner.scrollWidth > textWrap.clientWidth + 2) {
+            const dist = -(textInner.scrollWidth - textWrap.clientWidth) - 16;
+            const duration = Math.max(6, Math.abs(dist) / 40); // ~40px/s, at least 6s so short overflow isn't jarring
+            textInner.style.setProperty('--wwl-dist', `${dist}px`);
+            textInner.style.animation = `wwl-marquee ${duration}s ease-in-out 1s infinite alternate`;
+        } else {
+            textWrap.style.justifyContent = 'center';
+            textInner.style.cssText += 'width:100%;text-align:center;';
+        }
         banBar.querySelector('.wwl-ban-x').addEventListener('click', () => {
             const d = banDismissed(); d[b.id] = banHash(b.text);
             store.set(BAN_DISMISS_NAME, JSON.stringify(d));
             renderTornBanner();
         });
         if (shown.length > 1) banTimer = setInterval(() => { banIdx = (banIdx + 1) % shown.length; renderTornBanner(); }, 7000);
-        repositionForBanner();
     }
     const BAN_CACHE_NAME = 'wwl_torn_banners_cache';
     let banCached = null; try { banCached = JSON.parse(store.get(BAN_CACHE_NAME) || 'null'); } catch (e) { /* none */ }
