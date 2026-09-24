@@ -131,9 +131,8 @@
         prog.innerHTML = prog2.innerHTML = html;
     }
     function tabBar() {
-        const tabs = [['energy', '⚡ Energy']];
+        const tabs = [['todo', `✅ To do${todoItems && todoItems.length ? ` (${todoItems.length})` : ''}`], ['energy', '⚡ Energy']];
         if (mtPairs && mtPairs.length) tabs.push(['mentoring', '🎓 Mentoring']);
-        tabs.push(['todo', `✅ To do${todoItems && todoItems.length ? ` (${todoItems.length})` : ''}`]);
         if (tabs.length < 2) return '';
         return `<div style="display:flex;gap:6px;margin-bottom:10px;">${tabs.map(([id, label]) =>
             `<button type="button" class="wwl-tab" data-tab="${id}" style="flex:1;padding:6px;border-radius:6px;border:1px solid #3a4352;cursor:pointer;background:${tab === id ? '#2a2f3a' : 'transparent'};color:#e6e9ef;">${label}</button>`
