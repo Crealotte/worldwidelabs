@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         World Wide Labs
 // @namespace    https://worldwidelabs.vercel.app
-// @version      1.9
+// @version      1.10
 // @updateURL    __WWL_BASE__/wwl-energy-planner.user.js
 // @downloadURL  __WWL_BASE__/wwl-energy-planner.user.js
 // @description  Shows your WorldWideLabs weekly energy plan (the checklist from the Energy planner) inside Torn, a To do tab with small personal reminders (revive setting, feedback, timezone map), and — if you are in the Mentoring Platform — your mentoring checklist too. Also shows faction banners at the top of every Torn page. On a computer it is a small window you can drag around and close; in TornPDA it is a menu. Ticks are shared with the WWL site.
@@ -85,7 +85,18 @@
         <div id="wwl-body" style="overflow:auto;padding:8px 12px 12px;"></div>`;
     root.appendChild(win);
     const body = win.querySelector('#wwl-body'), prog2 = win.querySelector('#wwl-prog2'), head = win.querySelector('#wwl-head');
-    let plan = null, mtPairs = null, mtTodos = [], todoItems = null, tab = 'energy'; // tab: 'energy' | 'mentoring' | 'todo' — the mentoring tab only appears once we know there's something to show there
+    let plan = null, mtPairs = null, mtTodos = [], todoItems = null, tab = 'todo'; // tab: 'energy' | 'mentoring' | 'todo' — the mentoring tab only appears once we know there's something to show there
+
+    // A daily ritual checkbox, always first on the To do tab, unlike the automated checks below it:
+    // purely local (no server round trip needed for something this simple), and resets itself every
+    // day rather than staying done forever once ticked.
+    const DAILY_CHECK_NAME = 'wwl_daily_energy_check'; // { date: 'YYYY-MM-DD', checked }
+    const todayStr = () => new Date().toISOString().slice(0, 10); // UTC = TCT, same convention as everywhere else in WWL
+    function getDailyChecked() {
+        try { const d = JSON.parse(store.get(DAILY_CHECK_NAME) || 'null'); return !!(d && d.date === todayStr() && d.checked); } catch (e) { return false; }
+    }
+    function setDailyChecked(v) { store.set(DAILY_CHECK_NAME, JSON.stringify({ date: todayStr(), checked: v })); }
+    function todoCount() { return (todoItems ? todoItems.length : 0) + (getDailyChecked() ? 0 : 1); }
 
     // position (PC): remembered, and always kept inside the screen
     const place = (x, y) => {
@@ -126,12 +137,14 @@
     function showProgress() {
         const p = plan ? progress() : null;
         const energyText = p ? `${num(p.done)} / ${num(p.total)} E` : '';
-        const todoBadge = todoItems && todoItems.length ? `<span style="color:#f0b432;" title="${todoItems.length} to do">●${todoItems.length}</span>` : '';
+        const n = todoCount();
+        const todoBadge = n ? `<span style="color:#f0b432;" title="${n} to do">●${n}</span>` : '';
         const html = [energyText, todoBadge].filter(Boolean).join(' ');
         prog.innerHTML = prog2.innerHTML = html;
     }
     function tabBar() {
-        const tabs = [['todo', `✅ To do${todoItems && todoItems.length ? ` (${todoItems.length})` : ''}`], ['energy', '⚡ Energy']];
+        const n = todoCount();
+        const tabs = [['todo', `✅ To do${n ? ` (${n})` : ''}`], ['energy', '⚡ Energy']];
         if (mtPairs && mtPairs.length) tabs.push(['mentoring', '🎓 Mentoring']);
         if (tabs.length < 2) return '';
         return `<div style="display:flex;gap:6px;margin-bottom:10px;">${tabs.map(([id, label]) =>
@@ -173,17 +186,23 @@
     // 'member-todo' action. Each has an optional link (some open WWL in a new tab, the revive one
     // opens Torn's own Preferences page directly).
     function renderTodoTab() {
-        if (todoItems === null) return '<div style="padding:6px 0;color:#9aa4b5;">Loading…</div>';
-        if (!todoItems.length) return '<div style="padding:6px 0;color:#9aa4b5;">Nothing outstanding — nice.</div>';
-        return todoItems.map(t => `<div style="display:flex;gap:8px;align-items:center;padding:${IS_PDA ? 10 : 7}px 0;border-bottom:1px solid #3a4352;">
-            <span style="flex:1;">${esc(t.text)}</span>
-            ${t.url ? `<a href="${esc(t.url)}" target="_blank" rel="noopener" style="color:#35d99b;white-space:nowrap;text-decoration:none;border:1px solid #35d99b;border-radius:6px;padding:4px 8px;font-size:12px;">${esc(t.cta)}</a>` : ''}
-        </div>`).join('');
+        const daily = `<label style="display:flex;gap:8px;align-items:center;padding:${IS_PDA ? 10 : 7}px 0;border-bottom:1px solid #3a4352;cursor:pointer;">
+            <input type="checkbox" id="wwl-daily-check" ${getDailyChecked() ? 'checked' : ''} style="width:auto;">
+            <span style="flex:1;">Check your energy plan</span>
+        </label>`;
+        const rest = todoItems === null ? '<div style="padding:6px 0;color:#9aa4b5;">Loading…</div>'
+            : !todoItems.length ? ''
+            : todoItems.map(t => `<div style="display:flex;gap:8px;align-items:center;padding:${IS_PDA ? 10 : 7}px 0;border-bottom:1px solid #3a4352;">
+                <span style="flex:1;">${esc(t.text)}</span>
+                ${t.url ? `<a href="${esc(t.url)}" target="_blank" rel="noopener" style="color:#35d99b;white-space:nowrap;text-decoration:none;border:1px solid #35d99b;border-radius:6px;padding:4px 8px;font-size:12px;">${esc(t.cta)}</a>` : ''}
+            </div>`).join('');
+        return daily + rest;
     }
     function render() {
         body.innerHTML = tabBar() + (tab === 'mentoring' ? renderMentoringTab() : tab === 'todo' ? renderTodoTab() : renderEnergyTab());
         showProgress();
         wireTabs();
+        body.querySelector('#wwl-daily-check')?.addEventListener('change', e => { setDailyChecked(e.target.checked); render(); });
         body.querySelectorAll('.wwl-e-check').forEach(cb => cb.addEventListener('change', async () => {
             if (cb.checked) plan.checks[cb.dataset.k] = true; else delete plan.checks[cb.dataset.k];
             showProgress();

@@ -15,8 +15,8 @@ const WHATS_NEW = [
         version: '1.17', date: '2026-09-24',
         title: 'Userscript to-do list and Torn-wide banners',
         everyone: [
-            'WWL energy-plan userscript: new "To do" tab with small personal reminders — right now: your revive setting if it isn\'t "No one", the Feedback form if you haven\'t answered it, and the Timezone map if you haven\'t picked your country — each with a button straight to where you fix it. The little WWL button in Torn shows a dot with the count when there\'s something outstanding.',
-            'WWL energy-plan userscript: banners a leader posts (Leader settings → Banners) now also show at the top of every Torn page, not just on the WWL site — so a faction message doesn\'t get lost in Torn\'s own event feed. Closing one only dismisses it in Torn; the WWL site\'s own copy is unaffected.',
+            'The WWL userscript is renamed to "World Wide Labs" (was "WWL Energy plan"), and now opens on a new "To do" tab by default: a daily "Check your energy plan" reminder that ticks off for today and resets tomorrow, plus small automated reminders — the Feedback form if you haven\'t answered it, the Timezone map if you haven\'t picked your country, and your revive setting specifically if it is "Everyone" (Torn\'s API can only ever detect that one setting, not tell "Friends and faction" apart from "Nobody" — cross-check Torn Intel for the other two) — each with a button straight to where you fix it. The little WWL button in Torn shows a dot with the count when there\'s something outstanding.',
+            'WWL userscript: banners a leader posts (Leader settings → Banners) now also show, centered, at the top of every Torn page, not just on the WWL site — so a faction message doesn\'t get lost in Torn\'s own event feed. Closing one only dismisses it in Torn; the WWL site\'s own copy is unaffected.',
             'Member Overview and Your standing no longer track Energy drinks, and it\'s dropped off the list of competitions.',
         ],
         leaders: [

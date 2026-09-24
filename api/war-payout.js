@@ -627,11 +627,13 @@ module.exports = async function handler(req, res) {
         // The userscript's own "To do" tab — small personal reminders for the calling member, not
         // faction-wide like leader-todos above. Each check is independent and best-effort: one
         // failing (e.g. Torn hiccups on the profile call) must not hide the others.
-        //   - Revive setting: Torn's `revivable` field on a self-queried profile reflects the
-        //     privacy setting itself (not momentary reviv-ability), per Torn's own API docs — "When
-        //     querying for yourself, it will not check for the revive ability and show 1 when
-        //     enabled." Unverified against a live key by us; if it turns out not to behave this way,
-        //     this is the one check to revisit.
+        //   - Revive setting: Torn's `revivable` field only ever distinguishes "Everyone" (true)
+        //     from "Friends and faction" or "Nobody" (both false, even on your own profile) — Torn's
+        //     API has no field that tells those two apart at all (there's a standing forum request
+        //     asking for exactly this, confirmed by testing against a real key on "Friends and
+        //     faction": it read false, same as "Nobody" would). So this can only ever flag "Everyone"
+        //     specifically, not "anything other than Nobody" — the leader's own call, since Torn
+        //     Intel shows the real 3-way setting for a manual cross-check when it matters.
         //   - Feedback / timezone: exact same data the Feedback and Timezone map pages already use
         //     (see api/feedback-form.js's 'read' action and lib/tzMap.js's 'tz-get'), just read
         //     directly here instead of a second round trip.
@@ -644,7 +646,7 @@ module.exports = async function handler(req, res) {
                 const r = await tornFetch(`https://api.torn.com/v2/user/?selections=profile&key=${encodeURIComponent(key)}`, { headers: { accept: 'application/json' } });
                 const d = await r.json();
                 if (!d.error && d.revivable) {
-                    items.push({ id: 'revive', text: 'Your revive setting isn\'t "No one" — a fresh look never hurts.', cta: 'Open Preferences', url: 'https://www.torn.com/preferences.php#tab=privacy' });
+                    items.push({ id: 'revive', text: 'Your revive setting is "Everyone" — anyone can revive you, not just friends and faction.', cta: 'Open Preferences', url: 'https://www.torn.com/preferences.php#tab=privacy' });
                 }
             } catch (e) { /* skip this check on failure, don't fail the others */ }
 
