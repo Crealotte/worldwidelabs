@@ -7,6 +7,7 @@
     { "path": "/api/war-payout?cron=1", "schedule": "5 0 * * *" }
   ],
   "rewrites": [
+    { "source": "/worldwidelabs.user.js", "destination": "/api/war-payout?script=1" },
     { "source": "/wwl-energy-planner.user.js", "destination": "/api/war-payout?script=1" },
     { "source": "/steadfast/:code.png", "destination": "/api/war-payout?steadfast=:code" },
     { "source": "/((?!api/|.*\\.[\\w]+$).*)", "destination": "/index.html" }

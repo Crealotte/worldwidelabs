@@ -1,9 +1,9 @@
 // ==UserScript==
 // @name         World Wide Labs
 // @namespace    https://worldwidelabs.vercel.app
-// @version      1.10
-// @updateURL    __WWL_BASE__/wwl-energy-planner.user.js
-// @downloadURL  __WWL_BASE__/wwl-energy-planner.user.js
+// @version      1.11
+// @updateURL    __WWL_BASE__/worldwidelabs.user.js
+// @downloadURL  __WWL_BASE__/worldwidelabs.user.js
 // @description  Shows your WorldWideLabs weekly energy plan (the checklist from the Energy planner) inside Torn, a To do tab with small personal reminders (revive setting, feedback, timezone map), and — if you are in the Mentoring Platform — your mentoring checklist too. Also shows faction banners at the top of every Torn page. On a computer it is a small window you can drag around and close; in TornPDA it is a menu. Ticks are shared with the WWL site.
 // @match        https://www.torn.com/*
 // @grant        GM_xmlhttpRequest

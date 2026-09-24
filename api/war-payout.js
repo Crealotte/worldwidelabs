@@ -325,8 +325,11 @@ module.exports = async function handler(req, res) {
         res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
         res.setHeader('Vary', 'Origin');
         if (req.method === 'OPTIONS') return res.status(204).end();
-        // The WWL userscript for Torn: GET /wwl-energy-planner.user.js (see vercel.json). Tampermonkey installs it straight
-        // from this link; the site's own address is filled in so the script talks to the right place.
+        // The WWL userscript for Torn: GET /worldwidelabs.user.js, or the older /wwl-energy-planner.user.js
+        // (both rewritten to this same handler — see vercel.json; the old path is kept alive so
+        // existing installs, whose @updateURL is baked in from whenever they first installed, keep
+        // updating). Tampermonkey installs it straight from this link; the site's own address is
+        // filled in so the script talks to the right place.
         if (req.method === 'GET' && req.query?.script) {
             const src = require('fs').readFileSync(require('path').join(process.cwd(), 'userscripts', 'energy-plan.user.js'), 'utf8');
             const host = String(req.headers['x-forwarded-host'] || req.headers.host || '').replace(/[^\w.:-]/g, '');
