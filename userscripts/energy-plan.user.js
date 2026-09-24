@@ -2,7 +2,7 @@
 // @name         World Wide Labs
 // @namespace    https://worldwidelabs.vercel.app
 // @author       CreaLotte
-// @version      1.19
+// @version      1.20
 // @updateURL    __WWL_BASE__/worldwidelabs.user.js
 // @downloadURL  __WWL_BASE__/worldwidelabs.user.js
 // @description  Shows your WorldWideLabs weekly energy plan (the checklist from the Energy planner) inside Torn, a To do tab with small personal reminders (revive setting, feedback, timezone map), and — if you are in the Mentoring Platform — your mentoring checklist too. Also shows faction banners at the top of every Torn page. A small ⚙ in the header shows the installed version, flags when a newer one is out, lets you set/replace your API key, and — for a leader — add or remove your faction's banners right from Torn. On a computer it is a small window you can drag around and close; in TornPDA it is a menu. Ticks are shared with the WWL site.
@@ -26,7 +26,7 @@
     const KEY_NAME = 'wwl_api_key', POS_NAME = 'wwl_plan_pos', STATE_NAME = 'wwl_plan_state';
     // GM_info gives the version Tampermonkey actually has installed right now — falls back to a
     // hardcoded copy (kept in sync with @version above) for TornPDA, which doesn't grant GM_info.
-    const SCRIPT_VERSION = (typeof GM_info !== 'undefined' && GM_info.script?.version) || '1.19';
+    const SCRIPT_VERSION = (typeof GM_info !== 'undefined' && GM_info.script?.version) || '1.20';
     const versionGreater = (a, b) => {
         const pa = String(a).split('.').map(Number), pb = String(b).split('.').map(Number);
         for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
@@ -81,11 +81,17 @@
     root.style.cssText = 'font:13px/1.4 Arial,sans-serif;color:#e6e9ef;';
     document.body.appendChild(root);
 
-    const pill = document.createElement('div'); // the closed state: a small "WWL" button with the progress
-    // Parked bottom-right, alongside where Torn's own chat boxes float, instead of top-left — easier to
-    // find on TornPDA (no drag-to-discover needed) and out of the way of the banner up top.
-    pill.style.cssText = 'position:fixed;right:12px;bottom:12px;z-index:99998;display:flex;gap:6px;align-items:center;padding:8px 12px;background:#1b2029;border:1px solid #35d99b;border-radius:20px;cursor:pointer;box-shadow:0 2px 12px rgba(0,0,0,.5);user-select:none;';
-    pill.innerHTML = `${VIAL_SVG}<b>WWL</b><span id="wwl-prog" style="color:#35d99b;font-family:monospace;"></span>`;
+    const pill = document.createElement('div'); // the closed state: a small button with the progress
+    if (IS_PDA) {
+        // A full text pill was too big and, parked bottom-right, sat behind Torn's own bottom button row
+        // where it couldn't be tapped at all. A small round icon top-right instead — the to-do count
+        // becomes a corner badge since there's no room left for the energy-fraction text.
+        pill.style.cssText = 'position:fixed;top:8px;right:8px;z-index:99998;display:flex;align-items:center;justify-content:center;width:34px;height:34px;background:#1b2029;border:1px solid #35d99b;border-radius:50%;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,.5);user-select:none;';
+        pill.innerHTML = `${VIAL_SVG}<span id="wwl-prog" style="display:none;position:absolute;top:-4px;right:-4px;min-width:14px;height:14px;padding:0 2px;border-radius:8px;background:#f0b432;color:#1b2029;font:700 10px/14px Arial,sans-serif;text-align:center;align-items:center;justify-content:center;"></span>`;
+    } else {
+        pill.style.cssText = 'position:fixed;left:8px;top:8px;z-index:99998;display:flex;gap:6px;align-items:center;padding:8px 12px;background:#1b2029;border:1px solid #35d99b;border-radius:20px;cursor:pointer;box-shadow:0 2px 12px rgba(0,0,0,.5);user-select:none;';
+        pill.innerHTML = `${VIAL_SVG}<b>WWL</b><span id="wwl-prog" style="color:#35d99b;font-family:monospace;"></span>`;
+    }
     root.appendChild(pill);
     const prog = pill.querySelector('#wwl-prog');
 
@@ -163,8 +169,9 @@
         const energyText = p ? `${num(p.done)} / ${num(p.total)} E` : '';
         const n = todoCount();
         const todoBadge = n ? `<span style="color:#f0b432;" title="${n} to do">●${n}</span>` : '';
-        const html = [energyText, todoBadge].filter(Boolean).join(' ');
-        prog.innerHTML = prog2.innerHTML = html;
+        prog2.innerHTML = [energyText, todoBadge].filter(Boolean).join(' ');
+        if (IS_PDA) { prog.textContent = n; prog.style.display = n ? 'flex' : 'none'; }
+        else prog.innerHTML = [energyText, todoBadge].filter(Boolean).join(' ');
     }
     function tabBar() {
         const n = todoCount();
@@ -412,11 +419,18 @@
     banBar.style.cssText = 'display:none;position:relative;z-index:99990;font:13px/1.4 Arial,sans-serif;';
     document.body.insertBefore(banBar, document.body.firstChild);
     let banList = [], banIdx = 0, banTimer = null;
+    // The pill uses a fixed "top" — it doesn't know the banner is there, so once one renders it would
+    // otherwise sit half-covered by it. Repositioned to sit just below the banner's actual height
+    // every time it changes (left for a computer, right on TornPDA — either way, just needs pushing down).
+    function repositionForBanner() {
+        const h = banBar.style.display === 'none' ? 0 : banBar.offsetHeight;
+        pill.style.top = `${h + 8}px`;
+    }
     function renderTornBanner() {
         const gone = banDismissed();
         const shown = banList.filter(b => gone[b.id] !== banHash(b.text));
         clearInterval(banTimer);
-        if (!shown.length) { banBar.style.display = 'none'; banBar.innerHTML = ''; return; }
+        if (!shown.length) { banBar.style.display = 'none'; banBar.innerHTML = ''; repositionForBanner(); return; }
         banIdx = Math.min(banIdx, shown.length - 1);
         const b = shown[banIdx];
         const color = BAN_TONE_COLORS[b.tone] || BAN_TONE_COLORS.info;
@@ -450,6 +464,7 @@
             renderTornBanner();
         });
         if (shown.length > 1) banTimer = setInterval(() => { banIdx = (banIdx + 1) % shown.length; renderTornBanner(); }, 7000);
+        repositionForBanner();
     }
     const BAN_CACHE_NAME = 'wwl_torn_banners_cache';
     let banCached = null; try { banCached = JSON.parse(store.get(BAN_CACHE_NAME) || 'null'); } catch (e) { /* none */ }
