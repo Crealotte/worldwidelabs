@@ -2,7 +2,7 @@
 // @name         World Wide Labs
 // @namespace    https://worldwidelabs.vercel.app
 // @author       CreaLotte
-// @version      1.23
+// @version      1.24
 // @updateURL    __WWL_BASE__/worldwidelabs.user.js
 // @downloadURL  __WWL_BASE__/worldwidelabs.user.js
 // @description  Shows your WorldWideLabs weekly energy plan (the checklist from the Energy planner) inside Torn, a To do tab with small personal reminders (revive setting, feedback, timezone map), and — if you are in the Mentoring Platform — your mentoring checklist too. Also shows faction banners at the top of every Torn page. A small ⚙ in the header shows the installed version, flags when a newer one is out, lets you set/replace your API key, and — for a leader — add or remove your faction's banners right from Torn. On a computer it is a small window you can drag around and close; in TornPDA it is a menu. Ticks are shared with the WWL site.
@@ -26,7 +26,7 @@
     const KEY_NAME = 'wwl_api_key', POS_NAME = 'wwl_plan_pos', STATE_NAME = 'wwl_plan_state';
     // GM_info gives the version Tampermonkey actually has installed right now — falls back to a
     // hardcoded copy (kept in sync with @version above) for TornPDA, which doesn't grant GM_info.
-    const SCRIPT_VERSION = (typeof GM_info !== 'undefined' && GM_info.script?.version) || '1.23';
+    const SCRIPT_VERSION = (typeof GM_info !== 'undefined' && GM_info.script?.version) || '1.24';
     const versionGreater = (a, b) => {
         const pa = String(a).split('.').map(Number), pb = String(b).split('.').map(Number);
         for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
@@ -159,10 +159,10 @@
         try { const r = await api({ action: 'member-todo' }); todoItems = r.items || []; if (tab === 'todo') render(); }
         catch (e) { /* keep showing what we already had */ }
     }
-    let chatBarMounted = false; // once we're an icon in Torn's own chat bar (TornPDA only), the small pill stays hidden for good
+    let headerIconMounted = false; // once we're an icon in Torn's own header toolbar, the small pill stays hidden for good
     function setOpen(on, save = true) {
         win.style.display = on ? 'flex' : 'none';
-        pill.style.display = (on || chatBarMounted) ? 'none' : 'flex';
+        pill.style.display = (on || headerIconMounted) ? 'none' : 'flex';
         if (save) store.set(STATE_NAME, on ? 'open' : 'closed');
         clearInterval(todoRefreshTimer);
         if (on) { if (!IS_PDA) restorePos(); load(); todoRefreshTimer = setInterval(refreshTodoItems, 15000); }
@@ -175,35 +175,44 @@
         if (settingsData === null) loadSettings();
     });
 
-    // ---- TornPDA only: also park an icon in Torn's own chat bar (Companies/Faction/Notes/People/
-    // Settings, #chatRoot), next to the stable "Notes" button id (its wrapper `class` names are
-    // build-hashed and change on any Torn deploy, so we never rely on those). Reports of this fighting
-    // with the bar's drag-and-drop library (dnd-kit) turned out to only happen on a computer — on
-    // TornPDA it's been solid, so it's re-added here scoped to IS_PDA only, keeping our own dark/green
-    // look this time instead of copying Torn's own button style. Also nudges the slide-up window's
-    // bottom edge above the bar's real height, since it was sliding in underneath/behind it.
-    function mountChatBarIcon() {
-        if (!IS_PDA || document.getElementById('wwl-chatbar-btn')) return true;
-        const anchor = document.getElementById('notes_panel_button');
-        const row = anchor?.parentElement;
-        if (!anchor || !row) return false;
-        const cs = getComputedStyle(anchor);
+    // ---- also park an icon in Torn's own header toolbar (search/clock/history/avatar row —
+    // <ul class="toolbar clearfix">), on both a computer and TornPDA. Its outer <li> classes
+    // (.find-wrapper, .tc-clock, .avatar, ...) are plain, deliberately-named CSS, not the build-hashed
+    // classes the chat bar used — a much steadier thing to anchor on. The chat bar itself kept causing
+    // real bugs (drag-and-drop interference: lag on a computer, then a dead tap on TornPDA too) and has
+    // been dropped as an anchor entirely. Inserted right before the avatar menu, as a plain sibling <li>.
+    // TornPDA carries the to-do count as a small corner badge, since there's little room elsewhere; a
+    // computer already has the full pill for that, so this one is just the icon.
+    function mountHeaderIcon() {
+        if (document.getElementById('wwl-header-btn')) return true;
+        const toolbar = document.querySelector('ul.toolbar.clearfix');
+        if (!toolbar) return false;
+        const li = document.createElement('li');
         const btn = document.createElement('button');
         btn.type = 'button';
-        btn.id = 'wwl-chatbar-btn';
+        btn.id = 'wwl-header-btn';
         btn.title = 'World Wide Labs';
-        btn.style.cssText = `width:${cs.width};height:${cs.height};margin:${cs.margin};display:flex;align-items:center;justify-content:center;position:relative;box-sizing:border-box;background:#1b2029;border:2px solid #35d99b;border-radius:8px;cursor:pointer;padding:0;`;
-        btn.innerHTML = VIAL_SVG +
-            '<span id="wwl-chatbar-badge" style="display:none;position:absolute;top:-4px;right:-4px;min-width:14px;height:14px;padding:0 2px;border-radius:8px;background:#f0b432;color:#1b2029;font:700 10px/14px Arial,sans-serif;text-align:center;align-items:center;justify-content:center;"></span>';
+        btn.style.cssText = 'display:flex;align-items:center;justify-content:center;width:30px;height:30px;margin:0 2px;box-sizing:border-box;background:#1b2029;border:2px solid #35d99b;border-radius:8px;cursor:pointer;padding:0;position:relative;';
+        btn.innerHTML = VIAL_SVG + (IS_PDA ? '<span id="wwl-header-badge" style="display:none;position:absolute;top:-4px;right:-4px;min-width:14px;height:14px;padding:0 2px;border-radius:8px;background:#f0b432;color:#1b2029;font:700 10px/14px Arial,sans-serif;text-align:center;align-items:center;justify-content:center;"></span>' : '');
         btn.addEventListener('click', e => { e.stopPropagation(); setOpen(true); });
-        row.insertBefore(btn, anchor);
-        chatBarMounted = true;
+        li.appendChild(btn);
+        const avatarLi = toolbar.querySelector('.avatar');
+        if (avatarLi) toolbar.insertBefore(li, avatarLi); else toolbar.appendChild(li);
+        headerIconMounted = true;
         pill.style.display = 'none';
-        win.style.bottom = `${row.getBoundingClientRect().height}px`;
         showProgress();
         return true;
     }
-    if (IS_PDA) { mountChatBarIcon(); setInterval(mountChatBarIcon, 3000); }
+    // TornPDA only: Torn's own chat-icon row also renders as a bar pinned to the very bottom of the
+    // screen there — read-only, so this can't repeat the dnd-kit issue above (nothing is inserted into
+    // it), just measured so the slide-up menu stops above it instead of sliding in underneath.
+    function adjustPdaWindowBottom() {
+        if (!IS_PDA) return;
+        const bar = document.getElementById('notes_panel_button')?.parentElement;
+        if (bar) win.style.bottom = `${bar.getBoundingClientRect().height}px`;
+    }
+    mountHeaderIcon(); adjustPdaWindowBottom();
+    setInterval(() => { mountHeaderIcon(); adjustPdaWindowBottom(); }, 3000);
 
     function progress() {
         let done = 0, total = 0;
@@ -218,8 +227,8 @@
         prog2.innerHTML = [energyText, todoBadge].filter(Boolean).join(' ');
         if (IS_PDA) {
             prog.textContent = n; prog.style.display = n ? 'flex' : 'none';
-            const cbBadge = document.getElementById('wwl-chatbar-badge');
-            if (cbBadge) { cbBadge.textContent = n; cbBadge.style.display = n ? 'flex' : 'none'; }
+            const hBadge = document.getElementById('wwl-header-badge');
+            if (hBadge) { hBadge.textContent = n; hBadge.style.display = n ? 'flex' : 'none'; }
         } else prog.innerHTML = [energyText, todoBadge].filter(Boolean).join(' ');
     }
     function tabBar() {
