@@ -2,7 +2,7 @@
 // @name         World Wide Labs
 // @namespace    https://worldwidelabs.vercel.app
 // @author       CreaLotte
-// @version      1.28
+// @version      1.29
 // @updateURL    __WWL_BASE__/worldwidelabs.user.js
 // @downloadURL  __WWL_BASE__/worldwidelabs.user.js
 // @description  Shows your WorldWideLabs weekly energy plan (the checklist from the Energy planner) inside Torn, a To do tab with small personal reminders (revive setting, feedback, timezone map, availability, Discord/Intel/CAT), your My Targets list, a simplified energy/war standing strip, and — if you are in the Mentoring Platform — your mentoring checklist too. Also shows faction banners at the top of every Torn page. A small ⚙ in the header shows the installed version, flags when a newer one is out, lets you set/replace your API key, and — for a leader — add or remove your faction's banners right from Torn. On a computer it is a small window you can drag around and close; in TornPDA it is a menu. Ticks are shared with the WWL site.
@@ -26,7 +26,7 @@
     const KEY_NAME = 'wwl_api_key', POS_NAME = 'wwl_plan_pos', STATE_NAME = 'wwl_plan_state';
     // GM_info gives the version Tampermonkey actually has installed right now — falls back to a
     // hardcoded copy (kept in sync with @version above) for TornPDA, which doesn't grant GM_info.
-    const SCRIPT_VERSION = (typeof GM_info !== 'undefined' && GM_info.script?.version) || '1.28';
+    const SCRIPT_VERSION = (typeof GM_info !== 'undefined' && GM_info.script?.version) || '1.29';
     const versionGreater = (a, b) => {
         const pa = String(a).split('.').map(Number), pb = String(b).split('.').map(Number);
         for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
@@ -318,10 +318,16 @@
     }
     function renderSettingsTab() {
         const updateHtml = updateAvailable ? `<div style="color:#f0b432;margin:6px 0;">⬆ Update available: v${esc(updateAvailable)} — <a href="${WWL}/worldwidelabs.user.js" target="_blank" rel="noopener" style="color:#f0b432;">open the install link</a> and Tampermonkey will offer to update.</div>` : '';
+        // Closing a banner's × dismisses it in this browser forever (see renderTornBanner) — a leader
+        // adding a new one has no way to tell that's why an old one they still have live isn't showing,
+        // so surface a way back rather than leaving it a silent, permanent mystery.
+        const dismissedCount = Object.keys(banDismissed()).length;
+        const undismissHtml = dismissedCount ? `<button type="button" id="wwl-ban-undismiss" style="margin-top:8px;padding:6px 12px;border-radius:6px;border:1px solid #3a4352;background:transparent;color:#e6e9ef;cursor:pointer;">Show ${dismissedCount} dismissed banner${dismissedCount === 1 ? '' : 's'} again</button>` : '';
         let html = `<button type="button" id="wwl-back" style="margin-bottom:10px;padding:4px 10px;border-radius:6px;border:1px solid #3a4352;background:transparent;color:#e6e9ef;cursor:pointer;">← Back</button>
             <div style="font-weight:700;margin-bottom:4px;">World Wide Labs v${esc(SCRIPT_VERSION)}</div>
             ${updateHtml}
-            <button type="button" id="wwl-change-key" style="margin-top:4px;padding:6px 12px;border-radius:6px;border:1px solid #3a4352;background:transparent;color:#e6e9ef;cursor:pointer;">Change API key</button>`;
+            <button type="button" id="wwl-change-key" style="margin-top:4px;padding:6px 12px;border-radius:6px;border:1px solid #3a4352;background:transparent;color:#e6e9ef;cursor:pointer;">Change API key</button>
+            ${undismissHtml}`;
         if (settingsData === null) {
             html += '<div style="padding:10px 0;color:#9aa4b5;">Loading…</div>';
         } else if (settingsData.leader) {
@@ -363,6 +369,11 @@
             if (!trimmed) return;
             store.set(KEY_NAME, trimmed);
             load();
+        });
+        body.querySelector('#wwl-ban-undismiss')?.addEventListener('click', () => {
+            store.set(BAN_DISMISS_NAME, '{}');
+            renderTornBanner();
+            render();
         });
         body.querySelectorAll('.wwl-ban-del').forEach(x => x.addEventListener('click', async () => {
             if (!confirm('Delete this banner?')) return;

@@ -23,6 +23,7 @@ const WHATS_NEW = [
             'When a newer version of the WWL userscript is out, a small banner now shows right in the window (any tab, not just buried in ⚙ Settings) with a link straight to the update. (Computer only for now — checking for updates from inside TornPDA isn\'t possible the same way.)',
             'The WWL userscript\'s own window still said "WWL energy plan" in its title bar from before the rename — now says "World Wide Labs" too.',
             'The WWL userscript has two new tabs: a simplified 🎯 Targets tab showing the same My Targets list you build on the site (star a target on Level targets / Target finder / My targets and it shows up here, with live status and an Attack button), and a small strip above every tab with your energy trained this month and war participation — the same numbers "Your standing" on the dashboard shows, separate from the weekly plan checklist.',
+            'The WWL userscript\'s ⚙ Settings now shows a "Show N dismissed banners again" button if you\'ve closed any with the banner\'s × — closing one hides it in your browser for good (by design), which had no way back if you didn\'t mean to, or forgot you had.',
         ],
         leaders: [
             '"Who\'s on board" has a new "Discord exempt" toggle next to Intel/CAT, for members who shouldn\'t be nagged to link Discord (e.g. it\'s banned where they are).',
