@@ -28,6 +28,7 @@ const WHATS_NEW = [
             'Fixed a just-added (or just-deleted) banner not showing up in the Torn-wide rotation right away: adding or deleting one via ⚙ Settings only ever refreshed the list shown there, not the separate cached copy the actual banner display reads from — it now refreshes that too, and the general cache is trimmed from 10 minutes to 3 for banners added from the site instead.',
         ],
         leaders: [
+            'Fixed "Who\'s on board" → Userscript column only ever showing leaders: the script\'s "I\'m here" check-in was being rejected for everyone who isn\'t a leader (it sat behind a leaders-only gate on the server), so members who installed the script and added their key never appeared. Members will show up the next time they open Torn with the script — and straight away when they add their key in ⚙ Settings.',
             '"Who\'s on board" has a new "Discord exempt" toggle next to Intel/CAT, for members who shouldn\'t be nagged to link Discord (e.g. it\'s banned where they are).',
         ],
     },

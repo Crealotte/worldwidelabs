@@ -610,6 +610,16 @@ module.exports = async function handler(req, res) {
             const v = raw ? JSON.parse(raw) : {};
             return res.status(200).json({ intel: !!v.intel, cat: !!v.cat, discordExempt: !!v.discordExempt });
         }
+        // The userscript stamping "I'm here" — called from Torn itself, at most about once an hour
+        // per browser (throttled client-side), so this is a real signal of actual use, not just of
+        // having installed it once and never opening it again. Nothing sensitive, just a timestamp
+        // keyed by the caller's own verified playerId. Has to live ABOVE the leader-only gate below:
+        // it used to sit under it, so every non-leader's check-in was rejected with a 403 (which the
+        // script swallows silently) and only leaders ever showed up in the Userscript column.
+        if (action === 'script-checkin') {
+            await redis(['HSET', userscriptSeenKey(factionId), playerId, String(Date.now())]);
+            return res.status(200).json({ ok: true });
+        }
         // Banners at the top of every page. Everyone reads the ones meant for them; leaders write them for THEIR OWN faction, and only an owner
         // (the same owners as Labs funds) can also write one for ALL factions (stored apart, under 'global').
         if (action === 'banners-get') {
@@ -819,15 +829,8 @@ module.exports = async function handler(req, res) {
             await redis(['HSET', manualVerifyKey(factionId), String(id), JSON.stringify(v)]);
             return res.status(200).json({ ok: true });
         }
-        // The userscript stamping "I'm here" — called from Torn itself, at most about once an hour
-        // per browser (throttled client-side), so this is a real signal of actual use, not just of
-        // having installed it once and never opening it again. Self-reported like Discord/Intel/CAT
-        // above; nothing sensitive, just a timestamp keyed by the caller's own verified playerId.
-        if (action === 'script-checkin') {
-            await redis(['HSET', userscriptSeenKey(factionId), playerId, String(Date.now())]);
-            return res.status(200).json({ ok: true });
-        }
-        // Who's on board's "Userscript" column: the whole faction's last-seen timestamps.
+        // Who's on board's "Userscript" column: the whole faction's last-seen timestamps. (The check-in
+        // that fills this in is 'script-checkin', up above the leader-only gate — every member calls it.)
         if (action === 'userscript-get') {
             const flat = (await redis(['HGETALL', userscriptSeenKey(factionId)])) || [];
             const map = {};
