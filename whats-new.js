@@ -19,6 +19,7 @@ const WHATS_NEW = [
             'The To do tab now also flags: an upcoming war/weekend availability plan you haven\'t filled in yet, Torn Intel if a leader hasn\'t verified you on "Who\'s on board" yet, the CAT script the same way, and Discord if you haven\'t linked your Torn account to it (skipped for anyone a leader has marked exempt, e.g. a member in a country where Discord is banned).',
             'While the WWL userscript window is open, it now quietly re-checks your to-do list every 15 seconds — previously it only checked once when you opened it, so changing a setting (like revive) while it sat open showed nothing new until you closed and reopened it.',
             'On TornPDA, the WWL button is back as its own icon (our dark background, green outline, flask — not Torn\'s own button style this time) right in Torn\'s chat bar next to Notes and People, and the slide-up menu now stops just above that bar instead of sliding in underneath it.',
+            'Fixed the ⚙ Settings button doing absolutely nothing on a computer: pressing it started the window-drag behavior (only the × close button was ever excluded from that), which stole the click before it could reach Settings. Also moved the WWL button down slightly on a computer so it clears Torn\'s own logo in the corner instead of sitting on top of it.',
         ],
         leaders: [
             '"Who\'s on board" has a new "Discord exempt" toggle next to Intel/CAT, for members who shouldn\'t be nagged to link Discord (e.g. it\'s banned where they are).',

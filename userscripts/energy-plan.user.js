@@ -2,7 +2,7 @@
 // @name         World Wide Labs
 // @namespace    https://worldwidelabs.vercel.app
 // @author       CreaLotte
-// @version      1.22
+// @version      1.23
 // @updateURL    __WWL_BASE__/worldwidelabs.user.js
 // @downloadURL  __WWL_BASE__/worldwidelabs.user.js
 // @description  Shows your WorldWideLabs weekly energy plan (the checklist from the Energy planner) inside Torn, a To do tab with small personal reminders (revive setting, feedback, timezone map), and — if you are in the Mentoring Platform — your mentoring checklist too. Also shows faction banners at the top of every Torn page. A small ⚙ in the header shows the installed version, flags when a newer one is out, lets you set/replace your API key, and — for a leader — add or remove your faction's banners right from Torn. On a computer it is a small window you can drag around and close; in TornPDA it is a menu. Ticks are shared with the WWL site.
@@ -26,7 +26,7 @@
     const KEY_NAME = 'wwl_api_key', POS_NAME = 'wwl_plan_pos', STATE_NAME = 'wwl_plan_state';
     // GM_info gives the version Tampermonkey actually has installed right now — falls back to a
     // hardcoded copy (kept in sync with @version above) for TornPDA, which doesn't grant GM_info.
-    const SCRIPT_VERSION = (typeof GM_info !== 'undefined' && GM_info.script?.version) || '1.22';
+    const SCRIPT_VERSION = (typeof GM_info !== 'undefined' && GM_info.script?.version) || '1.23';
     const versionGreater = (a, b) => {
         const pa = String(a).split('.').map(Number), pb = String(b).split('.').map(Number);
         for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
@@ -81,6 +81,7 @@
     root.style.cssText = 'font:13px/1.4 Arial,sans-serif;color:#e6e9ef;';
     document.body.appendChild(root);
 
+    const PILL_TOP = 60; // clears Torn's own logo in the top-left corner on a computer (see note below)
     const pill = document.createElement('div'); // the closed state: a small button with the progress
     if (IS_PDA) {
         // A full text pill was too big and, parked bottom-right, sat behind Torn's own bottom button row
@@ -89,7 +90,9 @@
         pill.style.cssText = 'position:fixed;top:8px;right:8px;z-index:99998;display:flex;align-items:center;justify-content:center;width:34px;height:34px;background:#1b2029;border:1px solid #35d99b;border-radius:50%;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,.5);user-select:none;';
         pill.innerHTML = `${VIAL_SVG}<span id="wwl-prog" style="display:none;position:absolute;top:-4px;right:-4px;min-width:14px;height:14px;padding:0 2px;border-radius:8px;background:#f0b432;color:#1b2029;font:700 10px/14px Arial,sans-serif;text-align:center;align-items:center;justify-content:center;"></span>`;
     } else {
-        pill.style.cssText = 'position:fixed;left:8px;top:8px;z-index:99998;display:flex;gap:6px;align-items:center;padding:8px 12px;background:#1b2029;border:1px solid #35d99b;border-radius:20px;cursor:pointer;box-shadow:0 2px 12px rgba(0,0,0,.5);user-select:none;';
+        // top:8px used to sit right on top of Torn's own logo in the corner — nudged down to clear it.
+        // A visual estimate from a screenshot, not a measured value, so it may still need adjusting.
+        pill.style.cssText = `position:fixed;left:8px;top:${PILL_TOP}px;z-index:99998;display:flex;gap:6px;align-items:center;padding:8px 12px;background:#1b2029;border:1px solid #35d99b;border-radius:20px;cursor:pointer;box-shadow:0 2px 12px rgba(0,0,0,.5);user-select:none;`;
         pill.innerHTML = `${VIAL_SVG}<b>WWL</b><span id="wwl-prog" style="color:#35d99b;font-family:monospace;"></span>`;
     }
     root.appendChild(pill);
@@ -136,7 +139,10 @@
     if (!IS_PDA) {
         let drag = null;
         head.addEventListener('pointerdown', e => {
-            if (e.target.id === 'wwl-close') return;
+            // Only the close button was excluded from starting a drag — the settings gear (and its
+            // update-dot child) was not, so pressing it captured the pointer for dragging before its
+            // own click could ever fire. That's why ⚙ did nothing at all on a computer specifically.
+            if (e.target.closest('#wwl-close, #wwl-settings')) return;
             drag = { dx: e.clientX - win.offsetLeft, dy: e.clientY - win.offsetTop };
             head.setPointerCapture(e.pointerId);
         });
@@ -467,7 +473,7 @@
     // every time it changes (left for a computer, right on TornPDA — either way, just needs pushing down).
     function repositionForBanner() {
         const h = banBar.style.display === 'none' ? 0 : banBar.offsetHeight;
-        pill.style.top = `${h + 8}px`;
+        pill.style.top = `${h + (IS_PDA ? 8 : PILL_TOP)}px`;
     }
     function renderTornBanner() {
         const gone = banDismissed();
