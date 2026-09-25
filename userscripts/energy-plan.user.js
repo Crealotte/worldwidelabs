@@ -2,10 +2,10 @@
 // @name         World Wide Labs
 // @namespace    https://worldwidelabs.vercel.app
 // @author       CreaLotte
-// @version      1.27
+// @version      1.28
 // @updateURL    __WWL_BASE__/worldwidelabs.user.js
 // @downloadURL  __WWL_BASE__/worldwidelabs.user.js
-// @description  Shows your WorldWideLabs weekly energy plan (the checklist from the Energy planner) inside Torn, a To do tab with small personal reminders (revive setting, feedback, timezone map), and — if you are in the Mentoring Platform — your mentoring checklist too. Also shows faction banners at the top of every Torn page. A small ⚙ in the header shows the installed version, flags when a newer one is out, lets you set/replace your API key, and — for a leader — add or remove your faction's banners right from Torn. On a computer it is a small window you can drag around and close; in TornPDA it is a menu. Ticks are shared with the WWL site.
+// @description  Shows your WorldWideLabs weekly energy plan (the checklist from the Energy planner) inside Torn, a To do tab with small personal reminders (revive setting, feedback, timezone map, availability, Discord/Intel/CAT), your My Targets list, a simplified energy/war standing strip, and — if you are in the Mentoring Platform — your mentoring checklist too. Also shows faction banners at the top of every Torn page. A small ⚙ in the header shows the installed version, flags when a newer one is out, lets you set/replace your API key, and — for a leader — add or remove your faction's banners right from Torn. On a computer it is a small window you can drag around and close; in TornPDA it is a menu. Ticks are shared with the WWL site.
 // @match        https://www.torn.com/*
 // @grant        GM_xmlhttpRequest
 // @grant        GM_info
@@ -26,7 +26,7 @@
     const KEY_NAME = 'wwl_api_key', POS_NAME = 'wwl_plan_pos', STATE_NAME = 'wwl_plan_state';
     // GM_info gives the version Tampermonkey actually has installed right now — falls back to a
     // hardcoded copy (kept in sync with @version above) for TornPDA, which doesn't grant GM_info.
-    const SCRIPT_VERSION = (typeof GM_info !== 'undefined' && GM_info.script?.version) || '1.27';
+    const SCRIPT_VERSION = (typeof GM_info !== 'undefined' && GM_info.script?.version) || '1.28';
     const versionGreater = (a, b) => {
         const pa = String(a).split('.').map(Number), pb = String(b).split('.').map(Number);
         for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
@@ -114,8 +114,10 @@
         <div id="wwl-body" style="overflow:auto;padding:8px 12px 12px;"></div>`;
     root.appendChild(win);
     const body = win.querySelector('#wwl-body'), prog2 = win.querySelector('#wwl-prog2'), head = win.querySelector('#wwl-head');
-    let plan = null, mtPairs = null, mtTodos = [], todoItems = null, tab = 'todo', lastTab = 'todo'; // tab: 'energy' | 'mentoring' | 'todo' | 'settings' — the mentoring tab only appears once we know there's something to show there
+    let plan = null, mtPairs = null, mtTodos = [], todoItems = null, tab = 'todo', lastTab = 'todo'; // tab: 'energy' | 'mentoring' | 'todo' | 'settings' | 'targets' — the mentoring tab only appears once we know there's something to show there
     let settingsData = null, updateAvailable = null; // settingsData: { banners, leader, owner } once the Settings tab has been opened
+    let standing = null; // from 'mo-me' — the same numbers the site's "Your standing" dashboard card shows
+    let myTargets = null, targetStatus = {}; // My Targets list + live status, fetched separately (status can lag behind the list)
 
     // A daily ritual checkbox, always first on the To do tab, unlike the automated checks below it:
     // purely local (no server round trip needed for something this simple), and resets itself every
@@ -208,7 +210,7 @@
     }
     function tabBar() {
         const n = todoCount();
-        const tabs = [['todo', `✅ To do${n ? ` (${n})` : ''}`], ['energy', '⚡ Energy']];
+        const tabs = [['todo', `✅ To do${n ? ` (${n})` : ''}`], ['energy', '⚡ Energy'], ['targets', '🎯 Targets']];
         if (mtPairs && mtPairs.length) tabs.push(['mentoring', '🎓 Mentoring']);
         if (tabs.length < 2) return '';
         return `<div style="display:flex;gap:6px;margin-bottom:10px;">${tabs.map(([id, label]) =>
@@ -232,6 +234,45 @@
                     ${b.note ? `<div style="color:#9aa4b5;margin:3px 0;">${esc(b.note)}</div>` : ''}
                     ${b.items.map(it => `<label style="display:flex;gap:8px;align-items:flex-start;padding:${IS_PDA ? 8 : 4}px 0;cursor:pointer;"><input type="checkbox" class="wwl-e-check" data-k="${esc(it.key)}" ${plan.checks[it.key] ? 'checked' : ''} style="margin-top:2px;"><span>${esc(it.label)}</span></label>`).join('')}</details>`;
             }).join('')}${footer}`;
+    }
+    // A simplified strip of the same numbers the site's "Your standing" dashboard card shows — energy
+    // trained this month (a real, automatically-tracked stat) and war participation. Shown above every
+    // tab, not just Energy, since it's a different thing from the weekly plan checklist above: that one
+    // tracks a planned checklist of actions, this tracks what actually happened. Blank once 'mo-me'
+    // hasn't answered yet (e.g. no key, or a hiccup) rather than showing stale/wrong numbers.
+    function renderStandingStrip() {
+        if (!standing || standing.error) return '';
+        const s = standing;
+        const energyText = s.energy ? `${num(s.energy.month.trained)}${s.tier ? ` / ${num(s.energyNeeded)}` : ''}` : '—';
+        const warText = s.wars?.length && s.eligible ? `${s.okWars}/${s.eligible}` : '—';
+        return `<div style="display:flex;gap:16px;padding:6px 10px;margin-bottom:8px;background:#1b2029;border:1px solid #3a4352;border-radius:6px;font-size:12px;color:#9aa4b5;">
+            <span title="Energy trained this month, vs. your group's target">⚡ <span style="color:#e6e9ef;font-family:monospace;">${energyText}</span></span>
+            <span title="War participation, last 5 wars">⚔ <span style="color:#e6e9ef;font-family:monospace;">${warText}</span></span>
+        </div>`;
+    }
+    // My Targets: the same personal list a member builds on the site (star a target on Level targets /
+    // Target finder / My targets and it shows up here) — deliberately not the full target finder (search
+    // presets, fair-fight filters, FFScouter key setup), which would be a lot to cram into this window.
+    function renderTargetsTab() {
+        if (myTargets === null) return '<div style="padding:6px 0;color:#9aa4b5;">Loading…</div>';
+        if (!myTargets.length) return '<div style="padding:6px 0;color:#9aa4b5;">No targets yet — star one on the site\'s Level targets, Target finder, or My targets page and it shows up here.</div>';
+        const STATE_COLOR = { Okay: '#35d99b', Hospital: '#e05555', Jail: '#f0b432', Traveling: '#4da3ff', Abroad: '#4da3ff', Federal: '#e05555' };
+        const rows = myTargets.map(t => {
+            const st = targetStatus[t.id];
+            const color = st ? (STATE_COLOR[st.state] || '#9aa4b5') : '#9aa4b5';
+            const stateText = !st ? '…' : (st.state === 'Hospital' && st.until ? `Hospital, out ${new Date(st.until * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : st.state);
+            return `<div style="display:flex;gap:8px;align-items:center;padding:${IS_PDA ? 10 : 7}px 0;border-bottom:1px solid #3a4352;">
+                <span style="flex:1;">${esc(t.name || `#${t.id}`)}${t.level ? ` <span style="color:#9aa4b5;">(lvl ${t.level})</span>` : ''}</span>
+                <span style="color:${color};font-size:12px;white-space:nowrap;">${esc(stateText)}</span>
+                <a href="https://www.torn.com/loader2.php?sid=getInAttack&user2ID=${encodeURIComponent(t.id)}" target="_blank" rel="noopener" style="color:#35d99b;white-space:nowrap;text-decoration:none;border:1px solid #35d99b;border-radius:6px;padding:4px 8px;font-size:12px;">Attack</a>
+            </div>`;
+        }).join('');
+        return `<div style="display:flex;justify-content:flex-end;margin-bottom:6px;"><button type="button" id="wwl-targets-refresh" style="padding:3px 8px;border-radius:6px;border:1px solid #3a4352;background:transparent;color:#9aa4b5;cursor:pointer;font-size:11px;">🔄 Refresh status</button></div>${rows}`;
+    }
+    async function refreshTargetStatus() {
+        if (!myTargets?.length) return;
+        try { const r = await api({ action: 'target-status', ids: myTargets.map(t => t.id) }); targetStatus = r.status || {}; } catch (e) { /* keep showing what we had */ }
+        if (tab === 'targets') render();
     }
     // The mentoring to-dos: one section per pairing (a mentor with several pupils gets one each), each ticked
     // separately — same shared checklist the WWL page itself shows, just without the chat (open the site for that).
@@ -354,9 +395,11 @@
     }
     function render() {
         if (tab === 'settings') { body.innerHTML = renderSettingsTab(); wireSettingsTab(); return; }
-        body.innerHTML = updateBanner() + tabBar() + (tab === 'mentoring' ? renderMentoringTab() : tab === 'todo' ? renderTodoTab() : renderEnergyTab());
+        const tabContent = tab === 'mentoring' ? renderMentoringTab() : tab === 'targets' ? renderTargetsTab() : tab === 'todo' ? renderTodoTab() : renderEnergyTab();
+        body.innerHTML = updateBanner() + renderStandingStrip() + tabBar() + tabContent;
         showProgress();
         wireTabs();
+        body.querySelector('#wwl-targets-refresh')?.addEventListener('click', refreshTargetStatus);
         body.querySelector('#wwl-daily-check')?.addEventListener('change', e => { setDailyChecked(e.target.checked); render(); });
         body.querySelectorAll('.wwl-e-check').forEach(cb => cb.addEventListener('change', async () => {
             if (cb.checked) plan.checks[cb.dataset.k] = true; else delete plan.checks[cb.dataset.k];
@@ -373,15 +416,20 @@
     async function load() {
         body.innerHTML = '<div style="padding:6px 0;color:#9aa4b5;">Loading…</div>';
         try {
-            const [planR, mtR, todoR] = await Promise.all([
+            const [planR, mtR, todoR, standingR, myTargetsR] = await Promise.all([
                 api({ action: 'plan-get' }),
                 api({ action: 'mentor-my-status' }).catch(() => null), // fine if this member isn't in the program at all
                 api({ action: 'member-todo' }).catch(() => null),
+                api({ action: 'mo-me' }).catch(() => null), // the standing strip — fine if it fails, the strip just stays blank
+                api({ action: 'mytargets-get' }).catch(() => null),
             ]);
             plan = planR.plan; store.set('wwl_plan_cache', JSON.stringify({ at: Date.now(), plan }));
             mtPairs = mtR?.pairs || []; mtTodos = mtR?.todos || [];
             todoItems = todoR?.items || [];
+            standing = standingR;
+            myTargets = myTargetsR?.targets || [];
             render();
+            refreshTargetStatus(); // separate round trip (per-target Torn lookups) so it doesn't hold up everything else
         } catch (e) {
             if (e.message === 'NO_KEY') {
                 body.innerHTML = `<div style="padding:6px 0;color:#9aa4b5;">No API key set yet.</div>
