@@ -2,7 +2,7 @@
 // @name         World Wide Labs
 // @namespace    https://worldwidelabs.vercel.app
 // @author       CreaLotte
-// @version      1.30
+// @version      1.31
 // @updateURL    __WWL_BASE__/worldwidelabs.user.js
 // @downloadURL  __WWL_BASE__/worldwidelabs.user.js
 // @description  Shows your WorldWideLabs weekly energy plan (the checklist from the Energy planner) inside Torn, a To do tab with small personal reminders (revive setting, feedback, timezone map, availability, Discord/Intel/CAT), your My Targets list, a simplified energy/war standing strip, and — if you are in the Mentoring Platform — your mentoring checklist too. Also shows faction banners at the top of every Torn page. A small ⚙ in the header shows the installed version, flags when a newer one is out, lets you set/replace your API key, and — for a leader — add or remove your faction's banners right from Torn. On a computer it is a small window you can drag around and close; in TornPDA it is a menu. Ticks are shared with the WWL site.
@@ -26,7 +26,7 @@
     const KEY_NAME = 'wwl_api_key', POS_NAME = 'wwl_plan_pos', STATE_NAME = 'wwl_plan_state';
     // GM_info gives the version Tampermonkey actually has installed right now — falls back to a
     // hardcoded copy (kept in sync with @version above) for TornPDA, which doesn't grant GM_info.
-    const SCRIPT_VERSION = (typeof GM_info !== 'undefined' && GM_info.script?.version) || '1.30';
+    const SCRIPT_VERSION = (typeof GM_info !== 'undefined' && GM_info.script?.version) || '1.31';
     const versionGreater = (a, b) => {
         const pa = String(a).split('.').map(Number), pb = String(b).split('.').map(Number);
         for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
@@ -377,7 +377,7 @@
         });
         body.querySelectorAll('.wwl-ban-del').forEach(x => x.addEventListener('click', async () => {
             if (!confirm('Delete this banner?')) return;
-            try { await api({ action: 'banners-delete', id: x.dataset.id }); loadSettings(); }
+            try { await api({ action: 'banners-delete', id: x.dataset.id }); loadSettings(); refreshTornBanners(); }
             catch (e) { alert(`Couldn't delete that: ${e.message}`); }
         }));
         body.querySelector('#wwl-ban-add')?.addEventListener('click', async () => {
@@ -392,6 +392,7 @@
                     expires: body.querySelector('#wwl-ban-expires').value, page: '', linkLabel: '', icon: '', countdownAt: 0,
                 });
                 loadSettings();
+                refreshTornBanners();
             } catch (e) { st.style.color = '#e05555'; st.textContent = e.message; btn.disabled = false; }
         });
     }
@@ -504,7 +505,8 @@
     // ---- Torn-wide banners: the same ones a leader sets in Leader settings → Banners on the WWL
     // site, shown here too since faction messages posted in Torn's own event feed get lost. Inserted
     // in normal document flow (not a fixed overlay) at the very top of the page, so it pushes Torn's
-    // own content down rather than risking covering anything. Re-checked every ~10 minutes.
+    // own content down rather than risking covering anything. Re-checked every ~3 minutes, or right
+    // away if it was ⚙ Settings that just changed one (see refreshTornBanners below).
     const BAN_DISMISS_NAME = 'wwl_tornban_dismissed'; // { bannerId: hash of its text }
     const banHash = s => { let h = 0; for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0; return String(h); };
     const banDismissed = () => { try { return JSON.parse(store.get(BAN_DISMISS_NAME) || '{}'); } catch (e) { return {}; } };
@@ -566,13 +568,21 @@
         repositionForBanner();
     }
     const BAN_CACHE_NAME = 'wwl_torn_banners_cache';
-    let banCached = null; try { banCached = JSON.parse(store.get(BAN_CACHE_NAME) || 'null'); } catch (e) { /* none */ }
-    if (banCached?.banners) { banList = banCached.banners; renderTornBanner(); }
-    if (getKey() && !(banCached && Date.now() - banCached.at < 600000)) {
-        api({ action: 'banners-get' }).then(r => {
+    // A leader adding or deleting their own banner via ⚙ Settings only ever refreshed the management
+    // list there — the actual rotating banner kept showing whatever was cached (up to 10 minutes old),
+    // which is exactly what made a just-added banner look like it hadn't shown up, or a deleted one look
+    // like it was still stuck. Settings now calls this right after a successful add/delete too.
+    function refreshTornBanners() {
+        if (!getKey()) return;
+        return api({ action: 'banners-get' }).then(r => {
             banList = r.banners || [];
             store.set(BAN_CACHE_NAME, JSON.stringify({ at: Date.now(), banners: banList }));
             renderTornBanner();
         }).catch(() => {});
     }
+    let banCached = null; try { banCached = JSON.parse(store.get(BAN_CACHE_NAME) || 'null'); } catch (e) { /* none */ }
+    if (banCached?.banners) { banList = banCached.banners; renderTornBanner(); }
+    // Trimmed from 10 minutes to 3 — a banner added from the site (rather than ⚙ Settings, which now
+    // refreshes this immediately either way) could otherwise still look "missing" for a while yet.
+    if (!(banCached && Date.now() - banCached.at < 180000)) refreshTornBanners();
 })();
