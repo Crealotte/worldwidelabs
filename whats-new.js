@@ -21,6 +21,7 @@ const WHATS_NEW = [
             'Fixed the ⚙ Settings button doing absolutely nothing on a computer: pressing it started the window-drag behavior (only the × close button was ever excluded from that), which stole the click before it could reach Settings.',
             'The WWL button now also sits as its own flask icon right in Torn\'s own header toolbar (next to the search/clock/history/avatar icons, on both a computer and TornPDA), after a couple of attempts to put it in Torn\'s chat bar instead kept causing real problems there (lag on a computer, then a dead tap on TornPDA too). Styled flat like Torn\'s own icons there, no box or border around it (the first version stood out as a mismatched bordered tile). On TornPDA it still carries the to-do count as a small badge; on a computer it\'s just the icon, since the button in the corner already shows that.',
             'When a newer version of the WWL userscript is out, a small banner now shows right in the window (any tab, not just buried in ⚙ Settings) with a link straight to the update. (Computer only for now — checking for updates from inside TornPDA isn\'t possible the same way.)',
+            'The WWL userscript\'s own window still said "WWL energy plan" in its title bar from before the rename — now says "World Wide Labs" too.',
         ],
         leaders: [
             '"Who\'s on board" has a new "Discord exempt" toggle next to Intel/CAT, for members who shouldn\'t be nagged to link Discord (e.g. it\'s banned where they are).',
