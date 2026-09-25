@@ -2,7 +2,7 @@
 // @name         World Wide Labs
 // @namespace    https://worldwidelabs.vercel.app
 // @author       CreaLotte
-// @version      1.24
+// @version      1.25
 // @updateURL    __WWL_BASE__/worldwidelabs.user.js
 // @downloadURL  __WWL_BASE__/worldwidelabs.user.js
 // @description  Shows your WorldWideLabs weekly energy plan (the checklist from the Energy planner) inside Torn, a To do tab with small personal reminders (revive setting, feedback, timezone map), and — if you are in the Mentoring Platform — your mentoring checklist too. Also shows faction banners at the top of every Torn page. A small ⚙ in the header shows the installed version, flags when a newer one is out, lets you set/replace your API key, and — for a leader — add or remove your faction's banners right from Torn. On a computer it is a small window you can drag around and close; in TornPDA it is a menu. Ticks are shared with the WWL site.
@@ -26,7 +26,7 @@
     const KEY_NAME = 'wwl_api_key', POS_NAME = 'wwl_plan_pos', STATE_NAME = 'wwl_plan_state';
     // GM_info gives the version Tampermonkey actually has installed right now — falls back to a
     // hardcoded copy (kept in sync with @version above) for TornPDA, which doesn't grant GM_info.
-    const SCRIPT_VERSION = (typeof GM_info !== 'undefined' && GM_info.script?.version) || '1.24';
+    const SCRIPT_VERSION = (typeof GM_info !== 'undefined' && GM_info.script?.version) || '1.25';
     const versionGreater = (a, b) => {
         const pa = String(a).split('.').map(Number), pb = String(b).split('.').map(Number);
         for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
@@ -37,7 +37,9 @@
     };
 
     // The WWL "brand" icon (a flask), used everywhere the launcher shows itself, instead of a generic emoji.
-    const VIAL_SVG = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="#35d99b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;flex:none;"><line x1="9" y1="2" x2="15" y2="2"/><polyline points="9,2 9,8 4,20 20,20 15,8 15,2"/><line x1="6.3" y1="15" x2="17.7" y2="15"/></svg>';
+    // Takes a size since it's used both small (badges) and at Torn's own header-icon size.
+    const vialSvg = (size = 16) => `<svg viewBox="0 0 24 24" width="${size}" height="${size}" fill="none" stroke="#35d99b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;flex:none;"><line x1="9" y1="2" x2="15" y2="2"/><polyline points="9,2 9,8 4,20 20,20 15,8 15,2"/><line x1="6.3" y1="15" x2="17.7" y2="15"/></svg>`;
+    const VIAL_SVG = vialSvg();
     const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
     const num = n => Math.round(n).toLocaleString();
     const store = {
@@ -188,12 +190,15 @@
         const toolbar = document.querySelector('ul.toolbar.clearfix');
         if (!toolbar) return false;
         const li = document.createElement('li');
+        li.style.cssText = 'display:flex;align-items:center;';
         const btn = document.createElement('button');
         btn.type = 'button';
         btn.id = 'wwl-header-btn';
         btn.title = 'World Wide Labs';
-        btn.style.cssText = 'display:flex;align-items:center;justify-content:center;width:30px;height:30px;margin:0 2px;box-sizing:border-box;background:#1b2029;border:2px solid #35d99b;border-radius:8px;cursor:pointer;padding:0;position:relative;';
-        btn.innerHTML = VIAL_SVG + (IS_PDA ? '<span id="wwl-header-badge" style="display:none;position:absolute;top:-4px;right:-4px;min-width:14px;height:14px;padding:0 2px;border-radius:8px;background:#f0b432;color:#1b2029;font:700 10px/14px Arial,sans-serif;text-align:center;align-items:center;justify-content:center;"></span>' : '');
+        // Flat, like Torn's own header icons (no box/border/background around theirs either) — the
+        // earlier bordered tile stood out as a mismatched block sitting proud of the row.
+        btn.style.cssText = 'display:flex;align-items:center;justify-content:center;padding:0 6px;margin:0;background:transparent;border:none;cursor:pointer;position:relative;';
+        btn.innerHTML = vialSvg(22) + (IS_PDA ? '<span id="wwl-header-badge" style="display:none;position:absolute;top:2px;right:1px;min-width:13px;height:13px;padding:0 2px;border-radius:7px;background:#f0b432;color:#1b2029;font:700 9px/13px Arial,sans-serif;text-align:center;align-items:center;justify-content:center;"></span>' : '');
         btn.addEventListener('click', e => { e.stopPropagation(); setOpen(true); });
         li.appendChild(btn);
         const avatarLi = toolbar.querySelector('.avatar');
@@ -368,9 +373,18 @@
             } catch (e) { st.style.color = '#e05555'; st.textContent = e.message; btn.disabled = false; }
         });
     }
+    // A small banner right in the window, not just a dot buried in ⚙ Settings, so an update is hard to miss
+    // wherever you're looking. Not shown on the Settings tab itself — it already has its own, fuller version line.
+    function updateBanner() {
+        if (!updateAvailable) return '';
+        return `<div style="display:flex;align-items:center;gap:8px;padding:6px 8px;margin-bottom:8px;background:#f0b43222;border:1px solid #f0b432;border-radius:6px;font-size:12px;color:#f0b432;">
+            <span style="flex:1;">⬆ Update available: v${esc(updateAvailable)}</span>
+            <a href="${WWL}/worldwidelabs.user.js" target="_blank" rel="noopener" style="color:#f0b432;text-decoration:underline;white-space:nowrap;">Update now</a>
+        </div>`;
+    }
     function render() {
         if (tab === 'settings') { body.innerHTML = renderSettingsTab(); wireSettingsTab(); return; }
-        body.innerHTML = tabBar() + (tab === 'mentoring' ? renderMentoringTab() : tab === 'todo' ? renderTodoTab() : renderEnergyTab());
+        body.innerHTML = updateBanner() + tabBar() + (tab === 'mentoring' ? renderMentoringTab() : tab === 'todo' ? renderTodoTab() : renderEnergyTab());
         showProgress();
         wireTabs();
         body.querySelector('#wwl-daily-check')?.addEventListener('change', e => { setDailyChecked(e.target.checked); render(); });
@@ -443,7 +457,7 @@
         updateAvailable = v;
         const dot = win.querySelector('#wwl-settings-dot');
         if (dot) dot.style.display = v ? 'block' : 'none';
-        if (tab === 'settings') render();
+        render(); // refresh whichever tab is showing right now, so the banner appears immediately
     }
     let updateCached = null; try { updateCached = JSON.parse(store.get(UPDATE_CHECK_NAME) || 'null'); } catch (e) { /* none */ }
     if (updateCached?.remote && versionGreater(updateCached.remote, SCRIPT_VERSION)) markUpdateAvailable(updateCached.remote);
