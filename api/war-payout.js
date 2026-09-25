@@ -401,6 +401,17 @@ module.exports = async function handler(req, res) {
         if (!profile) return res.status(403).json({ error: 'Could not determine your faction from this key' });
         const { factionId, playerId, name: playerName, factionName, daysInFaction } = profile;
 
+        // Lets the userscript flag a newer version without doing its own raw GET-and-regex fetch of the
+        // live .user.js file, which needs a GET-capable bridge TornPDA's script manager doesn't provide
+        // (only a POST one) — that's why version-flagging only ever worked on a computer before. Reading
+        // the same on-disk file the /worldwidelabs.user.js download itself serves (see the GET handler
+        // above) keeps this as the one source of truth, nothing to remember to keep in sync by hand.
+        if (action === 'script-version') {
+            const src = require('fs').readFileSync(require('path').join(process.cwd(), 'userscripts', 'energy-plan.user.js'), 'utf8');
+            const m = /@version\s+([\d.]+)/.exec(src);
+            return res.status(200).json({ version: m ? m[1] : null });
+        }
+
         // Open to any logged-in member of the faction, not leader-gated — this is what lets the
         // faction dashboard show the latest war's badge winners to everyone, not just leaders.
         if (action === 'get-latest-badges') {

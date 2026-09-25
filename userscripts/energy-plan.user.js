@@ -2,7 +2,7 @@
 // @name         World Wide Labs
 // @namespace    https://worldwidelabs.vercel.app
 // @author       CreaLotte
-// @version      1.29
+// @version      1.30
 // @updateURL    __WWL_BASE__/worldwidelabs.user.js
 // @downloadURL  __WWL_BASE__/worldwidelabs.user.js
 // @description  Shows your WorldWideLabs weekly energy plan (the checklist from the Energy planner) inside Torn, a To do tab with small personal reminders (revive setting, feedback, timezone map, availability, Discord/Intel/CAT), your My Targets list, a simplified energy/war standing strip, and — if you are in the Mentoring Platform — your mentoring checklist too. Also shows faction banners at the top of every Torn page. A small ⚙ in the header shows the installed version, flags when a newer one is out, lets you set/replace your API key, and — for a leader — add or remove your faction's banners right from Torn. On a computer it is a small window you can drag around and close; in TornPDA it is a menu. Ticks are shared with the WWL site.
@@ -26,7 +26,7 @@
     const KEY_NAME = 'wwl_api_key', POS_NAME = 'wwl_plan_pos', STATE_NAME = 'wwl_plan_state';
     // GM_info gives the version Tampermonkey actually has installed right now — falls back to a
     // hardcoded copy (kept in sync with @version above) for TornPDA, which doesn't grant GM_info.
-    const SCRIPT_VERSION = (typeof GM_info !== 'undefined' && GM_info.script?.version) || '1.29';
+    const SCRIPT_VERSION = (typeof GM_info !== 'undefined' && GM_info.script?.version) || '1.30';
     const versionGreater = (a, b) => {
         const pa = String(a).split('.').map(Number), pb = String(b).split('.').map(Number);
         for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
@@ -478,9 +478,13 @@
     }
 
     // Tampermonkey's own @updateURL check only runs on its own schedule in the background and never
-    // surfaces anything inside the script itself. This flags a newer version proactively (checked
-    // every ~6 hours) by reading the live file's own @version line — actually applying the update
-    // still needs Tampermonkey (or the install link), this just makes it visible sooner.
+    // surfaces anything inside the script itself. This flags a newer version proactively (checked every
+    // ~6 hours) via the 'script-version' action, which reads the live file's own @version line
+    // server-side — actually applying the update still needs Tampermonkey (or the install link), this
+    // just makes it visible sooner. Goes through the same api()/post() every other call already uses
+    // (GM_xmlhttpRequest on a computer, PDA_httpPost on TornPDA), unlike the raw GET-and-regex fetch this
+    // used to do, which only worked on a computer — TornPDA's script manager has no GET-capable bridge,
+    // only a POST one, so version-flagging silently never happened there at all.
     const UPDATE_CHECK_NAME = 'wwl_update_check';
     function markUpdateAvailable(v) {
         updateAvailable = v;
@@ -490,17 +494,11 @@
     }
     let updateCached = null; try { updateCached = JSON.parse(store.get(UPDATE_CHECK_NAME) || 'null'); } catch (e) { /* none */ }
     if (updateCached?.remote && versionGreater(updateCached.remote, SCRIPT_VERSION)) markUpdateAvailable(updateCached.remote);
-    if (!IS_PDA && typeof GM_xmlhttpRequest === 'function' && !(updateCached && Date.now() - updateCached.at < 6 * 3600000)) {
-        GM_xmlhttpRequest({
-            method: 'GET', url: `${WWL}/worldwidelabs.user.js`, timeout: 15000,
-            onload: r => {
-                const m = /@version\s+([\d.]+)/.exec(r.responseText);
-                const remote = m ? m[1] : null;
-                store.set(UPDATE_CHECK_NAME, JSON.stringify({ at: Date.now(), remote }));
-                if (remote && versionGreater(remote, SCRIPT_VERSION)) markUpdateAvailable(remote);
-            },
-            onerror: () => {}, ontimeout: () => {},
-        });
+    if (getKey() && !(updateCached && Date.now() - updateCached.at < 6 * 3600000)) {
+        api({ action: 'script-version' }).then(r => {
+            store.set(UPDATE_CHECK_NAME, JSON.stringify({ at: Date.now(), remote: r.version }));
+            if (r.version && versionGreater(r.version, SCRIPT_VERSION)) markUpdateAvailable(r.version);
+        }).catch(() => {});
     }
 
     // ---- Torn-wide banners: the same ones a leader sets in Leader settings → Banners on the WWL
