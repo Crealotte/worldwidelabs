@@ -981,6 +981,18 @@ module.exports = async function handler(req, res) {
             return res.status(200).json({ sent: true, mentioned: mentions.length, noDiscord, messages: chunks.length });
         }
 
+        // Who hasn't answered the live feedback form yet — the same list feedback-ping (below) mentions,
+        // shown as its own chip list on the feedback editor page (mirrors availability's "who's missing" view).
+        if (action === 'feedback-missing') {
+            const formRaw = await redis(['GET', `wwl:feedback-form:${factionId}`]);
+            const form = formRaw ? JSON.parse(formRaw) : null;
+            if (form?.mode !== 'native') return res.status(200).json({ missing: [], total: 0 });
+            const respondedIds = new Set((await redis(['HKEYS', `wwl:feedback-responses:${factionId}`])) || []);
+            const roster = await getRoster(key);
+            const missing = roster.filter(m => !respondedIds.has(m.id));
+            return res.status(200).json({ missing, total: roster.length });
+        }
+
         // Posts an @mention reminder to Discord for every member who hasn't answered the feedback form
         // yet. Same target-resolution and chunking pattern as availability-ping just above, against the
         // feedback-responses hash instead of a plan's entries — and posted to this faction's 'feedback'

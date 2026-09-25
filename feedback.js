@@ -18,6 +18,15 @@ async function fbFetch(body) {
     const text = await res.text();
     try { return JSON.parse(text); } catch (e) { return { error: `Server problem (${res.status})` }; }
 }
+// The feedback ping and missing-members list live in api/war-payout.js (next to availability-ping,
+// same target-resolution code) rather than api/feedback-form.js, so they go through this instead of
+// fbFetch — which was the actual bug behind "ping who's missing" always failing: it was posting to
+// the wrong endpoint entirely, one that has no feedback-ping action at all.
+async function wpFetch(body) {
+    const res = await fetch('/api/war-payout', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key: apiKey, ...body }) });
+    const text = await res.text();
+    try { return JSON.parse(text); } catch (e) { return { error: `Server problem (${res.status})` }; }
+}
 
 // ============================================================================================
 // ===================================  PUBLIC PAGE  =========================================
@@ -256,6 +265,10 @@ async function loadFeedbackEditor() {
     try {
         const data = await fbFetch({ action: 'read' });
         const form = data?.form;
+        // Closed once a form is live, so Responses (below) is what you see while it's running —
+        // opens itself back up once the form is cleared, since there's then something to build.
+        $('fb-editor-details').open = !form;
+        $('fb-editor-summary').textContent = form ? 'Build / edit the form (a form is currently live)' : 'Build / edit the form';
         if (form?.mode === 'google') {
             setFbMode('google');
             $('fb-title-input-g').value = form.title || '';
@@ -371,12 +384,24 @@ function fbFmtAnswer(v) {
     return v;
 }
 
+// Who hasn't answered yet, as chips — same idea as availability's "who's missing" view. Loaded
+// alongside the responses themselves; wpFetch since this lives in api/war-payout.js, not feedback-form.js.
+async function loadFbMissing() {
+    const r = await wpFetch({ action: 'feedback-missing' });
+    const el = $('fb-missing-body');
+    if (r.error || !r.total) { el.innerHTML = ''; return; }
+    el.innerHTML = r.missing.length
+        ? `<div style="font-weight:700;margin-bottom:6px;font-size:13px;">⏳ Not answered yet (${r.missing.length} of ${r.total})</div>
+           <div style="display:flex;flex-wrap:wrap;gap:6px;">${r.missing.map(m => `<span class="chip" style="cursor:default;">${esc(m.name)}</span>`).join('')}</div>`
+        : `<div style="color:var(--reagent);font-size:13px;">✅ Everyone (${r.total}) has answered.</div>`;
+}
 async function loadFbResponses(isNative) {
     if (!isNative) { $('fb-responses-panel').style.display = 'none'; return; }
     const r = await fbFetch({ action: 'responses' });
     if (r.error) { $('fb-responses-panel').style.display = 'none'; return; }
     fbResponses = r;
     $('fb-responses-panel').style.display = 'block';
+    loadFbMissing();
     const when = ts => new Date(ts).toLocaleString();
     const mentioned = Object.entries(r.listFreq || {}).filter(([, list]) => list.length);
     $('fb-responses-body').innerHTML = (mentioned.length ? `<div style="margin-bottom:14px;">${mentioned.map(([qid, list]) => {
@@ -407,7 +432,7 @@ $('fb-ping-btn').addEventListener('click', async () => {
     const message = prompt('Message to post on Discord (mentions everyone who hasn\'t answered yet):', 'Your opinion is very important, please fill in this form!');
     if (message === null) return;
     try {
-        const r = await fbFetch({ action: 'feedback-ping', message });
+        const r = await wpFetch({ action: 'feedback-ping', message });
         if (r.error) throw new Error(r.error);
         const skipped = r.noDiscord?.length ? ` Couldn't @ ${r.noDiscord.length} with no verified Discord: ${r.noDiscord.join(', ')}.` : '';
         if (r.sent) toast(`Posted to Discord — ${r.mentioned} @mentioned.${skipped}`);

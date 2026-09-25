@@ -930,6 +930,10 @@
             </div>
 
             <div class="panel" id="feedback-editor" style="display:none;">
+                <!-- Closed by default once a form is live (loadFeedbackEditor sets `open`), so the
+                     Responses panel below is what you see first while it's running, not the builder. -->
+                <details id="fb-editor-details" open>
+                <summary id="fb-editor-summary" style="cursor:pointer;font-weight:700;margin-bottom:12px;">Build / edit the form</summary>
                 <div style="display:flex;gap:8px;margin-bottom:16px;">
                     <button class="ghost small" id="fb-mode-native">📝 Build a form here</button>
                     <button class="ghost small" id="fb-mode-google">🔗 Link a Google Form instead</button>
@@ -974,6 +978,7 @@
                     <button class="ghost" id="fb-clear">Clear</button>
                 </div>
                 <div class="status" id="fb-editor-status"></div>
+                </details>
             </div>
 
             <div class="panel" id="fb-responses-panel" style="display:none;margin-top:16px;">
@@ -982,6 +987,7 @@
                     <button class="ghost small" id="fb-ping-btn" style="margin-left:auto;">📣 Ping who's missing</button>
                     <button class="ghost small" id="fb-responses-copy">📋 Copy all responses</button>
                 </div>
+                <div id="fb-missing-body" style="margin-bottom:14px;"></div>
                 <div id="fb-responses-body"></div>
             </div>
         </section>
