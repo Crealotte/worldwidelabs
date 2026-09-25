@@ -2,7 +2,7 @@
 // @name         World Wide Labs
 // @namespace    https://worldwidelabs.vercel.app
 // @author       CreaLotte
-// @version      1.32
+// @version      1.33
 // @updateURL    __WWL_BASE__/worldwidelabs.user.js
 // @downloadURL  __WWL_BASE__/worldwidelabs.user.js
 // @description  Shows your WorldWideLabs weekly energy plan (the checklist from the Energy planner) inside Torn, a To do tab with small personal reminders (revive setting, feedback, timezone map, availability, Discord/Intel/CAT), your My Targets list, a simplified energy/war standing strip, and — if you are in the Mentoring Platform — your mentoring checklist too. Also shows faction banners at the top of every Torn page. A small ⚙ in the header shows the installed version, flags when a newer one is out, lets you set/replace your API key, and — for a leader — add or remove your faction's banners right from Torn. On a computer it is a small window you can drag around and close; in TornPDA it is a menu. Ticks are shared with the WWL site.
@@ -26,7 +26,7 @@
     const KEY_NAME = 'wwl_api_key', POS_NAME = 'wwl_plan_pos', STATE_NAME = 'wwl_plan_state';
     // GM_info gives the version Tampermonkey actually has installed right now — falls back to a
     // hardcoded copy (kept in sync with @version above) for TornPDA, which doesn't grant GM_info.
-    const SCRIPT_VERSION = (typeof GM_info !== 'undefined' && GM_info.script?.version) || '1.32';
+    const SCRIPT_VERSION = (typeof GM_info !== 'undefined' && GM_info.script?.version) || '1.33';
     const versionGreater = (a, b) => {
         const pa = String(a).split('.').map(Number), pb = String(b).split('.').map(Number);
         for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
@@ -155,20 +155,24 @@
         window.addEventListener('resize', () => { if (win.style.display !== 'none') place(win.offsetLeft, win.offsetTop); });
     }
 
-    // While the window sits open, nothing was re-checking Torn for these — a member could change their
-    // revive setting and stare at a stale to-do list indefinitely with no idea a reload was needed.
-    // Re-fetches just the to-do items (not the whole plan) every 15s while open, stops the moment it closes.
-    let todoRefreshTimer = null;
-    async function refreshTodoItems() {
+    // A member can change a setting (e.g. revive) in another tab and come back to a stale to-do list. This
+    // used to poll every 15s while the window was open — but the window stays open across every Torn page,
+    // so each member made ~4 server calls a minute all day, and together that burned through the whole
+    // database's monthly request quota. Now it only re-checks when there's a reason to: you come back to
+    // this tab, or click into the To do tab — and never more than once every 30s.
+    let lastTodoFetch = Date.now();
+    async function refreshTodoItems(force = false) {
+        if (win.style.display === 'none' || (!force && Date.now() - lastTodoFetch < 30000)) return;
+        lastTodoFetch = Date.now();
         try { const r = await api({ action: 'member-todo' }); todoItems = r.items || []; if (tab === 'todo') render(); }
         catch (e) { /* keep showing what we already had */ }
     }
+    document.addEventListener('visibilitychange', () => { if (!document.hidden) refreshTodoItems(); });
     function setOpen(on, save = true) {
         win.style.display = on ? 'flex' : 'none';
         pill.style.display = on ? 'none' : 'flex';
         if (save) store.set(STATE_NAME, on ? 'open' : 'closed');
-        clearInterval(todoRefreshTimer);
-        if (on) { if (!IS_PDA) restorePos(); load(); todoRefreshTimer = setInterval(refreshTodoItems, 15000); }
+        if (on) { if (!IS_PDA) restorePos(); lastTodoFetch = Date.now(); load(); }
     }
     pill.addEventListener('click', () => setOpen(true));
     win.querySelector('#wwl-close').addEventListener('click', () => setOpen(false));
@@ -218,7 +222,11 @@
         ).join('')}</div>`;
     }
     function wireTabs() {
-        body.parentElement.querySelectorAll('.wwl-tab').forEach(b => b.addEventListener('click', () => { tab = lastTab = b.dataset.tab; render(); }));
+        body.parentElement.querySelectorAll('.wwl-tab').forEach(b => b.addEventListener('click', () => {
+            tab = lastTab = b.dataset.tab; render();
+            if (tab === 'todo') refreshTodoItems();
+            if (tab === 'targets') loadTargets();
+        }));
     }
     function renderEnergyTab() {
         const footer = `<div style="margin-top:10px;padding-top:8px;border-top:1px solid #3a4352;color:#9aa4b5;">To change your settings (stat, method, candy, cans, refill), use the planner on the tool itself: <a href="${WWL}/energy" target="_blank" rel="noopener" style="color:#35d99b;">${esc(WWL)}/energy</a></div>`;
@@ -269,10 +277,23 @@
         }).join('');
         return `<div style="display:flex;justify-content:flex-end;margin-bottom:6px;"><button type="button" id="wwl-targets-refresh" style="padding:3px 8px;border-radius:6px;border:1px solid #3a4352;background:transparent;color:#9aa4b5;cursor:pointer;font-size:11px;">🔄 Refresh status</button></div>${rows}`;
     }
+    // Targets cost real database + Torn calls (one Torn lookup per target whose status isn't fresh), so
+    // nothing here runs until the Targets tab is actually opened — it used to load on every single
+    // window open, which added up fast across a whole faction.
+    let targetsFetchedAt = 0;
     async function refreshTargetStatus() {
         if (!myTargets?.length) return;
+        targetsFetchedAt = Date.now();
         try { const r = await api({ action: 'target-status', ids: myTargets.map(t => t.id) }); targetStatus = r.status || {}; } catch (e) { /* keep showing what we had */ }
         if (tab === 'targets') render();
+    }
+    async function loadTargets() {
+        if (myTargets === null) {
+            try { myTargets = (await api({ action: 'mytargets-get' })).targets || []; } catch (e) { myTargets = []; }
+            if (tab === 'targets') render();
+            return refreshTargetStatus();
+        }
+        if (Date.now() - targetsFetchedAt > 60000) return refreshTargetStatus(); // statuses go stale fast, but not that fast
     }
     // The mentoring to-dos: one section per pairing (a mentor with several pupils gets one each), each ticked
     // separately — same shared checklist the WWL page itself shows, just without the chat (open the site for that).
@@ -431,20 +452,22 @@
     async function load() {
         body.innerHTML = '<div style="padding:6px 0;color:#9aa4b5;">Loading…</div>';
         try {
-            const [planR, mtR, todoR, standingR, myTargetsR] = await Promise.all([
+            // The standing numbers (energy trained this month, wars) only move about once a day, so they're
+            // kept locally for 30 minutes rather than fetched on every window open / page load.
+            let standingCached = null; try { standingCached = JSON.parse(store.get('wwl_standing_cache') || 'null'); } catch (e) { /* none */ }
+            const standingFresh = standingCached && Date.now() - standingCached.at < 30 * 60000;
+            const [planR, mtR, todoR, standingR] = await Promise.all([
                 api({ action: 'plan-get' }),
                 api({ action: 'mentor-my-status' }).catch(() => null), // fine if this member isn't in the program at all
                 api({ action: 'member-todo' }).catch(() => null),
-                api({ action: 'mo-me' }).catch(() => null), // the standing strip — fine if it fails, the strip just stays blank
-                api({ action: 'mytargets-get' }).catch(() => null),
+                standingFresh ? Promise.resolve(standingCached.data) : api({ action: 'mo-me' }).catch(() => null), // the standing strip — fine if it fails, the strip just stays blank
             ]);
             plan = planR.plan; store.set('wwl_plan_cache', JSON.stringify({ at: Date.now(), plan }));
             mtPairs = mtR?.pairs || []; mtTodos = mtR?.todos || [];
             todoItems = todoR?.items || [];
             standing = standingR;
-            myTargets = myTargetsR?.targets || [];
+            if (standingR && !standingFresh) store.set('wwl_standing_cache', JSON.stringify({ at: Date.now(), data: standingR }));
             render();
-            refreshTargetStatus(); // separate round trip (per-target Torn lookups) so it doesn't hold up everything else
         } catch (e) {
             if (e.message === 'NO_KEY') {
                 body.innerHTML = `<div style="padding:6px 0;color:#9aa4b5;">No API key set yet.</div>
@@ -512,7 +535,7 @@
     // ---- Torn-wide banners: the same ones a leader sets in Leader settings → Banners on the WWL
     // site, shown here too since faction messages posted in Torn's own event feed get lost. Inserted
     // in normal document flow (not a fixed overlay) at the very top of the page, so it pushes Torn's
-    // own content down rather than risking covering anything. Re-checked every ~3 minutes, or right
+    // own content down rather than risking covering anything. Re-checked every ~10 minutes, or right
     // away if it was ⚙ Settings that just changed one (see refreshTornBanners below).
     const BAN_DISMISS_NAME = 'wwl_tornban_dismissed'; // { bannerId: hash of its text }
     const banHash = s => { let h = 0; for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0; return String(h); };
@@ -589,7 +612,7 @@
     }
     let banCached = null; try { banCached = JSON.parse(store.get(BAN_CACHE_NAME) || 'null'); } catch (e) { /* none */ }
     if (banCached?.banners) { banList = banCached.banners; renderTornBanner(); }
-    // Trimmed from 10 minutes to 3 — a banner added from the site (rather than ⚙ Settings, which now
-    // refreshes this immediately either way) could otherwise still look "missing" for a while yet.
-    if (!(banCached && Date.now() - banCached.at < 180000)) refreshTornBanners();
+    // 10 minutes: every Torn page load of every member goes through here, so shortening it multiplies
+    // database calls across the whole faction. ⚙ Settings refreshes it immediately when a leader changes one.
+    if (!(banCached && Date.now() - banCached.at < 600000)) refreshTornBanners();
 })();
