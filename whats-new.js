@@ -277,19 +277,31 @@ const WHATS_NEW = [
 
 const wnFmtDate = d => new Date(`${d}T12:00:00Z`).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' });
 
-// ---- which version was last posted in Discord (per browser) ----
-const WN_POSTED_KEY = 'wwl_whatsnew_posted';
+// ---- which version was last posted in Discord — one shared, faction-wide fact on the server, not
+// localStorage (that was per-browser, so different leaders on different devices each had their own
+// independent "posted up to" marker instead of one everyone agreed on). ----
 const WN_POSTED_DEFAULT = '1.13'; // what the owner had already posted in Discord (up to v1.13); a leader can move it with "Mark posted up to here"
-const wnPostedIndex = () => { // index in WHATS_NEW of the newest version already posted, -1 = none
-    let v = null;
-    try { v = localStorage.getItem(WN_POSTED_KEY); } catch (e) { /* none */ }
-    if (!v) v = WN_POSTED_DEFAULT;
-    return WHATS_NEW.findIndex(e => e.version === v);
-};
-function wnSetPosted(version) { try { localStorage.setItem(WN_POSTED_KEY, version); } catch (e) { /* not critical */ } }
+let wnPostedVersion = null; // filled in by wnEnsurePosted() the first time the page renders
+let wnPostedRequested = false;
+async function wnEnsurePosted() {
+    if (wnPostedRequested) return;
+    wnPostedRequested = true;
+    try {
+        const res = await fetch('/api/war-payout', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key: apiKey, action: 'whatsnew-posted-get' }) });
+        const d = await res.json();
+        wnPostedVersion = d.posted || WN_POSTED_DEFAULT;
+    } catch (e) { wnPostedVersion = WN_POSTED_DEFAULT; }
+    renderWhatsNew(); // re-render now that the real value (rather than the fallback default) is known
+}
+const wnPostedIndex = () => WHATS_NEW.findIndex(e => e.version === (wnPostedVersion || WN_POSTED_DEFAULT)); // index of the newest version already posted, -1 = none
+function wnSetPosted(version) {
+    wnPostedVersion = version; // reflected locally right away; the save below is best-effort
+    fetch('/api/war-payout', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key: apiKey, action: 'whatsnew-posted-set', version }) }).catch(() => {});
+}
 
 function renderWhatsNew() {
     markWhatsNewSeen(); // opening the page counts as having seen the latest update
+    wnEnsurePosted(); // fires once; re-renders itself when the real "posted" value comes back
     const leader = typeof isLeaderCached !== 'undefined' && isLeaderCached;
     const posted = wnPostedIndex();
     $('wn-leader-tools').style.display = leader ? 'block' : 'none';
@@ -365,6 +377,50 @@ $('wn-big-new').addEventListener('click', () => renderWnBig(wnBigPost(false, tru
 $('wn-big-new-leaders').addEventListener('click', () => renderWnBig(wnBigPost(true, true), 'Post for leaders — only what is new since the last posted version'));
 $('wn-big-all').addEventListener('click', () => renderWnBig(wnBigPost(false, false), 'Post for everyone — all versions'));
 $('wn-big-leaders').addEventListener('click', () => renderWnBig(wnBigPost(true, false), 'Post for leaders — all versions'));
+
+// ---- posting straight to Discord as embeds instead of copy-paste text — an embed description allows
+// ~4096 characters (vs. 2000 for a normal message), which is what actually fixes a long version's
+// bullets being too big to paste as plain text. One embed per version; batched to stay under Discord's
+// 10-embeds/6000-characters-per-message caps (wnBatchEmbeds), same "only what's new" logic as the
+// copy-paste flow above (wnBigPost) — just building embed objects instead of markdown lines.
+function wnBuildEmbeds(includeLeaders, onlyNew) {
+    const posted = wnPostedIndex();
+    const from = onlyNew && posted >= 0 ? posted : WHATS_NEW.length;
+    return WHATS_NEW.slice(0, from).map(e => {
+        const mine = [...(e.everyone || []).map(t => `• ${t}`), ...(includeLeaders ? (e.leaders || []).map(t => `• 🔒 (leaders) ${t}`) : [])];
+        return mine.length ? { title: `v${e.version} — ${e.title}`, description: mine.join('\n'), color: 0x35d99b } : null;
+    }).filter(Boolean);
+}
+function wnBatchEmbeds(embeds) {
+    const batches = []; let cur = [], curLen = 0;
+    for (const e of embeds) {
+        const len = e.title.length + e.description.length;
+        if (cur.length && (cur.length >= 10 || curLen + len > 5900)) { batches.push(cur); cur = []; curLen = 0; }
+        cur.push(e); curLen += len;
+    }
+    if (cur.length) batches.push(cur);
+    return batches;
+}
+async function wnSendToDiscord(includeLeaders) {
+    const embeds = wnBuildEmbeds(includeLeaders, true);
+    if (!embeds.length) { toast('Nothing new to post — everything is already marked as posted.'); return; }
+    const batches = wnBatchEmbeds(embeds);
+    const st = $('wn-send-status');
+    st.textContent = `Sending ${batches.length} message${batches.length === 1 ? '' : 's'}…`;
+    try {
+        for (const batch of batches) {
+            const res = await fetch('/api/war-payout', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key: apiKey, action: 'whatsnew-post', embeds: batch }) });
+            const d = await res.json();
+            if (d.error) throw new Error(d.error);
+        }
+        wnSetPosted(WHATS_NEW[0].version);
+        st.textContent = '';
+        toast(`Posted to Discord (${batches.length} message${batches.length === 1 ? '' : 's'})`);
+        renderWhatsNew();
+    } catch (e) { st.textContent = ''; toast(`Couldn't post to Discord: ${e.message}`); }
+}
+$('wn-send-new').addEventListener('click', () => wnSendToDiscord(false));
+$('wn-send-new-leaders').addEventListener('click', () => wnSendToDiscord(true));
 
 // ---- "something new" marker on the sidebar item -------------------------------------------------
 // The item turns bold (with a dot) when the newest update this person can see hasn't been opened yet.

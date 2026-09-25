@@ -124,6 +124,11 @@ function renderFbNative(form, mine, results) {
     const liveIds = new Set(form.questions.map(q => q.id));
     for (const id of Object.keys(fbListState)) if (!liveIds.has(id)) delete fbListState[id];
 
+    // Open by default until answered, then collapsed — so the results below aren't buried under a form
+    // you've already filled in. Re-opens itself if you click in to change your answer (see fb-native-submit).
+    $('fb-native-details').open = !mine;
+    $('fb-native-summary').textContent = mine ? '✓ You answered this — click to change your answer' : 'Fill in the form';
+
     $('fb-native-desc-panel').style.display = form.description ? 'block' : 'none';
     $('fb-native-desc').textContent = form.description || '';
     $('fb-native-questions').innerHTML = form.questions.map((q, i) => `
@@ -393,4 +398,22 @@ $('fb-responses-copy').addEventListener('click', async () => {
             fbResponses.form.questions.map(q => row.answers[q.id] !== undefined ? `  ${q.text}: ${fbFmtAnswer(row.answers[q.id])}` : '').filter(Boolean).join('\n')
         ).join('\n\n');
     try { await navigator.clipboard.writeText(text); toast('Copied — paste it wherever you need it'); } catch (e) { toast('Could not copy — try again'); }
+});
+// @mentions everyone who hasn't answered yet, posted to this faction's 'feedback' Discord destination
+// (see Leader settings → Discord settings) — same target-resolution the server does for availability
+// pings, just against who has answered the form. Falls back to a copy-paste message if that channel
+// isn't set up, or if nobody could be @mentioned.
+$('fb-ping-btn').addEventListener('click', async () => {
+    const message = prompt('Message to post on Discord (mentions everyone who hasn\'t answered yet):', 'Your opinion is very important, please fill in this form!');
+    if (message === null) return;
+    try {
+        const r = await fbFetch({ action: 'feedback-ping', message });
+        if (r.error) throw new Error(r.error);
+        const skipped = r.noDiscord?.length ? ` Couldn't @ ${r.noDiscord.length} with no verified Discord: ${r.noDiscord.join(', ')}.` : '';
+        if (r.sent) toast(`Posted to Discord — ${r.mentioned} @mentioned.${skipped}`);
+        else if (r.text) {
+            await navigator.clipboard.writeText(r.text).catch(() => {});
+            toast(`${r.configured ? '' : 'Feedback Discord channel isn\'t set up yet (see Discord settings under Leader settings) — '}message copied instead, paste it into Discord.${skipped}`);
+        }
+    } catch (e) { toast(`Couldn't send that: ${e.message}`); }
 });

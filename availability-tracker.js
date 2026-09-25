@@ -252,15 +252,22 @@ function renderAvOd() {
     $('av-od-refresh')?.addEventListener('click', () => scanAvOd());
 }
 
-// Leader-only: this faction's own Discord destination for pings. A faction on the shared server
-// saves a channel ID (the bot posts there); any faction can instead save a webhook URL.
-async function loadAvDiscord() {
+// Leader-only: this faction's own Discord destination(s). A faction on the shared server saves a
+// channel ID (the bot posts there); any faction can instead save a webhook URL. Three named kinds
+// share this one panel (buttons in index.html toggle avDiscordKind) — 'feedback' and 'whatsnew' fall
+// back to 'default' until a leader gives them their own destination (discord-settings-get says so via
+// `usingDefault`).
+let avDiscordKind = 'default';
+const AV_DC_LABELS = { default: 'Availability pings', feedback: 'Feedback reminders', whatsnew: "What's new posts" };
+async function loadAvDiscord(kind = avDiscordKind) {
+    avDiscordKind = kind;
+    document.querySelectorAll('.dc-kind-btn').forEach(b => b.style.background = b.dataset.kind === kind ? 'var(--bench-2)' : '');
     const el = $('av-discord-body');
     try {
-        const s = await avFetch({ action: 'discord-settings-get' });
+        const s = await avFetch({ action: 'discord-settings-get', kind });
         if (s.error) throw new Error(s.error);
         el.innerHTML = `
-            <div style="font-size:12px;color:var(--muted);margin-bottom:10px;">Your faction ID: <b>${esc(s.factionId)}</b></div>
+            <div style="font-size:12px;color:var(--muted);margin-bottom:10px;">Your faction ID: <b>${esc(s.factionId)}</b>${s.usingDefault ? ` · <span style="color:var(--muted);">no destination of its own yet — falling back to Availability pings' channel</span>` : ''}</div>
             ${s.shared ? `
             <div class="field" style="max-width:420px;">
                 <label for="av-dc-channel">Discord channel ID (the WorldWideLabs bot posts here)</label>
@@ -281,7 +288,7 @@ async function loadAvDiscord() {
             <p style="font-size:11px;color:var(--muted);margin:10px 0 0;">@mentions work for members who've linked their Discord on Torn (the same link verification bots use). Anyone without one is skipped, and you're told who.</p>`;
 
         const save = async (extra = {}) => {
-            const body = { action: 'discord-settings-set', ...extra };
+            const body = { action: 'discord-settings-set', kind, ...extra };
             if ($('av-dc-channel')) body.channelId = $('av-dc-channel').value;
             const wh = $('av-dc-webhook').value.trim();
             if (wh) body.webhookUrl = wh;
@@ -289,24 +296,25 @@ async function loadAvDiscord() {
             if (r.error) throw new Error(r.error);
         };
         $('av-dc-save').addEventListener('click', async () => {
-            try { await save(); toast('Discord settings saved'); loadAvDiscord(); } catch (e) { toast(e.message); }
+            try { await save(); toast(`${AV_DC_LABELS[kind]}: Discord settings saved`); loadAvDiscord(kind); } catch (e) { toast(e.message); }
         });
         $('av-dc-test').addEventListener('click', async () => {
             try {
                 await save(); // save whatever's typed first, so "test" tests what you see
-                const r = await avFetch({ action: 'discord-settings-test' });
+                const r = await avFetch({ action: 'discord-settings-test', kind });
                 if (r.error) throw new Error(r.error);
                 toast('Test message sent — check the channel');
-                loadAvDiscord();
+                loadAvDiscord(kind);
             } catch (e) { toast(e.message); }
         });
         $('av-dc-clear')?.addEventListener('click', async () => {
-            try { await save({ clearWebhook: true }); toast('Webhook removed'); loadAvDiscord(); } catch (e) { toast(e.message); }
+            try { await save({ clearWebhook: true }); toast('Webhook removed'); loadAvDiscord(kind); } catch (e) { toast(e.message); }
         });
     } catch (e) {
         el.innerHTML = `<p style="color:var(--danger);font-size:13px;">Couldn't load Discord settings: ${esc(e.message)}</p>`;
     }
 }
+document.querySelectorAll('.dc-kind-btn').forEach(b => b.addEventListener('click', () => loadAvDiscord(b.dataset.kind)));
 
 // Matched/upcoming ranked wars for the "link to war" picker in the start form (leaders only).
 async function loadAvWars() {

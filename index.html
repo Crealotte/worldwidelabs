@@ -879,16 +879,25 @@
                 <p style="color:var(--muted);margin:0;">No open form right now — check back soon.</p>
             </div>
 
-            <!-- a form built into WWL itself — one card per question, like Google Forms -->
+            <!-- a form built into WWL itself — one card per question, like Google Forms. The whole thing lives
+                 in one <details>, open by default until you've answered, then closed so the results (below,
+                 always visible) aren't buried under a form you've already filled in. -->
             <div id="fb-native" style="display:none;">
-                <div class="panel" id="fb-native-desc-panel" style="display:none;">
-                    <p id="fb-native-desc" style="color:var(--muted);margin:0;"></p>
-                </div>
-                <div id="fb-native-questions" class="wrap-text"></div>
-                <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin:4px 0 20px;">
-                    <button class="ghost" id="fb-native-submit">Submit</button>
-                    <span id="fb-native-savednote" style="display:none;color:var(--muted);font-size:12px;">You already answered this — submitting again replaces your answer.</span>
-                </div>
+                <details id="fb-native-details" class="panel">
+                    <summary id="fb-native-summary" style="cursor:pointer;font-weight:700;">Fill in the form</summary>
+                    <div style="margin-top:12px;">
+                        <div id="fb-native-desc-panel" style="display:none;margin-bottom:14px;">
+                            <p id="fb-native-desc" style="color:var(--muted);margin:0;"></p>
+                        </div>
+                        <div id="fb-native-questions" class="wrap-text"></div>
+                        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin:4px 0 4px;">
+                            <button class="ghost" id="fb-native-submit">Submit</button>
+                            <span id="fb-native-savednote" style="display:none;color:var(--muted);font-size:12px;">You already answered this — submitting again replaces your answer.</span>
+                        </div>
+                    </div>
+                </details>
+                <!-- outside the <details> on purpose: a successful-submit confirmation would otherwise vanish
+                     the instant the panel auto-collapses right after saving. -->
                 <div class="status" id="fb-native-status"></div>
                 <div id="fb-native-results-panel" style="display:none;margin-top:16px;">
                     <h3>Results so far</h3>
@@ -968,9 +977,10 @@
             </div>
 
             <div class="panel" id="fb-responses-panel" style="display:none;margin-top:16px;">
-                <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">
+                <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;flex-wrap:wrap;">
                     <h3 style="margin:0;">Responses</h3>
-                    <button class="ghost small" id="fb-responses-copy" style="margin-left:auto;">📋 Copy all responses</button>
+                    <button class="ghost small" id="fb-ping-btn" style="margin-left:auto;">📣 Ping who's missing</button>
+                    <button class="ghost small" id="fb-responses-copy">📋 Copy all responses</button>
                 </div>
                 <div id="fb-responses-body"></div>
             </div>
@@ -1503,8 +1513,13 @@
                 <h3 style="margin:0 0 6px;">Post in Discord</h3>
                 <div id="wn-posted-note" style="font-size:13px;color:var(--muted);margin-bottom:10px;"></div>
                 <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:6px;">
-                    <button class="ghost small" id="wn-big-new">📋 Post what's new — for everyone</button>
-                    <button class="ghost small" id="wn-big-new-leaders">📋 Post what's new — for leaders</button>
+                    <button class="ghost small" id="wn-send-new">🚀 Send what's new to Discord — for everyone</button>
+                    <button class="ghost small" id="wn-send-new-leaders">🚀 Send what's new to Discord — for leaders</button>
+                </div>
+                <div style="font-size:11px;color:var(--muted);margin:0 0 10px;">Posts straight to the What's new channel (see Discord settings under Leader settings) as one embedded message — no character limit to fight with. Prefer to paste it yourself instead?</div>
+                <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:6px;">
+                    <button class="ghost small" id="wn-big-new">📋 Copy what's new — for everyone</button>
+                    <button class="ghost small" id="wn-big-new-leaders">📋 Copy what's new — for leaders</button>
                 </div>
                 <details><summary class="av-sum"><span style="font-size:12px;">Post all versions instead (from the start)</span></summary>
                     <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;">
@@ -1512,6 +1527,7 @@
                         <button class="ghost small" id="wn-big-leaders">📋 All versions — for leaders</button>
                     </div>
                 </details>
+                <div id="wn-send-status" style="font-size:12px;color:var(--muted);margin:6px 0;"></div>
                 <div id="wn-big"></div>
             </div>
             <div id="wn-list"></div>
@@ -1654,7 +1670,12 @@
             <div id="ls-body" style="display:none;">
             <div class="panel" id="av-discord-panel" style="display:none;">
                 <details open><summary class="av-sum"><h3>Discord settings</h3></summary>
-                <p style="color:var(--muted);font-size:12px;margin:0 0 10px;">Where <b>your faction's</b> war pings get posted — each faction sets its own, so factions using this app never post into each other's channels. Leaders/council only.</p>
+                <p style="color:var(--muted);font-size:12px;margin:0 0 10px;">Where <b>your faction's</b> messages get posted — each faction sets its own, so factions using this app never post into each other's channels. Feedback reminders and What's new posts fall back to the same channel as availability pings until you give them one of their own. Leaders/council only.</p>
+                <div style="display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap;">
+                    <button type="button" class="ghost small dc-kind-btn" data-kind="default">Availability pings</button>
+                    <button type="button" class="ghost small dc-kind-btn" data-kind="feedback">Feedback reminders</button>
+                    <button type="button" class="ghost small dc-kind-btn" data-kind="whatsnew">What's new posts</button>
+                </div>
                 <div id="av-discord-body"></div>
                 </details>
             </div>

@@ -149,21 +149,31 @@ function isSharedServerFaction(factionId) {
     return Object.keys(roleMap).includes(String(factionId)) || extra.includes(String(factionId));
 }
 
-// Resolves to { post(content, users) } for this faction, { error }, or null if not set up yet.
-async function getDiscordPoster(factionId) {
+// DISCORD_KINDS: the named destinations a faction can point at different channels. 'default' is the
+// original single destination (availability pings); 'feedback' and 'whatsnew' are separate so a leader
+// can, say, keep availability pings in a war channel but feedback nudges somewhere quieter.
+const DISCORD_KINDS = ['default', 'feedback', 'whatsnew'];
+// Resolves to { post(content, users, embeds?) } for this faction and kind, { error }, or null if
+// nothing is set up for it. Newer saves live under `channels`, one destination per kind; a kind with
+// no destination of its own falls back to 'default', and 'default' itself still understands the old
+// flat { webhookUrl, channelId } shape from before named channels existed, so nobody's existing setup
+// silently broke when this was added.
+async function getDiscordPoster(factionId, kind = 'default') {
     const raw = await redis(['GET', discordSettingsKey(factionId)]);
-    const s = raw ? JSON.parse(raw) : {};
+    const all = raw ? JSON.parse(raw) : {};
+    const legacy = (all.webhookUrl || all.channelId) ? { webhookUrl: all.webhookUrl, channelId: all.channelId } : null;
+    const s = all.channels?.[kind] || (kind === 'default' ? legacy : null) || all.channels?.default || legacy || {};
     if (s.webhookUrl) {
         if (!WEBHOOK_RE.test(s.webhookUrl)) return { error: 'The saved Discord webhook URL doesn\'t look valid — save it again in the Discord settings.' };
-        return { post: (content, users) => fetch(s.webhookUrl, {
+        return { post: (content, users, embeds) => fetch(s.webhookUrl, {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ content, username: 'WWLabs', allowed_mentions: { parse: [], users } }),
+            body: JSON.stringify({ content, username: 'WWLabs', allowed_mentions: { parse: [], users }, ...(embeds ? { embeds } : {}) }),
         }) };
     }
     if (s.channelId && isSharedServerFaction(factionId) && process.env.DISCORD_BOT_TOKEN) {
-        return { post: (content, users) => fetch(`https://discord.com/api/v10/channels/${encodeURIComponent(s.channelId)}/messages`, {
+        return { post: (content, users, embeds) => fetch(`https://discord.com/api/v10/channels/${encodeURIComponent(s.channelId)}/messages`, {
             method: 'POST', headers: { Authorization: `Bot ${process.env.DISCORD_BOT_TOKEN}`, 'Content-Type': 'application/json' },
-            body: JSON.stringify({ content, allowed_mentions: { parse: [], users } }),
+            body: JSON.stringify({ content, allowed_mentions: { parse: [], users }, ...(embeds ? { embeds } : {}) }),
         }) };
     }
     return null;
@@ -307,7 +317,20 @@ async function leaderTodos(key, factionId) {
         }
     } catch (e) { /* skip */ }
 
-    // 5. Steadfast: every stat has reached its challenge
+    // 5. feedback form: everyone has filled it in (same idea as the availability check above,
+    // just against the feedback-responses hash instead of a plan's entries)
+    try {
+        const formRaw = await redis(['GET', `wwl:feedback-form:${factionId}`]);
+        const form = formRaw ? JSON.parse(formRaw) : null;
+        if (form?.mode === 'native') {
+            const respondedIds = new Set((await redis(['HKEYS', `wwl:feedback-responses:${factionId}`])) || []);
+            const roster = await getRoster(key);
+            const missing = roster.filter(m => !respondedIds.has(m.id));
+            if (missing.length) add('feedback', `${missing.length} of ${roster.length} members have not filled in ${form.title ? `"${form.title}"` : 'the feedback form'} yet.`, 'See who and ping them', 'feedback-edit', 'fb-responses-panel');
+        }
+    } catch (e) { /* skip */ }
+
+    // 6. Steadfast: every stat has reached its challenge
     try {
         const sf = await steadfastHandle('steadfast-get', {}, { redis, key, factionId, leader: false });
         if (sf?.countdown?.allDone) add('steadfast', 'All the Steadfast challenges are done — time to upgrade.', 'Open the Steadfast planner', 'steadfast', null);
@@ -801,23 +824,32 @@ module.exports = async function handler(req, res) {
             return res.status(200).json({ map });
         }
 
-        // This faction's own Discord destination (see getDiscordPoster). Leader-only. The webhook
-        // URL is a secret — it's never sent back, only a hint of which webhook is saved.
+        // This faction's own Discord destination(s) (see getDiscordPoster). Leader-only. The webhook
+        // URL is a secret — it's never sent back, only a hint of which webhook is saved. `kind` picks
+        // which named destination to read/write ('default', 'feedback', 'whatsnew'); omitted = 'default'.
         if (action === 'discord-settings-get') {
+            const kind = DISCORD_KINDS.includes(req.body.kind) ? req.body.kind : 'default';
             const raw = await redis(['GET', discordSettingsKey(factionId)]);
-            const s = raw ? JSON.parse(raw) : {};
+            const all = raw ? JSON.parse(raw) : {};
+            const legacy = (all.webhookUrl || all.channelId) ? { webhookUrl: all.webhookUrl, channelId: all.channelId } : null;
+            const ownSetting = all.channels?.[kind] || (kind === 'default' ? legacy : null);
+            const s = ownSetting || {};
             return res.status(200).json({
-                factionId,
+                factionId, kind,
                 shared: isSharedServerFaction(factionId), // on the shared server -> the bot can post here
                 channelId: s.channelId || '',
                 webhookSet: !!s.webhookUrl,
                 webhookHint: s.webhookUrl ? `webhook …${s.webhookUrl.match(/\/webhooks\/(\d+)\//)?.[1]?.slice(-6) || ''}` : '',
+                usingDefault: kind !== 'default' && !ownSetting, // this kind has nothing of its own yet — falls back to 'default'
             });
         }
 
         if (action === 'discord-settings-set') {
+            const kind = DISCORD_KINDS.includes(req.body.kind) ? req.body.kind : 'default';
             const raw = await redis(['GET', discordSettingsKey(factionId)]);
-            const s = raw ? JSON.parse(raw) : {};
+            const all = raw ? JSON.parse(raw) : {};
+            if (!all.channels) all.channels = {};
+            const s = { ...(all.channels[kind] || (kind === 'default' ? { webhookUrl: all.webhookUrl, channelId: all.channelId } : {})) };
             const { webhookUrl, channelId, clearWebhook } = req.body;
             if (clearWebhook) delete s.webhookUrl;
             if (typeof webhookUrl === 'string' && webhookUrl.trim()) {
@@ -829,17 +861,24 @@ module.exports = async function handler(req, res) {
                 if (channelId.trim() && !isSharedServerFaction(factionId)) return res.status(400).json({ error: 'The shared bot can only post for factions on the shared Discord server — use a webhook instead.' });
                 if (channelId.trim()) s.channelId = channelId.trim(); else delete s.channelId;
             }
-            await redis(['SET', discordSettingsKey(factionId), JSON.stringify(s)]);
+            all.channels[kind] = s;
+            // Once 'default' is saved under the new shape, drop the old flat fields so it's the one
+            // source of truth from now on — getDiscordPoster's legacy fallback still covers anyone
+            // who saved before named channels existed and hasn't touched settings since.
+            if (kind === 'default') { delete all.webhookUrl; delete all.channelId; }
+            await redis(['SET', discordSettingsKey(factionId), JSON.stringify(all)]);
             return res.status(200).json({ ok: true });
         }
 
         // Sends a harmless test message (mentions nobody) so a leader can confirm the destination
         // works before the first real ping.
         if (action === 'discord-settings-test') {
-            const poster = await getDiscordPoster(factionId);
+            const kind = DISCORD_KINDS.includes(req.body.kind) ? req.body.kind : 'default';
+            const poster = await getDiscordPoster(factionId, kind);
             if (poster?.error) return res.status(400).json({ error: poster.error });
             if (!poster) return res.status(400).json({ error: 'Nothing saved yet — add a channel ID or webhook first.' });
-            const r = await poster.post(`✅ WWLabs is connected — war availability pings for your faction will post here.`, []);
+            const what = kind === 'feedback' ? 'feedback reminders' : kind === 'whatsnew' ? 'What\'s new posts' : 'war availability pings';
+            const r = await poster.post(`✅ WWLabs is connected — ${what} for your faction will post here.`, []);
             if (!r.ok) {
                 const body = await r.text().catch(() => '');
                 return res.status(502).json({ error: `Discord rejected the test (${r.status})${body ? `: ${body.slice(0, 120)}` : ''} — check the bot can see and post in that channel.` });
@@ -940,6 +979,102 @@ module.exports = async function handler(req, res) {
                 }
             }
             return res.status(200).json({ sent: true, mentioned: mentions.length, noDiscord, messages: chunks.length });
+        }
+
+        // Posts an @mention reminder to Discord for every member who hasn't answered the feedback form
+        // yet. Same target-resolution and chunking pattern as availability-ping just above, against the
+        // feedback-responses hash instead of a plan's entries — and posted to this faction's 'feedback'
+        // Discord destination (see discord-settings-*), so it can go to a different channel if wanted.
+        if (action === 'feedback-ping') {
+            const { message } = req.body;
+            const formRaw = await redis(['GET', `wwl:feedback-form:${factionId}`]);
+            const form = formRaw ? JSON.parse(formRaw) : null;
+            if (form?.mode !== 'native') return res.status(400).json({ error: 'There is no feedback form open right now.' });
+
+            const respondedIds = new Set((await redis(['HKEYS', `wwl:feedback-responses:${factionId}`])) || []);
+            let targets;
+            try { targets = (await getRoster(key)).filter(m => !respondedIds.has(m.id)); }
+            catch (e) { return res.status(403).json({ error: `Couldn't read the member list: ${e.message}` }); }
+            if (!targets.length) return res.status(400).json({ error: 'Everyone has already filled it in.' });
+
+            const intro = String(message || '').slice(0, 400).trim();
+            let guildMap = null, mapError = null;
+            if (isSharedServerFaction(factionId)) {
+                try { guildMap = await tornToDiscordIds(); } catch (e) { mapError = String(e.message || e); }
+            }
+            const idMap = guildMap ? Object.fromEntries(targets.filter(t => guildMap[t.id]).map(t => [t.id, guildMap[t.id]])) : await resolveDiscordIds(targets, { key, redis, guildMap });
+            const mentions = [], noDiscord = [];
+            for (const t of targets) {
+                const did = idMap[t.id];
+                if (did) mentions.push(`<@${did}>`); else noDiscord.push(t.name);
+            }
+
+            const text = [intro, mentions.join(' ')].filter(Boolean).join('\n');
+            const poster = await getDiscordPoster(factionId, 'feedback');
+            if (poster?.error) return res.status(400).json({ error: poster.error });
+            const configured = !!poster;
+            if (!configured || !mentions.length) {
+                return res.status(200).json({ sent: false, configured, text, mentioned: mentions.length, noDiscord, mapError });
+            }
+            const postToDiscord = poster.post;
+
+            const chunks = [];
+            let cur = intro ? `${intro}\n` : '';
+            for (const m of mentions) {
+                if ((cur + m + ' ').length > 1900) { chunks.push(cur.trim()); cur = ''; }
+                cur += `${m} `;
+            }
+            if (cur.trim()) chunks.push(cur.trim());
+            for (const content of chunks) {
+                const users = [...content.matchAll(/<@(\d+)>/g)].map(x => x[1]);
+                const r = await postToDiscord(content, users);
+                if (!r.ok) {
+                    const body = await r.text().catch(() => '');
+                    return res.status(502).json({ error: `Discord rejected the message (${r.status})${body ? `: ${body.slice(0, 120)}` : ''}` });
+                }
+            }
+            return res.status(200).json({ sent: true, mentioned: mentions.length, noDiscord, messages: chunks.length });
+        }
+
+        // What's New posts to Discord, as embeds instead of plain message content — an embed description
+        // allows ~4096 characters (vs. 2000 for a normal message), which is what actually fixes a long
+        // version's bullets being "too big to paste" rather than just moving the copy-paste elsewhere.
+        // WHATS_NEW itself lives client-side (whats-new.js) — the client builds the embed objects (one
+        // per version, already chunked to Discord's 6000-char-per-message/10-embeds-per-message caps) and
+        // this just forwards them to the faction's 'whatsnew' Discord destination (see discord-settings-*).
+        if (action === 'whatsnew-post') {
+            const { embeds } = req.body;
+            if (!Array.isArray(embeds) || !embeds.length) return res.status(400).json({ error: 'Nothing to post.' });
+            if (embeds.length > 10) return res.status(400).json({ error: 'Too many entries for one message (Discord allows 10 embeds) — post in smaller batches.' });
+            const safeEmbeds = embeds.map(e => ({
+                title: String(e.title || '').slice(0, 256),
+                description: String(e.description || '').slice(0, 4096),
+                color: Number.isInteger(e.color) ? e.color : 0x35d99b,
+            }));
+            const totalLen = safeEmbeds.reduce((s, e) => s + e.title.length + e.description.length, 0);
+            if (totalLen > 6000) return res.status(400).json({ error: 'That\'s too much text for one Discord message (6000 character limit across all embeds) — post in smaller batches.' });
+            const poster = await getDiscordPoster(factionId, 'whatsnew');
+            if (poster?.error) return res.status(400).json({ error: poster.error });
+            if (!poster) return res.status(400).json({ error: 'The What\'s new Discord channel isn\'t set up yet (see Discord settings under Leader settings).' });
+            const r = await poster.post('', [], safeEmbeds);
+            if (!r.ok) {
+                const body = await r.text().catch(() => '');
+                return res.status(502).json({ error: `Discord rejected the message (${r.status})${body ? `: ${body.slice(0, 120)}` : ''}` });
+            }
+            return res.status(200).json({ ok: true });
+        }
+        // Which version was last posted to Discord — moved server-side (was localStorage-only, so
+        // different leaders on different devices each had their own independent "posted up to" marker
+        // instead of one shared, faction-wide fact).
+        if (action === 'whatsnew-posted-get') {
+            const v = await redis(['GET', `wwl:whatsnew-posted:${factionId}`]);
+            return res.status(200).json({ posted: v || null });
+        }
+        if (action === 'whatsnew-posted-set') {
+            const { version } = req.body;
+            if (!version) return res.status(400).json({ error: 'Missing version' });
+            await redis(['SET', `wwl:whatsnew-posted:${factionId}`, String(version)]);
+            return res.status(200).json({ ok: true });
         }
 
         // Matched/upcoming wars a tracker can be linked to (picker in the start form).
