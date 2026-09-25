@@ -574,7 +574,7 @@ module.exports = async function handler(req, res) {
         if (action === 'verify-mine') {
             const raw = await redis(['HGET', manualVerifyKey(factionId), playerId]);
             const v = raw ? JSON.parse(raw) : {};
-            return res.status(200).json({ intel: !!v.intel, cat: !!v.cat });
+            return res.status(200).json({ intel: !!v.intel, cat: !!v.cat, discordExempt: !!v.discordExempt });
         }
         // Banners at the top of every page. Everyone reads the ones meant for them; leaders write them for THEIR OWN faction, and only an owner
         // (the same owners as Labs funds) can also write one for ALL factions (stored apart, under 'global').
@@ -630,18 +630,20 @@ module.exports = async function handler(req, res) {
         // The userscript's own "To do" tab — small personal reminders for the calling member, not
         // faction-wide like leader-todos above. Each check is independent and best-effort: one
         // failing (e.g. Torn hiccups on the profile call) must not hide the others.
-        //   - Revive setting: Torn's `revivable` field only ever distinguishes "Everyone" (true)
-        //     from "Friends and faction" or "Nobody" (both false, even on your own profile) — Torn's
-        //     API has no field that tells those two apart at all (there's a standing forum request
-        //     asking for exactly this, confirmed by testing against a real key on "Friends and
-        //     faction": it read false, same as "Nobody" would). So this can only ever flag "Everyone"
-        //     specifically, not "anything other than Nobody" — the leader's own call, since Torn
-        //     Intel shows the real 3-way setting for a manual cross-check when it matters.
+        //   - Revive setting: confirmed live against a real key across all three settings —
+        //     `revivable` is true for both "Everyone" and "Friends and faction", false only for
+        //     "No one". So it can't tell Everyone and Friends-and-faction apart, but it doesn't need
+        //     to: either way someone other than "no one" can revive you, which is the thing worth
+        //     flagging either way.
         //   - Feedback / timezone: exact same data the Feedback and Timezone map pages already use
         //     (see api/feedback-form.js's 'read' action and lib/tzMap.js's 'tz-get'), just read
         //     directly here instead of a second round trip.
         //   - Availability: same "live" + "soon" plan and respondedMap() the leader to-do card
         //     (leaderTodos above) uses to find who's missing, just checked against one player's own id.
+        //   - Discord / Intel / CAT: Intel and CAT have no API of their own, so this reads the same
+        //     manual-verify record a leader ticks by hand on "Who's on board" (manualVerifyKey);
+        //     Discord is the real discordStatus() check, skipped entirely for anyone a leader has
+        //     marked discordExempt (e.g. a member in a country where Discord is banned).
         if (action === 'member-todo') {
             const host = String(req.headers['x-forwarded-host'] || req.headers.host || '').replace(/[^\w.:-]/g, '');
             const site = host ? `https://${host}` : '';
@@ -657,11 +659,9 @@ module.exports = async function handler(req, res) {
                 const d = await r.json();
                 // v2's response nests everything under "profile" (confirmed against a real reference
                 // userscript's own code, `data.profile.revivable`) — reading `d.revivable` directly
-                // was always undefined regardless of the real setting, which is why neither "Friends
-                // and faction" nor "Everyone" ever showed up in testing. Fixed; still only a boolean,
-                // so still only "Everyone" vs "not Everyone" at best until confirmed otherwise live.
+                // was always undefined regardless of the real setting.
                 if (!d.error && d.profile?.revivable) {
-                    items.push({ id: 'revive', text: 'Your revive setting is "Everyone" — anyone can revive you, not just friends and faction.', cta: 'Open Preferences', url: 'https://www.torn.com/preferences.php#tab=privacy' });
+                    items.push({ id: 'revive', text: "You have your revives on, set them to \"no one\".", cta: 'Open Preferences', url: 'https://www.torn.com/preferences.php#tab=privacy' });
                 }
             } catch (e) { /* skip this check on failure, don't fail the others */ }
 
@@ -697,6 +697,22 @@ module.exports = async function handler(req, res) {
             try {
                 const tz = await tzHandle('tz-get', {}, { redis, factionId, playerId });
                 if (!tz.me) items.push({ id: 'timezone', text: 'Pick your country on the Timezone map.', cta: 'Open Timezone map', url: site ? `${site}/tz-map` : null });
+            } catch (e) { /* skip */ }
+
+            // Discord / Torn Intel / CAT: same manual-verify record "Who's on board" already ticks by
+            // hand (Torn Intel and CAT have no API to check automatically). URLs match core.js's own
+            // REQUIRED_LINKS, shown on the Tools & Links page.
+            try {
+                const raw = await redis(['HGET', manualVerifyKey(factionId), playerId]);
+                const v = raw ? JSON.parse(raw) : {};
+                if (!v.intel) items.push({ id: 'intel', text: 'Join Torn Intel and ask a leader to verify you on "Who\'s on board".', cta: 'Open Torn Intel', url: 'https://torn-intel.com/' });
+                if (!v.cat) items.push({ id: 'cat', text: 'Install the CAT script and ask a leader to verify you on "Who\'s on board".', cta: 'Open CAT', url: 'https://cat-script.com/' });
+                if (!v.discordExempt) {
+                    let guildMap = null;
+                    if (isSharedServerFaction(factionId)) { try { guildMap = await tornToDiscordIds(); } catch (e) { /* fall back to the per-user Torn lookup below */ } }
+                    const { status } = await discordStatus([playerId], { key, redis, guildMap, resolve: true, limit: 1 });
+                    if (status[playerId] !== 'yes') items.push({ id: 'discord', text: 'Join the faction Discord and link it to your Torn account.', cta: 'Open Discord', url: 'https://discord.gg/HFmPUd2zyh' });
+                }
             } catch (e) { /* skip */ }
 
             return res.status(200).json({ items });
@@ -760,7 +776,9 @@ module.exports = async function handler(req, res) {
         }
         if (action === 'verify-set') {
             const { id, tool, value } = req.body;
-            if (!/^\d+$/.test(String(id)) || !['intel', 'cat'].includes(tool)) return res.status(400).json({ error: 'Bad request' });
+            // 'discordExempt' is not a tool a member joins — it's a leader marking someone (e.g. in a
+            // country where Discord is banned) as not expected to link it, so the to-do list stops nagging them.
+            if (!/^\d+$/.test(String(id)) || !['intel', 'cat', 'discordExempt'].includes(tool)) return res.status(400).json({ error: 'Bad request' });
             const raw = await redis(['HGET', manualVerifyKey(factionId), String(id)]);
             const v = raw ? JSON.parse(raw) : {};
             v[tool] = !!value; v.updatedAt = Date.now();

@@ -2,7 +2,7 @@
 // @name         World Wide Labs
 // @namespace    https://worldwidelabs.vercel.app
 // @author       CreaLotte
-// @version      1.20
+// @version      1.21
 // @updateURL    __WWL_BASE__/worldwidelabs.user.js
 // @downloadURL  __WWL_BASE__/worldwidelabs.user.js
 // @description  Shows your WorldWideLabs weekly energy plan (the checklist from the Energy planner) inside Torn, a To do tab with small personal reminders (revive setting, feedback, timezone map), and — if you are in the Mentoring Platform — your mentoring checklist too. Also shows faction banners at the top of every Torn page. A small ⚙ in the header shows the installed version, flags when a newer one is out, lets you set/replace your API key, and — for a leader — add or remove your faction's banners right from Torn. On a computer it is a small window you can drag around and close; in TornPDA it is a menu. Ticks are shared with the WWL site.
@@ -26,7 +26,7 @@
     const KEY_NAME = 'wwl_api_key', POS_NAME = 'wwl_plan_pos', STATE_NAME = 'wwl_plan_state';
     // GM_info gives the version Tampermonkey actually has installed right now — falls back to a
     // hardcoded copy (kept in sync with @version above) for TornPDA, which doesn't grant GM_info.
-    const SCRIPT_VERSION = (typeof GM_info !== 'undefined' && GM_info.script?.version) || '1.20';
+    const SCRIPT_VERSION = (typeof GM_info !== 'undefined' && GM_info.script?.version) || '1.21';
     const versionGreater = (a, b) => {
         const pa = String(a).split('.').map(Number), pb = String(b).split('.').map(Number);
         for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
@@ -145,11 +145,20 @@
         window.addEventListener('resize', () => { if (win.style.display !== 'none') place(win.offsetLeft, win.offsetTop); });
     }
 
+    // While the window sits open, nothing was re-checking Torn for these — a member could change their
+    // revive setting and stare at a stale to-do list indefinitely with no idea a reload was needed.
+    // Re-fetches just the to-do items (not the whole plan) every 15s while open, stops the moment it closes.
+    let todoRefreshTimer = null;
+    async function refreshTodoItems() {
+        try { const r = await api({ action: 'member-todo' }); todoItems = r.items || []; if (tab === 'todo') render(); }
+        catch (e) { /* keep showing what we already had */ }
+    }
     function setOpen(on, save = true) {
         win.style.display = on ? 'flex' : 'none';
         pill.style.display = on ? 'none' : 'flex';
         if (save) store.set(STATE_NAME, on ? 'open' : 'closed');
-        if (on) { if (!IS_PDA) restorePos(); load(); }
+        clearInterval(todoRefreshTimer);
+        if (on) { if (!IS_PDA) restorePos(); load(); todoRefreshTimer = setInterval(refreshTodoItems, 15000); }
     }
     pill.addEventListener('click', () => setOpen(true));
     win.querySelector('#wwl-close').addEventListener('click', () => setOpen(false));
