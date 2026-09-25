@@ -318,7 +318,8 @@ function renderWhatsNew() {
                 <span style="font-family:var(--mono);font-size:12px;font-weight:700;color:var(--reagent);border:1px solid var(--reagent);border-radius:10px;padding:1px 8px;">v${esc(e.version)}</span>
                 <h3 style="margin:0;">${esc(e.title)}</h3>
                 <span style="color:var(--muted);font-size:12px;">${wnFmtDate(e.date)}</span>
-                ${leader ? `<span style="margin-left:auto;display:flex;gap:8px;align-items:center;">${isPosted ? '<span style="color:var(--muted);font-size:12px;">✓ posted</span>' : ''}
+                ${leader ? `<span style="margin-left:auto;display:flex;gap:8px;align-items:center;flex-wrap:wrap;">${isPosted ? '<span style="color:var(--muted);font-size:12px;">✓ posted</span>' : ''}
+                    <button class="ghost small wn-send" data-i="${i}" title="Posts this version straight to the What's new Discord channel, as an embed (no character limit)">🚀 Send to Discord</button>
                     <button class="ghost small wn-copy" data-i="${i}">Copy as message</button>
                     <button class="ghost small wn-mark" data-v="${esc(e.version)}" title="Marks this version and all older ones as posted in Discord">Mark posted up to here</button></span>` : ''}
             </div>
@@ -336,6 +337,25 @@ function renderWhatsNew() {
         navigator.clipboard.writeText(text).then(() => toast('Message copied — paste it in Discord'));
     }));
     document.querySelectorAll('.wn-mark').forEach(b => b.addEventListener('click', () => { wnSetPosted(b.dataset.v); renderWhatsNew(); toast(`Marked as posted up to v${b.dataset.v}`); }));
+    document.querySelectorAll('.wn-send').forEach(b => b.addEventListener('click', () => wnSendOneToDiscord(Number(b.dataset.i))));
+}
+// Posts one version straight to Discord as a single embed (title + everyone/leaders bullets, same
+// content "Copy as message" builds) instead of copy-paste text — an embed description allows ~4096
+// characters vs. a message's 2000, which is what actually fixes a long version being too big to paste.
+async function wnSendOneToDiscord(i) {
+    const e = WHATS_NEW[i];
+    if (!e) return;
+    const mine = [...(e.everyone || []).map(t => `• ${t}`), ...(e.leaders || []).map(t => `• 🔒 (leaders) ${t}`)];
+    const embed = { title: `v${e.version} — ${e.title}`, description: mine.join('\n') || '(nothing to show)', color: 0x35d99b };
+    try {
+        const res = await fetch('/api/war-payout', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key: apiKey, action: 'whatsnew-post', embeds: [embed] }) });
+        const d = await res.json();
+        if (d.error) throw new Error(d.error);
+        toast(`Posted v${e.version} to Discord`);
+        const curPosted = wnPostedIndex(); // lower index = newer version — only move "posted" forward
+        if (curPosted < 0 || i < curPosted) wnSetPosted(e.version);
+        renderWhatsNew();
+    } catch (err) { toast(`Couldn't post to Discord: ${err.message}`); }
 }
 
 // ---- one big post with the updates NOT posted yet (or all of them), split into parts that each fit in a
@@ -377,50 +397,6 @@ $('wn-big-new').addEventListener('click', () => renderWnBig(wnBigPost(false, tru
 $('wn-big-new-leaders').addEventListener('click', () => renderWnBig(wnBigPost(true, true), 'Post for leaders — only what is new since the last posted version'));
 $('wn-big-all').addEventListener('click', () => renderWnBig(wnBigPost(false, false), 'Post for everyone — all versions'));
 $('wn-big-leaders').addEventListener('click', () => renderWnBig(wnBigPost(true, false), 'Post for leaders — all versions'));
-
-// ---- posting straight to Discord as embeds instead of copy-paste text — an embed description allows
-// ~4096 characters (vs. 2000 for a normal message), which is what actually fixes a long version's
-// bullets being too big to paste as plain text. One embed per version; batched to stay under Discord's
-// 10-embeds/6000-characters-per-message caps (wnBatchEmbeds), same "only what's new" logic as the
-// copy-paste flow above (wnBigPost) — just building embed objects instead of markdown lines.
-function wnBuildEmbeds(includeLeaders, onlyNew) {
-    const posted = wnPostedIndex();
-    const from = onlyNew && posted >= 0 ? posted : WHATS_NEW.length;
-    return WHATS_NEW.slice(0, from).map(e => {
-        const mine = [...(e.everyone || []).map(t => `• ${t}`), ...(includeLeaders ? (e.leaders || []).map(t => `• 🔒 (leaders) ${t}`) : [])];
-        return mine.length ? { title: `v${e.version} — ${e.title}`, description: mine.join('\n'), color: 0x35d99b } : null;
-    }).filter(Boolean);
-}
-function wnBatchEmbeds(embeds) {
-    const batches = []; let cur = [], curLen = 0;
-    for (const e of embeds) {
-        const len = e.title.length + e.description.length;
-        if (cur.length && (cur.length >= 10 || curLen + len > 5900)) { batches.push(cur); cur = []; curLen = 0; }
-        cur.push(e); curLen += len;
-    }
-    if (cur.length) batches.push(cur);
-    return batches;
-}
-async function wnSendToDiscord(includeLeaders) {
-    const embeds = wnBuildEmbeds(includeLeaders, true);
-    if (!embeds.length) { toast('Nothing new to post — everything is already marked as posted.'); return; }
-    const batches = wnBatchEmbeds(embeds);
-    const st = $('wn-send-status');
-    st.textContent = `Sending ${batches.length} message${batches.length === 1 ? '' : 's'}…`;
-    try {
-        for (const batch of batches) {
-            const res = await fetch('/api/war-payout', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key: apiKey, action: 'whatsnew-post', embeds: batch }) });
-            const d = await res.json();
-            if (d.error) throw new Error(d.error);
-        }
-        wnSetPosted(WHATS_NEW[0].version);
-        st.textContent = '';
-        toast(`Posted to Discord (${batches.length} message${batches.length === 1 ? '' : 's'})`);
-        renderWhatsNew();
-    } catch (e) { st.textContent = ''; toast(`Couldn't post to Discord: ${e.message}`); }
-}
-$('wn-send-new').addEventListener('click', () => wnSendToDiscord(false));
-$('wn-send-new-leaders').addEventListener('click', () => wnSendToDiscord(true));
 
 // ---- "something new" marker on the sidebar item -------------------------------------------------
 // The item turns bold (with a dot) when the newest update this person can see hasn't been opened yet.

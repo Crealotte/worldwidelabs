@@ -1512,23 +1512,20 @@
             <div id="wn-leader-tools" class="panel" style="display:none;">
                 <h3 style="margin:0 0 6px;">Post in Discord</h3>
                 <div id="wn-posted-note" style="font-size:13px;color:var(--muted);margin-bottom:10px;"></div>
-                <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:6px;">
-                    <button class="ghost small" id="wn-send-new">🚀 Send what's new to Discord — for everyone</button>
-                    <button class="ghost small" id="wn-send-new-leaders">🚀 Send what's new to Discord — for leaders</button>
-                </div>
-                <div style="font-size:11px;color:var(--muted);margin:0 0 10px;">Posts straight to the What's new channel (see Discord settings under Leader settings) as one embedded message — no character limit to fight with. Prefer to paste it yourself instead?</div>
-                <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:6px;">
-                    <button class="ghost small" id="wn-big-new">📋 Copy what's new — for everyone</button>
-                    <button class="ghost small" id="wn-big-new-leaders">📋 Copy what's new — for leaders</button>
-                </div>
-                <details><summary class="av-sum"><span style="font-size:12px;">Post all versions instead (from the start)</span></summary>
-                    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;">
-                        <button class="ghost small" id="wn-big-all">📋 All versions — for everyone</button>
-                        <button class="ghost small" id="wn-big-leaders">📋 All versions — for leaders</button>
+                <p style="font-size:12px;color:var(--muted);margin:0 0 10px;">Each version below has its own 🚀 Send to Discord button (posts as an embed straight to the What's new channel — see Discord settings under Leader settings — no character limit to fight with) and a Copy button if you'd rather paste it yourself.</p>
+                <details><summary class="av-sum"><span style="font-size:12px;">Copy everything that's new in one go instead</span></summary>
+                    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;margin-bottom:6px;">
+                        <button class="ghost small" id="wn-big-new">📋 Copy what's new — for everyone</button>
+                        <button class="ghost small" id="wn-big-new-leaders">📋 Copy what's new — for leaders</button>
                     </div>
+                    <details><summary class="av-sum"><span style="font-size:12px;">Or all versions (from the start)</span></summary>
+                        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;">
+                            <button class="ghost small" id="wn-big-all">📋 All versions — for everyone</button>
+                            <button class="ghost small" id="wn-big-leaders">📋 All versions — for leaders</button>
+                        </div>
+                    </details>
+                    <div id="wn-big"></div>
                 </details>
-                <div id="wn-send-status" style="font-size:12px;color:var(--muted);margin:6px 0;"></div>
-                <div id="wn-big"></div>
             </div>
             <div id="wn-list"></div>
         </section>
