@@ -101,11 +101,23 @@ async function resolvePlan(factionId, requestedId, allowArchived = false) {
 
 // Resolves faction + the caller's own identity in one profile fetch — the availability tracker
 // (any member, not just leaders) needs to know who's actually recording their own slots.
+// Torn's profile lookup, retried once when Torn answers "too many requests" or a passing backend error
+// (a leader running a payout uses up their own 100-calls-a-minute, and the script's check lands in the middle).
+// If it still fails, the reason is kept in getProfile.lastError so the caller can say WHY, not just "no faction".
 async function getProfile(key) {
-    const r = await tornFetch(`https://api.torn.com/user/?selections=profile&key=${encodeURIComponent(key)}`);
-    const profile = await r.json();
-    if (profile.error || !profile.faction?.faction_id) return null;
-    return { factionId: String(profile.faction.faction_id), factionName: profile.faction.faction_name || '', daysInFaction: profile.faction.days_in_faction ?? null, playerId: String(profile.player_id), name: profile.name };
+    getProfile.lastError = null;
+    for (let attempt = 0; attempt < 2; attempt++) {
+        const r = await tornFetch(`https://api.torn.com/user/?selections=profile&key=${encodeURIComponent(key)}`);
+        const profile = await r.json();
+        if (profile.error) {
+            getProfile.lastError = `Torn says: ${profile.error.error || 'error'} (code ${profile.error.code ?? '?'})`;
+            if (attempt === 0 && [5, 17].includes(Number(profile.error.code))) { await sleep(2000); continue; }
+            return null;
+        }
+        if (!profile.faction?.faction_id) { getProfile.lastError = 'Torn returned no faction for this key — is the key from a player in a faction?'; return null; }
+        return { factionId: String(profile.faction.faction_id), factionName: profile.faction.faction_name || '', daysInFaction: profile.faction.days_in_faction ?? null, playerId: String(profile.player_id), name: profile.name };
+    }
+    return null;
 }
 async function isLeader(key) {
     const r = await tornFetch(`https://api.torn.com/v2/faction/balance?key=${encodeURIComponent(key)}`,
@@ -398,7 +410,7 @@ module.exports = async function handler(req, res) {
         if (!key) return res.status(400).json({ error: 'Missing key' });
 
         const profile = await getProfile(key);
-        if (!profile) return res.status(403).json({ error: 'Could not determine your faction from this key' });
+        if (!profile) return res.status(403).json({ error: `Could not determine your faction from this key${getProfile.lastError ? ` — ${getProfile.lastError}` : ''}` });
         const { factionId, playerId, name: playerName, factionName, daysInFaction } = profile;
 
         // Lets the userscript flag a newer version without doing its own raw GET-and-regex fetch of the
