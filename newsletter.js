@@ -16,9 +16,12 @@ async function loadNewsletter() {
     $('nl-locked').style.display = locked ? 'block' : 'none';
     $('nl-body').style.display = locked ? 'none' : 'block';
     if (locked) return;
-    if (!$('nl-period').options.length) {
-        const list = moPeriods().filter(p => p.id.startsWith('p'));
-        $('nl-period').innerHTML = list.map(p => `<option value="${p.id}">${esc(`${moFmt(p.start)} → ${moFmt(p.end)}`)}</option>`).join('');
+    {
+        // the running period first (if a full week has passed since the last newsletter), then the finished ones
+        const keep = $('nl-period').value;
+        const list = moPeriods().filter(p => p.id === 'now' || p.id.startsWith('p'));
+        $('nl-period').innerHTML = list.map(p => `<option value="${p.id}">${esc(p.id === 'now' ? `Current period (so far) — ${moFmt(p.start)} → ${moFmt(p.end)}` : `${moFmt(p.start)} → ${moFmt(p.end)}`)}</option>`).join('');
+        if (keep && list.some(p => p.id === keep)) $('nl-period').value = keep;
     }
 }
 
@@ -47,12 +50,12 @@ async function buildNewsletter() {
         const medal = ['🥇', '🥈', '🥉'];
         const fmt = v => Math.round(v).toLocaleString();
         const winners = moData ? moWinners(moRows()) : [];
-        sections.push({ title: '🏆 Competition winners', text: `🏆 **Competition winners — ${moFmt(period.start)} → ${moFmt(period.end)}**\n\n` + (winners.length ? winners.map(w =>
+        sections.push({ title: '🏆 Competition winners', text: `🏆 **Competition winners — ${moFmt(period.start)} → ${moFmt(period.end)}${period.id === 'now' ? ' (so far)' : ''}**\n\n` + (winners.length ? winners.map(w =>
             `**${w.label}**\n${w.top.length ? w.top.map((t, i) => `${medal[i]} ${t.name} — ${fmt(t.value)}`).join('\n') : '(no data)'}`).join('\n\n') : '(the competition numbers could not be read — open Member Overview once and try again)') });
 
         // 2. Steadfast perks this month and next month
         st.textContent = 'Reading the Steadfast numbers…';
-        const endDate = new Date(period.end * 1000);
+        const endDate = new Date(period.id === 'now' ? Date.now() : period.end * 1000); // a running period is about the month we are in
         const month = endDate.getUTCMonth() + 1, next = month % 12 + 1;
         const role = arr => `**${arr.slice(0, 2).map(s => FP_LABEL[s]).join(' & ')}** get the top perk, ${arr.slice(2).map(s => FP_LABEL[s]).join(' & ')} the lower one`;
         let steadfast = `💪 **Steadfast perks**\n\n**${FP_MONTHS[month - 1]}:** ${role(FP_ROTATION[month])}\n**${FP_MONTHS[next - 1]}:** ${role(FP_ROTATION[next])}\n(swapped on the first Sunday of the month)`;
