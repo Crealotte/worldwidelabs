@@ -366,5 +366,5 @@ $('mo-usage-btn').addEventListener('click', async () => {
     const busy = per.filter(m => m.n >= 60).length;
     const at = m => (m ? `${m.slice(6, 8)}/${m.slice(4, 6)} ${m.slice(8, 10)}:${m.slice(10, 12)} UTC` : '—');
     const kinds = o => Object.entries(o || {}).sort((a, b) => b[1] - a[1]).slice(0, 15).map(([k, n]) => `  ${String(n).padStart(5)}  ${k}`).join('\n') || '  (nothing yet)';
-    out.textContent = `Last 2 hours: ${total} calls with your key\nBusiest minute: ${peak.n} calls (${at(peak.minute)}) — Torn allows about 100 a minute for all your tools together\nMinutes with 60+ calls: ${busy}\n\nToday, per kind ("saved" = answered from memory, no call to Torn):\n${kinds(r.today)}\n\nYesterday:\n${kinds(r.yesterday)}`;
+    out.textContent = `Last 2 hours: ${total} calls with your key\nBusiest minute: ${peak.n} calls (${at(peak.minute)}) — Torn allows about 100 a minute for all your tools together\nMinutes with 60+ calls: ${busy}\n\nToday, per kind ("saved" = answered from memory, no call to Torn) — estimates, only 1 call in 10 is recorded to save database writes, so expect steps of 10:\n${kinds(r.today)}\n\nYesterday:\n${kinds(r.yesterday)}`;
 });
