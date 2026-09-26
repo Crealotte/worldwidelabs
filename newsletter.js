@@ -47,11 +47,12 @@ async function buildNewsletter() {
         st.textContent = 'Reading the competition numbers (this can take a minute the first time)…';
         moPeriodId = period.id; moPerWeek = false;
         await loadMemberOverview();
-        const medal = ['🥇', '🥈', '🥉'];
         const fmt = v => Math.round(v).toLocaleString();
         const winners = moData ? moWinners(moRows()) : [];
-        sections.push({ title: '🏆 Competition winners', text: `🏆 **Competition winners — ${moFmt(period.start)} → ${moFmt(period.end)}${period.id === 'now' ? ' (so far)' : ''}**\n\n` + (winners.length ? winners.map(w =>
-            `**${w.label}**\n${w.top.length ? w.top.map((t, i) => `${medal[i]} ${t.name} — ${fmt(t.value)}`).join('\n') : '(no data)'}`).join('\n\n') : '(the competition numbers could not be read — open Member Overview once and try again)') });
+        // Only the winner of each competition, one line each — the runners-up are on the Member Overview page.
+        sections.push({ title: '🏆 Competition winners', text: `🏆 **Competition winners — ${moFmt(period.start)} → ${moFmt(period.end)}${period.id === 'now' ? ' (so far)' : ''}**\n\n` + (winners.length
+            ? winners.map(w => `**${w.label}:** ${w.top.length ? `🥇 ${w.top[0].name} — ${fmt(w.top[0].value)}` : '(no data)'}`).join('\n') + `\n\nThe full standings, runners-up included, are on WWL → Member Overview.`
+            : '(the competition numbers could not be read — open Member Overview once and try again)') });
 
         // 2. Steadfast perks this month and next month
         st.textContent = 'Reading the Steadfast numbers…';
