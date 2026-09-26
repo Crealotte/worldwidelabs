@@ -37,7 +37,7 @@ async function loadMyStanding() {
         const chips = r.wars.map(w => {
             const color = w.unknown || w.notIn ? 'var(--muted)' : w.ok ? 'var(--reagent)' : 'var(--danger)';
             const text = w.unknown ? '…' : w.notIn ? '—' : `${w.war}${w.chain ? `+${w.chain}` : ''}`;
-            return `<span title="vs ${esc(w.opponent)}" style="font-family:var(--mono);font-size:12px;color:${color};margin-right:10px;">${text}</span>`;
+            return `<span title="${w.event ? `Chain event: ${esc(w.opponent)}` : `vs ${esc(w.opponent)}`}" style="font-family:var(--mono);font-size:12px;color:${color};margin-right:10px;">${text}</span>`;
         }).join('');
         const warTile = `
             <div class="stat">

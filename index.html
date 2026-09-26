@@ -1474,6 +1474,19 @@
 
                 <div class="panel">
                     <details>
+                        <summary class="av-sum"><h3>Linked chains &amp; chain events</h3></summary>
+                        <p style="color:var(--muted);font-size:12px;margin:10px 0;">The war rule only looks for chain hits from a war's start until 24 hours after it ends, so a chain done later isn't counted — and a chain done instead of a war isn't counted anywhere. Link a chain to a war below so it counts for that war, or add a <b>chain event</b> (a chain done instead of a war) and link its chains to it. An event takes one of the last 5 slots like a war does, and is passed with the chain-hit minimum. A member's chain hits for a war become the larger of what's found automatically and what its linked chains add up to — so link every chain you want counted.</p>
+                        <div id="mo-extra"></div>
+                        <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-top:14px;padding-top:12px;border-top:1px solid var(--line);">
+                            <div class="field" style="margin:0;max-width:220px;"><label for="mo-ev-name">New chain event — name</label><input id="mo-ev-name" type="text" maxlength="40" placeholder="e.g. Sunday chain"></div>
+                            <div class="field" style="margin:0;max-width:170px;"><label for="mo-ev-date">Date</label><input id="mo-ev-date" type="date"></div>
+                            <button class="ghost small" id="mo-ev-add">+ Add chain event</button>
+                        </div>
+                    </details>
+                </div>
+
+                <div class="panel">
+                    <details>
                         <summary class="av-sum"><h3>Rules</h3></summary>
                         <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-top:10px;">
                             <div class="field" style="margin:0;max-width:170px;"><label for="mo-min">War hits needed per war</label><input id="mo-min" type="number" min="0" value="10"></div>

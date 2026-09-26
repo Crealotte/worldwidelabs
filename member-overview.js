@@ -112,7 +112,7 @@ async function loadMemberOverview() {
         // war is read in pieces (the server remembers where it stopped), so keep asking until done.
         // A war that fails must never stop the rest (the stats below), so problems are collected.
         const problems = [];
-        const todo = moWarsInPeriod().filter(w => !moData.hits[w.id]);
+        const todo = moWarsInPeriod().filter(w => !w.event && !moData.hits[w.id]); // a chain event has nothing to scan — only its linked chains
         for (let i = 0; i < todo.length; i++) {
             for (let round = 1; round <= 10; round++) {
                 st.className = 'status ok'; st.textContent = `Counting hits for the war vs ${todo[i].opponent} (${i + 1} of ${todo.length}${round > 1 ? `, part ${round}` : ''})…`;
@@ -252,7 +252,7 @@ function renderMemberOverview() {
     $('mo-need').value = moData.settings.needWars;
 
     const th = (key, label) => `<th style="padding:4px 8px;cursor:pointer;white-space:nowrap;${moSort === key ? 'color:var(--reagent);' : ''}" data-sort="${key}">${label}${moSort === key ? ' ▾' : ''}</th>`;
-    const warHead = moWarsInPeriod().map(w => `<th style="padding:4px 8px;font-size:11px;white-space:nowrap;" title="${esc(`vs ${w.opponent}`)}">${esc(w.opponent.slice(0, 10))}<br><span style="color:var(--muted);">${new Date(w.end * 1000).toLocaleDateString(undefined, { day: '2-digit', month: 'short', timeZone: 'UTC' })}</span></th>`).join('');
+    const warHead = moWarsInPeriod().map(w => `<th style="padding:4px 8px;font-size:11px;white-space:nowrap;" title="${esc(w.event ? `Chain event: ${w.opponent}` : `vs ${w.opponent}`)}">${w.event ? '⛓ ' : ''}${esc(w.opponent.slice(0, 10))}<br><span style="color:var(--muted);">${new Date(w.end * 1000).toLocaleDateString(undefined, { day: '2-digit', month: 'short', timeZone: 'UTC' })}</span></th>`).join('');
     const unitLabel = moPerWeek ? 'per week' : 'in period';
     $('mo-table').innerHTML = `
         <table style="width:100%;font-size:13px;border-collapse:collapse;">
@@ -292,7 +292,77 @@ function renderMemberOverview() {
         const r = await moFetch({ action: 'mo-tier', id: s.dataset.id, tier: s.value });
         if (r.error) toast(r.error);
     }));
+    renderMoExtra();
 }
+
+// ---- Linked chains & chain events (the panel above Rules) ----
+// A chain done after a war (or instead of one) isn't picked up by the war's automatic count, so a leader links
+// it here. Every change goes to the server (which reads the chain's report with the leader's key and checks it
+// is real) and then the whole page is reloaded, so the table, the "Wars OK" column and members' own dashboard
+// cards all show the same numbers. See lib/memberOverview.js for how linked hits are combined with a war's own.
+async function moReload() {
+    if (moBusy) { toast('Saved — the page is still loading, press Refresh in a moment to see it.'); return; }
+    moData = null;
+    await loadMemberOverview();
+}
+
+function renderMoExtra() {
+    const el = $('mo-extra');
+    if (!el || !moData) return;
+    const x = moData.extra || { events: [], links: {}, chainTotals: {} };
+    const items = moWarsInPeriod().slice().reverse(); // newest first
+    const day = ts => new Date(ts * 1000).toLocaleDateString(undefined, { day: 'numeric', month: 'short', timeZone: 'UTC' });
+    const older = (x.events || []).filter(e => !items.some(i => i.id === e.id)); // pushed out of the last 5 by newer ones, still deletable
+    el.innerHTML = (items.length ? items.map(w => {
+        const chains = x.links[w.id] || [];
+        return `<div style="padding:8px 0;border-top:1px solid var(--line);">
+            <div style="display:flex;gap:8px;align-items:baseline;flex-wrap:wrap;">
+                <b>${w.event ? '⛓ ' : ''}${esc(w.opponent)}</b>
+                <span style="color:var(--muted);font-size:12px;">${w.event ? 'chain event' : 'war'} · ${day(w.end)}</span>
+                ${w.event && !chains.length ? '<span style="color:var(--happy);font-size:12px;">not counted until a chain is linked</span>' : ''}
+                ${w.event ? `<button class="ghost small mo-ev-del" data-id="${esc(w.id)}" style="margin-left:auto;">Delete event</button>` : ''}
+            </div>
+            <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:6px;">
+                ${chains.map(c => `<span class="chip" style="cursor:default;">chain #${esc(c)}${x.chainTotals?.[c] != null ? ` · ${esc(x.chainTotals[c])} hits` : ''} <span class="mo-unlink" data-item="${esc(w.id)}" data-chain="${esc(c)}" style="cursor:pointer;color:var(--danger);" title="Remove this link">✕</span></span>`).join('')}
+                <input class="mo-link-in" data-item="${esc(w.id)}" type="text" placeholder="chain ID or link" style="width:170px;">
+                <button class="ghost small mo-link-add" data-item="${esc(w.id)}">+ Link chain</button>
+            </div>
+        </div>`;
+    }).join('') : '<p style="color:var(--muted);font-size:13px;margin:0;">No wars loaded yet.</p>')
+        + (older.length ? `<div style="margin-top:10px;font-size:12px;color:var(--muted);">Older chain events (outside the last 5): ${older.map(e => `${esc(e.name)} (${day(e.end)}) <button class="ghost small mo-ev-del" data-id="${esc(e.id)}">Delete</button>`).join(' · ')}</div>` : '');
+
+    // one delegated handler, replaced each render so buttons never fire twice
+    el.onclick = async ev => {
+        const t = ev.target;
+        if (t.classList.contains('mo-link-add')) {
+            const input = el.querySelector(`.mo-link-in[data-item="${CSS.escape(t.dataset.item)}"]`);
+            if (!input || !input.value.trim()) { toast('Paste a chain ID or the link to its chain report first.'); return; }
+            t.disabled = true;
+            const r = await moFetch({ action: 'mo-link-chain', itemId: t.dataset.item, chainId: input.value });
+            t.disabled = false;
+            if (r.error) { toast(r.error); return; }
+            toast(`Linked chain #${r.chainId} — ${r.membersWithHits} member${r.membersWithHits === 1 ? '' : 's'} had hits in it`);
+            await moReload();
+        } else if (t.classList.contains('mo-unlink')) {
+            const r = await moFetch({ action: 'mo-unlink-chain', itemId: t.dataset.item, chainId: t.dataset.chain });
+            if (r.error) { toast(r.error); return; }
+            await moReload();
+        } else if (t.classList.contains('mo-ev-del')) {
+            if (!confirm('Delete this chain event and the chains linked to it?')) return;
+            const r = await moFetch({ action: 'mo-event-delete', id: t.dataset.id });
+            if (r.error) { toast(r.error); return; }
+            await moReload();
+        }
+    };
+}
+
+$('mo-ev-add').addEventListener('click', async () => {
+    const r = await moFetch({ action: 'mo-event-save', name: $('mo-ev-name').value, date: $('mo-ev-date').value });
+    if (r.error) { toast(r.error); return; }
+    $('mo-ev-name').value = '';
+    toast('Chain event added — now link its chain to it below.');
+    await moReload();
+});
 
 $('mo-period').addEventListener('change', () => { moPeriodId = $('mo-period').value; renderMemberOverview(); loadMemberOverview(); });
 $('mo-custom-weeks').addEventListener('change', () => {

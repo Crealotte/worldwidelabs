@@ -12,6 +12,17 @@
 
 const WHATS_NEW = [
     {
+        version: '1.19', date: '2026-09-26',
+        title: 'Linked chains and chain events for the war rule',
+        everyone: [
+            'The war rule ("3 of the last 5 wars") can now count a chain that wasn\'t picked up automatically. Leaders can link a chain to a war — for example a chain thrown after the war to use up faction energy, which used to count for nothing once it ran past the 24 hours after the war — and can add a "chain event" for a chain done instead of a war. A chain event takes one of the last 5 slots like a war does, and is passed with the chain-hit minimum. The "Your standing" card on the dashboard shows it as one of the last 5.',
+        ],
+        leaders: [
+            'New "Linked chains & chain events" panel on Member Overview (above Rules): paste a chain ID or the link to its chain report under a war to link it, or add a chain event with a name and date and link its chain(s). The chain is read from Torn straight away, so a wrong or unfinished chain is refused instead of silently counting nothing. A member\'s chain hits for a war are the larger of what\'s found automatically and what its linked chains add up to (never the sum, so a chain that overlaps the war\'s own window isn\'t counted twice) — so link every chain you want counted. A chain event doesn\'t count for anyone until a chain is linked to it.',
+            'The per-kind numbers in Member Overview → Torn API usage are now estimates (1 call in 10 is recorded, 10 at a time), to cut the database writes that used up the monthly allowance. The per-minute figure, which is what matters for Torn\'s rate limit, is still exact.',
+        ],
+    },
+    {
         version: '1.18', date: '2026-09-25',
         title: 'To-do list: Discord/Intel/CAT, availability, and a real revive fix',
         everyone: [
