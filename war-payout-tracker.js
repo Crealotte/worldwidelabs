@@ -5,6 +5,8 @@ let warPayoutLoaded = false;
 let wpWars = [];
 let wpSelectedWar = null; // optional — just for opponent name context on the receipt
 let wpChains = []; // { id, totalHits } — the chains the register assigns to the picked war / chain event
+const WP_LIST_LIMIT = 10; // the dropdown shows the latest 10 wars (and 10 chain events); "Show older" lists the rest
+let wpShowAll = false, wpListOpen = false;
 let wpEvents = []; // chain events from the register: { id, name, start, end }
 let wpLinks = {}; // register: war or event id -> [chain ids]
 let wpCalcResult = null; // { members: [...] }
@@ -60,13 +62,15 @@ function renderWarList() {
         el.innerHTML = '<p style="color:var(--muted);font-size:13px;">No past wars found on this key.</p>';
         return;
     }
+    const lim = wpShowAll ? Infinity : WP_LIST_LIMIT;
+    const hidden = Math.max(0, wpWars.length - lim) + Math.max(0, wpEvents.length - lim);
     el.innerHTML = `
-        <div class="ocfit-scenario collapsed" data-collapse="wp-wars">
+        <div class="ocfit-scenario${wpListOpen ? "" : " collapsed"}" data-collapse="wp-wars">
             <div class="ocfit-scenario-header">
                 <span>Past wars (${wpWars.length})${wpEvents.length ? ` and chain events (${wpEvents.length})` : ''}</span>
                 <span class="chev">▾</span>
             </div>
-            <div class="ocfit-scenario-body">${wpWars.map((w, i) => `
+            <div class="ocfit-scenario-body">${wpWars.map((w, i) => i >= lim ? '' : `
                 <div class="ocfit-role-row" data-war-idx="${i}" style="cursor:pointer;">
                     <span class="ocfit-role-name">${esc(w.them?.name || 'Unknown opponent')}</span>
                     <span style="font-size:12px;color:var(--muted);">${esc(wpFmtDate(w.end))}</span>
@@ -75,17 +79,19 @@ function renderWarList() {
                         <input type="checkbox" data-restock-idx="${i}" ${w.restocked ? 'checked' : ''} style="width:auto;"> Restocked
                     </label>
                 </div>`).join('')}
-                ${wpEvents.slice().sort((a, b) => b.end - a.end).map(e => `
+                ${wpEvents.slice().sort((a, b) => b.end - a.end).slice(0, lim).map(e => `
                 <div class="ocfit-role-row" data-event-id="${esc(e.id)}" style="cursor:pointer;">
                     <span class="ocfit-role-name">⛓ ${esc(e.name)}</span>
                     <span style="font-size:12px;color:var(--muted);">${esc(wpFmtDate(e.end))}</span>
                     <span style="font-size:12px;color:var(--muted);">chain event · ${(wpLinks[e.id] || []).length} chain${(wpLinks[e.id] || []).length === 1 ? '' : 's'}</span>
                 </div>`).join('')}
+                ${hidden ? `<div style="padding:8px 0;"><button class="ghost small" id="wp-show-all">Show older (${hidden} more)</button></div>` : ''}
             </div>
         </div>`;
     el.querySelector('.ocfit-scenario-header').addEventListener('click', () => {
-        el.querySelector('.ocfit-scenario').classList.toggle('collapsed');
+        wpListOpen = !el.querySelector('.ocfit-scenario').classList.toggle('collapsed');
     });
+    $('wp-show-all')?.addEventListener('click', () => { wpShowAll = true; renderWarList(); });
     el.querySelectorAll('[data-war-idx]').forEach(row => {
         row.addEventListener('click', () => selectWar(Number(row.dataset.warIdx)));
     });
@@ -146,6 +152,8 @@ function selectEvent(id) {
     wpSelectedWar = { id: e.id, start: e.start, end: e.end, event: true, us: null, them: { name: e.name, id: null }, winner: null };
     highlightPicked('e' + id);
     showPickedChains(`Chain event: ${e.name}`);
+    // No war, usually no pool either: chain hits at the flat rate is what fits (the total to pay is shown under "4.")
+    if (!$('wp-mode-split').checked) { $('wp-mode-split').checked = true; $('wp-mode-split').dispatchEvent(new Event('change')); }
 }
 
 function renderChainChips() {
@@ -346,7 +354,19 @@ function renderWpPayout() {
             <div style="font-size:11px;color:var(--muted);align-self:center;">Sub-faction sends you 15% total (leadership share stays local)</div>
         </div>` : '';
 
-    const exceededHtml = computed.poolExceeded ? `
+    // What actually has to be paid out in total (after penalties) — so with no pool entered (a chain event) you
+    // still see how much money to have ready.
+    const totalPayout = computed.rows.reduce((s, r) => s + r.net, 0);
+    const noPool = !computed.cfg.pool;
+    const totalHtml = `
+        <div style="margin-top:10px;padding:10px 12px;background:var(--bench-2);border-radius:var(--radius);font-size:13px;">
+            <b>Total to pay out: <span style="color:var(--reagent);font-family:var(--mono);">$${Math.round(totalPayout).toLocaleString()}</span></b>
+            <span style="color:var(--muted);"> — ${computed.rows.filter(r => r.net > 0).length} members${computed.rows.some(r => r.penalty) ? ', after penalties' : ''}</span>
+            ${noPool && computed.cfg.mode === 'split' ? `<div style="color:var(--muted);font-size:12px;margin-top:4px;">No pool entered, so this is just the flat rate: ${computed.totalOverflowHits} chain hits × $${Math.round(computed.overflowRate).toLocaleString()}. Have at least this much ready. To also pay war hits, enter a pool in "Total pool" above.</div>` : ''}
+            ${noPool && computed.cfg.mode !== 'split' ? '<div style="color:var(--muted);font-size:12px;margin-top:4px;">No pool entered — enter a "Total pool" above, or switch to the Split payout mode to pay chain hits a flat rate without a pool.</div>' : ''}
+        </div>`;
+
+    const exceededHtml = computed.poolExceeded && !noPool ? `
         <div style="margin-top:10px;padding:8px 12px;background:rgba(220,80,80,.12);border:1px solid var(--danger);border-radius:var(--radius);font-size:12px;color:var(--danger);">
             ⚠ The fixed overflow rate alone (${computed.totalOverflowHits} hits × $${computed.overflowRate.toLocaleString()}) exceeds the payout pool — war hitters are getting $0/hit as a result. Lower the fixed rate or raise the pool.
         </div>` : '';
@@ -359,6 +379,7 @@ function renderWpPayout() {
             <div><div style="color:var(--muted);font-size:11px;">$ / war hit</div><div style="font-weight:700;">$${Math.round(computed.warRate).toLocaleString()}</div></div>
             <div><div style="color:var(--muted);font-size:11px;">$ / chain-only hit</div><div style="font-weight:700;">$${Math.round(computed.overflowRate).toLocaleString()}</div></div>
         </div>
+        ${totalHtml}
         ${subSplitHtml}
         ${exceededHtml}
         <table style="width:100%;font-size:13px;border-collapse:collapse;margin-top:14px;">
