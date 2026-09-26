@@ -313,7 +313,7 @@ async function moRegLoad() {
     const btn = $('mo-reg-load');
     btn.disabled = true; btn.textContent = 'Loading…';
     try {
-        const r = await moFetch({ action: 'reg-get' });
+        const r = await moFetch({ action: 'mo-reg-get' });
         if (r.error) throw new Error(r.error);
         moReg = r;
         renderMoReg();
@@ -353,7 +353,7 @@ function renderMoReg() {
     <div style="color:var(--muted);font-size:11px;margin-top:6px;">Shows the latest 100 chains.</div>`;
 
     const assign = async (chainId, target) => {
-        const r = await moFetch({ action: 'reg-assign', chainId, target });
+        const r = await moFetch({ action: 'mo-reg-assign', chainId, target });
         if (r.error) { toast(r.error); return false; }
         const row = moReg.chains.find(c => c.id === chainId);
         if (row) { row.target = target; row.suggest = null; }
