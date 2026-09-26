@@ -1407,7 +1407,7 @@ module.exports = async function handler(req, res) {
             const perChainMeta = [];
             for (let i = 0; i < chains.length; i++) {
                 const chainId = chains[i];
-                if (i > 0) await sleep(1100); // stay well clear of Torn's rate limit across multiple chains
+                if (i > 0) await sleep(600); // stay well clear of Torn's rate limit across multiple chains
                 const r = await tornFetch(`https://api.torn.com/v2/faction/${chainId}/chainreport?key=${encodeURIComponent(key)}`,
                     { headers: { accept: 'application/json' } });
                 const data = await r.json();
