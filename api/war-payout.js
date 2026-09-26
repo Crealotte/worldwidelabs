@@ -28,7 +28,7 @@ const { tornFetch } = require('../lib/tornFetch');
 const { fetchWarHits, sleep, fetchLiveChainHits } = require('../lib/warHits');
 const { fetchWarBadgeStats } = require('../lib/warBadgeStats');
 const { tornToDiscordIds, resolveDiscordIds, discordStatus } = require('../lib/discordMap');
-const { moHandle, moMe } = require('../lib/memberOverview');
+const { moHandle, moMe, loadExtra, isEventId } = require('../lib/memberOverview');
 const { gymHandle } = require('../lib/gymStats');
 const { warReports } = require('../lib/warReports');
 const { sendBugReport, bugsHandle, suggestHandle } = require('../lib/bugReport');
@@ -1333,9 +1333,10 @@ module.exports = async function handler(req, res) {
         }
 
         if (action === 'list-wars') {
-            const [r, restockedRaw] = await Promise.all([
+            const [r, restockedRaw, register] = await Promise.all([
                 tornFetch(`https://api.torn.com/v2/faction?selections=rankedwars&key=${encodeURIComponent(key)}`, { headers: { accept: 'application/json' } }),
                 redis(['GET', restockedKey(factionId)]),
+                loadExtra(redis, factionId), // the war & chain register: chain events and which chains belong where
             ]);
             const data = await r.json();
             if (data.error) return res.status(403).json({ error: data.error.error });
@@ -1352,7 +1353,7 @@ module.exports = async function handler(req, res) {
                     restocked: !!restocked[w.id],
                 };
             }).sort((a, b) => b.end - a.end);
-            return res.status(200).json({ wars: list });
+            return res.status(200).json({ wars: list, events: register.events, links: register.links });
         }
 
         // Manual "did I restock after this war yet" checkbox, per war, stored per faction — the
@@ -1370,15 +1371,21 @@ module.exports = async function handler(req, res) {
         }
 
         if (action === 'calculate') {
-            const { chainIds, warStart, warEnd } = req.body;
-            const chains = Array.isArray(chainIds) ? chainIds : [];
-            if (!warStart || !warEnd) return res.status(400).json({ error: 'Pick a war first — war hits are counted directly from it.' });
+            const { warStart, warEnd, itemId } = req.body;
+            // The chains come from the register (a war's or chain event's assigned chains), never from the request,
+            // so a chain can't be paid for twice under two different wars.
+            const register = await loadExtra(redis, factionId);
+            const isEvent = isEventId(itemId);
+            const chains = (register.links[String(itemId)] || []).map(String);
+            if (!itemId) return res.status(400).json({ error: 'Pick a war or chain event first.' });
+            if (!isEvent && (!warStart || !warEnd)) return res.status(400).json({ error: 'Pick a war first — war hits are counted directly from it.' });
 
             const membersByAttacker = {}; // attackerId -> { warHits, overflowHits, perChain: { chainId: totalHitsInThatChain } }
 
             // War hits: authoritative, straight from the war itself — covers every member who
             // landed a war hit whether or not it happened inside a chain the leader added below.
-            const warHitsResult = await fetchWarHits(key, factionId, warStart, warEnd);
+            // A chain event has no war, so nothing to scan — all its hits come from its chains.
+            const warHitsResult = isEvent ? { perAttacker: {}, scanned: 0, ownAttacks: 0, rateLimited: false, pagesFetched: 0 } : await fetchWarHits(key, factionId, warStart, warEnd);
             const nameFromAttacks = {};
             for (const [id, entry] of Object.entries(warHitsResult.perAttacker)) {
                 if (!membersByAttacker[id]) membersByAttacker[id] = { warHits: 0, overflowHits: 0, perChain: {} };

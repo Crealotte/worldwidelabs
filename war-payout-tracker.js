@@ -4,7 +4,9 @@
 let warPayoutLoaded = false;
 let wpWars = [];
 let wpSelectedWar = null; // optional — just for opponent name context on the receipt
-let wpChains = []; // { id, totalHits }
+let wpChains = []; // { id, totalHits } — the chains the register assigns to the picked war / chain event
+let wpEvents = []; // chain events from the register: { id, name, start, end }
+let wpLinks = {}; // register: war or event id -> [chain ids]
 let wpCalcResult = null; // { members: [...] }
 let wpPenalties = {}; // memberId -> amount
 let wpPaidIds = new Set(); // memberId -> marked as paid this session
@@ -43,6 +45,8 @@ async function loadWarPayout() {
         const result = await wpFetch({ action: 'list-wars' });
         if (result.error) throw new Error(result.error);
         wpWars = result.wars || [];
+        wpEvents = result.events || [];
+        wpLinks = result.links || {};
         renderWarList();
         st.textContent = ''; st.className = 'status';
     } catch (e) {
@@ -52,14 +56,14 @@ async function loadWarPayout() {
 
 function renderWarList() {
     const el = $('wp-war-list');
-    if (!wpWars.length) {
+    if (!wpWars.length && !wpEvents.length) {
         el.innerHTML = '<p style="color:var(--muted);font-size:13px;">No past wars found on this key.</p>';
         return;
     }
     el.innerHTML = `
         <div class="ocfit-scenario collapsed" data-collapse="wp-wars">
             <div class="ocfit-scenario-header">
-                <span>Past wars (${wpWars.length})</span>
+                <span>Past wars (${wpWars.length})${wpEvents.length ? ` and chain events (${wpEvents.length})` : ''}</span>
                 <span class="chev">▾</span>
             </div>
             <div class="ocfit-scenario-body">${wpWars.map((w, i) => `
@@ -71,6 +75,12 @@ function renderWarList() {
                         <input type="checkbox" data-restock-idx="${i}" ${w.restocked ? 'checked' : ''} style="width:auto;"> Restocked
                     </label>
                 </div>`).join('')}
+                ${wpEvents.slice().sort((a, b) => b.end - a.end).map(e => `
+                <div class="ocfit-role-row" data-event-id="${esc(e.id)}" style="cursor:pointer;">
+                    <span class="ocfit-role-name">⛓ ${esc(e.name)}</span>
+                    <span style="font-size:12px;color:var(--muted);">${esc(wpFmtDate(e.end))}</span>
+                    <span style="font-size:12px;color:var(--muted);">chain event · ${(wpLinks[e.id] || []).length} chain${(wpLinks[e.id] || []).length === 1 ? '' : 's'}</span>
+                </div>`).join('')}
             </div>
         </div>`;
     el.querySelector('.ocfit-scenario-header').addEventListener('click', () => {
@@ -78,6 +88,9 @@ function renderWarList() {
     });
     el.querySelectorAll('[data-war-idx]').forEach(row => {
         row.addEventListener('click', () => selectWar(Number(row.dataset.warIdx)));
+    });
+    el.querySelectorAll('[data-event-id]').forEach(row => {
+        row.addEventListener('click', () => selectEvent(row.dataset.eventId));
     });
     el.querySelectorAll('[data-restock-idx]').forEach(cb => {
         cb.addEventListener('click', e => e.stopPropagation()); // don't also trigger selectWar on the row
@@ -101,45 +114,53 @@ async function toggleWarRestocked(idx, restocked) {
     }
 }
 
+function highlightPicked(key) {
+    $('wp-war-list').querySelectorAll('[data-war-idx], [data-event-id]').forEach(row => {
+        row.style.background = (row.dataset.warIdx !== undefined ? 'w' + row.dataset.warIdx : 'e' + row.dataset.eventId) === key ? 'var(--bench-2)' : '';
+    });
+}
+
+// The chains come from the War & chain register (Member Overview), where each chain is assigned to exactly one
+// war or chain event — so picking one here can never pay a chain twice, and there is nothing to type in.
+function showPickedChains(label) {
+    wpChains = (wpLinks[wpSelectedWar.id] || []).map(id => ({ id: String(id), totalHits: null }));
+    $('wp-chains-panel').style.display = 'block';
+    $('wp-chains-note').textContent = wpChains.length
+        ? `${label} — these chains are assigned to it in the War & chain register (Member Overview), so each chain is only counted once.`
+        : `${label} — no chains are assigned to it yet. War hits are still counted. If hitters chained too, assign the chain(s) to it in Member Overview → War & chain register, then reload this page.`;
+    renderChainChips();
+    $('wp-calc-status').textContent = ''; $('wp-calc-status').className = 'status';
+}
+
 function selectWar(idx) {
     wpSelectedWar = wpWars[idx];
-    $('wp-war-list').querySelectorAll('[data-war-idx]').forEach((row, i) => {
-        row.style.background = i === idx ? 'var(--bench-2)' : '';
-    });
-    $('wp-chains-panel').style.display = 'block';
-    $('wp-chains-note').textContent = `vs ${wpSelectedWar.them?.name || 'unknown'} — war hits are pulled automatically. Only add a chain ID here if hitters kept chaining after the war ended, so those extra hits get paid the flat rate instead of nothing.`;
+    highlightPicked('w' + idx);
+    showPickedChains(`vs ${wpSelectedWar.them?.name || 'unknown'}`);
     if (typeof wpArmoryDefaultDates === 'function') wpArmoryDefaultDates(); // armory-tracker.js — prefill the armory-costs date range for this war
+}
+
+// A chain event (a chain done instead of a war) has no war hits, only its assigned chains.
+function selectEvent(id) {
+    const e = wpEvents.find(x => x.id === id);
+    if (!e) return;
+    wpSelectedWar = { id: e.id, start: e.start, end: e.end, event: true, us: null, them: { name: e.name, id: null }, winner: null };
+    highlightPicked('e' + id);
+    showPickedChains(`Chain event: ${e.name}`);
 }
 
 function renderChainChips() {
     const el = $('wp-chain-list');
-    el.innerHTML = wpChains.map((c, i) => `
+    el.innerHTML = wpChains.map(c => `
         <div class="chip">
             <span class="cid">#${esc(c.id)}</span>
             <span class="meta">${c.totalHits != null ? `${c.totalHits} hits` : 'not loaded yet'}</span>
-            <button data-idx="${i}" class="wp-remove-chain">✕</button>
         </div>`).join('');
-    el.querySelectorAll('.wp-remove-chain').forEach(btn => {
-        btn.addEventListener('click', () => { wpChains.splice(Number(btn.dataset.idx), 1); renderChainChips(); });
-    });
 }
-
-$('wp-add-chain').addEventListener('click', () => {
-    const id = wpParseChainID($('wp-chain-input').value);
-    const st = $('wp-chain-status');
-    if (!id) { st.className = 'status err'; st.textContent = 'Enter a chain ID or paste the full chain report URL.'; return; }
-    if (wpChains.some(c => c.id === id)) { st.className = 'status err'; st.textContent = `Chain #${id} is already added.`; return; }
-    wpChains.push({ id, totalHits: null });
-    $('wp-chain-input').value = '';
-    st.className = 'status'; st.textContent = '';
-    renderChainChips();
-});
-$('wp-chain-input').addEventListener('keydown', e => { if (e.key === 'Enter') $('wp-add-chain').click(); });
 
 $('wp-calculate').addEventListener('click', async () => {
     if (!wpSelectedWar) {
         $('wp-calc-status').className = 'status err';
-        $('wp-calc-status').textContent = 'Pick a war above first — war hits are counted directly from it.';
+        $('wp-calc-status').textContent = 'Pick a war or chain event above first.';
         return;
     }
     const btn = $('wp-calculate');
@@ -149,7 +170,7 @@ $('wp-calculate').addEventListener('click', async () => {
         const result = await wpFetch({
             action: 'calculate',
             warStart: wpSelectedWar.start, warEnd: wpSelectedWar.end,
-            chainIds: wpChains.map(c => c.id),
+            itemId: wpSelectedWar.id,
         });
         if (result.error) throw new Error(result.error);
         wpCalcResult = result;
@@ -165,10 +186,10 @@ $('wp-calculate').addEventListener('click', async () => {
         const meta = result.warHitsMeta;
         if (meta?.brokenWithNoChains) {
             st.className = 'status err';
-            st.textContent = `Scanned ${meta.scanned} attack(s) in the war window but none matched as war hits, and no chain IDs were added to fall back on — add the chain(s) that ran during this war below, or flag this to WWL before paying out.`;
+            st.textContent = `Scanned ${meta.scanned} attack(s) in the war window but none matched as war hits, and no chains are assigned to this war in the register to fall back on — assign the chain(s) that ran during this war in Member Overview → War & chain register, or flag this to WWL before paying out.`;
         } else if (meta?.usedFallback) {
             st.className = 'status err';
-            st.textContent = `Couldn't confirm war hits directly from Torn, so war hits below are from the chain report(s) added instead — same as the old calculator, this only counts hits inside an added chain. Add every chain that ran during the war, and flag this to WWL.`;
+            st.textContent = `Couldn't confirm war hits directly from Torn, so war hits below are from the chain report(s) added instead — same as the old calculator, this only counts hits inside an added chain. Make sure every chain that ran during the war is assigned to it in the register, and flag this to WWL.`;
         } else {
             st.className = 'status ok';
             st.textContent = `${result.members.length} hitter(s) found`

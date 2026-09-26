@@ -1216,8 +1216,8 @@
             <h2>War Payout Calculator</h2>
             <p class="pagedesc">
                 Hit-count based. War hits are pulled straight from the war itself, so hits outside any chain
-                still count — chain IDs are only needed on top of that to catch hits thrown after the war
-                already ended, paid at a flat rate instead of a pool share.
+                still count. Chains are assigned to wars and chain events once, in the War &amp; chain register
+                (Member Overview) — hits from those chains beyond the war's own are paid at a flat rate instead of a pool share.
             </p>
 
             <div class="panel" id="wp-locked" style="display:none;">
@@ -1227,20 +1227,15 @@
 
             <div id="wp-editor" style="display:none;">
                 <div class="panel">
-                    <h3>1. Pick a war</h3>
-                    <p style="color:var(--muted);font-size:12px;margin:0 0 10px;">Required — war hits are pulled directly from this war, so every war hit counts even if it wasn't part of any chain.</p>
+                    <h3>1. Pick a war or chain event</h3>
+                    <p style="color:var(--muted);font-size:12px;margin:0 0 10px;">War hits are pulled directly from the war, so every war hit counts even if it wasn't part of any chain. Chain events (a chain done instead of a war) are listed after the wars.</p>
                     <div class="status" id="wp-war-status"></div>
                     <div id="wp-war-list" style="margin-top:10px;"></div>
                 </div>
 
                 <div class="panel" id="wp-chains-panel">
-                    <h3>2. Add chain IDs (optional)</h3>
-                    <p id="wp-chains-note" style="color:var(--muted);font-size:12px;margin:0 0 10px;">Only needed if hitters kept a chain going after the war ended — those extra hits don't count toward the war, but you still want to pay them something (a chain ID or a pasted chain report URL both work).</p>
-                    <div style="display:flex;gap:8px;">
-                        <input id="wp-chain-input" type="text" placeholder="Chain ID or report URL" style="flex:1;">
-                        <button id="wp-add-chain">Add</button>
-                    </div>
-                    <div class="status" id="wp-chain-status" style="margin-top:8px;"></div>
+                    <h3>2. Chains for this war</h3>
+                    <p id="wp-chains-note" style="color:var(--muted);font-size:12px;margin:0 0 10px;">Chains come from the War &amp; chain register in Member Overview.</p>
                     <div id="wp-chain-list" style="display:flex;flex-wrap:wrap;gap:8px;margin-top:10px;"></div>
                     <button id="wp-calculate" style="margin-top:14px;">Calculate hits</button>
                     <div class="status" id="wp-calc-status" style="margin-top:8px;"></div>
@@ -1474,8 +1469,12 @@
 
                 <div class="panel">
                     <details>
-                        <summary class="av-sum"><h3>Linked chains &amp; chain events</h3></summary>
-                        <p style="color:var(--muted);font-size:12px;margin:10px 0;">The war rule only looks for chain hits from a war's start until 24 hours after it ends, so a chain done later isn't counted — and a chain done instead of a war isn't counted anywhere. Link a chain to a war below so it counts for that war, or add a <b>chain event</b> (a chain done instead of a war) and link its chains to it. An event takes one of the last 5 slots like a war does, and is passed with the chain-hit minimum. A member's chain hits for a war become the larger of what's found automatically and what its linked chains add up to — so link every chain you want counted.</p>
+                        <summary class="av-sum"><h3>War &amp; chain register <span id="mo-reg-warn" style="color:var(--happy);font-size:12px;font-weight:400;"></span></h3></summary>
+                        <p style="color:var(--muted);font-size:12px;margin:10px 0;">Every chain Torn has on record for us, newest first. Put each one in exactly one place: a <b>war</b>, a <b>chain event</b> (a chain done instead of a war), or <b>Ignore</b>. Because a chain can only live in one place it is never counted twice — not by two wars, not by the war rule and the payout calculator. Once a war has chains assigned, those are its chain hits for the 3-of-5 rule and the payout calculator; a chain event takes one of the last 5 slots like a war does. Chains you haven't placed yet show a suggested war (the one it overlapped most) with an Accept button.</p>
+                        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;">
+                            <button class="ghost small" id="mo-reg-load">Load the register</button>
+                            <button class="ghost small" id="mo-reg-accept" style="display:none;">Accept all suggestions</button>
+                        </div>
                         <div id="mo-extra"></div>
                         <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-top:14px;padding-top:12px;border-top:1px solid var(--line);">
                             <div class="field" style="margin:0;max-width:220px;"><label for="mo-ev-name">New chain event — name</label><input id="mo-ev-name" type="text" maxlength="40" placeholder="e.g. Sunday chain"></div>

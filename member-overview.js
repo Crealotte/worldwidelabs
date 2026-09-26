@@ -295,73 +295,103 @@ function renderMemberOverview() {
     renderMoExtra();
 }
 
-// ---- Linked chains & chain events (the panel above Rules) ----
-// A chain done after a war (or instead of one) isn't picked up by the war's automatic count, so a leader links
-// it here. Every change goes to the server (which reads the chain's report with the leader's key and checks it
-// is real) and then the whole page is reloaded, so the table, the "Wars OK" column and members' own dashboard
-// cards all show the same numbers. See lib/memberOverview.js for how linked hits are combined with a war's own.
+// ---- War & chain register (the panel above Rules) ----
+// Lists every war and every chain Torn has for us, and each chain goes in exactly one place: a war, a chain
+// event, "ignore", or nothing yet. Because a chain lives in one place it can't be counted twice. Every change
+// goes to the server (which reads the chain's report with the leader's key and checks it is real); the register
+// is then reloaded, and the Member Overview table behind it is reloaded so "Wars OK" and members' own dashboard
+// cards show the same numbers. See lib/memberOverview.js (assignChain, mergeLinked) for the counting rules.
+let moReg = null;
+
 async function moReload() {
     if (moBusy) { toast('Saved — the page is still loading, press Refresh in a moment to see it.'); return; }
     moData = null;
     await loadMemberOverview();
 }
 
-function renderMoExtra() {
-    const el = $('mo-extra');
-    if (!el || !moData) return;
-    const x = moData.extra || { events: [], links: {}, chainTotals: {} };
-    const items = moWarsInPeriod().slice().reverse(); // newest first
-    const day = ts => new Date(ts * 1000).toLocaleDateString(undefined, { day: 'numeric', month: 'short', timeZone: 'UTC' });
-    const older = (x.events || []).filter(e => !items.some(i => i.id === e.id)); // pushed out of the last 5 by newer ones, still deletable
-    el.innerHTML = (items.length ? items.map(w => {
-        const chains = x.links[w.id] || [];
-        return `<div style="padding:8px 0;border-top:1px solid var(--line);">
-            <div style="display:flex;gap:8px;align-items:baseline;flex-wrap:wrap;">
-                <b>${w.event ? '⛓ ' : ''}${esc(w.opponent)}</b>
-                <span style="color:var(--muted);font-size:12px;">${w.event ? 'chain event' : 'war'} · ${day(w.end)}</span>
-                ${w.event && !chains.length ? '<span style="color:var(--happy);font-size:12px;">not counted until a chain is linked</span>' : ''}
-                ${w.event ? `<button class="ghost small mo-ev-del" data-id="${esc(w.id)}" style="margin-left:auto;">Delete event</button>` : ''}
-            </div>
-            <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:6px;">
-                ${chains.map(c => `<span class="chip" style="cursor:default;">chain #${esc(c)}${x.chainTotals?.[c] != null ? ` · ${esc(x.chainTotals[c])} hits` : ''} <span class="mo-unlink" data-item="${esc(w.id)}" data-chain="${esc(c)}" style="cursor:pointer;color:var(--danger);" title="Remove this link">✕</span></span>`).join('')}
-                <input class="mo-link-in" data-item="${esc(w.id)}" type="text" placeholder="chain ID or link" style="width:170px;">
-                <button class="ghost small mo-link-add" data-item="${esc(w.id)}">+ Link chain</button>
-            </div>
-        </div>`;
-    }).join('') : '<p style="color:var(--muted);font-size:13px;margin:0;">No wars loaded yet.</p>')
-        + (older.length ? `<div style="margin-top:10px;font-size:12px;color:var(--muted);">Older chain events (outside the last 5): ${older.map(e => `${esc(e.name)} (${day(e.end)}) <button class="ghost small mo-ev-del" data-id="${esc(e.id)}">Delete</button>`).join(' · ')}</div>` : '');
+async function moRegLoad() {
+    const btn = $('mo-reg-load');
+    btn.disabled = true; btn.textContent = 'Loading…';
+    try {
+        const r = await moFetch({ action: 'reg-get' });
+        if (r.error) throw new Error(r.error);
+        moReg = r;
+        renderMoReg();
+    } catch (e) { toast(e.message); } finally { btn.disabled = false; btn.textContent = 'Reload the register'; }
+}
 
-    // one delegated handler, replaced each render so buttons never fire twice
+// The small note next to the panel title: chains nobody has placed yet (from the last Member Overview load).
+function renderMoExtra() {
+    const n = moData?.extra?.unassigned;
+    const el = $('mo-reg-warn');
+    if (el) el.textContent = n ? `⚠ ${n} chain${n === 1 ? '' : 's'} not placed yet` : '';
+}
+
+function renderMoReg() {
+    const el = $('mo-extra');
+    if (!el || !moReg) return;
+    const day = ts => new Date(ts * 1000).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: '2-digit', timeZone: 'UTC' });
+    const wars = moReg.wars, events = moReg.events || [];
+    const label = id => { const w = wars.find(x => x.id === id); if (w) return `War vs ${w.opponent} (${day(w.end)})`; const e = events.find(x => x.id === id); return e ? `⛓ ${e.name} (${day(e.end)})` : id; };
+    const options = sel => `<option value=""${sel === '' ? ' selected' : ''}>— not placed yet —</option>`
+        + `<optgroup label="Wars">${wars.map(w => `<option value="${esc(w.id)}"${sel === w.id ? ' selected' : ''}>${esc(label(w.id))}</option>`).join('')}</optgroup>`
+        + (events.length ? `<optgroup label="Chain events">${events.map(e => `<option value="${esc(e.id)}"${sel === e.id ? ' selected' : ''}>${esc(label(e.id))}</option>`).join('')}</optgroup>` : '')
+        + `<option value="ignore"${sel === 'ignore' ? ' selected' : ''}>Ignore (don't count)</option>`;
+    const pending = moReg.chains.filter(c => !c.target && c.suggest);
+    $('mo-reg-accept').style.display = pending.length ? '' : 'none';
+    $('mo-reg-accept').textContent = `Accept all suggestions (${pending.length})`;
+    el.innerHTML = `<div style="overflow-x:auto;"><table style="width:100%;font-size:13px;border-collapse:collapse;">
+        <thead><tr style="color:var(--muted);text-align:left;"><th style="padding:4px 8px;">Chain</th><th style="padding:4px 8px;">Date</th><th style="padding:4px 8px;">Hits</th><th style="padding:4px 8px;">Belongs to</th></tr></thead>
+        <tbody>${moReg.chains.map(c => `<tr style="border-top:1px solid var(--line);${c.target ? '' : 'background:var(--bench-2);'}">
+            <td style="padding:4px 8px;font-family:var(--mono);"><a href="https://www.torn.com/war.php?step=chainreport&chainID=${esc(c.id)}" target="_blank" rel="noopener" style="color:var(--text);">#${esc(c.id)}</a></td>
+            <td style="padding:4px 8px;color:var(--muted);white-space:nowrap;">${day(c.start)} → ${day(c.end)}</td>
+            <td style="padding:4px 8px;font-family:var(--mono);">${c.length ?? '?'}</td>
+            <td style="padding:4px 8px;"><select class="mo-reg-sel" data-chain="${esc(c.id)}" style="font-size:12px;padding:2px 4px;width:auto;max-width:260px;">${options(c.target)}</select>
+                ${c.suggest ? `<span style="color:var(--muted);font-size:11px;">suggested: ${esc(label(c.suggest))}</span> <button class="ghost small mo-reg-accept1" data-chain="${esc(c.id)}" data-target="${esc(c.suggest)}">Accept</button>` : ''}</td>
+        </tr>`).join('') || '<tr><td colspan="4" style="color:var(--muted);padding:8px;">Torn returned no completed chains.</td></tr>'}</tbody>
+    </table></div>
+    <div style="color:var(--muted);font-size:11px;margin-top:6px;">Shows the latest 100 chains.</div>`;
+
+    const assign = async (chainId, target) => {
+        const r = await moFetch({ action: 'reg-assign', chainId, target });
+        if (r.error) { toast(r.error); return false; }
+        const row = moReg.chains.find(c => c.id === chainId);
+        if (row) { row.target = target; row.suggest = null; }
+        return true;
+    };
+    el.onchange = async ev => {
+        const t = ev.target;
+        if (!t.classList.contains('mo-reg-sel')) return;
+        t.disabled = true;
+        const ok = await assign(t.dataset.chain, t.value);
+        renderMoReg();
+        if (ok) moReload();
+    };
     el.onclick = async ev => {
         const t = ev.target;
-        if (t.classList.contains('mo-link-add')) {
-            const input = el.querySelector(`.mo-link-in[data-item="${CSS.escape(t.dataset.item)}"]`);
-            if (!input || !input.value.trim()) { toast('Paste a chain ID or the link to its chain report first.'); return; }
-            t.disabled = true;
-            const r = await moFetch({ action: 'mo-link-chain', itemId: t.dataset.item, chainId: input.value });
-            t.disabled = false;
-            if (r.error) { toast(r.error); return; }
-            toast(`Linked chain #${r.chainId} — ${r.membersWithHits} member${r.membersWithHits === 1 ? '' : 's'} had hits in it`);
-            await moReload();
-        } else if (t.classList.contains('mo-unlink')) {
-            const r = await moFetch({ action: 'mo-unlink-chain', itemId: t.dataset.item, chainId: t.dataset.chain });
-            if (r.error) { toast(r.error); return; }
-            await moReload();
-        } else if (t.classList.contains('mo-ev-del')) {
-            if (!confirm('Delete this chain event and the chains linked to it?')) return;
-            const r = await moFetch({ action: 'mo-event-delete', id: t.dataset.id });
-            if (r.error) { toast(r.error); return; }
-            await moReload();
-        }
+        if (!t.classList.contains('mo-reg-accept1')) return;
+        t.disabled = true;
+        const ok = await assign(t.dataset.chain, t.dataset.target);
+        renderMoReg();
+        if (ok) moReload();
+    };
+    $('mo-reg-accept').onclick = async () => {
+        const btn = $('mo-reg-accept'); btn.disabled = true;
+        for (const c of pending) { if (!(await assign(c.id, c.suggest))) break; }
+        btn.disabled = false;
+        renderMoReg();
+        moReload();
     };
 }
+
+$('mo-reg-load').addEventListener('click', moRegLoad);
 
 $('mo-ev-add').addEventListener('click', async () => {
     const r = await moFetch({ action: 'mo-event-save', name: $('mo-ev-name').value, date: $('mo-ev-date').value });
     if (r.error) { toast(r.error); return; }
     $('mo-ev-name').value = '';
-    toast('Chain event added — now link its chain to it below.');
-    await moReload();
+    toast('Chain event added — you can now pick it in the register\'s dropdowns.');
+    await moRegLoad();
 });
 
 $('mo-period').addEventListener('change', () => { moPeriodId = $('mo-period').value; renderMemberOverview(); loadMemberOverview(); });

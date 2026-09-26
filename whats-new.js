@@ -12,6 +12,17 @@
 
 const WHATS_NEW = [
     {
+        version: '1.20', date: '2026-09-26',
+        title: 'War & chain register',
+        everyone: [
+            'Chains now belong to exactly one war or chain event, so nothing is counted twice. Your 3-of-5 war rule and the "Your standing" chain hits use the same list, and a chain event (a chain done instead of a war) takes one of the last 5 slots like a war does.',
+        ],
+        leaders: [
+            'New Member Overview → War & chain register: every chain Torn has for us, newest first, each with a dropdown — a war, a chain event, Ignore, or not placed yet. Chains you haven\'t placed show the war they overlapped most with an Accept button (and "Accept all suggestions"). Once a war has chains assigned, those are its chain hits (the automatic chain scan is dropped for that war), and a warning appears on the panel when recent chains haven\'t been placed.',
+            'The War Payout Calculator no longer has an "add chain" step: pick a war or a chain event from the list and its assigned chains are used automatically. Chain events have no war hits, so all their hits are paid at the flat chain rate.',
+        ],
+    },
+    {
         version: '1.19', date: '2026-09-26',
         title: 'Linked chains and chain events for the war rule',
         everyone: [
