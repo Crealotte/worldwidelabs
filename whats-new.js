@@ -12,24 +12,15 @@
 
 const WHATS_NEW = [
     {
-        version: '1.20', date: '2026-09-26',
-        title: 'War & chain register',
-        everyone: [
-            'Chains now belong to exactly one war or chain event, so nothing is counted twice. Your 3-of-5 war rule and the "Your standing" chain hits use the same list, and a chain event (a chain done instead of a war) takes one of the last 5 slots like a war does.',
-        ],
-        leaders: [
-            'New Member Overview → War & chain register: every chain Torn has for us, newest first, each with a dropdown — a war, a chain event, Ignore, or not placed yet. Chains you haven\'t placed show the war they overlapped most with an Accept button (and "Accept all suggestions"). Once a war has chains assigned, those are its chain hits (the automatic chain scan is dropped for that war), and a warning appears on the panel when recent chains haven\'t been placed.',
-            'The War Payout Calculator no longer has an "add chain" step: pick a war or a chain event from the list and its assigned chains are used automatically. Chain events have no war hits, so all their hits are paid at the flat chain rate.',
-        ],
-    },
-    {
         version: '1.19', date: '2026-09-26',
-        title: 'Linked chains and chain events for the war rule',
+        title: 'War & chain register for the war rule',
         everyone: [
-            'The war rule ("3 of the last 5 wars") can now count a chain that wasn\'t picked up automatically. Leaders can link a chain to a war — for example a chain thrown after the war to use up faction energy, which used to count for nothing once it ran past the 24 hours after the war — and can add a "chain event" for a chain done instead of a war. A chain event takes one of the last 5 slots like a war does, and is passed with the chain-hit minimum. The "Your standing" card on the dashboard shows it as one of the last 5.',
+            'The war rule ("3 of the last 5 wars") now uses a register where every chain belongs to exactly one war or chain event, so no chain is ever counted twice. A chain thrown after a war (to use up faction energy, which used to count for nothing once it ran past the 24 hours after the war) can now be counted, and a "chain event" — a chain done instead of a war — takes one of the last 5 slots like a war does and is passed with the chain-hit minimum. The "Your standing" card on the dashboard shows it as one of the last 5.',
         ],
         leaders: [
-            'New "Linked chains & chain events" panel on Member Overview (above Rules): paste a chain ID or the link to its chain report under a war to link it, or add a chain event with a name and date and link its chain(s). The chain is read from Torn straight away, so a wrong or unfinished chain is refused instead of silently counting nothing. A member\'s chain hits for a war are the larger of what\'s found automatically and what its linked chains add up to (never the sum, so a chain that overlaps the war\'s own window isn\'t counted twice) — so link every chain you want counted. A chain event doesn\'t count for anyone until a chain is linked to it.',
+            'New "War & chain register" panel on Member Overview (above Rules): press "Load the register" to see every chain Torn has for us, newest first, each with a dropdown — a war, a chain event, Ignore, or not placed yet. Chains you haven\'t placed show the war they overlapped most with an Accept button (and "Accept all suggestions"). Add a chain event with a name and date at the bottom of the panel. The chain is read from Torn when you place it, so a wrong or unfinished chain is refused instead of silently counting nothing.',
+            'Once a war has chains assigned, those are its chain hits for the war rule (the automatic chain scan is dropped for that war; war hits stay as they were). A chain event doesn\'t count for anyone until a chain is assigned to it. The panel title shows a warning when recent chains haven\'t been placed yet.',
+            'The War Payout Calculator no longer has an "add chain" step: pick a war or a chain event from the list and its assigned chains are used automatically, so a chain can\'t be paid under two wars. Chain events have no war hits, so all their hits are paid at the flat chain rate.',
             'The per-kind numbers in Member Overview → Torn API usage are now estimates (1 call in 10 is recorded, 10 at a time), to cut the database writes that used up the monthly allowance. The per-minute figure, which is what matters for Torn\'s rate limit, is still exact.',
         ],
     },
