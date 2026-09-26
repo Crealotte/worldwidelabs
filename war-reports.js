@@ -35,7 +35,7 @@ function renderWarReports(r) {
     const wins = r.reports.filter(x => x.won === true).length, losses = r.reports.filter(x => x.won === false).length;
     const head = `<div style="color:var(--muted);font-size:13px;margin-bottom:10px;">${r.reports.length} reports · <span style="color:var(--reagent);">${wins} won</span> · <span style="color:var(--danger);">${losses} lost</span></div>`;
     $('wr-list').innerHTML = addPanel + head + r.reports.map(x => {
-        const result = x.won === true ? '<span style="color:var(--reagent);font-weight:700;">Win</span>' : x.won === false ? '<span style="color:var(--danger);font-weight:700;">Loss</span>' : '<span style="color:var(--muted);">Result unknown</span>';
+        const result = x.isEvent ? '<span style="color:var(--muted);">Chain event</span>' : x.won === true ? '<span style="color:var(--reagent);font-weight:700;">Win</span>' : x.won === false ? '<span style="color:var(--danger);font-weight:700;">Loss</span>' : '<span style="color:var(--muted);">Result unknown</span>';
         const score = x.scoreUs != null && x.scoreThem != null ? `<span style="color:var(--muted);font-family:var(--mono);font-size:12px;">${Math.round(x.scoreUs).toLocaleString()} – ${Math.round(x.scoreThem).toLocaleString()}</span>` : '';
         const rows = x.rows || [];
         const restockRow = r.leader && x.warId ? `<label style="display:flex;align-items:center;gap:5px;font-size:12px;color:var(--muted);cursor:pointer;" title="Have you restocked the armory for this war yet?">
@@ -57,7 +57,7 @@ function renderWarReports(r) {
         return `
         <div class="panel">
             <div style="display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;">
-                <h3 style="margin:0;">vs ${esc(x.opponent)}</h3>
+                <h3 style="margin:0;">${x.isEvent ? '⛓ ' : 'vs '}${esc(x.opponent)}</h3>
                 ${result} ${score}
                 <span style="color:var(--muted);font-size:12px;">${wrDate(x.warEnd)}</span>
                 <span style="margin-left:auto;display:flex;gap:8px;align-items:center;">
@@ -67,6 +67,12 @@ function renderWarReports(r) {
                 </span>
             </div>
             ${matchPicker}
+            ${x.summary ? `<div style="display:flex;gap:16px;flex-wrap:wrap;margin-top:8px;font-size:12px;color:var(--muted);">
+                <span>Total pool <b style="color:var(--text);font-family:var(--mono);">${wrMoney(x.summary.pool)}</b></span>
+                <span>Costs <b style="color:var(--text);font-family:var(--mono);">${wrMoney(x.summary.costTotal)}</b></span>
+                <span>Retained${x.summary.retainPct != null ? ` (${esc(x.summary.retainPct)}%)` : ''} <b style="color:var(--text);font-family:var(--mono);">${wrMoney(x.summary.retained)}</b></span>
+                <span>Divided <b style="color:var(--reagent);font-family:var(--mono);">${wrMoney(x.summary.payoutPool)}</b></span>
+            </div>` : ''}
             ${details}
         </div>`;
     }).join('');

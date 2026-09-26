@@ -472,6 +472,7 @@ $('wp-save-receipt').addEventListener('click', async () => {
             opponent: wpSelectedWar?.them?.name || 'Not specified', warEnd: wpSelectedWar?.end || Math.floor(Date.now() / 1000),
             warStart: wpSelectedWar?.start, enemyFactionId: wpSelectedWar?.them?.id, // used server-side to also bake War Badges into this receipt
             won: wpSelectedWar?.winner != null ? String(wpSelectedWar.winner) === String(wpSelectedWar.us?.id) : null, scoreUs: wpSelectedWar?.us?.score ?? null, scoreThem: wpSelectedWar?.them?.score ?? null, // shown on the War reports page
+            isEvent: !!wpSelectedWar?.event, chainIds: wpChains.map(c => c.id), pool: computed.cfg.pool, // the full report shows the whole money flow, from the total pool down
             costs: wpCosts, netPool: computed.netPool, retained: computed.retained, payoutPool: computed.payoutPool,
             retainPct: computed.cfg.retainPct, mode: computed.cfg.mode, subSplit: computed.subSplit,
             warRate: computed.warRate, overflowRate: computed.overflowRate,
@@ -497,36 +498,71 @@ async function loadPayoutReceipt(id) {
         const result = await wpFetch({ action: 'get-receipt', id });
         if (result.error) throw new Error(result.error);
         const r = result.receipt;
-        const costsHtml = (r.costs && r.costs.length) ? `
+        const money = n => `$${Math.round(Number(n) || 0).toLocaleString()}`;
+        const rows = Array.isArray(r.rows) ? r.rows : [];
+        const costs = Array.isArray(r.costs) ? r.costs : [];
+        const costTotal = costs.reduce((s, c) => s + (Number(c.amount) || 0), 0);
+        // Receipts saved before the total pool was stored: it is the net pool plus the costs taken off it.
+        const pool = r.pool != null ? Number(r.pool) : (Number(r.netPool) || 0) + costTotal;
+        const totalPaid = rows.reduce((s, x) => s + (Number(x.net) || 0), 0);
+        const totalPenalties = rows.reduce((s, x) => s + (Number(x.penalty) || 0), 0);
+        const warHits = rows.reduce((s, x) => s + (Number(x.warHits) || 0), 0);
+        const chainHits = rows.reduce((s, x) => s + (Number(x.overflowHits) || 0), 0);
+        const paidCount = rows.filter(x => Number(x.net) > 0).length;
+        const modeName = { equal: 'Equal — one rate for every hit', split: 'Split — chain hits at a flat rate, war hits share the rest', weighted: 'Weighted — chain hits worth a fraction of a war hit' }[r.mode] || '';
+        const stat = (label, value, color, sub) => `<div><div style="color:var(--muted);font-size:11px;">${label}</div><div style="font-weight:700;${color ? `color:${color};` : ''}">${value}</div>${sub ? `<div style="color:var(--muted);font-size:11px;">${sub}</div>` : ''}</div>`;
+        const score = r.scoreUs != null && r.scoreThem != null ? ` · ${Number(r.scoreUs).toLocaleString()} – ${Number(r.scoreThem).toLocaleString()}` : '';
+        const outcome = r.won === true ? ' · Won' : r.won === false ? ' · Lost' : '';
+        const title = r.isEvent ? `Chain event: ${r.opponent}` : `War vs ${r.opponent}`;
+        const costsHtml = costs.length ? `
             <div style="margin-bottom:14px;">
-                <div style="color:var(--muted);font-size:11px;margin-bottom:4px;">Costs deducted</div>
-                ${r.costs.map(c => `<div style="font-size:13px;">${esc(c.label)} — $${Math.round(c.amount).toLocaleString()}</div>`).join('')}
+                <div style="color:var(--muted);font-size:11px;margin-bottom:4px;">Costs deducted, by category</div>
+                <table style="font-size:13px;border-collapse:collapse;">
+                    ${costs.map(c => `<tr><td style="padding:2px 16px 2px 0;">${esc(c.label)}</td><td style="padding:2px 0;font-family:var(--mono);text-align:right;">${money(c.amount)}</td></tr>`).join('')}
+                    <tr style="border-top:1px solid var(--line);"><td style="padding:2px 16px 2px 0;font-weight:700;">Total costs</td><td style="padding:2px 0;font-family:var(--mono);text-align:right;font-weight:700;">${money(costTotal)}</td></tr>
+                </table>
             </div>` : '';
         el.innerHTML = `
-            <h3 style="margin-top:0;">War vs ${esc(r.opponent)} — ${esc(new Date(r.warEnd * 1000).toLocaleDateString())}</h3>
+            <h3 style="margin-top:0;">${esc(title)} — ${esc(new Date(r.warEnd * 1000).toLocaleDateString())}${esc(outcome)}${esc(score)}</h3>
+            <div style="color:var(--muted);font-size:11px;margin-bottom:4px;">Where the money went</div>
             <div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:14px;">
-                <div><div style="color:var(--muted);font-size:11px;">Net pool</div><div style="font-weight:700;">$${Math.round(r.netPool).toLocaleString()}</div></div>
-                <div><div style="color:var(--muted);font-size:11px;">Retained (${r.retainPct}%)</div><div style="font-weight:700;">$${Math.round(r.retained).toLocaleString()}</div></div>
-                <div><div style="color:var(--muted);font-size:11px;">Payout pool</div><div style="font-weight:700;color:var(--reagent);">$${Math.round(r.payoutPool).toLocaleString()}</div></div>
-                ${r.warRate != null ? `<div><div style="color:var(--muted);font-size:11px;">$ / war hit</div><div style="font-weight:700;">$${Math.round(r.warRate).toLocaleString()}</div></div>` : ''}
-                ${r.overflowRate != null ? `<div><div style="color:var(--muted);font-size:11px;">$ / chain hit</div><div style="font-weight:700;">$${Math.round(r.overflowRate).toLocaleString()}</div></div>` : ''}
+                ${stat('Total pool', money(pool))}
+                ${stat('Costs', `− ${money(costTotal)}`)}
+                ${stat('Net pool', money(r.netPool))}
+                ${stat(`Retained (${r.retainPct}%)`, `− ${money(r.retained)}`)}
+                ${stat(`Divided among members (${100 - (Number(r.retainPct) || 0)}%)`, money(r.payoutPool), 'var(--reagent)')}
+                ${stat('Total paid out', money(totalPaid), 'var(--reagent)', `${paidCount} member${paidCount === 1 ? '' : 's'}${totalPenalties ? `, after ${money(totalPenalties)} in penalties` : ''}`)}
             </div>
             ${costsHtml}
+            <div style="color:var(--muted);font-size:11px;margin-bottom:4px;">How it was divided${modeName ? ` — ${esc(modeName)}` : ''}</div>
+            <div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:14px;">
+                ${stat('War hits', warHits.toLocaleString())}
+                ${stat('Chain hits', chainHits.toLocaleString())}
+                ${r.warRate != null ? stat('$ / war hit', money(r.warRate)) : ''}
+                ${r.overflowRate != null ? stat('$ / chain hit', money(r.overflowRate)) : ''}
+                ${Array.isArray(r.chainIds) && r.chainIds.length ? stat('Chains', r.chainIds.map(c => '#' + esc(c)).join(', ')) : ''}
+            </div>
             <table style="width:100%;font-size:13px;border-collapse:collapse;">
                 <thead><tr style="color:var(--muted);text-align:left;">
                     <th style="padding:4px 8px;">Member</th><th style="padding:4px 8px;">Breakdown</th>
                     <th style="padding:4px 8px;">Gross</th><th style="padding:4px 8px;">Penalty</th><th style="padding:4px 8px;">Net pay</th>
                 </tr></thead>
-                <tbody>${r.rows.map(row => `
+                <tbody>${rows.map(row => `
                     <tr style="border-top:1px solid var(--line);">
                         <td style="padding:4px 8px;">${esc(row.name)}</td>
                         <td style="padding:4px 8px;font-family:var(--mono);font-size:12px;color:var(--muted);">
-                            ${row.warHits != null ? `${row.warHits} war = $${Math.round(row.warPay).toLocaleString()}${row.overflowHits ? `<br>${row.overflowHits} chain = $${Math.round(row.overflowPay).toLocaleString()}` : ''}` : `${row.totalHits} hits`}
+                            ${row.warHits != null ? `${row.warHits} war = ${money(row.warPay)}${row.overflowHits ? `<br>${row.overflowHits} chain = ${money(row.overflowPay)}` : ''}` : `${row.totalHits} hits`}
                         </td>
-                        <td style="padding:4px 8px;font-family:var(--mono);">$${Math.round(row.gross).toLocaleString()}</td>
-                        <td style="padding:4px 8px;font-family:var(--mono);color:var(--muted);">${row.penalty ? `-$${Math.round(row.penalty).toLocaleString()}` : '—'}</td>
-                        <td style="padding:4px 8px;font-family:var(--mono);font-weight:700;color:var(--reagent);">$${Math.round(row.net).toLocaleString()}</td>
+                        <td style="padding:4px 8px;font-family:var(--mono);">${money(row.gross)}</td>
+                        <td style="padding:4px 8px;font-family:var(--mono);color:var(--muted);">${row.penalty ? `-${money(row.penalty)}` : '—'}</td>
+                        <td style="padding:4px 8px;font-family:var(--mono);font-weight:700;color:var(--reagent);">${money(row.net)}</td>
                     </tr>`).join('')}
+                    <tr style="border-top:2px solid var(--line);font-weight:700;">
+                        <td style="padding:6px 8px;" colspan="2">Total</td>
+                        <td style="padding:6px 8px;font-family:var(--mono);">${money(rows.reduce((s, x) => s + (Number(x.gross) || 0), 0))}</td>
+                        <td style="padding:6px 8px;font-family:var(--mono);color:var(--muted);">${totalPenalties ? `-${money(totalPenalties)}` : '—'}</td>
+                        <td style="padding:6px 8px;font-family:var(--mono);color:var(--reagent);">${money(totalPaid)}</td>
+                    </tr>
                 </tbody>
             </table>
             ${(() => { const badgesHtml = renderReceiptBadgesHtml(r); return badgesHtml ? `<div style="margin-top:24px;"><h3 style="margin-bottom:10px;">🏆 War Badges</h3>${badgesHtml}</div>` : ''; })()}`;
