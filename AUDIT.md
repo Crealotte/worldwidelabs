@@ -42,9 +42,76 @@ for the faction armory" — per player, per day. The old personal-lifetime-stat 
   elsewhere — except a leader can press **"Dig deeper"** (shown right under the period picker,
   Member Overview) to walk back further into Torn's armory news history, as far as it still goes.
   You only need it to reach back through the current newsletter period.
-- The "filled a Blood Bag" wording match is an educated guess (not confirmed against a real Torn
-  news line, unlike the "used" wording which is) — if Blood bags filled looks off after this ships,
-  send a real news line from your faction's armory log and it can be corrected.
+- The "filled a Blood Bag" wording was wrong on the first day this shipped (a guess); confirmed and
+  fixed the same day against a real line ("Solo050 filled one of the faction's Empty Blood Bags to
+  create a Blood Bag : A+"). The tracker auto-resets once to rebuild with the corrected pattern —
+  press "Dig deeper" again afterward to get back to where it was.
+
+---
+
+## Access tiers — design proposal (nothing implemented yet, needs your decisions)
+
+You asked for five tiers: **Personal** (only you), **Members** (everyone in the faction),
+**Council** (has faction API access, but isn't Leader/Co-leader), **Leader/Co-leader** (full access
+to their own faction), **Owner** (you — edits Labs funds by hand, sees every faction on WWL).
+
+**Torn side, checked and workable:** WWL already tells "has faction API access" from "doesn't"
+(that's what `isLeader(key)` actually checks today — the name is misleading, it really means "this
+key's position has API Access turned on," which a leader can grant to non-Leader positions too,
+which is exactly your Council). What's missing is telling **Council apart from Leader/Co-leader**
+specifically. Torn's own profile data includes `faction.position` — the exact position name — and
+"Leader" and "Co-leader" are two reserved names Torn itself assigns and nobody can rename. So:
+- **Leader/Co-leader** = has API access AND position is exactly "Leader" or "Co-leader".
+- **Council** = has API access AND position is anything else (whatever your custom rank is called).
+- **Owner** = the existing `labsIsOwner()` check (already built, already faction-independent).
+- **Members** = a working key that resolves to the faction at all (no API access needed).
+- **Personal** = not really a tier — it's "only this row is about you," which cuts across all of the
+  above (a Council member's OWN feedback answer, say, vs. everyone's).
+
+Plan: one shared helper, computed once per request from data already being fetched (the existing
+profile lookup + the existing `isLeader`/`labsIsOwner` checks), so this doesn't add any extra Torn
+calls anywhere. Every action then declares its own required tier instead of the current one-size
+`isLeader` gate.
+
+**Below is a first pass at sorting every currently leader-gated thing into a tier**, page by page,
+based on your own rule of thumb (Council can *see* most things, but not change money, form
+questions, or integration settings). Anything I wasn't confident about is marked **OPEN**. Please
+go through this and correct/confirm before any of it gets built — this is a proposal, not a plan.
+
+| Page / feature | Gated today | Proposed | Note |
+|---|---|---|---|
+| Availability tracker (view) | Extra detail (names, who's out) is Leader-only; the count is public | **Council sees the same detail as Leader** | Your own example — high confidence |
+| Availability tracker (create/edit/archive a plan) | Leader-only | OPEN — lean Leader-only (structural) | Council could still "see and ping" |
+| Availability tracker ("see who and ping them") | Leader-only | OPEN — lean Council | Operational, not structural |
+| Feedback form (fill in your own / see public results) | Already open to everyone | No change (Members/Personal) | |
+| Feedback form (edit the questions) | Leader-only | **Leader-only** | Your own example — high confidence |
+| Feedback form (see everyone's raw answers) | Leader-only | OPEN — lean **Leader-only** | Feedback often includes opinions about leadership itself; worth keeping Council out even though they can see availability |
+| Feedback form ("clear"/reset all responses) | Leader-only | **Leader-only** | Destructive |
+| Member Overview (view hits/rules/register) | Leader-only (whole `mo-*` bucket) | OPEN — lean Council | |
+| Member Overview (change rule settings, tier overrides, register assignments) | Leader-only | OPEN — lean **Leader-only** | Affects who "passes" and payout amounts |
+| War Payout Calculator (view/calculate/pay) | Leader-only | OPEN — lean **Leader/Co-leader only** | Real money moves via the "Pay" button |
+| War reports (remove a report from the list) | Leader-only | OPEN — lean Council | Low risk, just tidies a list |
+| Labs funds (view) | Leader-only | OPEN — lean **Leader-only** | Financial |
+| Labs funds (add/edit an entry) | Owner-only | No change | Already matches your Owner definition exactly |
+| Newsletter (build the draft) | Leader-only | OPEN — lean Council | No money, no real changes, just a copy-paste helper |
+| Steadfast (sync numbers) | Leader-only | OPEN — lean Council | Routine refresh |
+| Steadfast (set respect goals) | Leader-only | OPEN — lean **Leader-only** | Target-setting decision |
+| Respect tracker (view) | Already open to everyone | No change | |
+| Respect tracker (sync) | Leader-only | OPEN — lean Council | Routine refresh |
+| Respect tracker (add manual war entry / set goal) | Leader-only | OPEN — lean **Leader-only** | |
+| OC Fit team planner (assign members to slots) | Leader-only | OPEN — lean Council | Scheduling, no money |
+| Mentoring admin (assign/monitor pairs) | Leader-only | OPEN — lean Council | Scheduling/oversight, no money |
+| Bug reports & suggestions (change status/delete) | Leader-only | OPEN — lean Council | Moderation |
+| Announcement editor | Leader-only | OPEN — lean **Leader-only** | Faction-wide public message |
+| Leader settings → "Who's on board" verify ticks | Leader-only | OPEN — lean Council | Routine data entry |
+| Leader settings → Discord/nightly/faction-share config | Leader-only | OPEN — lean **Leader-only** | Credentials/integration |
+| What's New → send version to Discord | Leader-only | OPEN — lean **Leader-only** | Outward-facing post |
+| Armory / Consumption Tracker (view report) | Leader-only | OPEN — lean Council | Report only, doesn't spend anything |
+| Banners (create/edit for this faction) | Leader-only | OPEN — lean Council | Just a message |
+| Banners (create/edit for ALL factions) | Owner-only | No change | Already matches Owner |
+
+Everything else on the page-by-page list below has no leader gate today and stays Members/Personal
+as-is.
 
 ---
 
@@ -97,3 +164,5 @@ or missing. Mark `[x]` once checked, with a one-line note (even "looks correct" 
 ## Fixes queued from the audit (add here as we find them)
 
 1. ~~Candy/Alcohol/Blood bags data source~~ — **fixed 2026-09-27**, see above.
+2. Access tiers (Personal/Members/Council/Leader/Owner) — see the design proposal above. **Waiting
+   on your answers to the OPEN rows before any of this is built.** Nothing changes until then.
