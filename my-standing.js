@@ -50,7 +50,7 @@ async function loadMyStanding() {
 
         // --- the smaller tiles: each with the number big and the place under it ---
         const small = [['bloodwithdrawn', '🩸 Blood bags filled'], ['candyused', '🍬 Candy'], ['alcoholused', '🍺 Alcohol'],
-            ['war', '⚔ War hits (last 5 wars)'], ['chain', '⛓ Chain hits (last 5 wars)']].map(([k, label]) => {
+            ['war', '⚔ War hits (this period)'], ['chain', '⛓ Chain hits (this period)']].map(([k, label]) => {
             const p = r.places[k];
             return `
             <div class="stat">
@@ -62,7 +62,7 @@ async function loadMyStanding() {
 
         $('dash-standing-body').innerHTML = `
             <div class="grid2" style="margin-bottom:14px;">${energyTile}${warTile}</div>
-            <div style="color:var(--muted);font-size:12px;margin-bottom:8px;">Your numbers and place this month (${msFmt(r.period.start)} → ${msFmt(r.period.end)}${r.period.running ? ', so far' : ''}); the war and chain hits count the last 5 wars instead.</div>
+            <div style="color:var(--muted);font-size:12px;margin-bottom:8px;">Your numbers and place this month (${msFmt(r.period.start)} → ${msFmt(r.period.end)}${r.period.running ? ', so far' : ''}) — war and chain hits here only count a war or chain event that ended in this period, so nothing wins the competition twice.</div>
             <div class="grid3">${small}</div>`;
         panel.style.display = 'block';
     } catch (e) { panel.style.display = 'none'; }

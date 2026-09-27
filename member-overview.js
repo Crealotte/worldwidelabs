@@ -179,19 +179,24 @@ function moWarOk(p, s) { return !!p && (p.war >= s.minWarHits || (p.war < s.minW
 
 function moRows() {
     const { hits, settings, tiers } = moData;
-    const wars = moWarsInPeriod();
+    const wars = moWarsInPeriod(); // rolling last 5 — what the 3-of-5 rule is judged on, whatever period is picked
+    const period = moPeriod();
     const now = Math.floor(Date.now() / 1000);
     return moData.members.map(m => {
         // Torn only gives "days in faction", so the join moment is "at least that many days ago". A war
         // is only held against a member if they were definitely already in the faction when it started
         // — anyone who might have joined after it began is left out of that war rather than penalised.
         const joinedBy = m.daysInFaction === null ? 0 : now - m.daysInFaction * MO_DAY;
-        let war = 0, chain = 0, okWars = 0, eligible = 0;
+        let war = 0, chain = 0, periodWar = 0, periodChain = 0, okWars = 0, eligible = 0;
         const perWar = wars.map(w => {
             if (!hits[w.id]) return null;
             const h = hits[w.id]?.[m.id];
             const p = { war: h?.war || 0, chain: h?.chain || 0 };
             war += p.war; chain += p.chain;
+            // The war/chain-hit COMPETITION only counts a war or event that ended within the period shown, so
+            // one that's still in the rolling last 5 during the NEXT newsletter's period isn't handed out as a
+            // competition win twice. The 3-of-5 rule (war/chain/okWars above) is unaffected, always the last 5.
+            if (w.end >= period.start && w.end < period.end) { periodWar += p.war; periodChain += p.chain; }
             if (joinedBy > w.start) { p.notIn = true; return p; } // not in the faction yet
             eligible++;
             p.ok = moWarOk(p, settings);
@@ -203,7 +208,7 @@ function moRows() {
         let light = 'grey';
         if (eligible) light = okWars >= need ? 'green' : 'red';
         return {
-            ...m, perWar, war, chain, okWars, need, counted: eligible, light, isNew: eligible < settings.needWars, tier: tiers[m.id] || '',
+            ...m, perWar, war, chain, periodWar, periodChain, okWars, need, counted: eligible, light, isNew: eligible < settings.needWars, tier: tiers[m.id] || '',
             used: Object.fromEntries(MO_KEYS.map(([k]) => [k, moUsed(m.id, k)])),
         };
     });
@@ -216,8 +221,8 @@ const moNum = v => v === null ? '…' : (moPerWeek ? (Math.round(v * 10) / 10).t
 // Top 3 per competition for the newsletter. Ties share a value but are listed in order.
 function moWinners(rows) {
     const cats = [
-        ['War hits (last 5 wars)', r => r.war],
-        ['Chain hits (last 5 wars)', r => r.chain],
+        ['War hits (this period)', r => r.periodWar],
+        ['Chain hits (this period)', r => r.periodChain],
         ...MO_KEYS.map(([k, l]) => [l, r => r.used[k], 'stat']),
     ];
     return cats.map(([label, get]) => ({
