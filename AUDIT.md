@@ -357,7 +357,8 @@ cleanup.** Three more things flagged after using the plan for real:
   visible right where changes are being made instead of requiring a scroll past the whole checklist
   first. Also confirmed the chart already picks up every setting correctly per method (each method's own
   saved "jumps this week" override, plus the shared Xanax-per-day / refill-toggle / candy-per-day
-  settings) — nothing there needed fixing beyond the layout move.
+  settings) — nothing there needed fixing beyond the layout move. Made it collapsible too, same as
+  every other panel on this page.
 
 ## How to use this list
 
