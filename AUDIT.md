@@ -264,6 +264,13 @@ or missing. Mark `[x]` once checked, with a one-line note (even "looks correct" 
   leftover/stray reference. Not touched; needs a look when we get to Availability overview or Leader
   settings in the page-by-page pass.
 
+## Ops note
+
+2026-09-27: commit `3ff0863` (the tallying version of the War Badges diagnostic) reached GitHub's
+`main` fine but never showed up in Vercel's Deployments list at all — a missed webhook, not a build
+failure. If this happens again: check Vercel → Project → Deployments for the commit; if it's simply
+absent (not "Building"/"Error"), push a trivial follow-up commit to re-trigger it, same as this one.
+
 ## Fixes queued from the audit (add here as we find them)
 
 1. ~~Candy/Alcohol/Blood bags data source~~ — **fixed 2026-09-27**, see above.
