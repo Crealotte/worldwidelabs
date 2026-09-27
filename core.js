@@ -199,7 +199,10 @@
             lockNavGroup('leadership', !isLeaderCached);
             lockNavGroup('leadership-leaders', !canEditLeaderOnly);
             lockNavGroup('leadership-council', !isLeaderCached);
-            if (isLeaderCached) { setTimeout(() => { if (typeof loadSteadfastCard === 'function') loadSteadfastCard(); }, 8000); loadAdoption(); setTimeout(loadLeaderTodos, 2500);
+            // "Who's on board" no longer duplicates on the Dashboard — it's Member Overview's own
+            // loadAdoption('-mo') now, called from there; loadFactionSharing() still runs here since its
+            // toggle + "Other factions" panel moved to Labs Funds, not tied to any one page being open.
+            if (isLeaderCached) { setTimeout(() => { if (typeof loadSteadfastCard === 'function') loadSteadfastCard(); }, 8000); setTimeout(loadLeaderTodos, 2500);
             loadFactionSharing();
             loadRespectGoalPanel(); }
         } catch (e) {

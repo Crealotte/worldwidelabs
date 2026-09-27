@@ -1483,6 +1483,30 @@ module.exports = async function handler(req, res) {
         // pushed this project over. The two tools already shared list-wars/getProfile/isLeader
         // verbatim, so this isn't a stretch: it's the same "war data" endpoint answering one more
         // kind of question.
+        // One-off diagnostic: 4 of the 8 War Badges never show (Rogue Element/abroad, Catalyst/assists,
+        // Detonator/hospitalized, Volatile Compound/timesDowned) — all four depend on lib/warBadgeStats.js's
+        // guess at Torn's `result` string and `modifiers.overseas` field, which was never confirmed against
+        // a real response (see its own top comment). This dumps a few raw attacks from a real war so the
+        // actual field names/values can be read directly instead of guessing again.
+        if (action === 'badge-probe') {
+            const { warStart, warEnd } = req.body;
+            if (!warStart || !warEnd) return res.status(400).json({ error: 'Pick a war first.' });
+            const r = await tornFetch(`https://api.torn.com/v2/faction/attacks?from=${warStart}&to=${warEnd}&sort=ASC&key=${encodeURIComponent(key)}`,
+                { headers: { accept: 'application/json' } });
+            const data = await r.json();
+            if (data.error) return res.status(403).json({ error: data.error.error });
+            const list = Array.isArray(data.attacks) ? data.attacks : Object.values(data.attacks || {});
+            // Prefer our own outgoing hits (what the broken badges read), a mix of hospitalized-looking and
+            // ordinary ones if we can tell, else just the first several.
+            const ours = list.filter(a => String(a.attacker?.faction?.id ?? '') === factionId);
+            const sample = ours.slice(0, 8).map(a => ({
+                result: a.result, respect_gain: a.respect_gain, modifiers: a.modifiers,
+                is_ranked_war: a.is_ranked_war, ranked_war: a.ranked_war,
+                attacker: a.attacker?.id, defender: a.defender?.id, defender_faction: a.defender?.faction?.id,
+            }));
+            return res.status(200).json({ scanned: list.length, ownOutgoing: ours.length, sample });
+        }
+
         if (action === 'badge-stats') {
             const { warStart, warEnd, enemyFactionId } = req.body;
             if (!warStart || !warEnd || !enemyFactionId) return res.status(400).json({ error: 'Pick a war first.' });

@@ -114,7 +114,7 @@ async function loadAdoption(sfx = '') {
                 const r = await res.json();
                 if (r.error) throw new Error(r.error);
                 if (adoptionCache) { adoptionCache.verifyMap = adoptionCache.verifyMap || {}; adoptionCache.verifyMap[id] = { ...(adoptionCache.verifyMap[id] || {}), [tool]: next }; }
-                loadAdoption(''); loadAdoption('-mo'); // both copies of the table share one cache — keep them in sync
+                loadAdoption('-mo'); // Member Overview's own copy — the Dashboard no longer has a duplicate
             } catch (e) { toast(`Couldn't update it: ${e.message}`); el.style.pointerEvents = ''; }
         }));
         panel.style.display = 'block';

@@ -120,10 +120,28 @@ async function selectWbReceipt(idx) {
         st.textContent = wbSelectedReceipt.badgeStats
             ? '' : "This receipt was saved before War Badges existed, so most categories won't have data — The Reagent (payout) still will.";
         renderWbGrid();
+        const probePanel = $('wb-probe-panel');
+        if (probePanel) {
+            probePanel.style.display = (typeof isLeaderCached !== 'undefined' && isLeaderCached && wbSelectedReceipt.warStart && wbSelectedReceipt.warEnd) ? 'block' : 'none';
+            probePanel.open = false;
+            $('wb-probe-out').style.display = 'none';
+        }
     } catch (e) {
         st.className = 'status err'; st.textContent = e.message;
     }
 }
+
+$('wb-probe-btn')?.addEventListener('click', async () => {
+    if (!wbSelectedReceipt?.warStart || !wbSelectedReceipt?.warEnd) return;
+    const btn = $('wb-probe-btn'); btn.disabled = true; btn.textContent = 'Checking…';
+    try {
+        const r = await wbFetch({ action: 'badge-probe', warStart: wbSelectedReceipt.warStart, warEnd: wbSelectedReceipt.warEnd });
+        if (r.error) throw new Error(r.error);
+        const out = $('wb-probe-out');
+        out.textContent = `Scanned ${r.scanned} attack(s), ${r.ownOutgoing} of ours.\n\n${JSON.stringify(r.sample, null, 2)}`;
+        out.style.display = 'block';
+    } catch (e) { toast(e.message); } finally { btn.disabled = false; btn.textContent = 'Check what Torn sends for this war'; }
+});
 
 // Pure ranking function, given a plain array of per-member stat objects.
 function wbRankByStat(members, badge) {

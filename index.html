@@ -711,31 +711,6 @@
                 <div class="grid3" id="cooldowns"></div>
             </div>
 
-            <div class="panel" id="adoption" style="display:none;">
-                <details><summary class="av-sum"><h3>Who's on board <span style="font-weight:400;color:var(--muted);font-size:12px;">(leaders only)</span></h3></summary>
-                <p style="color:var(--muted);font-size:12px;margin:0 0 12px;" id="adoption-summary"></p>
-                <div class="table-scroll" style="max-height:340px;overflow-y:auto;">
-                    <table>
-                        <thead><tr><th>Member</th><th>WWLabs</th><th>Discord</th><th>Discord exempt</th><th>Intel</th><th>CAT</th><th>Userscript</th><th class="num">Last login</th></tr></thead>
-                        <tbody id="adoption-body"></tbody>
-                    </table>
-                </div>
-                <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin-top:14px;padding-top:14px;border-top:1px solid var(--line);color:var(--text);">
-                    <input type="checkbox" id="share-toggle" style="width:auto;">
-                    Share this overview with other faction leaders on this site
-                    <span id="share-status" style="color:var(--muted);font-size:12px;"></span>
-                </label>
-                <p style="color:var(--muted);font-size:11px;margin:6px 0 0;">
-                    Only a snapshot of name / WWLabs status / Discord status is shared — never your API key. Refreshes automatically whenever you open this dashboard.
-                </p>
-                </details>
-            </div>
-
-            <div class="panel" id="shared-factions-panel" style="display:none;">
-                <details><summary class="av-sum"><h3>Other factions <span style="font-weight:400;color:var(--muted);font-size:12px;">(shared by their own leaders)</span></h3></summary>
-                <div id="shared-factions-list"></div>
-                </details>
-            </div>
         </section>
 
         <!-- ========== ENERGY PLANNER ========== -->
@@ -1380,6 +1355,12 @@
                     <h3>2. Badges</h3>
                     <div class="status" id="wb-status" style="margin-bottom:8px;"></div>
                     <div class="crimes-grid" id="wb-badge-grid"></div>
+                    <details id="wb-probe-panel" style="display:none;margin-top:14px;padding-top:12px;border-top:1px solid var(--line);">
+                        <summary class="av-sum"><span style="font-size:12px;">Leaders: why are only 4 of 8 showing? (developer check)</span></summary>
+                        <p style="color:var(--muted);font-size:12px;margin:8px 0;">4 categories (Rogue Element, Catalyst, Detonator, Volatile Compound) rely on a Torn field that was never confirmed against a real attack — this shows a few raw ones so it can be fixed instead of guessed at again.</p>
+                        <button class="ghost small" id="wb-probe-btn">Check what Torn sends for this war</button>
+                        <pre id="wb-probe-out" style="display:none;margin-top:8px;font-size:11px;white-space:pre-wrap;background:var(--bench-2);padding:10px;border-radius:var(--radius);max-height:300px;overflow:auto;"></pre>
+                    </details>
                 </div>
 
                 <div class="panel" id="wb-detail-panel" style="display:none;">
@@ -1438,6 +1419,23 @@
             <div class="panel">
                 <h3 id="lf-history-title">History</h3>
                 <div id="lf-history" style="overflow:auto;"></div>
+            </div>
+
+            <div class="panel">
+                <label style="display:flex;align-items:center;gap:8px;cursor:pointer;color:var(--text);">
+                    <input type="checkbox" id="share-toggle" style="width:auto;">
+                    Share our "Who's on board" overview with other faction leaders on this site
+                    <span id="share-status" style="color:var(--muted);font-size:12px;"></span>
+                </label>
+                <p style="color:var(--muted);font-size:11px;margin:6px 0 0;">
+                    Only a snapshot of name / WWLabs status / Discord status is shared — never your API key. Refreshes automatically whenever you open this page.
+                </p>
+            </div>
+
+            <div class="panel" id="shared-factions-panel" style="display:none;">
+                <details><summary class="av-sum"><h3>Other factions <span style="font-weight:400;color:var(--muted);font-size:12px;">(shared by their own leaders — owner only)</span></h3></summary>
+                <div id="shared-factions-list"></div>
+                </details>
             </div>
         </section>
 

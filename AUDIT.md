@@ -194,15 +194,18 @@ war? That tells us exactly which 4 are broken, instead of guessing among the abo
   leader who opted into sharing could see every OTHER opted-in faction's shared overview too. Now
   only `labsIsOwner()` gets the `others` list; every leader can still toggle their OWN faction's
   sharing on/off (that stays their own call).
-- **"Who's on board" and "Other factions" placement — not changed, needs your call:**
-  - "Who's on board" already exists on Member Overview too. Removing it from the Dashboard would
-    reduce duplication — but it's also the only place a plain (non-Council) leader ever saw it,
-    since Member Overview is now Council+ only in the nav. Worth deciding once you're sure who
-    should be seeing it and where.
-  - "Other factions" now correctly shows only for you — a reasonable next step is moving it onto
-    the Labs Funds page (also Owner-scoped, also cross-faction) instead of leaving it on the
-    Dashboard, since it'll now only ever render content for one person. Not done yet — say if you
-    want it moved.
+- **"Who's on board" removed from the Dashboard** (per your call) — it's Member Overview's own copy
+  now, nobody lost access (both were already Council+, same bar).
+- **"Other factions" and the "share this overview" toggle moved from the Dashboard to Labs Funds**
+  (per your call) — thematically the same "Owner sees across factions" idea Labs Funds already is.
+  Every leader can still switch their own faction's sharing on/off there; only you see what other
+  factions shared.
+- **Also added while looking at this: a "why only 4 of 8 War Badges" diagnostic** — War Badges page,
+  under a picked war, "Leaders: why are only 4 of 8 showing?" — dumps a few raw attacks' `result`/
+  `modifiers` fields so the real Torn wording can be read directly. You confirmed the 4 that DO show
+  (Alchemist, Reactor, Buffer, Reagent), which lines up exactly with the 4 that depend on the
+  unconfirmed field guesses (Rogue Element, Catalyst, Detonator, Volatile Compound) always coming
+  back empty — press the new button and paste the output here to fix the pattern for real.
 
 ## Noticed in passing, not yet looked into
 
@@ -268,7 +271,7 @@ or missing. Mark `[x]` once checked, with a one-line note (even "looks correct" 
    built, 2026-09-27**, see above. Next, whenever you're ready: real server-side enforcement, so
    Council is actually blocked (not just hidden from) the Leader-only bits — the `getRole()` helper
    described above, wired into each action named in the tables.
-3. War Badges showing only 4 of 8 — see Confirmed issue #2 above. **Waiting on you to say which 4
-   show**, so the broken field-name guess(es) can be pinned down instead of re-guessed.
-4. "Who's on board" and "Other factions" placement on the Dashboard — see the Dashboard fixes above.
-   **Waiting on your call.**
+3. War Badges showing only 4 of 8 — see Confirmed issue #2 above. Which 4 show is confirmed
+   (Alchemist/Reactor/Buffer/Reagent) and a diagnostic button is live on the War Badges page.
+   **Waiting on its output to fix the field guess for real.**
+4. ~~"Who's on board" and "Other factions" placement~~ — **done 2026-09-27**, see above.
