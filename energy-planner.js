@@ -196,6 +196,21 @@
             tip: 'Good for newbies under level 15 — often faction-funded since it also helps you hit harder in chains. Repeatable every 24h once the booster cooldown clears.',
         },
         {
+            key: 'candy2x', name: 'Candy Jump — 2x daily', cost: '$88,000/day (2x $44,000)', property: 'Shack (no requirement)',
+            items: ['24x candy worth 25 Happy each — 600 Happy, twice a day', '2x Ecstasy — one per dose, ~12h apart (Ecstasy\'s own booster cooldown)'],
+            steps: [
+                { buy: 'Buy the day\'s items (24x candy, 1x Ecstasy) — twice, once per dose' },
+                { wait: 'until your Energy reaches max (100, or 150 for donators)' },
+                { wait: 'until just past a 15-minute Happy reset (:00, :15, :30, :45)' },
+                { do: 'Consume 24 candies' },
+                { do: 'Use the Ecstasy to double your Happy' },
+                { do: 'Spend your Energy training in the gym' },
+                { wait: '~12h, until Ecstasy\'s booster cooldown clears (e.g. 6am → 6pm)' },
+                { do: 'Repeat: 24 candies + Ecstasy + train, for the second dose' },
+            ],
+            tip: 'Two smaller doses beat one big one: the training planner\'s numbers show this beats a single 49-candy jump by a wide margin for similar total candy cost, since the gym gain formula rewards hitting elevated Happy twice more than hitting it once, even higher. Suggested by a faction member, checked against the same math the planner already uses.',
+        },
+        {
             key: 'choco1', name: 'Big Choco Jump — 1 Xanax', cost: '$1,400,000', property: 'Mansion, max upgrades, no staff',
             items: ['1x Xanax', '49x Big Box of Chocolate Bars — 1,715 Happy', '1x Ecstasy'],
             steps: [

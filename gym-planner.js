@@ -31,6 +31,11 @@ function gpMethods(fill, job, candy = 1) {
         { id: 'nat-soft', kind: 'natural', mode: 'soft', name: 'Natural energy — Soft', sub: '3 bars + 2 Xanax a day · 3 log-ins', sessions: 0, items: {}, addHappy: 0, energy: 0, ecstasy: false },
         { id: 'nat-hard', kind: 'natural', mode: 'hard', name: 'Natural energy — Hard', sub: '4 bars + 3 Xanax a day · 4 log-ins', sessions: 0, items: {}, addHappy: 0, energy: 0, ecstasy: false },
         { id: 'candy', name: 'Candy jump', sub: 'Starter jump — 49 candies worth 25 happy + Ecstasy', sessions: 4, items: { candy: 49, ecstasy: 1 }, addHappy: 1225 * candy, energy: fill, ecstasy: true },
+        // Two smaller doses a day beat one big one: the dominant 8*H^1.05 term in gpTrain() below is nearly
+        // linear in happy, so hitting elevated happy TWICE (even at a lower peak each time) adds it up twice,
+        // while the one-big-jump method only gets that boost once. Timed ~12h apart (e.g. 6am/6pm) because
+        // that's Ecstasy's own booster cooldown — the same one energy cans already share, see gpNatFor's note.
+        { id: 'candy2x', name: 'Candy jump (2x daily)', sub: '24 candies + Ecstasy, twice a day ~12h apart', sessions: 8, perDay: 2, items: { candy: 24, ecstasy: 1 }, addHappy: 600 * candy, energy: fill, ecstasy: true },
         { id: 'candy1', name: 'Candy jump (1 Xanax)', sub: '49 candies worth 25 happy + Ecstasy + 1 Xanax', sessions: 4, items: { candy: 49, ecstasy: 1, xanax: 1 }, addHappy: 1225 * candy, energy: fill + 250, ecstasy: true },
         { id: 'candy4', name: 'Candy jump (4 Xanax)', sub: '49 candies worth 25 happy + Ecstasy + 4 Xanax + refill', sessions: 2, items: { candy: 49, ecstasy: 1, xanax: 4 }, addHappy: 1225 * candy, energy: fill + 1000, ecstasy: true, refill: true },
         { id: 'choco1', name: 'Big Choco jump (1 Xanax)', sub: '49 Big Boxes + Ecstasy + 1 Xanax', sessions: 4, items: { choco: 49, ecstasy: 1, xanax: 1 }, addHappy: 1715 * candy, energy: fill + 250, ecstasy: true },
@@ -313,9 +318,12 @@ function renderGymPlanner() {
     // jumps per week the member set for a method (max 4: one per training day)
     let overrides = {};
     try { overrides = JSON.parse(localStorage.getItem('wwl_gym_sessions') || '{}'); } catch (e) { /* defaults */ }
-    methods.forEach(m => { if (m.kind !== 'natural' && overrides[m.id] !== undefined) m.sessions = Math.min(4, Math.max(0, Number(overrides[m.id]) || 0)); });
+    methods.forEach(m => { if (m.kind !== 'natural' && overrides[m.id] !== undefined) m.sessions = Math.min(4 * (m.perDay || 1), Math.max(0, Number(overrides[m.id]) || 0)); });
     const chosen = methods.find(m => m.id === sel);
+    const maxSessions = 4 * (chosen.perDay || 1);
     if ($('gp-sessions').dataset.method !== sel) { $('gp-sessions').value = chosen.sessions; $('gp-sessions').dataset.method = sel; }
+    $('gp-sessions').max = maxSessions;
+    $('gp-sessions-max').textContent = maxSessions;
     $('gp-sessions-wrap').style.display = chosen.kind === 'natural' ? 'none' : 'inline-flex';
     $('gp-settings-label').textContent = `— ${GP_STAT_LABEL[inp.stat]} · ${chosen.name}`;
 
@@ -384,9 +392,11 @@ function renderGymPlanner() {
     const w = rows.find(r => r.m.id === sel).w;
     let checks = {};
     try { checks = JSON.parse(localStorage.getItem(gpWeekKey()) || '{}'); } catch (e) { /* none */ }
-    // jump sessions spread over the 4 training days (1 -> day 1, 2 -> days 1 & 3, 3 -> days 1-3, 4 -> every day)
-    const jumpDayOf = {}; // training day index (0-3) -> session number
-    for (let k = 0; k < chosen.sessions; k++) jumpDayOf[Math.floor(k * 4 / chosen.sessions)] = k;
+    // jump sessions spread over the 4 training days (1 -> day 1, 2 -> days 1 & 3, 3 -> days 1-3, 4 -> every
+    // day, 8 -> twice a day for a perDay:2 method like Candy jump (2x daily)) — an array per day since a
+    // perDay:2 method can land more than one session on the same day.
+    const jumpsByDay = [[], [], [], []]; // training day index (0-3) -> [session numbers]
+    for (let k = 0; k < chosen.sessions; k++) jumpsByDay[Math.floor(k * 4 / chosen.sessions)].push(k);
     const restPerDay = Math.round(w.restEnergy / 4);
     const fillsFor = (energy) => { // natural energy split into bars, like the standard planner
         const out = [];
@@ -397,15 +407,20 @@ function renderGymPlanner() {
     for (let i = 0; i < 4; i++) {
         const day = `d${i + 1}`;
         const items = [];
-        const s = jumpDayOf[i] !== undefined ? w.perSession[jumpDayOf[i]] : null;
-        let note = '';
-        if (s) {
-            note = `${chosen.name}: happy ≈ ${gpN(s.peak)}, estimated +${gpN(s.gain)} ${inp.stat} from this jump.`;
-            gpJumpSteps(chosen, inp).forEach((label, n) => items.push({ key: `${day}s${n}`, label, value: 0 }));
+        const daySessions = jumpsByDay[i];
+        const notes = [];
+        daySessions.forEach((sessionNum, j) => {
+            const s = w.perSession[sessionNum];
+            if (!s) return;
+            const tag = daySessions.length > 1 ? (j === 0 ? 'Morning jump' : j === 1 ? 'Evening jump' : `Jump #${j + 1}`) : chosen.name;
+            notes.push(`${tag}: happy ≈ ${gpN(s.peak)}, estimated +${gpN(s.gain)} ${inp.stat}.`);
+            const pfx = daySessions.length > 1 ? `${day}j${j}` : day;
+            gpJumpSteps(chosen, inp).forEach((label, n) => items.push({ key: `${pfx}s${n}`, label: daySessions.length > 1 ? `${tag} — ${label}` : label, value: 0 }));
             const jumpTrain = chosen.refill ? s.energy - inp.fill : s.energy;
-            items.push({ key: `${day}train`, label: `Train: spend ${gpN(jumpTrain)} E`, value: jumpTrain });
-            if (chosen.refill) items.push({ key: `${day}refill`, label: `Spend 25 points on an energy refill and train again (${gpN(inp.fill)} E)`, value: inp.fill });
-        }
+            items.push({ key: `${pfx}train`, label: `${daySessions.length > 1 ? `${tag} — train` : 'Train'}: spend ${gpN(jumpTrain)} E`, value: jumpTrain });
+            if (chosen.refill) items.push({ key: `${pfx}refill`, label: `Spend 25 points on an energy refill and train again (${gpN(inp.fill)} E)`, value: inp.fill });
+        });
+        const note = notes.join(' ');
         if (nat) {
             // The natural energy day: bars through the day (Xanax with the morning and evening bar first), a refill, and any cans.
             const names = ['Morning', 'Lunch', 'Evening', 'Night'];
@@ -457,13 +472,20 @@ function renderGymPlanner() {
     $('gp-summary').innerHTML = `<b>${esc(chosen.name)}</b> for a week: about <b style="color:var(--reagent);">+${gpN(w.gain)} ${inp.stat}</b> from ${gpN(w.energyUsed)} energy${w.priced ? `, items ≈ <b>${gpMoney(w.cost)}</b>` : ''}.${reqNote}`;
 }
 
-// The steps before the training itself, per method (shortened from the jump guide below).
+// The steps before the training itself, per method (shortened from the jump guide below). Xanax's drug
+// cooldown is 6–8h PER DOSE, so 4 of them is realistically a day of stacking, never "back-to-back" —
+// same real sequence as xanaxStackSteps() in energy-planner.js, just as plain strings for this checklist.
 function gpJumpSteps(m, inp) {
     const items = Object.entries(m.items).map(([k, q]) => `${q}× ${GP_ITEMS[k]}`).join(' + ');
     const peak = Math.min(99999, (inp.base + m.addHappy) * 2);
     const steps = [`Have everything ready: ${items}`];
     if (m.items.xanax === 1) steps.push('Take 1 Xanax and wait out the drug cooldown (6–8 h)');
-    else if (m.items.xanax) steps.push(`Stack ${m.items.xanax} Xanax back-to-back to reach 1,000 E, then wait out all the cooldowns`);
+    else if (m.items.xanax) {
+        for (let x = 1; x <= m.items.xanax; x++) {
+            steps.push(x === m.items.xanax ? `Take Xanax #${x} — you should now be holding around 1,000 E` : `Take Xanax #${x}`);
+            if (x < m.items.xanax) steps.push('Wait 6–8h for the drug cooldown to clear');
+        }
+    }
     else steps.push(`Wait until your energy bar is full (${gpN(inp.fill)} E)`);
     steps.push('Wait until just past a :00 / :15 / :30 / :45 reset');
     const main = m.items.candy ? `all ${m.items.candy} ${gpCandyChoice()?.name || 'candies worth 25 happy each'} (25 happy each)` : m.items.choco ? `all ${m.items.choco} Big Boxes of Chocolate Bars` : `all ${m.items.edvd} Erotic DVDs`;
@@ -486,7 +508,8 @@ async function loadGymPlanner() {
 // ---- the only things a member can change ----
 $('gp-sessions').addEventListener('change', () => {
     let o = {}; try { o = JSON.parse(localStorage.getItem('wwl_gym_sessions') || '{}'); } catch (e) { /* fresh */ }
-    o[$('gp-sessions').dataset.method] = Math.min(4, Math.max(0, Number($('gp-sessions').value) || 0));
+    const max = Number($('gp-sessions').max) || 4;
+    o[$('gp-sessions').dataset.method] = Math.min(max, Math.max(0, Number($('gp-sessions').value) || 0));
     try { localStorage.setItem('wwl_gym_sessions', JSON.stringify(o)); } catch (e) { /* not critical */ }
     renderGymPlanner();
 });

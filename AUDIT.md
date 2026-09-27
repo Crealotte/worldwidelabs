@@ -247,17 +247,34 @@ one, since they're different timelines, not one card with two branches.
 - Removed the "Install the script" checklist panel — the userscript is a general one now and will be
   linked from somewhere else, not repeated per-page.
 
-**Not done — needs your input:**
-- **A "how many Xanax per day" cap for the weekly calculator** (planForGroupA/B) was suggested as an
-  alternative/addition to timing the jumps exactly. The weekly plan itself was already spreading
-  doses across days reasonably (2/day for group A, 4 over "days 1 & 2" for group B) — it was only the
-  Happy Jump *guide* that had the impossible wording, now fixed. Say if you still want a daily-cap
+**Found a second copy of the same bug, same day:** the "Tailored training plan" further down this same
+page (`gym-planner.js`, the personalized calculator with the comparison chart) had its own, separate
+`gpJumpSteps()` function with the exact same "stack N Xanax back-to-back" line — this is the one that
+actually generates each member's real weekly checklist, so it's arguably the more important of the two
+to have fixed. Same real sequence applied there too.
+
+**Cross-checked whether the numbers (stat gain, cost) needed to change because of this:** no. The
+`sessions`-per-week defaults for the 4-Xanax methods (2/week for the Big Choco/Candy 4-Xanax variants,
+1/week for the EDVD jumps) were already conservative enough to fit around the real ~1–1.5 day stacking
+time — the bug was only ever in the descriptive step text, never in the math.
+
+**Added: "Candy jump (2x daily)"**, per a member's suggestion — checked against the planner's own gym
+formula (`gpTrain()` in [gym-planner.js](gym-planner.js)) rather than taking their spreadsheet's
+headline number on faith: the dominant `8×Happy^1.05` term in that formula is close to linear in Happy,
+so hitting elevated Happy TWICE a day (even at a lower peak each time — 24 candies instead of 49) adds
+that term up twice, while one big jump only gets it once. Timed ~12h apart because that's Ecstasy's own
+booster cooldown (the same one energy cans already share). Added as a real, selectable training method
+— it shows up in the comparison chart automatically like every other method, and in the Happy Jumping
+Guide for documentation. The exact 24-candy/12h-apart numbers came from the member's report; the
+underlying "this should be better" reasoning is independently checked against code already here, not
+just trusted.
+
+**Still open, needs your input:**
+- **A "how many Xanax per day" cap for the weekly calculator** (planForGroupA/B, the simpler
+  group-based checklist — different from the Tailored training plan above) was suggested as an
+  alternative/addition to timing the jumps exactly. That one already spreads doses across days
+  reasonably (2/day for group A, 4 over "days 1 & 2" for group B) — say if you still want a daily-cap
   input added on top of that.
-- **A member's "2x daily candy jump" suggestion** (their numbers: ~75% more stat gain than 1x49
-  candy/day, using Private Island + 4,275 base Happy + 25-Happy candy boxes) — I don't want to add
-  unverified stat-gain numbers as training guidance. Could you get their Google Sheet? Once I can see
-  the actual formula behind their numbers (not just the conclusion), I can check it against Torn's
-  known gym-gain mechanics and add it properly if it holds up.
 
 ## How to use this list
 
@@ -326,5 +343,6 @@ absent (not "Building"/"Error"), push a trivial follow-up commit to re-trigger i
    described above, wired into each action named in the tables.
 3. ~~War Badges showing only 4 of 8~~ — **resolved 2026-09-27, not a bug**, see Confirmed issue #2.
 4. ~~"Who's on board" and "Other factions" placement~~ — **done 2026-09-27**, see above.
-5. ~~Happy Jumping Guide's impossible "4 Xanax back-to-back"~~ — **fixed 2026-09-27**, see Confirmed
-   issue #3. Daily-Xanax-cap input and the 2x-daily-candy-jump suggestion are still open, waiting on you.
+5. ~~Happy Jumping Guide's impossible "4 Xanax back-to-back"~~ — **fixed in both places it appeared,
+   2026-09-27**, see Confirmed issue #3. Candy jump (2x daily) added and wired into the comparison
+   chart. Daily-Xanax-cap input for the simpler weekly checklist is still open, waiting on you.
