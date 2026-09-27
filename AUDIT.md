@@ -128,6 +128,11 @@ final spec, ready to implement — not a proposal.
 | Energy trained: fill in from Torn Intel | the whole panel | Leader-only |
 | Checks for the developer | the whole panel | Leader-only |
 
+**Built 2026-09-27:** the "View as" selector (sidebar, member/council/leader/owner) now previews all
+of the above — the six whole-page Leader-only items lock for Council, the two Council-usable pages
+stay open, and the three split pages show their Council-visible panels/table/read-only bits while
+hiding the Leader-only panels and edit controls within them.
+
 ### Still needs real enforcement, not just hiding
 
 Today, every one of the "Leader-only" and "Council" boundaries above is enforced by ONE blanket
@@ -185,9 +190,17 @@ or missing. Mark `[x]` once checked, with a one-line note (even "looks correct" 
 - [ ] Payout receipt viewer (`payout-receipt`, shareable link)
 - [ ] The userscript (Torn/TornPDA) — to-do list, energy tab, targets tab, banners, update flagging
 
+## Noticed in passing, not yet looked into
+
+- `availability-tracker.js`'s `renderAvailabilityPage()` sets `$('av-discord-panel').style.display`,
+  but that element lives on the Leader settings page, not Availability overview — looks like a
+  leftover/stray reference. Not touched; needs a look when we get to Availability overview or Leader
+  settings in the page-by-page pass.
+
 ## Fixes queued from the audit (add here as we find them)
 
 1. ~~Candy/Alcohol/Blood bags data source~~ — **fixed 2026-09-27**, see above.
-2. Access tiers (Personal/Members/Council/Leader/Owner) — **spec decided 2026-09-27**, see above.
-   Next: build the "View as" preview selector (member/council/leader/owner) against this spec, then
-   real server-side enforcement page by page, whenever you're ready.
+2. Access tiers (Personal/Members/Council/Leader/Owner) — **spec decided AND "View as" preview
+   built, 2026-09-27**, see above. Next, whenever you're ready: real server-side enforcement, so
+   Council is actually blocked (not just hidden from) the Leader-only bits — the `getRole()` helper
+   described above, wired into each action named in the tables.

@@ -61,11 +61,18 @@ async function loadAdoption(sfx = '') {
 
         // Torn Intel and CAT can't be checked automatically — a leader clicks the ○/✓ badge to tick a member
         // by hand once they've confirmed it themselves. Not tracked at all for someone not yet on WWLabs.
-        const manualBadge = (id, tool, on) => `<span class="adopt-verify" data-id="${esc(id)}" data-tool="${tool}" style="cursor:pointer;${on ? 'color:var(--reagent);' : 'color:var(--muted);'}" title="Click to mark ${on ? 'not verified' : 'verified'}">${on ? '✓ verified' : '○ not yet'}</span>`;
+        // Who's on board is read-only for Council on Member Overview (see AUDIT.md) — this same table is
+        // also shown elsewhere (e.g. the main adoption page), which stays editable as before.
+        const canVerify = sfx !== '-mo' || typeof canEditLeaderOnly === 'undefined' || canEditLeaderOnly; // only the Member Overview copy is read-only for Council
+        const manualBadge = (id, tool, on) => canVerify
+            ? `<span class="adopt-verify" data-id="${esc(id)}" data-tool="${tool}" style="cursor:pointer;${on ? 'color:var(--reagent);' : 'color:var(--muted);'}" title="Click to mark ${on ? 'not verified' : 'verified'}">${on ? '✓ verified' : '○ not yet'}</span>`
+            : `<span style="${on ? 'color:var(--reagent);' : 'color:var(--muted);'}">${on ? '✓ verified' : '○ not yet'}</span>`;
         // Discord exempt: a member in a country where Discord is banned — clicking this stops the
         // userscript's to-do list nagging them to join/link it. Same click handler as intel/cat, since
         // it's stored in the same manual-verify record; just a different label and sense (on = skip it).
-        const exemptBadge = (id, on) => `<span class="adopt-verify" data-id="${esc(id)}" data-tool="discordExempt" style="cursor:pointer;${on ? 'color:var(--happy);' : 'color:var(--muted);'}" title="Click to mark ${on ? 'not exempt' : 'exempt (e.g. Discord banned in their country)'}">${on ? '✓ exempt' : '○ no'}</span>`;
+        const exemptBadge = (id, on) => canVerify
+            ? `<span class="adopt-verify" data-id="${esc(id)}" data-tool="discordExempt" style="cursor:pointer;${on ? 'color:var(--happy);' : 'color:var(--muted);'}" title="Click to mark ${on ? 'not exempt' : 'exempt (e.g. Discord banned in their country)'}">${on ? '✓ exempt' : '○ no'}</span>`
+            : `<span style="${on ? 'color:var(--happy);' : 'color:var(--muted);'}">${on ? '✓ exempt' : '○ no'}</span>`;
 
         $('adoption-body' + sfx).innerHTML = sorted.map(m => {
             const l = logins[m.id];

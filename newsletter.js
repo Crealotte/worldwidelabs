@@ -11,7 +11,7 @@ const nlNum = n => Math.round(n).toLocaleString();
 const nlPerkName = k => k.replace(/^steadfast (\w+)$/, (m, s) => `${s[0].toUpperCase()}${s.slice(1)} Steadfast`).replace(/^./, c => c.toUpperCase());
 
 async function loadNewsletter() {
-    const locked = !isLeaderCached;
+    const locked = !canEditLeaderOnly; // Leader/Co-leader only end to end — see AUDIT.md
     $('nl-locked').style.display = locked ? 'block' : 'none';
     $('nl-body').style.display = locked ? 'none' : 'block';
     if (locked) return;

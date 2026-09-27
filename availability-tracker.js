@@ -357,17 +357,20 @@ function renderAvPlanBar() {
         bar.style.display = 'flex';
         $('av-plan-select' + sfx).innerHTML = options;
     }
-    $('av-plan-resize-l').style.display = avSummary !== null && !avViewingArchived && avPlanId ? 'inline-block' : 'none'; // leaders only
-    $('av-plan-archive-l').style.display = avSummary !== null && !avViewingArchived && avPlanId ? 'inline-block' : 'none'; // leaders only
-    $('av-plan-delete-l').style.display = avSummary !== null && !avViewingArchived ? 'inline-block' : 'none'; // leaders only
+    // Council can view/pick a plan (av-plan-select-l above); resizing, archiving, deleting, and the
+    // archived-plans picker are structural and stay Leader-only (see AUDIT.md).
+    const canEditPlan = typeof canEditLeaderOnly === 'undefined' ? avSummary !== null : canEditLeaderOnly;
+    $('av-plan-resize-l').style.display = canEditPlan && !avViewingArchived && avPlanId ? 'inline-block' : 'none';
+    $('av-plan-archive-l').style.display = canEditPlan && !avViewingArchived && avPlanId ? 'inline-block' : 'none';
+    $('av-plan-delete-l').style.display = canEditPlan && !avViewingArchived ? 'inline-block' : 'none';
 
     const arSel = $('av-archived-select-l');
-    $('av-archived-bar-l').style.display = avSummary !== null && avArchivedPlans.length ? 'flex' : 'none'; // leaders only
-    if (avSummary !== null) {
+    $('av-archived-bar-l').style.display = canEditPlan && avArchivedPlans.length ? 'flex' : 'none';
+    if (canEditPlan) {
         arSel.innerHTML = '<option value="">— pick one to view —</option>'
             + avArchivedPlans.map(p => `<option value="${esc(p.id)}"${p.id === avPlanId && avViewingArchived ? ' selected' : ''}>${esc(avPlanLabel(p))}</option>`).join('');
     }
-    $('av-archived-note-l').style.display = avSummary !== null && avViewingArchived ? 'flex' : 'none';
+    $('av-archived-note-l').style.display = canEditPlan && avViewingArchived ? 'flex' : 'none';
 }
 
 ['av-plan-select', 'av-plan-select-l'].forEach(id => $(id).addEventListener('change', () => {
@@ -443,9 +446,10 @@ $('av-plan-delete-l').addEventListener('click', async () => {
 });
 
 function renderAvailabilityPage() {
-    $('av-leaders-locked').style.display = avSummary === null ? 'block' : 'none'; // the leaders' page is for leaders only
+    $('av-leaders-locked').style.display = avSummary === null ? 'block' : 'none'; // Council gets in too, so this only locks out plain Members
     renderAvPlanBar();
-    $('av-start-panel').style.display = avSummary !== null ? 'block' : 'none'; // leader-only, inferred from whether summary came back at all
+    // Creating a plan is structural — Leader-only (see AUDIT.md), even though Council is past av-leaders-locked above.
+    $('av-start-panel').style.display = (typeof canEditLeaderOnly === 'undefined' ? avSummary !== null : canEditLeaderOnly) ? 'block' : 'none';
     $('av-discord-panel').style.display = avSummary !== null ? 'block' : 'none';
     renderAvLinkPanel();
     $('av-od-panel').style.display = avSummary !== null ? 'block' : 'none';
@@ -961,8 +965,10 @@ async function toggleAvWatch(day, hour, cellEl) {
 }
 
 // ---- Leader: link a war to the plan picked above, and note if it is termed / how it ended ----
+// Leader-only (see AUDIT.md) even though Council can otherwise view this page.
 function renderAvLinkPanel() {
-    if (avSummary === null || !avConfig) { $('av-link-panel').style.display = 'none'; return; }
+    const canEdit = typeof canEditLeaderOnly === 'undefined' ? avSummary !== null : canEditLeaderOnly;
+    if (!canEdit || !avConfig) { $('av-link-panel').style.display = 'none'; return; }
     $('av-link-panel').style.display = 'block';
     const war = avConfig.war || null;
     const cur = avPlans.find(p => p.id === avPlanId);

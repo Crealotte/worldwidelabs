@@ -123,6 +123,10 @@ async function loadMemberOverview() {
     if (moBusy) return;
     if (!isLeaderCached) { $('mo-locked').style.display = 'block'; $('mo-body').style.display = 'none'; return; }
     $('mo-locked').style.display = 'none'; $('mo-body').style.display = 'block';
+    // Council reads the hits/rules table and Who's on board; the register, Rules settings, Energy
+    // Intel import, and dev checks stay Leader-only whole panels (see AUDIT.md).
+    const editOnly = typeof canEditLeaderOnly === 'undefined' ? isLeaderCached : canEditLeaderOnly;
+    ['mo-register-panel', 'mo-rules-panel', 'mo-intel-panel', 'mo-dev-panel'].forEach(id => { const el = $(id); if (el) el.style.display = editOnly ? '' : 'none'; });
     if (typeof loadAdoption === 'function') loadAdoption('-mo');
     moBusy = true;
     const st = $('mo-status');
@@ -296,8 +300,14 @@ function renderMemberOverview() {
                         const eff = r.tier || auto?.tier || '';
                         const weeks = moWeeksIn(moPeriod());
                         const need = eff ? Math.round(moData.energyTarget[eff] * weeks) : null;
-                        return `<select class="mo-tier" data-id="${esc(r.id)}" style="font-size:12px;padding:2px 4px;width:auto;">
-                        <option value="">${auto ? `Auto: ${auto.tier === 'high' ? '1.5m+' : '&lt;1.5m'}` : 'Auto (not seen yet)'}</option><option value="high" ${r.tier === 'high' ? 'selected' : ''}>Set: 1.5m+</option><option value="low" ${r.tier === 'low' ? 'selected' : ''}>Set: &lt;1.5m</option></select>
+                        // The tier OVERRIDE is the one editable bit in an otherwise read-only-for-Council table (see AUDIT.md) —
+                        // Council sees the same effective tier as plain text instead of the edit dropdown.
+                        const editOnly = typeof canEditLeaderOnly === 'undefined' ? isLeaderCached : canEditLeaderOnly;
+                        const tierPicker = editOnly
+                            ? `<select class="mo-tier" data-id="${esc(r.id)}" style="font-size:12px;padding:2px 4px;width:auto;">
+                        <option value="">${auto ? `Auto: ${auto.tier === 'high' ? '1.5m+' : '&lt;1.5m'}` : 'Auto (not seen yet)'}</option><option value="high" ${r.tier === 'high' ? 'selected' : ''}>Set: 1.5m+</option><option value="low" ${r.tier === 'low' ? 'selected' : ''}>Set: &lt;1.5m</option></select>`
+                            : `<span style="font-size:12px;">${eff ? (eff === 'high' ? '1.5m+' : '&lt;1.5m') : 'not seen yet'}${r.tier ? ' (set)' : auto ? ' (auto)' : ''}</span>`;
+                        return `${tierPicker}
                         <div style="color:var(--muted);font-size:10px;">${need ? `${need.toLocaleString()} E needed` : ''}${auto ? ` · ${(auto.total / 1e6).toFixed(2)}m stats` : ''}</div>`;
                     })()}</td>
                     ${MO_KEYS.map(([k]) => `<td style="padding:4px 8px;font-family:var(--mono);">${moNum(r.used[k])}</td>`).join('')}

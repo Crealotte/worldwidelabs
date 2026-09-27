@@ -134,7 +134,8 @@ const mtMyId = () => String((typeof profile !== 'undefined' && profile?.player_i
 let mtaProgram = null, mtaTodos = [], mtaRoster = [];
 
 async function loadMentoringAdmin() {
-    const locked = typeof isLeaderCached === 'undefined' || !isLeaderCached;
+    // Leader/Co-leader only end to end (see AUDIT.md).
+    const locked = typeof canEditLeaderOnly === 'undefined' || !canEditLeaderOnly;
     $('mta-locked').style.display = locked ? 'block' : 'none';
     $('mta-body').style.display = locked ? 'none' : 'block';
     if (locked) return;

@@ -36,7 +36,8 @@ function renderLeaderTodos(todos) {
 
 // ---- Leader settings page: the Discord settings and the nightly saving live here (moved panels, same handlers) ----
 async function loadLeaderSettings() {
-    const locked = typeof isLeaderCached === 'undefined' || !isLeaderCached;
+    // Leader/Co-leader only end to end — Discord credentials, nightly saving, faction-share (see AUDIT.md).
+    const locked = typeof canEditLeaderOnly === 'undefined' || !canEditLeaderOnly;
     $('ls-locked').style.display = locked ? 'block' : 'none';
     $('ls-body').style.display = locked ? 'none' : 'block';
     if (locked) return;

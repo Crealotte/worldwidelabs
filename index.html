@@ -576,7 +576,15 @@
 
         <div class="spacer"></div>
         <div class="whoami" id="whoami"></div>
-        <button class="ghost small" id="member-view-btn" style="display:none;margin:10px 12px 0;">👁 View as member</button>
+        <div id="view-as-wrap" style="display:none;margin:10px 12px 0;align-items:center;gap:6px;">
+            <span style="font-size:12px;color:var(--muted);" title="Only ever hides things in this browser — a look-and-feel preview, not a real permission change.">👁 View as</span>
+            <select id="view-as-select" style="width:auto;font-size:12px;padding:2px 6px;">
+                <option value="member">Member</option>
+                <option value="council">Council</option>
+                <option value="leader">Leader</option>
+                <option value="owner">Owner</option>
+            </select>
+        </div>
         <button class="ghost small" id="logout-btn" style="margin:10px 12px 0;">Log out</button>
         <a class="ghost small" href="https://ko-fi.com/crealotte" target="_blank" rel="noopener"
            style="margin:6px 12px 10px;display:flex;align-items:center;justify-content:center;gap:6px;text-decoration:none;">
@@ -1111,7 +1119,7 @@
             </div>
 
             <div id="respect-editor" style="display:none;">
-                <div class="panel">
+                <div class="panel" id="rg-goals-panel">
                     <h3>Goals</h3>
                     <div class="field" style="max-width:220px;">
                         <label for="rg-window">Pace calculated from</label>
@@ -1138,7 +1146,7 @@
                     <div id="rg-goal-list" style="margin-top:14px;"></div>
                 </div>
 
-                <div class="panel">
+                <div class="panel" id="rg-warlog-panel">
                     <h3>Log war respect manually</h3>
                     <p style="color:var(--muted);font-size:12px;margin:0 0 10px;">
                         War bonus is now auto-tracked below — use this only if it misses a war, or for
@@ -1191,7 +1199,7 @@
                         are treated as additional to hit respect, not overlapping with it. Click "Reset hits
                         tracking" once after this update to rebuild with the corrected numbers.
                     </p>
-                    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;">
+                    <div id="rg-daily-buttons" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;">
                         <button class="ghost small" id="rg-sync-all">Refresh tracking now</button>
                         <button class="ghost small" id="rg-deep-sync-oc">Dig deeper — OC</button>
                         <button class="ghost small" id="rg-deep-sync-hits">Dig deeper — Hits</button>
@@ -1468,7 +1476,7 @@
                     </details>
                 </div>
 
-                <div class="panel">
+                <div class="panel" id="mo-register-panel">
                     <details>
                         <summary class="av-sum"><h3>War &amp; chain register <span id="mo-reg-warn" style="color:var(--happy);font-size:12px;font-weight:400;"></span></h3></summary>
                         <p style="color:var(--muted);font-size:12px;margin:10px 0;">Every chain Torn has on record for us, newest first. Put each one in exactly one place: a <b>war</b>, a <b>chain event</b> (a chain done instead of a war), or <b>Ignore</b>. Because a chain can only live in one place it is never counted twice — not by two wars, not by the war rule and the payout calculator. Once a war has chains assigned, those are its chain hits for the 3-of-5 rule and the payout calculator; a chain event takes one of the last 5 slots like a war does. Chains you haven't placed yet show a suggested war (the one it overlapped most) with an Accept button.</p>
@@ -1485,7 +1493,7 @@
                     </details>
                 </div>
 
-                <div class="panel">
+                <div class="panel" id="mo-rules-panel">
                     <details>
                         <summary class="av-sum"><h3>Rules</h3></summary>
                         <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-top:10px;">
@@ -1497,7 +1505,7 @@
                     </details>
                 </div>
 
-                <div class="panel">
+                <div class="panel" id="mo-intel-panel">
                     <details>
                         <summary class="av-sum"><h3>Energy trained: fill in the past from Torn Intel</h3></summary>
                         <p style="color:var(--muted);font-size:12px;margin:10px 0;">We count the energy each member trains from the day we started saving the faction's gym counters (every night, see below). To fill in the days before that, copy a member's table from Torn Intel — open the member so their day-by-day rows show, select the rows and copy — and paste it here, one member at a time. Intel rounds to about 0.1k, so it is close, not exact. Pasting a member again just overwrites the same days.</p>
@@ -1509,7 +1517,7 @@
                     </details>
                 </div>
 
-                <div class="panel">
+                <div class="panel" id="mo-dev-panel">
                     <details>
                         <summary class="av-sum"><h3>Checks for the developer</h3></summary>
                         <p style="color:var(--muted);font-size:12px;margin:10px 0;">Only needed when something in Torn's data seems to change. They show what Torn answers.</p>

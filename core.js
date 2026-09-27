@@ -138,12 +138,26 @@
 
     // Leaders with the "API Access" faction permission can read faction data; others get the payout tab locked.
     let isLeaderCached = false;
-    // Leaders can preview the app as a normal member sees it. Only ever hides things in this browser
-    // (the server still checks the real key), so it is a look-and-feel check, not a security change.
-    const MEMBER_VIEW_KEY = "wwl_member_view";
+    // A real leader-tier key can preview the app as any of the four tiers sees it: member, council,
+    // leader/co-leader, owner. Only ever hides/shows things in THIS browser (the server still checks
+    // the real key against one blanket "leaders only" gate today, see AUDIT.md) — a look-and-feel
+    // check, not a security change, exactly like the old member-only toggle this replaced.
+    const VIEW_AS_KEY = "wwl_view_as";
+    const VIEW_RANK = { member: 0, council: 1, leader: 2, owner: 3 };
     let isRealLeader = false;
-    let memberView = false;
-    try { memberView = localStorage.getItem(MEMBER_VIEW_KEY) === "1"; } catch (e) { /* storage blocked */ }
+    let viewAs = "leader"; // default: see everything a real leader-tier key can
+    try {
+        const saved = localStorage.getItem(VIEW_AS_KEY);
+        if (saved && VIEW_RANK[saved] !== undefined) viewAs = saved;
+        else if (localStorage.getItem("wwl_member_view") === "1") viewAs = "member"; // migrate the old boolean toggle once
+    } catch (e) { /* storage blocked */ }
+    const viewAtLeast = (tier) => VIEW_RANK[viewAs] >= VIEW_RANK[tier]; // e.g. viewAtLeast('council') is also true for leader/owner
+    const memberView = viewAs === 'member'; // kept for the couple of older call sites that only ever cared about this one boundary
+    // Six Leadership pages are Leader/Co-leader only end to end (Announcements, Feedback form, War
+    // Payout, Newsletter, Leader settings, Mentoring admin — see AUDIT.md). isLeaderCached alone isn't
+    // strict enough for these any more, since it now also covers "at least Council" for the pages
+    // Council DOES get into.
+    let canEditLeaderOnly = false;
 
     function setNavLock(page, locked) {
         const navItem = document.querySelector(`.nav-item[data-page="${page}"]`);
@@ -164,46 +178,40 @@
         try {
             await tornV2('/faction/balance');
             isRealLeader = true;
-            isLeaderCached = !memberView;
-            $("member-view-btn").style.display = "block";
-            $("member-view-btn").textContent = memberView ? "👁 Member view: ON (click to exit)" : "👁 View as member";
-            setNavLock('announce-edit', memberView);
-            setNavLock('feedback-edit', memberView);
-            setNavLock('ocfit-team', memberView);
-            setNavLock('respect-edit', memberView);
-            setNavLock('war-payout', memberView);
-            setNavLock('armory-tracker', memberView);
-            setNavLock('members-overview', memberView);
-            setNavLock('newsletter', memberView);
-            setNavLock('leader-settings', memberView);
-            setNavLock('mentoring-admin', memberView);
-            setNavLock('availability-leaders', memberView);
-            if (!memberView) { setTimeout(() => { if (typeof loadSteadfastCard === 'function') loadSteadfastCard(); }, 8000); loadAdoption(); setTimeout(loadLeaderTodos, 2500);
+            // "At least Council" still fetches the full leader-tier data (there's no server-side Council
+            // yet — see AUDIT.md), just with Leader-only edit controls hidden within the page. Only
+            // "Member" hides the page entirely.
+            isLeaderCached = viewAtLeast('council');
+            canEditLeaderOnly = viewAtLeast('leader');
+            $("view-as-wrap").style.display = "flex";
+            $("view-as-select").value = viewAs;
+            // Leader/Co-leader only, whole page (view and edit) — see AUDIT.md's access-tier spec.
+            const leaderOnlyPages = ['announce-edit', 'feedback-edit', 'war-payout', 'newsletter', 'leader-settings', 'mentoring-admin'];
+            // Council can use fully.
+            const councilPages = ['ocfit-team', 'armory-tracker'];
+            // Council gets in, but some panels inside are Leader-only — handled within each page's own render.
+            const splitPages = ['respect-edit', 'members-overview', 'availability-leaders'];
+            leaderOnlyPages.forEach(p => setNavLock(p, !viewAtLeast('leader')));
+            [...councilPages, ...splitPages].forEach(p => setNavLock(p, !viewAtLeast('council')));
+            if (viewAtLeast('council')) { setTimeout(() => { if (typeof loadSteadfastCard === 'function') loadSteadfastCard(); }, 8000); loadAdoption(); setTimeout(loadLeaderTodos, 2500);
             loadFactionSharing();
             loadRespectGoalPanel(); }
         } catch (e) {
             isLeaderCached = false;
-            setNavLock('announce-edit', true);
-            setNavLock('feedback-edit', true);
-            setNavLock('ocfit-team', true);
-            setNavLock('respect-edit', true);
-            setNavLock('war-payout', true);
-            setNavLock('armory-tracker', true);
-            setNavLock('members-overview', true);
-            setNavLock('newsletter', true);
-            setNavLock('leader-settings', true);
-            setNavLock('mentoring-admin', true);
-            setNavLock('availability-leaders', true);
+            canEditLeaderOnly = false;
+            ['announce-edit', 'feedback-edit', 'ocfit-team', 'respect-edit', 'war-payout', 'armory-tracker',
+                'members-overview', 'newsletter', 'leader-settings', 'mentoring-admin', 'availability-leaders']
+                .forEach(p => setNavLock(p, true));
         }
         if (document.querySelector('.nav-item[data-page="announce-edit"]').classList.contains('active')) {
-            $('announce-locked').style.display = isLeaderCached ? 'none' : 'block';
-            $('announce-editor').style.display = isLeaderCached ? 'block' : 'none';
-            if (isLeaderCached) { loadAnnouncementEditor(); loadPollEditor(); }
+            $('announce-locked').style.display = canEditLeaderOnly ? 'none' : 'block';
+            $('announce-editor').style.display = canEditLeaderOnly ? 'block' : 'none';
+            if (canEditLeaderOnly) { loadAnnouncementEditor(); loadPollEditor(); }
         }
         if (document.querySelector('.nav-item[data-page="feedback-edit"]').classList.contains('active')) {
-            $('feedback-locked').style.display = isLeaderCached ? 'none' : 'block';
-            $('feedback-editor').style.display = isLeaderCached ? 'block' : 'none';
-            if (isLeaderCached) loadFeedbackEditor();
+            $('feedback-locked').style.display = canEditLeaderOnly ? 'none' : 'block';
+            $('feedback-editor').style.display = canEditLeaderOnly ? 'block' : 'none';
+            if (canEditLeaderOnly) loadFeedbackEditor();
         }
         if (document.querySelector('.nav-item[data-page="members-overview"]').classList.contains('active')) loadMemberOverview();
         if (document.querySelector('.nav-item[data-page="availability-leaders"]').classList.contains('active')) loadAvailability();
@@ -245,8 +253,8 @@
     });
     $('login-key').addEventListener('keydown', e => { if (e.key === 'Enter') $('login-btn').click(); });
 
-    $('member-view-btn').addEventListener('click', () => {
-        try { localStorage.setItem(MEMBER_VIEW_KEY, memberView ? '0' : '1'); } catch (e) { /* storage blocked */ }
+    $('view-as-select').addEventListener('change', () => {
+        try { localStorage.setItem(VIEW_AS_KEY, $('view-as-select').value); } catch (e) { /* storage blocked */ }
         location.reload(); // simplest way to re-draw every page consistently
     });
 
@@ -343,15 +351,15 @@
         if (page === 'foreign-stock' && !foreignStockLoaded) { foreignStockLoaded = true; loadForeignStock(); }
         if (page === 'crimes-guide' && !crimesGuideLoaded) { crimesGuideLoaded = true; loadCrimesGuide(); }
         if (page === 'feedback-edit') {
-            $('feedback-locked').style.display = isLeaderCached ? 'none' : 'block';
-            $('feedback-editor').style.display = isLeaderCached ? 'block' : 'none';
-            if (isLeaderCached) loadFeedbackEditor();
+            $('feedback-locked').style.display = canEditLeaderOnly ? 'none' : 'block';
+            $('feedback-editor').style.display = canEditLeaderOnly ? 'block' : 'none';
+            if (canEditLeaderOnly) loadFeedbackEditor();
         }
         if (page === 'dashboard') { startCooldownTicker(); loadAnnouncement(); loadPolls(); loadRespectGoalPanel(); loadDashboardWarBadges(); loadMyStanding(); if (typeof loadLeaderTodos === 'function' && isLeaderCached) setTimeout(loadLeaderTodos, 1500); setTimeout(() => { if (typeof loadSteadfastCard === 'function') loadSteadfastCard(); }, 8000); } else { stopCooldownTicker(); }
         if (page === 'announce-edit') {
-            $('announce-locked').style.display = isLeaderCached ? 'none' : 'block';
-            $('announce-editor').style.display = isLeaderCached ? 'block' : 'none';
-            if (isLeaderCached) { loadAnnouncementEditor(); loadPollEditor(); }
+            $('announce-locked').style.display = canEditLeaderOnly ? 'none' : 'block';
+            $('announce-editor').style.display = canEditLeaderOnly ? 'block' : 'none';
+            if (canEditLeaderOnly) { loadAnnouncementEditor(); loadPollEditor(); }
         }
     }
 

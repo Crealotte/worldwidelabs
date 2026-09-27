@@ -144,9 +144,14 @@ async function loadRespectGoalPanel() {
 }
 
 async function loadRespectEditor() {
+    // Council gets into this page; Goals, manual war-respect logging, and the daily-breakdown sync/dig-deeper/
+    // reset buttons stay Leader-only (see AUDIT.md) — "Check a specific period" and the breakdown table itself are Council.
     $('respect-locked').style.display = isLeaderCached ? 'none' : 'block';
     $('respect-editor').style.display = isLeaderCached ? 'block' : 'none';
     if (!isLeaderCached) return;
+    $('rg-goals-panel').style.display = canEditLeaderOnly ? '' : 'none';
+    $('rg-warlog-panel').style.display = canEditLeaderOnly ? '' : 'none';
+    $('rg-daily-buttons').style.display = canEditLeaderOnly ? 'flex' : 'none';
 
     try {
         const data = await respectFetch({ action: 'read' });

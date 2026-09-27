@@ -37,9 +37,10 @@ function wpParseChainID(input) {
 }
 
 async function loadWarPayout() {
-    $('wp-locked').style.display = isLeaderCached ? 'none' : 'block';
-    $('wp-editor').style.display = isLeaderCached ? 'block' : 'none';
-    if (!isLeaderCached) return;
+    // Leader/Co-leader only end to end — real money moves through the "Pay" button (see AUDIT.md).
+    $('wp-locked').style.display = canEditLeaderOnly ? 'none' : 'block';
+    $('wp-editor').style.display = canEditLeaderOnly ? 'block' : 'none';
+    if (!canEditLeaderOnly) return;
 
     const st = $('wp-war-status');
     st.className = 'status ok'; st.textContent = 'Loading past wars…';
