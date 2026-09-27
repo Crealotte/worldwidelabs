@@ -119,6 +119,9 @@
         color: var(--muted);
     }
     .nav-group-header:hover { color: var(--text); }
+    .nav-group-header.nav-locked { cursor: default; }
+    .nav-group-header.nav-locked:hover { color: var(--muted); }
+    .nav-group-header.nav-locked .nav-chevron { visibility: hidden; }
     .nav-chevron { transition: transform .18s ease; flex: none; }
     .nav-group.collapsed .nav-chevron { transform: rotate(-90deg); }
     .nav-group-items {
@@ -553,18 +556,34 @@
                 <svg class="nav-chevron" width="10" height="10" viewBox="0 0 10 10"><path d="M2 3.5L5 6.5L8 3.5" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
             </div>
             <div class="nav-group-items" data-group-items="leadership">
-                <a class="nav-item" data-page="announce-edit" href="/announce-edit">Announcements</a>
-                <a class="nav-item" data-page="feedback-edit" href="/feedback-edit">Feedback form</a>
-                <a class="nav-item" data-page="ocfit-team" href="/ocfit-team">OC Team Builder</a>
-                <a class="nav-item" data-page="respect-edit" href="/respect-edit">Respect Tracker</a>
-                <a class="nav-item" data-page="war-payout" href="/war-payout">War Payout</a>
-                <a class="nav-item" data-page="armory-tracker" href="/armory-tracker">Consumption Tracker</a>
-                <a class="nav-item" data-page="availability-leaders" href="/availability-leaders">Availability overview</a>
-                <a class="nav-item" data-page="members-overview" href="/members-overview">Member Overview</a>
-                <a class="nav-item" data-page="newsletter" href="/newsletter">Newsletter</a>
-                <a class="nav-item" data-page="leader-settings" href="/leader-settings">Leader settings</a>
-                <a class="nav-item" data-page="mentoring-admin" href="/mentoring-admin">Mentoring admin</a>
-                <a class="nav-item" data-page="labs-funds" href="/labs-funds" style="display:none;">Labs Funds</a>
+                <div class="nav-group">
+                    <div class="nav-group-header" data-group="leadership-leaders">
+                        <span>Leaders</span>
+                        <svg class="nav-chevron" width="10" height="10" viewBox="0 0 10 10"><path d="M2 3.5L5 6.5L8 3.5" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                    </div>
+                    <div class="nav-group-items" data-group-items="leadership-leaders">
+                        <a class="nav-item" data-page="announce-edit" href="/announce-edit">Announcements</a>
+                        <a class="nav-item" data-page="feedback-edit" href="/feedback-edit">Feedback form</a>
+                        <a class="nav-item" data-page="war-payout" href="/war-payout">War Payout</a>
+                        <a class="nav-item" data-page="newsletter" href="/newsletter">Newsletter</a>
+                        <a class="nav-item" data-page="leader-settings" href="/leader-settings">Leader settings</a>
+                        <a class="nav-item" data-page="mentoring-admin" href="/mentoring-admin">Mentoring admin</a>
+                        <a class="nav-item" data-page="labs-funds" href="/labs-funds" style="display:none;">Labs Funds</a>
+                    </div>
+                </div>
+                <div class="nav-group">
+                    <div class="nav-group-header" data-group="leadership-council">
+                        <span>Council</span>
+                        <svg class="nav-chevron" width="10" height="10" viewBox="0 0 10 10"><path d="M2 3.5L5 6.5L8 3.5" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                    </div>
+                    <div class="nav-group-items" data-group-items="leadership-council">
+                        <a class="nav-item" data-page="ocfit-team" href="/ocfit-team">OC Team Builder</a>
+                        <a class="nav-item" data-page="armory-tracker" href="/armory-tracker">Consumption Tracker</a>
+                        <a class="nav-item" data-page="respect-edit" href="/respect-edit">Respect Tracker</a>
+                        <a class="nav-item" data-page="availability-leaders" href="/availability-leaders">Availability overview</a>
+                        <a class="nav-item" data-page="members-overview" href="/members-overview">Member Overview</a>
+                    </div>
+                </div>
             </div>
         </div>
 

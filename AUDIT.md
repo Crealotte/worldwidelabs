@@ -128,19 +128,31 @@ final spec, ready to implement — not a proposal.
 | Energy trained: fill in from Torn Intel | the whole panel | Leader-only |
 | Checks for the developer | the whole panel | Leader-only |
 
-**Built 2026-09-27:** the "View as" selector (sidebar, member/council/leader/owner) now previews all
-of the above — the six whole-page Leader-only items lock for Council, the two Council-usable pages
-stay open, and the three split pages show their Council-visible panels/table/read-only bits while
-hiding the Leader-only panels and edit controls within them.
+**Built 2026-09-27:** the "View as" selector (sidebar, member/council/leader/owner) previews all of
+the above, and the nav itself now matches the split: the "Leadership" group has two subgroups,
+**Leaders** (the six whole-page items, plus Labs Funds) and **Council** (the two fully-open pages
+plus the three split ones). Locking happens at the group level, not per page — a locked subgroup
+shows one 🔒 on its own header, starts closed, and its header isn't clickable (nothing to open),
+instead of decorating every page inside it. Inside an OPEN group, the split pages (Respect Tracker,
+Availability overview, Member Overview) still hide their own Leader-only panels/edit controls.
+
+### Real enforcement, done so far
+
+- **Labs Funds is now actually Leader/Co-leader-or-Owner only, enforced on the server** — not just
+  hidden in the UI. This one used Torn's own `faction.position` field (exactly "Leader" or
+  "Co-leader", the two reserved names) rather than the old `isLeader(key)` check, which only ever
+  meant "has faction API access" and let Council in too. See `isLeaderRank()` in api/war-payout.js —
+  this is the first real piece of the `getRole()` helper described above, built where it mattered
+  most (Council could otherwise see every faction's war-pay history and retained cut).
 
 ### Still needs real enforcement, not just hiding
 
-Today, every one of the "Leader-only" and "Council" boundaries above is enforced by ONE blanket
-`isLeader(key)` check per action on the server — there's no server-side idea of "Council" yet at
-all. Making this real (not just hidden in the UI) needs the `getRole()` helper described above,
-wired into every action named in the tables — a genuinely separate, larger implementation pass,
-page by page, once you're ready. Until then, treat any UI hiding as look-and-feel only, same as
-today's "View as member" already is.
+Every OTHER "Leader-only" vs "Council" boundary above is still enforced by one blanket
+`isLeader(key)` check per action on the server (true API access, not rank) — there's no server-side
+Council-vs-Leader distinction for these yet. Making each real (not just hidden in the UI) means
+reusing `isLeaderRank()` in every action named in the tables — a genuinely separate, larger pass,
+page by page, once you're ready. Until then, treat any UI hiding on those as look-and-feel only,
+same as today's "View as" selector.
 
 ---
 

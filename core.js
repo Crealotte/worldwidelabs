@@ -159,18 +159,25 @@
     // Council DOES get into.
     let canEditLeaderOnly = false;
 
-    function setNavLock(page, locked) {
-        const navItem = document.querySelector(`.nav-item[data-page="${page}"]`);
-        if (!navItem) return;
+    // Locking happens at the GROUP level, not per page — a page with no access at all just sits inside
+    // a locked, collapsed, unclickable group header (a single 🔒 there says enough; no per-item icons
+    // or "leaders only" messages needed in the nav itself).
+    function lockNavGroup(groupName, locked) {
+        const header = document.querySelector(`.nav-group-header[data-group="${groupName}"]`);
+        if (!header) return;
+        const group = header.closest('.nav-group');
+        header.classList.toggle('nav-locked', locked);
         if (locked) {
-            if (!navItem.querySelector('.lock')) {
+            group.classList.add('collapsed'); // nothing inside works, so don't leave it sitting open
+            if (!header.querySelector('.lock')) {
                 const lock = document.createElement('span');
                 lock.className = 'lock';
                 lock.textContent = ' 🔒';
-                navItem.appendChild(lock);
+                header.querySelector('span').appendChild(lock);
             }
         } else {
-            navItem.querySelector('.lock')?.remove();
+            header.querySelector('.lock')?.remove();
+            // Unlocking doesn't force it open — leaves whatever the person's own expand/collapse choice was.
         }
     }
 
@@ -185,23 +192,22 @@
             canEditLeaderOnly = viewAtLeast('leader');
             $("view-as-wrap").style.display = "flex";
             $("view-as-select").value = viewAs;
-            // Leader/Co-leader only, whole page (view and edit) — see AUDIT.md's access-tier spec.
-            const leaderOnlyPages = ['announce-edit', 'feedback-edit', 'war-payout', 'newsletter', 'leader-settings', 'mentoring-admin'];
-            // Council can use fully.
-            const councilPages = ['ocfit-team', 'armory-tracker'];
-            // Council gets in, but some panels inside are Leader-only — handled within each page's own render.
-            const splitPages = ['respect-edit', 'members-overview', 'availability-leaders'];
-            leaderOnlyPages.forEach(p => setNavLock(p, !viewAtLeast('leader')));
-            [...councilPages, ...splitPages].forEach(p => setNavLock(p, !viewAtLeast('council')));
-            if (viewAtLeast('council')) { setTimeout(() => { if (typeof loadSteadfastCard === 'function') loadSteadfastCard(); }, 8000); loadAdoption(); setTimeout(loadLeaderTodos, 2500);
+            // Locking is by GROUP: "Leadership" itself locks when nothing inside works at all; its two
+            // subgroups lock independently (Leaders needs canEditLeaderOnly, Council needs isLeaderCached).
+            // Individual pages inside a group that's OPEN still hide their own Leader-only panels/edit
+            // controls internally (respect-tracker.js etc.) — see AUDIT.md's access-tier spec.
+            lockNavGroup('leadership', !isLeaderCached);
+            lockNavGroup('leadership-leaders', !canEditLeaderOnly);
+            lockNavGroup('leadership-council', !isLeaderCached);
+            if (isLeaderCached) { setTimeout(() => { if (typeof loadSteadfastCard === 'function') loadSteadfastCard(); }, 8000); loadAdoption(); setTimeout(loadLeaderTodos, 2500);
             loadFactionSharing();
             loadRespectGoalPanel(); }
         } catch (e) {
             isLeaderCached = false;
             canEditLeaderOnly = false;
-            ['announce-edit', 'feedback-edit', 'ocfit-team', 'respect-edit', 'war-payout', 'armory-tracker',
-                'members-overview', 'newsletter', 'leader-settings', 'mentoring-admin', 'availability-leaders']
-                .forEach(p => setNavLock(p, true));
+            lockNavGroup('leadership', true);
+            lockNavGroup('leadership-leaders', true);
+            lockNavGroup('leadership-council', true);
         }
         if (document.querySelector('.nav-item[data-page="announce-edit"]').classList.contains('active')) {
             $('announce-locked').style.display = canEditLeaderOnly ? 'none' : 'block';
@@ -280,6 +286,7 @@
 
     document.querySelectorAll('.nav-group-header').forEach(header => {
         header.addEventListener('click', () => {
+            if (header.classList.contains('nav-locked')) return; // nothing inside works — not worth opening
             const group = header.closest('.nav-group');
             const name = header.dataset.group;
             group.classList.toggle('collapsed');

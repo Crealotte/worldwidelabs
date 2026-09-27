@@ -26,7 +26,10 @@ async function checkLabsOwner() {
         const r = await lfFetch({ action: 'labs-status' });
         lfOwner = !!r.owner; lfClaimable = !!r.claimable;
         const nav = document.querySelector('.nav-item[data-page="labs-funds"]');
-        if (nav) nav.style.display = r.leader ? '' : 'none';
+        // r.leader is real (Leader/Co-leader, enforced server-side); also respect the "View as" preview
+        // so simulating Member/Council hides this like the rest of the Leader-only pages (see AUDIT.md).
+        const previewOk = typeof viewAtLeast === 'undefined' || viewAtLeast('leader');
+        if (nav) nav.style.display = (r.leader && previewOk) ? '' : 'none';
     } catch (e) { /* not an owner, or offline — the nav item just stays hidden */ }
 }
 

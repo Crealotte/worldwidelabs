@@ -115,7 +115,7 @@ async function getProfile(key) {
             return null;
         }
         if (!profile.faction?.faction_id) { getProfile.lastError = 'Torn returned no faction for this key — is the key from a player in a faction?'; return null; }
-        return { factionId: String(profile.faction.faction_id), factionName: profile.faction.faction_name || '', daysInFaction: profile.faction.days_in_faction ?? null, playerId: String(profile.player_id), name: profile.name };
+        return { factionId: String(profile.faction.faction_id), factionName: profile.faction.faction_name || '', daysInFaction: profile.faction.days_in_faction ?? null, playerId: String(profile.player_id), name: profile.name, position: profile.faction.position || '' };
     }
     return null;
 }
@@ -125,6 +125,10 @@ async function isLeader(key) {
     const d = await r.json();
     return !d.error;
 }
+// "Leader" or "Co-leader" specifically, not just any position with API access (Council) — Torn assigns
+// these two exact, unrenameable position names. Used where the AUDIT.md spec says Leader/Co-leader
+// only, not Council (currently just Labs Funds — the rest of that spec is still preview-only).
+const isLeaderRank = (profile) => profile?.position === 'Leader' || profile?.position === 'Co-leader';
 
 // Ranked wars with no end yet — i.e. matched-but-not-started, or still running. What the
 // availability tracker links to, so the war's start time (and the overdose window derived from
@@ -803,14 +807,14 @@ module.exports = async function handler(req, res) {
         if (action.startsWith('labs-')) {
             const owner = await labsIsOwner(redis, playerId);
             if (action === 'labs-status') {
-                const leader = owner || await isLeader(key);
+                const leader = owner || isLeaderRank(profile); // Leader/Co-leader only, not Council — see AUDIT.md
                 return res.status(200).json({ owner, leader, claimable: leader && !owner && !(await labsHasOwners(redis)) });
             }
             const readOnly = action === 'labs-get';
             if (action === 'labs-claim') {
-                if (!(await isLeader(key))) return res.status(403).json({ error: 'Leaders only' });
+                if (!isLeaderRank(profile)) return res.status(403).json({ error: 'Leaders and Co-leaders only' });
             } else if (readOnly) {
-                if (!owner && !(await isLeader(key))) return res.status(403).json({ error: 'Leaders only' });
+                if (!owner && !isLeaderRank(profile)) return res.status(403).json({ error: 'Leaders and Co-leaders only' });
             } else if (!owner) {
                 return res.status(403).json({ error: 'Owner only' });
             }
