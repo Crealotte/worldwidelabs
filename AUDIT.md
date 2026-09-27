@@ -177,10 +177,21 @@ The likeliest candidates, in order of how shaky their field-name guess is:
 - **The Volatile Compound** (needs both `warHits` and `timesDowned` to be nonzero — could fail even
   if `timesDowned` itself is fine, just because it also depends on `warHits`, which is more trusted).
 
-**Needs from you to actually fix, rather than guess again:** which 4 badges DO show up for a recent
-war? That tells us exactly which 4 are broken, instead of guessing among the above.
+**Resolved 2026-09-27 — the code was never actually broken.** A live diagnostic against a real war
+(1,598 attacks) showed the field guesses were all correct: "Hospitalized" and "Assist" are real
+`result` values, and the `overseas` modifier does go above 1 (rarely). The 4 missing badges on that
+one older receipt were genuine near-zero events for that specific war (0 assists on our outgoing
+hits, 0 of our own members hospitalized, 1 abroad hit total) — not a field-name bug. Confirmed by
+checking a more recently-saved war ("Glory to Saints"), which shows all 8 badges correctly. The
+older receipt's badge numbers were simply baked in once, at save time, possibly before something in
+the pipeline was in its current shape — they're not recalculated afterward by design (see
+war-badges-tracker.js's own top comment on why). Not touched further — an optional "refresh this
+receipt's badges" button could be built if old receipts showing fewer badges bothers you, but it's
+cosmetic history at this point, not a live bug.
 
 **Also requested:** make the War Badges widget collapsible, closed by default — **done**, see below.
+A leader-only diagnostic ("why are only 4 of 8 showing?", under a picked war) is also now live on
+the War Badges page — kept in place in case a genuinely new pattern shows up later.
 
 ## Fixes — Dashboard, 2026-09-27
 
@@ -278,7 +289,5 @@ absent (not "Building"/"Error"), push a trivial follow-up commit to re-trigger i
    built, 2026-09-27**, see above. Next, whenever you're ready: real server-side enforcement, so
    Council is actually blocked (not just hidden from) the Leader-only bits — the `getRole()` helper
    described above, wired into each action named in the tables.
-3. War Badges showing only 4 of 8 — see Confirmed issue #2 above. Which 4 show is confirmed
-   (Alchemist/Reactor/Buffer/Reagent) and a diagnostic button is live on the War Badges page.
-   **Waiting on its output to fix the field guess for real.**
+3. ~~War Badges showing only 4 of 8~~ — **resolved 2026-09-27, not a bug**, see Confirmed issue #2.
 4. ~~"Who's on board" and "Other factions" placement~~ — **done 2026-09-27**, see above.
