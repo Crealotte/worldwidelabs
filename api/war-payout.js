@@ -319,8 +319,9 @@ async function leaderTodos(key, factionId) {
             const p = live[0];
             const raw = await redis(['GET', availabilityKey(factionId, p.id)]);
             const data = raw ? JSON.parse(raw) : null;
-            const soon = new Date(`${p.startDate}T00:00:00Z`).getTime() <= Date.now() + 4 * 86400e3; // it starts within four days, or is running
-            if (data && soon) {
+            // Shows as soon as the plan exists — even a war that hasn't been matched yet (a placeholder start
+            // date further out) — rather than waiting until 4 days before the (possibly guessed) start date.
+            if (data) {
                 const responded = respondedMap(data);
                 const roster = await getRoster(key);
                 const missing = roster.filter(m => !responded[m.id]);
