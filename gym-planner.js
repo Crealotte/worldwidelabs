@@ -438,41 +438,46 @@ function renderGymPlanner() {
     const xanaxCount = chosen.items?.xanax || 0;
     const blocks = [];
     if (xanaxCount > 1) {
-        // A 4-Xanax jump can't fit in one day — it's spread across real, separate days at `xanPerDay` doses
-        // a day, using the conservative 8h cooldown throughout (see GP_COOLDOWN_H). Each session gets its
-        // own run of days: stacking doses first, the LAST of those days also does the actual jump (reset,
-        // items, Ecstasy, train, optional refill) — never crammed into a single "Training day".
-        const stackDays = gpXanaxDays(xanaxCount, xanPerDay);
-        for (let s = 0; s < chosen.sessions; s++) {
-            const sd = w.perSession[s];
-            for (let d = 0; d < stackDays; d++) {
-                const items = [];
-                for (let x = d * xanPerDay + 1; x <= Math.min(xanaxCount, (d + 1) * xanPerDay); x++) {
-                    items.push({ key: `s${s}d${d}x${x}`, label: `Take Xanax #${x}${x === xanaxCount ? ' — you should now be holding around 1,000 E' : ''}`, value: 0 });
-                    if (x < xanaxCount) items.push({ note: true, label: `Wait ${GP_COOLDOWN_H}h for the drug cooldown to clear` });
-                }
-                const isLastDay = d === stackDays - 1;
-                let note = '';
-                if (isLastDay && sd) {
-                    note = `${chosen.name}: happy ≈ ${gpN(sd.peak)}, estimated +${gpN(sd.gain)} ${inp.stat}.`;
+        // ONE continuous drug-cooldown clock across every jump this week, not a separate isolated block
+        // per jump — the moment one jump's LAST dose clears, the very next dose (for the NEXT jump) can
+        // follow right after, so two jumps can genuinely share a day. Always the conservative 8h cooldown
+        // (see GP_COOLDOWN_H), at up to `xanPerDay` doses a day (capped at 3 — 4 doses 8h apart already
+        // spans a full 24h, landing the 4th on the next day no matter when you start).
+        const doses = []; // flat, in order: { s: session index, n: dose number within that session (1-based) }
+        for (let s = 0; s < chosen.sessions; s++) for (let n = 1; n <= xanaxCount; n++) doses.push({ s, n });
+        let di = 0, dayNum = 0;
+        while (di < doses.length && dayNum < GP_TRAINING_DAYS) {
+            const items = [];
+            const notes = [];
+            for (let slot = 0; slot < xanPerDay && di < doses.length; slot++, di++) {
+                const dose = doses[di];
+                const isLastOfSession = dose.n === xanaxCount;
+                const tag = chosen.sessions > 1 ? ` (jump ${dose.s + 1})` : '';
+                items.push({ key: `s${dose.s}n${dose.n}`, label: `Take Xanax #${dose.n}${tag}${isLastOfSession ? ' — you should now be holding around 1,000 E' : ''}`, value: 0 });
+                if (di < doses.length - 1) items.push({ note: true, label: `Wait ${GP_COOLDOWN_H}h for the drug cooldown to clear` });
+                if (isLastOfSession) {
+                    const sd = w.perSession[dose.s];
+                    notes.push(`Jump ${chosen.sessions > 1 ? `${dose.s + 1}` : ''}: happy ≈ ${gpN(sd.peak)}, estimated +${gpN(sd.gain)} ${inp.stat}.`);
                     items.push({ note: true, label: 'Wait until just past a :00 / :15 / :30 / :45 reset' });
                     const main = chosen.items.candy ? `all ${chosen.items.candy} ${gpCandyChoice()?.name || 'candies worth 25 happy each'}`
                         : chosen.items.choco ? `all ${chosen.items.choco} Big Boxes of Chocolate Bars` : `all ${chosen.items.edvd} Erotic DVDs`;
-                    items.push({ key: `s${s}take`, label: `Take ${main}`, value: 0 });
-                    if (chosen.ecstasy) items.push({ key: `s${s}ecstasy`, label: 'Use the Ecstasy — it doubles your Happy', value: 0 });
+                    items.push({ key: `s${dose.s}take`, label: `Take ${main}`, value: 0 });
+                    if (chosen.ecstasy) items.push({ key: `s${dose.s}ecstasy`, label: 'Use the Ecstasy — it doubles your Happy', value: 0 });
                     const jumpTrain = chosen.refill ? sd.energy - inp.fill : sd.energy;
-                    items.push({ key: `s${s}train`, label: `Train: spend ${gpN(jumpTrain)} E`, value: jumpTrain });
-                    if (chosen.refill) items.push({ key: `s${s}refill`, label: `Spend 25 points on an energy refill and train again (${gpN(inp.fill)} E)`, value: inp.fill });
+                    items.push({ key: `s${dose.s}train`, label: `Train: spend ${gpN(jumpTrain)} E`, value: jumpTrain });
+                    if (chosen.refill) items.push({ key: `s${dose.s}refill`, label: `Spend 25 points on an energy refill and train again (${gpN(inp.fill)} E)`, value: inp.fill });
                 }
-                blocks.push({ title: `${chosen.sessions > 1 ? `Jump #${s + 1} — ` : ''}Xanax stacking, day ${d + 1} of ${stackDays}${isLastDay ? ' (jump day)' : ''}`, note, items });
             }
+            dayNum++;
+            fillsFor(restPerDay).forEach((it, n) => items.push({ key: `d${dayNum}n${n}`, label: it.label, value: it.value }));
+            blocks.push({ title: `Day ${dayNum}`, note: notes.join(' '), items });
         }
         // Any training day left over once every full jump cycle is placed — never a half-finished one —
         // gets natural energy instead, exactly as asked.
-        for (let i = chosen.sessions * stackDays; i < GP_TRAINING_DAYS; i++) {
+        for (let i = dayNum; i < GP_TRAINING_DAYS; i++) {
             const items = [];
             fillsFor(restPerDay).forEach((it, n) => items.push({ key: `rest${i}n${n}`, label: it.label, value: it.value }));
-            blocks.push({ title: `Training day ${i + 1} (natural energy)`, note: '', items });
+            blocks.push({ title: `Day ${i + 1} (natural energy)`, note: '', items });
         }
     } else {
         // 0/1-Xanax jumps, natural methods, and perDay methods like Candy jump (2x daily) — all fit within a

@@ -282,11 +282,15 @@ fix above corrected the TEXT, but the day-by-day layout still put the whole stac
 properly:
 - New setting: **"Xanax you'll take per day for this"** (1–3). Every calculation uses the conservative
   **8h** cooldown (never the optimistic 6h), so a plan never promises something that's still impossible.
-- Stacking now spans however many real days it actually takes (`gpXanaxDays()`), as its own block(s) —
-  "Xanax stacking, day 1 of 2", etc. — separate from the "jump day" that finishes it. How many full
-  jump cycles fit in the 4 training days is DERIVED from this (`gpMaxSessions()`), not a fixed guess —
-  any training day left over once every full cycle is placed falls back to natural energy, never a
-  half-finished jump.
+- Stacking spans however many real days it takes (`gpXanaxDays()`). How many full jump cycles fit in
+  the 4 training days is DERIVED from this (`gpMaxSessions()`), not a fixed guess.
+- **Round 3, same day:** the first version above still gave each jump its own isolated day-range (e.g.
+  "Jump #1: day 1–2", "Jump #2: day 1–2 again"), reset per jump — not how it actually works. Rebuilt
+  around ONE continuous drug-cooldown clock across every jump in the week: as soon as one jump's last
+  dose clears, the next jump's first dose can follow right after, so two jumps can genuinely share a
+  day. Days are now labelled plainly "Day 1", "Day 2", ... across the whole week, and a day can contain
+  one jump finishing and the next one starting, exactly as the user laid out. Any day left over once
+  every full cycle is placed falls back to natural energy, never a half-finished jump.
 - Every step is a real checkbox except a "wait" step, which is a small arrow note instead (not its own
   checkbox) — applied to the actual weekly plan this time, not just the reference guide.
 - The 25-point refill + extra train at the end of a jump is now an optional toggle, same idea as
