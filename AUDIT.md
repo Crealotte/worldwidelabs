@@ -224,6 +224,41 @@ the War Badges page — kept in place in case a genuinely new pattern shows up l
   today's changes too) — could be a real unclosed tag, or just something inside a JS string/comment
   that isn't real markup. Not investigated; flagging so it doesn't get missed.
 
+## Confirmed issue #3 — Happy Jumping Guide told people to stack 4 Xanax "back-to-back"
+
+**Reported:** the 4-Xanax jump guides (Big Choco 4x, 5x/9x EDVD, Poison Mistletoe) said to "stack 4
+Xanax back-to-back to reach 1000 Energy" then "wait out all drug cooldowns" as if that were one short
+wait — but Xanax's drug cooldown is 6–8h **per dose**, so 4 of them takes at least 3 full cooldowns
+back to back (roughly a day, sometimes into a second), never something you can do in one sitting on
+day one.
+
+**Fixed 2026-09-27.** Every jump that stacks 4 Xanax now shows the real sequence — Xanax #1 → wait
+6–8h → #2 → wait → #3 → wait → #4 — via one shared step list (`xanaxStackSteps()` in
+[energy-planner.js](energy-planner.js)) so the timing is consistent everywhere instead of retyped (and
+re-guessed) per jump. The 4-Xanax Big Choco variant is now its own card, separate from the 1-Xanax
+one, since they're different timelines, not one card with two branches.
+
+**Also done, same page:**
+- Steps are now checkboxes (persisted per browser) instead of plain bullets — but a "wait" step
+  (buying items first, waiting for a Happy reset, waiting out a cooldown) isn't its own checkbox any
+  more, since waiting isn't a task you complete — it shows as a small "→ Wait ..." note attached
+  under the step before it, as asked.
+- "This week's plan" panel is now collapsible.
+- Removed the "Install the script" checklist panel — the userscript is a general one now and will be
+  linked from somewhere else, not repeated per-page.
+
+**Not done — needs your input:**
+- **A "how many Xanax per day" cap for the weekly calculator** (planForGroupA/B) was suggested as an
+  alternative/addition to timing the jumps exactly. The weekly plan itself was already spreading
+  doses across days reasonably (2/day for group A, 4 over "days 1 & 2" for group B) — it was only the
+  Happy Jump *guide* that had the impossible wording, now fixed. Say if you still want a daily-cap
+  input added on top of that.
+- **A member's "2x daily candy jump" suggestion** (their numbers: ~75% more stat gain than 1x49
+  candy/day, using Private Island + 4,275 base Happy + 25-Happy candy boxes) — I don't want to add
+  unverified stat-gain numbers as training guidance. Could you get their Google Sheet? Once I can see
+  the actual formula behind their numbers (not just the conclusion), I can check it against Torn's
+  known gym-gain mechanics and add it properly if it holds up.
+
 ## How to use this list
 
 For each page below: open it, use it as a member would and as a leader would (if it has both
@@ -248,7 +283,7 @@ or missing. Mark `[x]` once checked, with a one-line note (even "looks correct" 
 - [ ] Perk roadmap (`perk-roadmap`)
 - [ ] Respect tracker (`respect-edit`, plus the dashboard goal panel)
 - [ ] Energy tracker (`energy-tracker`)
-- [ ] Energy planner (`energy`)
+- [x] Energy planner (`energy`) — 2026-09-27. See "Confirmed issue #3" below.
 - [ ] Gym stats (`gym-stats`)
 - [ ] OC Fit (`ocfit`)
 - [ ] OC Fit team planner (`ocfit-team`)
@@ -291,3 +326,5 @@ absent (not "Building"/"Error"), push a trivial follow-up commit to re-trigger i
    described above, wired into each action named in the tables.
 3. ~~War Badges showing only 4 of 8~~ — **resolved 2026-09-27, not a bug**, see Confirmed issue #2.
 4. ~~"Who's on board" and "Other factions" placement~~ — **done 2026-09-27**, see above.
+5. ~~Happy Jumping Guide's impossible "4 Xanax back-to-back"~~ — **fixed 2026-09-27**, see Confirmed
+   issue #3. Daily-Xanax-cap input and the 2x-daily-candy-jump suggestion are still open, waiting on you.
