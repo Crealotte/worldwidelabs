@@ -338,6 +338,27 @@ plans had no sense of time.** Two more corrections from the user, checked agains
   between repeated fills; the Natural energy — Soft/Hard day's own bars and Xanax doses got the same
   treatment (fill time, cooldown before the next Xanax).
 
+**2026-09-27, round 6 — the last day of a stack was being written off entirely, plus naming/layout
+cleanup.** Three more things flagged after using the plan for real:
+- **"Why is there no natural energy after the second jump?"** Every day before the LAST day of a
+  Xanax stack is always packed to the full `xanPerDay` doses, but the very last day often finishes with
+  fewer doses than that (e.g. the session's Ecstasy step with no next Xanax queued behind it) — real
+  spare time that was being thrown away instead of offered as a top-up. Fixed: a new `gpXanaxDayInfo()`
+  works out exactly how much of that last day is spare (as a fraction of a day, since it's measured in
+  drug-cooldown slots, not whole days) and adds a proportional natural energy top-up to it, on top of
+  any fully free days after it. The weekly gain/cost estimate now includes this fractional day too,
+  instead of only ever counting whole free days.
+- **Streamlined the "several jumps in one day/week" labels.** Candy jump (Nx daily) called its extra
+  sessions "Morning jump" / "Evening jump" / "Jump #3", a different style each time and different again
+  from the 4-Xanax stack's own "(jump 2)" suffix. Every method now uses the exact same "Jump 1 —",
+  "Jump 2 —", ... prefix, consistently placed in front of the step text.
+- **Moved "Compared over one week" higher up the page** — it now sits directly under the settings panel
+  (stat, method, sessions, Xanax/day, etc.) and above "This week's plan", so the comparison chart is
+  visible right where changes are being made instead of requiring a scroll past the whole checklist
+  first. Also confirmed the chart already picks up every setting correctly per method (each method's own
+  saved "jumps this week" override, plus the shared Xanax-per-day / refill-toggle / candy-per-day
+  settings) — nothing there needed fixing beyond the layout move.
+
 ## How to use this list
 
 For each page below: open it, use it as a member would and as a leader would (if it has both
