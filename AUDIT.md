@@ -73,45 +73,69 @@ profile lookup + the existing `isLeader`/`labsIsOwner` checks), so this doesn't 
 calls anywhere. Every action then declares its own required tier instead of the current one-size
 `isLeader` gate.
 
-**Below is a first pass at sorting every currently leader-gated thing into a tier**, page by page,
-based on your own rule of thumb (Council can *see* most things, but not change money, form
-questions, or integration settings). Anything I wasn't confident about is marked **OPEN**. Please
-go through this and correct/confirm before any of it gets built — this is a proposal, not a plan.
+**2026-09-27 — decided.** You confirmed: every page NOT under the "Leadership" nav menu is fine as
+it is (no change). Everything below is scoped to exactly the 12 pages in that menu. This is now the
+final spec, ready to implement — not a proposal.
 
-| Page / feature | Gated today | Proposed | Note |
-|---|---|---|---|
-| Availability tracker (view) | Extra detail (names, who's out) is Leader-only; the count is public | **Council sees the same detail as Leader** | Your own example — high confidence |
-| Availability tracker (create/edit/archive a plan) | Leader-only | OPEN — lean Leader-only (structural) | Council could still "see and ping" |
-| Availability tracker ("see who and ping them") | Leader-only | OPEN — lean Council | Operational, not structural |
-| Feedback form (fill in your own / see public results) | Already open to everyone | No change (Members/Personal) | |
-| Feedback form (edit the questions) | Leader-only | **Leader-only** | Your own example — high confidence |
-| Feedback form (see everyone's raw answers) | Leader-only | OPEN — lean **Leader-only** | Feedback often includes opinions about leadership itself; worth keeping Council out even though they can see availability |
-| Feedback form ("clear"/reset all responses) | Leader-only | **Leader-only** | Destructive |
-| Member Overview (view hits/rules/register) | Leader-only (whole `mo-*` bucket) | OPEN — lean Council | |
-| Member Overview (change rule settings, tier overrides, register assignments) | Leader-only | OPEN — lean **Leader-only** | Affects who "passes" and payout amounts |
-| War Payout Calculator (view/calculate/pay) | Leader-only | OPEN — lean **Leader/Co-leader only** | Real money moves via the "Pay" button |
-| War reports (remove a report from the list) | Leader-only | OPEN — lean Council | Low risk, just tidies a list |
-| Labs funds (view) | Leader-only | OPEN — lean **Leader-only** | Financial |
-| Labs funds (add/edit an entry) | Owner-only | No change | Already matches your Owner definition exactly |
-| Newsletter (build the draft) | Leader-only | OPEN — lean Council | No money, no real changes, just a copy-paste helper |
-| Steadfast (sync numbers) | Leader-only | OPEN — lean Council | Routine refresh |
-| Steadfast (set respect goals) | Leader-only | OPEN — lean **Leader-only** | Target-setting decision |
-| Respect tracker (view) | Already open to everyone | No change | |
-| Respect tracker (sync) | Leader-only | OPEN — lean Council | Routine refresh |
-| Respect tracker (add manual war entry / set goal) | Leader-only | OPEN — lean **Leader-only** | |
-| OC Fit team planner (assign members to slots) | Leader-only | OPEN — lean Council | Scheduling, no money |
-| Mentoring admin (assign/monitor pairs) | Leader-only | OPEN — lean Council | Scheduling/oversight, no money |
-| Bug reports & suggestions (change status/delete) | Leader-only | OPEN — lean Council | Moderation |
-| Announcement editor | Leader-only | OPEN — lean **Leader-only** | Faction-wide public message |
-| Leader settings → "Who's on board" verify ticks | Leader-only | OPEN — lean Council | Routine data entry |
-| Leader settings → Discord/nightly/faction-share config | Leader-only | OPEN — lean **Leader-only** | Credentials/integration |
-| What's New → send version to Discord | Leader-only | OPEN — lean **Leader-only** | Outward-facing post |
-| Armory / Consumption Tracker (view report) | Leader-only | OPEN — lean Council | Report only, doesn't spend anything |
-| Banners (create/edit for this faction) | Leader-only | OPEN — lean Council | Just a message |
-| Banners (create/edit for ALL factions) | Owner-only | No change | Already matches Owner |
+### Leader/Co-leader only — the whole page, view and edit
 
-Everything else on the page-by-page list below has no leader gate today and stays Members/Personal
-as-is.
+- **Announcements** (`announce-edit`)
+- **Feedback form** (`feedback-edit`) — editing questions, seeing raw answers, and clearing responses all stay Leader-only
+- **War Payout** (`war-payout`)
+- **Newsletter** (`newsletter`)
+- **Leader settings** (`leader-settings`)
+- **Mentoring admin** (`mentoring-admin`)
+- **Labs Funds** (`labs-funds`) — Leader views, Owner edits (already built this way)
+
+### Council can use fully (view and edit)
+
+- **OC Team Builder** (`ocfit-team`)
+- **Consumption Tracker** (`armory-tracker`)
+
+### Split within the page — some sections Council, some Leader-only
+
+**Respect Tracker** (`respect-edit`) — panel by panel:
+| Panel | Elements | Tier |
+|---|---|---|
+| Goals | `rg-window`/`rg-label`/`rg-target`/`rg-deadline`/`rg-save` + the goal list | Leader-only |
+| Log war respect manually | `rg-war-*` | Leader-only |
+| Check a specific period | `rg-range-*` | Council |
+| Daily breakdown | the table itself | Council |
+| Daily breakdown | its 3 buttons: `rg-sync-all`, `rg-deep-sync-oc`, `rg-deep-sync-hits` | Leader-only |
+
+**Availability overview** (`availability-leaders`) — panel by panel:
+| Panel | Elements | Tier |
+|---|---|---|
+| Plan picker (choosing which plan to view) | `av-plan-select-l` | Council |
+| Resize / archive / delete this plan | `av-plan-resize-l`/`av-plan-archive-l`/`av-plan-delete-l` | Leader-only |
+| Link a war to this plan | `av-link-panel` (the whole panel) | Leader-only |
+| Faction availability (the table) | `av-summary-panel` | Council |
+| Responses | `av-out-panel` | Council |
+| Overdoses | `av-od-panel` | Council |
+| Create a plan | `av-start-panel` (the whole panel) | Leader-only |
+| Archived plans (view/unarchive) | `av-archived-*` | **OPEN** — not covered by your answer, defaulting to Leader-only (structural) until you say otherwise |
+
+**Member Overview** (`members-overview`) — panel by panel:
+| Panel | Elements | Tier |
+|---|---|---|
+| Summary counts, Winners for this period | top panels | Council |
+| The hits/rules table | the table itself (period switching, sorting, viewing) | Council (read-only) |
+| The hits/rules table | each row's tier-override dropdown (`.mo-tier`) | Leader-only (this is the "editable bit" in an otherwise read-only table) |
+| Who's on board | the table | Council (read-only) |
+| Who's on board | the Verify checkboxes/toggles | Leader-only |
+| War & chain register | the whole panel | Leader-only |
+| Rules (settings: min war/chain hits, wars needed) | the whole panel | Leader-only |
+| Energy trained: fill in from Torn Intel | the whole panel | Leader-only |
+| Checks for the developer | the whole panel | Leader-only |
+
+### Still needs real enforcement, not just hiding
+
+Today, every one of the "Leader-only" and "Council" boundaries above is enforced by ONE blanket
+`isLeader(key)` check per action on the server — there's no server-side idea of "Council" yet at
+all. Making this real (not just hidden in the UI) needs the `getRole()` helper described above,
+wired into every action named in the tables — a genuinely separate, larger implementation pass,
+page by page, once you're ready. Until then, treat any UI hiding as look-and-feel only, same as
+today's "View as member" already is.
 
 ---
 
@@ -164,5 +188,6 @@ or missing. Mark `[x]` once checked, with a one-line note (even "looks correct" 
 ## Fixes queued from the audit (add here as we find them)
 
 1. ~~Candy/Alcohol/Blood bags data source~~ — **fixed 2026-09-27**, see above.
-2. Access tiers (Personal/Members/Council/Leader/Owner) — see the design proposal above. **Waiting
-   on your answers to the OPEN rows before any of this is built.** Nothing changes until then.
+2. Access tiers (Personal/Members/Council/Leader/Owner) — **spec decided 2026-09-27**, see above.
+   Next: build the "View as" preview selector (member/council/leader/owner) against this spec, then
+   real server-side enforcement page by page, whenever you're ready.
