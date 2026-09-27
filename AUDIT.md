@@ -156,6 +156,60 @@ same as today's "View as" selector.
 
 ---
 
+## Confirmed issue #2 — War Badges: only 4 of 8 categories ever show
+
+**Reported:** the Dashboard's War Badges widget (and the War Badges page itself) only shows 4 of the
+8 badges for a saved receipt.
+
+**Likely cause, from reading [lib/warBadgeStats.js](lib/warBadgeStats.js) (not yet confirmed against
+real data):** the file's own top comment says so directly — "Field-name risk: `is_ranked_war`/
+`ranked_war`, the `overseas` modifier, and the `Assist` result string are all based on how other Torn
+tool developers describe the API, not a verified live response (no API key available here to test
+against)." A badge only shows at all when at least one member has a value above zero for it
+(`war-badges-tracker.js`'s `wbTopTwoForReceipt`/`renderReceiptBadgesHtml` — a badge with nobody
+qualifying is skipped, not shown as "0"). So 4 silently-always-empty categories would look exactly
+like this: every war, always exactly those 4 missing.
+
+The likeliest candidates, in order of how shaky their field-name guess is:
+- **The Rogue Element** (`abroadHits`, reads `att.modifiers?.overseas`) — the shakiest guess.
+- **The Catalyst** (`assists`, reads `result.toLowerCase().includes('assist')`).
+- **The Detonator** (`hospitalized`, reads `result.includes('hospital')` AND the defender's faction).
+- **The Volatile Compound** (needs both `warHits` and `timesDowned` to be nonzero — could fail even
+  if `timesDowned` itself is fine, just because it also depends on `warHits`, which is more trusted).
+
+**Needs from you to actually fix, rather than guess again:** which 4 badges DO show up for a recent
+war? That tells us exactly which 4 are broken, instead of guessing among the above.
+
+**Also requested:** make the War Badges widget collapsible, closed by default — **done**, see below.
+
+## Fixes — Dashboard, 2026-09-27
+
+- **Respect Goal**: now collapsible, **open by default** (as asked).
+- **Steadfast countdown**: now collapsible, **closed by default** (as asked).
+- **War Badges**: now collapsible, **closed by default** (as asked). The 4-of-8 issue itself is
+  Confirmed issue #2 above — not fixed yet, needs your input.
+- **"Other factions" (cross-faction sharing) is now really Owner-only**, enforced on the server —
+  not just hidden in the UI. Before, `api/faction-share.js`'s `read` action used the old
+  `isLeader(key)` check (= "has faction API access", the same gap Labs Funds had), so any faction's
+  leader who opted into sharing could see every OTHER opted-in faction's shared overview too. Now
+  only `labsIsOwner()` gets the `others` list; every leader can still toggle their OWN faction's
+  sharing on/off (that stays their own call).
+- **"Who's on board" and "Other factions" placement — not changed, needs your call:**
+  - "Who's on board" already exists on Member Overview too. Removing it from the Dashboard would
+    reduce duplication — but it's also the only place a plain (non-Council) leader ever saw it,
+    since Member Overview is now Council+ only in the nav. Worth deciding once you're sure who
+    should be seeing it and where.
+  - "Other factions" now correctly shows only for you — a reasonable next step is moving it onto
+    the Labs Funds page (also Owner-scoped, also cross-faction) instead of leaving it on the
+    Dashboard, since it'll now only ever render content for one person. Not done yet — say if you
+    want it moved.
+
+## Noticed in passing, not yet looked into
+
+- `index.html` has a pre-existing `<details>`/`</details>` count mismatch (off by 2, present before
+  today's changes too) — could be a real unclosed tag, or just something inside a JS string/comment
+  that isn't real markup. Not investigated; flagging so it doesn't get missed.
+
 ## How to use this list
 
 For each page below: open it, use it as a member would and as a leader would (if it has both
@@ -165,7 +219,7 @@ or missing. Mark `[x]` once checked, with a one-line note (even "looks correct" 
 
 ## Page-by-page checklist
 
-- [ ] Dashboard (`dashboard`) — the aggregate widgets (Your standing, War Badges, announcements, banners, polls)
+- [x] Dashboard (`dashboard`) — 2026-09-27. See "Confirmed issue #2" and the fixes below.
 - [ ] Your standing card specifically (`my-standing.js`) — energy, war/chain hits, places
 - [ ] Member Overview (`members-overview`) — hits table, war rule, War & chain register, consumption columns, tiers
 - [ ] War Payout Calculator (`war-payout`)
@@ -202,8 +256,6 @@ or missing. Mark `[x]` once checked, with a one-line note (even "looks correct" 
 - [ ] Payout receipt viewer (`payout-receipt`, shareable link)
 - [ ] The userscript (Torn/TornPDA) — to-do list, energy tab, targets tab, banners, update flagging
 
-## Noticed in passing, not yet looked into
-
 - `availability-tracker.js`'s `renderAvailabilityPage()` sets `$('av-discord-panel').style.display`,
   but that element lives on the Leader settings page, not Availability overview — looks like a
   leftover/stray reference. Not touched; needs a look when we get to Availability overview or Leader
@@ -216,3 +268,7 @@ or missing. Mark `[x]` once checked, with a one-line note (even "looks correct" 
    built, 2026-09-27**, see above. Next, whenever you're ready: real server-side enforcement, so
    Council is actually blocked (not just hidden from) the Leader-only bits — the `getRole()` helper
    described above, wired into each action named in the tables.
+3. War Badges showing only 4 of 8 — see Confirmed issue #2 above. **Waiting on you to say which 4
+   show**, so the broken field-name guess(es) can be pinned down instead of re-guessed.
+4. "Who's on board" and "Other factions" placement on the Dashboard — see the Dashboard fixes above.
+   **Waiting on your call.**

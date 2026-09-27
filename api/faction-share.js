@@ -11,6 +11,7 @@
 // POST { key, action:'toggle', enabled }  -> leaders only: turn sharing on (builds+saves a fresh snapshot) or off
 
 const { tornFetch } = require('../lib/tornFetch');
+const { labsIsOwner } = require('../lib/labsLedger');
 const REDIS_URL = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL;
 const REDIS_TOKEN = process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN;
 const LOGINS_HASH = 'wwl:logins';
@@ -34,7 +35,7 @@ async function tornProfile(key) {
 async function getFactionId(key) {
     const p = await tornProfile(key);
     if (p.error || !p.faction?.faction_id) return null;
-    return String(p.faction.faction_id);
+    return { factionId: String(p.faction.faction_id), playerId: String(p.player_id) };
 }
 async function isLeader(key) {
     const r = await tornFetch(`https://api.torn.com/v2/faction/balance?key=${encodeURIComponent(key)}`, { headers: { accept: 'application/json' } });
@@ -112,8 +113,9 @@ module.exports = async function handler(req, res) {
         const { key, action, enabled } = req.body || {};
         if (!key) return res.status(400).json({ error: 'Missing key' });
 
-        const factionId = await getFactionId(key);
-        if (!factionId) return res.status(403).json({ error: 'Could not determine your faction from this key' });
+        const ids = await getFactionId(key);
+        if (!ids) return res.status(403).json({ error: 'Could not determine your faction from this key' });
+        const { factionId, playerId } = ids;
         if (!(await isLeader(key))) return res.status(403).json({ error: 'Leaders only' });
 
         if (action === 'read') {
@@ -128,14 +130,18 @@ module.exports = async function handler(req, res) {
                 } catch (e) { /* keep the last good snapshot if a refresh attempt fails */ }
             }
 
-            const factionIds = (await redis(['SMEMBERS', SHARE_INDEX])) || [];
-            const others = [];
-            for (const fid of factionIds) {
-                if (fid === factionId) continue;
-                const raw = await redis(['GET', shareKey(fid)]);
-                if (!raw) continue;
-                const data = JSON.parse(raw);
-                if (data.enabled) others.push(data);
+            // Seeing what OTHER factions shared is the WWL owner's business, not any faction's own
+            // leaders' — every faction leader can still opt their own faction in/out below.
+            let others = [];
+            if (await labsIsOwner(redis, playerId)) {
+                const factionIds = (await redis(['SMEMBERS', SHARE_INDEX])) || [];
+                for (const fid of factionIds) {
+                    if (fid === factionId) continue;
+                    const raw = await redis(['GET', shareKey(fid)]);
+                    if (!raw) continue;
+                    const data = JSON.parse(raw);
+                    if (data.enabled) others.push(data);
+                }
             }
 
             return res.status(200).json({ mine, others });
