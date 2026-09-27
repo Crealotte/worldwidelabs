@@ -784,15 +784,27 @@
                     </details>
                 </div>
                 <span id="gp-sessions-wrap" style="display:none;align-items:center;gap:6px;font-size:13px;margin-bottom:10px;">Jumps this week (max <span id="gp-sessions-max">4</span>): <input autocomplete="off" id="gp-sessions" type="number" min="0" max="4" style="width:70px;"></span>
+                <span id="gp-xanperday-wrap" style="display:none;align-items:center;gap:6px;font-size:13px;margin-bottom:10px;" title="Stacking 4 Xanax always uses the conservative 8h drug cooldown — this just decides how many of those doses you're willing to fit into one day.">Xanax you'll take per day for this: <input autocomplete="off" id="gp-xanperday" type="number" min="1" max="3" style="width:70px;"></span>
+                <label id="gp-jump-refill-wrap" style="display:none;align-items:center;gap:8px;cursor:pointer;font-size:13px;margin-bottom:10px;">
+                    <input type="checkbox" id="gp-jump-refill" style="width:auto;"> Include the 25-point refill + extra train at the end
+                </label>
                 </details>
 
-                <div id="gp-summary" style="font-size:14px;margin:6px 0 12px;"></div>
+                <div id="gp-summary" style="font-size:14px;margin:6px 0 0;"></div>
+            </div>
 
+            <div class="panel" id="gp-plan-panel">
+                <details open>
+                <summary class="av-sum"><h3 style="display:inline;">This week's plan</h3></summary>
                 <div class="bar-block" style="margin-bottom:6px;">
-                    <div class="bar-head"><span>This week's plan</span><span id="gp-progress"></span></div>
+                    <div class="bar-head"><span id="gp-progress"></span></div>
                     <div class="bar-track"><div class="bar-fill" id="gp-progress-fill" style="background:var(--reagent);width:0%;"></div></div>
                 </div>
-                <div id="gp-plan" style="margin-bottom:18px;"></div>
+                <div id="gp-plan"></div>
+                </details>
+            </div>
+
+            <div class="panel">
                 <h3 id="gp-chart-head" style="margin:0 0 10px;">Compared over one week</h3>
                 <div id="gp-chart"></div>
                 <p style="color:var(--muted);font-size:12px;margin:10px 0 0;">Uses the standard community gym formula with your own stat, max happy, gym and gym bonuses. Happy is assumed to drop by about half of the energy of each train. Item costs use current market values and count only the extra items (jump items and energy cans), not your normal Xanax use.</p>

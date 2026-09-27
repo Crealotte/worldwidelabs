@@ -276,6 +276,28 @@ just trusted.
   reasonably (2/day for group A, 4 over "days 1 & 2" for group B) — say if you still want a daily-cap
   input added on top of that.
 
+**2026-09-27, round 2 — the real weekly checklist still crammed all 4 Xanax into one day.** The wording
+fix above corrected the TEXT, but the day-by-day layout still put the whole stacking sequence under one
+"Training day" block, which reads as "do all of this today" regardless of what the text says. Rebuilt
+properly:
+- New setting: **"Xanax you'll take per day for this"** (1–3). Every calculation uses the conservative
+  **8h** cooldown (never the optimistic 6h), so a plan never promises something that's still impossible.
+- Stacking now spans however many real days it actually takes (`gpXanaxDays()`), as its own block(s) —
+  "Xanax stacking, day 1 of 2", etc. — separate from the "jump day" that finishes it. How many full
+  jump cycles fit in the 4 training days is DERIVED from this (`gpMaxSessions()`), not a fixed guess —
+  any training day left over once every full cycle is placed falls back to natural energy, never a
+  half-finished jump.
+- Every step is a real checkbox except a "wait" step, which is a small arrow note instead (not its own
+  checkbox) — applied to the actual weekly plan this time, not just the reference guide.
+- The 25-point refill + extra train at the end of a jump is now an optional toggle, same idea as
+  natural energy's own refill toggle, instead of being baked in as mandatory.
+- Property needed per method (Shack/Mansion/Private Island) now shows on every method card and in the
+  comparison chart — it was only ever documented in the separate reference guide before, so a Shack
+  owner had no way to tell a Private-Island-only method apart from one they could actually do. Confirmed
+  with the user: the comparison chart's gain numbers were already personal (their own real stat, Happy,
+  and gym), this was purely about showing the requirement, not a missing factor in the math.
+- "This week's plan" is now its own separate, closeable card, not folded into the settings/chart panel.
+
 ## How to use this list
 
 For each page below: open it, use it as a member would and as a leader would (if it has both
