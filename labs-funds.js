@@ -66,9 +66,12 @@ function lfFactions() {
 }
 
 function renderLabsFunds() {
+    // lfOwner is REAL (server-checked); also respect the "View as" preview, so a real owner previewing
+    // as Leader sees the same read-only view a genuine non-owner leader would (see AUDIT.md).
+    const lfCanEdit = lfOwner && (typeof viewAtLeast === 'undefined' || viewAtLeast('owner'));
     $('lf-claim-panel').style.display = lfClaimable && !lfOwner ? 'block' : 'none';
-    $('lf-edit-panel').style.display = lfOwner ? 'block' : 'none';
-    $('lf-owners-line').innerHTML = lfOwner ? `Owners: ${Object.entries(lfOwners).map(([id, n]) => esc(n ? `${n} [${id}]` : id)).join(', ') || '—'} · <a href="#" id="lf-add-owner" style="color:var(--reagent);">add an owner</a>` : 'View only — only Labs owners can change this.';
+    $('lf-edit-panel').style.display = lfCanEdit ? 'block' : 'none';
+    $('lf-owners-line').innerHTML = lfCanEdit ? `Owners: ${Object.entries(lfOwners).map(([id, n]) => esc(n ? `${n} [${id}]` : id)).join(', ') || '—'} · <a href="#" id="lf-add-owner" style="color:var(--reagent);">add an owner</a>` : 'View only — only Labs owners can change this.';
     const factions = lfFactions();
     const counted = factions.filter(f => !lfExcluded.has(f.key));
     const total = counted.reduce((s, f) => s + f.income + f.out, 0);
@@ -94,7 +97,7 @@ function renderLabsFunds() {
                     <td style="padding:4px 8px;font-family:var(--mono);">${lfMoney(f.income)}</td>
                     <td style="padding:4px 8px;font-family:var(--mono);">${lfMoney(f.out)}</td>
                     <td style="padding:4px 8px;font-family:var(--mono);font-weight:700;color:var(--reagent);">${lfMoney(f.income + f.out)}</td>
-                    <td style="padding:4px 8px;"><input type="checkbox" class="lf-count" data-key="${esc(f.key)}" ${lfExcluded.has(f.key) ? '' : 'checked'} ${lfOwner ? '' : 'disabled'} style="width:auto;"></td>
+                    <td style="padding:4px 8px;"><input type="checkbox" class="lf-count" data-key="${esc(f.key)}" ${lfExcluded.has(f.key) ? '' : 'checked'} ${lfCanEdit ? '' : 'disabled'} style="width:auto;"></td>
                 </tr>`).join('')}
             </tbody>
         </table>
@@ -123,7 +126,7 @@ function renderLabsFunds() {
                     <td style="padding:4px 8px;">${lfKind[e.kind]}${e.source === 'manual' ? '' : ` <span style="color:var(--muted);font-size:11px;">(${e.source})</span>`}</td>
                     <td style="padding:4px 8px;color:var(--muted);">${esc([e.opponent && `vs ${e.opponent}`, e.note].filter(Boolean).join(' — '))}${e.receiptId ? ` <a href="/?receipt=${esc(e.receiptId)}" target="_blank" style="color:var(--reagent);">receipt</a>` : ''}</td>
                     <td style="padding:4px 8px;text-align:right;font-family:var(--mono);${e.amount < 0 ? 'color:var(--danger);' : ''}">${lfMoney(e.amount)}</td>
-                    <td style="padding:4px 8px;">${lfOwner ? `<button class="ghost small lf-del" data-id="${esc(e.id)}" title="Delete this entry">✕</button>` : ''}</td>
+                    <td style="padding:4px 8px;">${lfCanEdit ? `<button class="ghost small lf-del" data-id="${esc(e.id)}" title="Delete this entry">✕</button>` : ''}</td>
                 </tr>`).join('')}
             </tbody>
         </table>` : '<p style="color:var(--muted);margin:0;">No entries.</p>';
