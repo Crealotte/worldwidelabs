@@ -723,21 +723,19 @@ module.exports = async function handler(req, res) {
             } catch (e) { /* skip this check on failure, don't fail the others */ }
 
             try {
-                // Same "live" + "soon" rule as the leader to-do card (leaderTodos above): only nag once
-                // there is an upcoming plan and it is close enough to matter, not for one three weeks out.
+                // Shows as soon as there is a live plan you haven't responded to yet — even a war that hasn't
+                // been matched yet, so a plan made well ahead of time (a placeholder start date) still reminds
+                // people early rather than waiting until 4 days out (that "soon" gate used to hide it entirely).
                 const plans = (await loadPlanIndex(factionId)).filter(p => !p.archived);
                 const today = new Date().toISOString().slice(0, 10);
                 const endOf = p => { const d = new Date(`${p.startDate}T00:00:00Z`); d.setUTCDate(d.getUTCDate() + p.days); return d.toISOString().slice(0, 10); };
                 const live = plans.filter(p => endOf(p) >= today).sort((a, b) => a.startDate.localeCompare(b.startDate));
                 if (live.length) {
                     const p = live[0];
-                    const soon = new Date(`${p.startDate}T00:00:00Z`).getTime() <= Date.now() + 4 * 86400e3;
-                    if (soon) {
-                        const raw = await redis(['GET', availabilityKey(factionId, p.id)]);
-                        const data = raw ? JSON.parse(raw) : null;
-                        if (data && !respondedMap(data)[playerId]) {
-                            items.push({ id: 'availability', text: `Fill in your availability for ${p.name ? `"${p.name}"` : 'the upcoming war/weekend'}.`, cta: 'Open Availability', url: site ? `${site}/availability` : null });
-                        }
+                    const raw = await redis(['GET', availabilityKey(factionId, p.id)]);
+                    const data = raw ? JSON.parse(raw) : null;
+                    if (data && !respondedMap(data)[playerId]) {
+                        items.push({ id: 'availability', text: `Fill in your availability for ${p.name ? `"${p.name}"` : 'the upcoming war/weekend'}.`, cta: 'Open Availability', url: site ? `${site}/availability` : null });
                     }
                 }
             } catch (e) { /* skip */ }
