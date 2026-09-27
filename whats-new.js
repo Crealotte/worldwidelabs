@@ -16,6 +16,7 @@ const WHATS_NEW = [
         title: 'War & chain register for the war rule',
         everyone: [
             'The war rule ("3 of the last 5 wars") now uses a register where every chain belongs to exactly one war or chain event, so no chain is ever counted twice. A chain thrown after a war (to use up faction energy, which used to count for nothing once it ran past the 24 hours after the war) can now be counted, and a "chain event" — a chain done instead of a war — takes one of the last 5 slots like a war does and is passed with the chain-hit minimum. The "Your standing" card on the dashboard shows it as one of the last 5.',
+            'The "current month" numbers on your dashboard (candy, alcohol, blood bags, and your place in each) now count every day up to today, not just full weeks — training midweek shows up right away instead of waiting for the next Sunday.',
         ],
         leaders: [
             'New "War & chain register" panel on Member Overview (above Rules): press "Load the register" to see every chain Torn has for us, newest first, each with a dropdown — a war, a chain event, Ignore, or not placed yet. Chains you haven\'t placed show the war they overlapped most with an Accept button (and "Accept all suggestions"). Add a chain event with a name and date at the bottom of the panel. The chain is read from Torn when you place it, so a wrong or unfinished chain is refused instead of silently counting nothing.',
@@ -24,6 +25,7 @@ const WHATS_NEW = [
             'War payout reports now hold the whole picture: total pool, the costs by category, what was retained, the amount divided among members, the rates and hit totals, then the member list with a totals row. The payout calculator also shows a "Total to pay out" box, and only lists the latest 10 wars and chain events ("Show older" for the rest). War reports cards show the money flow for leaders. Reports saved earlier fill in what they can (the total pool is worked out from the net pool plus costs).',
             'The Newsletter page now builds the draft for Torn: no emoji, only the winner of each competition, the Steadfast swap (this month and next), the exact respect gained from the respect tracker, the perks upgraded and the perks coming up, shown as a styled card you can copy with its formatting (plus plain text boxes). You can also build it for the current, still running period.',
             'The per-kind numbers in Member Overview → Torn API usage are now estimates (1 call in 10 is recorded, 10 at a time), to cut the database writes that used up the monthly allowance. The per-minute figure, which is what matters for Torn\'s rate limit, is still exact.',
+            'Fixed: members\' candy/alcohol/blood bag numbers for the current period could sit blank or stale, because Member Overview\'s dropdown defaults to the last FINISHED period, and only visiting with "Running now" selected used to keep the current period\'s numbers up to date. It\'s now refreshed every time Member Overview is opened, whatever period the dropdown is showing.',
         ],
     },
     {

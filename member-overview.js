@@ -3,9 +3,11 @@
 // Backend: lib/memberOverview.js via /api/war-payout ('mo-*' actions, refused for anyone without
 // faction API access).
 //
-// Everything is shown for a chosen PERIOD. Weeks run Sunday to Sunday (TCT). The newsletter comes
-// out on the first Sunday of each month, so a "newsletter period" runs from the previous first
-// Sunday to this one — 4 or 5 weeks depending on the month. A custom "last N weeks" is there too.
+// Everything is shown for a chosen PERIOD. Finished periods run Sunday to Sunday (TCT) — the newsletter
+// comes out on the first Sunday of each month, so a "newsletter period" runs from the previous first
+// Sunday to this one, 4 or 5 weeks depending on the month. The RUNNING period ("now") counts every day up
+// to and including today instead, so it never hides what happened since the last Sunday. A custom "last N
+// full weeks" is there too, for week-to-week comparisons.
 // Shows: hits per member for the wars that ended in the period (war + chain), a traffic light from
 // the hits rule, blood bags filled / candy / alcohol used (total or per week), energy tier, and a
 // winners list. Energy trained needs Torn data that isn't connected yet.
@@ -49,6 +51,9 @@ function moPeriods() {
     const now = Math.floor(Date.now() / 1000);
     const latest = moLatestSunday();
     const today = new Date();
+    // The running period counts every day up to and including today (not just full weeks), so it matches
+    // lib/memberOverview.js's currentPeriod() — what members' own dashboards and the newsletter draft use.
+    const todayStart = Math.floor(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()) / 1000);
     const dates = []; // newsletter dates (first Sundays) up to now, newest first
     for (let i = 0; dates.length < 8 && i < 24; i++) {
         const dt = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth() - i, 1));
@@ -56,7 +61,7 @@ function moPeriods() {
         if (t <= now) dates.push(t);
     }
     const out = [];
-    if (latest > dates[0]) out.push({ id: 'now', start: dates[0], end: latest, label: `Running now — ${moFmt(dates[0])} → ${moFmt(latest)} (full weeks so far)` });
+    if (todayStart > dates[0]) out.push({ id: 'now', start: dates[0], end: todayStart, label: `Running now — ${moFmt(dates[0])} → ${moFmt(todayStart)} (up to today)` });
     for (let i = 0; i < dates.length - 1; i++) {
         const weeks = Math.round((dates[i] - dates[i + 1]) / (7 * MO_DAY));
         out.push({ id: `p${dates[i]}`, start: dates[i + 1], end: dates[i], label: `Newsletter ${moFmt(dates[i])} — ${moFmt(dates[i + 1])} → ${moFmt(dates[i])} (${weeks} weeks)` });
@@ -90,7 +95,7 @@ function renderPeriodBar() {
     $('mo-date-from').value = moDates.from; $('mo-date-to').value = moDates.to;
     $('mo-view-total').classList.toggle('active-toggle', !moPerWeek);
     $('mo-view-week').classList.toggle('active-toggle', moPerWeek);
-    $('mo-period-note').textContent = (moEnergy?.partial && moEnergy.sinceDay ? `Energy trained is counted since ${moFmt(moEnergy.sinceDay * 86400)} — that is when the counting started. ` : '') + `${moDaysIn(cur)} days (${Math.round(moWeeksIn(cur) * 10) / 10} weeks) · ${moFmt(cur.start)} 00:00 → ${moFmt(cur.end)} 00:00 TCT${cur.id === 'dates' ? '' : ' (Sunday to Sunday)'}`;
+    $('mo-period-note').textContent = (moEnergy?.partial && moEnergy.sinceDay ? `Energy trained is counted since ${moFmt(moEnergy.sinceDay * 86400)} — that is when the counting started. ` : '') + `${moDaysIn(cur)} days (${Math.round(moWeeksIn(cur) * 10) / 10} weeks) · ${moFmt(cur.start)} 00:00 → ${moFmt(cur.end)} 00:00 TCT${cur.id === 'dates' || cur.id === 'now' ? '' : ' (Sunday to Sunday)'}`;
 }
 
 async function loadMemberOverview() {
@@ -126,9 +131,15 @@ async function loadMemberOverview() {
         const ids = moData.members.map(m => m.id);
         const p = moPeriod();
         try { const e = await moFetch({ action: 'mo-energy', from: p.start, to: p.end }); moEnergy = e.error ? null : e; renderMemberOverview(); } catch (e) { moEnergy = null; }
+        // Members' own dashboard (my-standing.js) always reads the CURRENT running period, whatever a leader
+        // happens to be viewing here (the dropdown defaults to the last FINISHED period, not "now"). So the
+        // current period's snapshot is requested every time too, or a member's candy/alcohol/blood numbers
+        // would only ever update on the rare visit where a leader had "Running now" selected.
+        const nowPeriod = moPeriods().find(x => x.id === 'now');
+        const timestamps = [...new Set(nowPeriod ? [p.start, p.end, nowPeriod.start, nowPeriod.end] : [p.start, p.end])];
         let lastPending = Infinity;
         for (let round = 0; round < 40; round++) {
-            const s = await moFetch({ action: 'mo-stats', ids, timestamps: [p.start, p.end] });
+            const s = await moFetch({ action: 'mo-stats', ids, timestamps });
             if (s.error) { problems.push(`Stats: ${s.error}`); break; }
             Object.assign(moStats, s.values);
             renderMemberOverview();

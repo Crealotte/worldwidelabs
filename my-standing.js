@@ -62,7 +62,7 @@ async function loadMyStanding() {
 
         $('dash-standing-body').innerHTML = `
             <div class="grid2" style="margin-bottom:14px;">${energyTile}${warTile}</div>
-            <div style="color:var(--muted);font-size:12px;margin-bottom:8px;">Your numbers and place this month (${msFmt(r.period.start)} → ${msFmt(r.period.end)}${r.period.running ? ', full weeks so far' : ''}); the war and chain hits count the last 5 wars instead.</div>
+            <div style="color:var(--muted);font-size:12px;margin-bottom:8px;">Your numbers and place this month (${msFmt(r.period.start)} → ${msFmt(r.period.end)}${r.period.running ? ', so far' : ''}); the war and chain hits count the last 5 wars instead.</div>
             <div class="grid3">${small}</div>`;
         panel.style.display = 'block';
     } catch (e) { panel.style.display = 'none'; }
