@@ -178,6 +178,9 @@
             { do: 'Take Xanax #3' },
             { wait: '6–8h for the drug cooldown to clear' },
             { do: 'Take Xanax #4 — you should now be holding around 1,000 Energy' },
+            // Ecstasy is ALSO a drug — it shares the exact same drug-cooldown pool as Xanax, so it can only
+            // be taken once THIS cooldown clears too, never right after the 4th dose.
+            { wait: '6–8h for the drug cooldown to clear (Ecstasy shares the same cooldown as Xanax)' },
         ];
     }
 
@@ -235,7 +238,7 @@
                 { do: 'Use the Ecstasy to double your Happy' },
                 { do: 'Train, then spend 25 Points on an Energy refill and train again' },
             ],
-            tip: 'Pushes further than the 1-Xanax version without going all-in on EDVDs — good middle ground before you\'re ready to spend $21M+ per jump. Stacking the 4 Xanax alone takes roughly a day (three separate 6–8h cooldowns), so plan it a day ahead rather than same-day.',
+            tip: 'Pushes further than the 1-Xanax version without going all-in on EDVDs — good middle ground before you\'re ready to spend $21M+ per jump. Stacking the 4 Xanax alone, plus the wait before the Ecstasy can follow, takes well over a day (four separate 6–8h cooldowns), so plan it 1–2 days ahead rather than same-day.',
         },
         {
             key: 'edvd5', name: '5x EDVD Jump', cost: '$21,000,000', property: 'Private Island, max upgrades, no staff',
@@ -248,7 +251,7 @@
                 { do: 'Use Ecstasy to double your Happy' },
                 { do: 'Train, then spend 25 Points on a refill and train again' },
             ],
-            tip: 'Working a 10★ Adult Novelties Shop job doubles your EDVD gains (12,500 → 25,000 Happy) — worth arranging before doing this method regularly. Stacking the 4 Xanax alone takes roughly a day.',
+            tip: 'Working a 10★ Adult Novelties Shop job doubles your EDVD gains (12,500 → 25,000 Happy) — worth arranging before doing this method regularly. Stacking the 4 Xanax alone, plus the wait before the Ecstasy can follow, takes well over a day.',
         },
         {
             key: 'edvd9', name: '9x EDVD Jump', cost: '$32,000,000 + a "Book: Ignorance is Bliss"', property: 'Private Island, max upgrades, max staff',

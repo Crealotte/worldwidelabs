@@ -302,6 +302,42 @@ properly:
   and gym), this was purely about showing the requirement, not a missing factor in the math.
 - "This week's plan" is now its own separate, closeable card, not folded into the settings/chart panel.
 
+**2026-09-27, round 4 — Ecstasy is a drug too, and shares Xanax's cooldown.** New fact from the user:
+Ecstasy is classified as a drug in Torn, sharing the SAME drug-cooldown pool as Xanax — it can't be
+taken until the last Xanax's 6–8h cooldown has cleared (never right after popping one), and then has
+its own separate cooldown (a real max of **4h**) before the next drug. This wasn't modelled at all
+before. Fixed in both places:
+- The reference guide's shared `xanaxStackSteps()` ([energy-planner.js](energy-planner.js)) now ends
+  with an extra wait step for this, so every guide entry using it (Big Choco 4x, both EDVD jumps,
+  Poison Mistletoe) picked up the fix from one place.
+- The real weekly calculator's dose queue ([gym-planner.js](gym-planner.js)) now treats the session's
+  Ecstasy as one more "drug action" after the Xanax doses (`gpDrugActions()`), with its own 4h wait
+  before the next drug action can follow.
+
+**Also added: Candy jump's daily repeat count is now a setting, not fixed at "2x".** The member's own
+tested baseline (2×/day) is the minimum; the real maximum (4×/day) is derived from whichever is the
+longer real-world wait — a full natural Energy bar's own regen time (~5h, same fact already shown
+under natural energy's settings) or Ecstasy's 4h cooldown — not just guessed. New "Candy jumps per
+day" setting (2–4) in the planner, same idea as the existing Xanax-per-day and natural energy's own
+easy/hard choice.
+
+**2026-09-27, round 5 — natural energy bars were being crammed into active Xanax-stacking days, and
+plans had no sense of time.** Two more corrections from the user, checked against the code:
+- **"It's either stacking Xanax OR training natural energy that day, never both."** The 4-Xanax week
+  plan was still adding a few "extra" natural energy fills onto every day, including the days spent
+  waiting out Xanax/Ecstasy cooldowns — not realistic, since those days are already spoken for. Fixed:
+  no natural fills are shown on an active stacking day any more. Natural energy only appears on a
+  genuine leftover day, once every full jump cycle for the week is already placed — sized to the
+  actual number of leftover days, not diluted across all 4 like before. Candy jump (Nx daily) got the
+  same fix from the other direction: since its own sessions already repeat several times a day using a
+  full energy bar each time, there's no real slack left for "extra" bars on top, so none are added —
+  this is also what was making the easy/candy plans look artificially padded and overwhelming.
+- **Added real timing everywhere natural energy shows up**, so a plan reads as realistic pacing
+  instead of a wall of same-instant checkboxes: every natural energy fill now says it's a full bar and
+  notes it takes about 5h to regen, with an explicit "Wait ≈5h for your bar to refill" arrow-note
+  between repeated fills; the Natural energy — Soft/Hard day's own bars and Xanax doses got the same
+  treatment (fill time, cooldown before the next Xanax).
+
 ## How to use this list
 
 For each page below: open it, use it as a member would and as a leader would (if it has both
