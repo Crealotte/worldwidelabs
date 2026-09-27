@@ -643,9 +643,11 @@ function renderGymPlanner() {
         renderGpProgress();
     }));
     renderGpProgress();
-    // keep a copy of the plan on the server, so the WWL userscript in Torn shows the same checklist (ticks are shared both ways)
+    // keep a copy of the plan on the server, so the WWL userscript in Torn shows the same checklist (ticks are shared both ways).
+    // `weekly` (this member's own personal energy minimum) rides along too — it's the only way the Energy
+    // Tracker leaderboard can know it, since battle stats (what it's based on) are private to this key alone.
     gpPlanFetch({ action: 'plan-save', week: Math.floor(Date.now() / (7 * 86400e3)), stat: inp.stat, method: chosen.name, checks,
-        summary: `${chosen.name}: about +${gpN(w.gain)} ${inp.stat} from ${gpN(w.energyUsed)} energy a week`, blocks }).then(r => {
+        summary: `${chosen.name}: about +${gpN(w.gain)} ${inp.stat} from ${gpN(w.energyUsed)} energy a week`, blocks, weekly: inp.weekly }).then(r => {
         const server = r?.plan?.checks;
         if (!server) return;
         let changed = false;

@@ -605,6 +605,18 @@ module.exports = async function handler(req, res) {
             const r = await energyDaily(redis, factionId, fromDay, toDay);
             const rosterRaw = await redis(['GET', `wwl:mo-roster:${factionId}`]); // names a leader's page saved, for members without one yet
             for (const m of (rosterRaw ? JSON.parse(rosterRaw) : [])) if (r.members[m.id] && !r.members[m.id].name) r.members[m.id].name = m.name;
+            // Each member's own personal weekly energy minimum (see lib/planSync.js) — piggybacked on their
+            // Energy planner plan record, since that's the only place it's ever known (it comes from THEIR
+            // OWN battle stats, private to their own key; there is no faction-wide way to ask Torn for it).
+            // One MGET for everyone shown, not one Redis call per member.
+            const ids = Object.keys(r.members);
+            if (ids.length) {
+                const plansRaw = await redis(['MGET', ...ids.map(id => `wwl:gym-plan:${id}`)]);
+                ids.forEach((id, i) => {
+                    if (!plansRaw[i]) return;
+                    try { const w = JSON.parse(plansRaw[i]).weekly; if (Number.isFinite(w) && w > 0) r.members[id].weekly = w; } catch (e) { /* skip a bad record */ }
+                });
+            }
             return res.status(200).json({ ...r, days, today, fromDay, toDay, me: playerId });
         }
         // Steadfast countdown — everyone can read the stored numbers; refreshing, the share link and the goals are for leaders.

@@ -34,7 +34,12 @@ function etRow(id, m) {
     const days = Object.entries(m.days).sort((a, b) => b[0].localeCompare(a[0]));
     for (const [, arr] of days) arr.forEach((v, k) => { totals[k] += v; });
     const total = etSum(totals);
-    return { id, name: m.name || `#${id}`, totals, total, avg: etData.days ? total / etData.days : 0, days };
+    const avg = etData.days ? total / etData.days : 0;
+    // This member's own weekly energy minimum (from their own Energy planner visit — see lib/planSync.js;
+    // null until they've opened it at least once, since it comes from their own private battle stats).
+    // "Weekly average" is just the daily average scaled to a week, so it compares like for like whatever
+    // period is picked (a day, a month, a custom range) instead of only meaning something over exactly 7 days.
+    return { id, name: m.name || `#${id}`, totals, total, avg, weeklyAvg: avg * 7, weekly: m.weekly || null, days };
 }
 
 function renderEnergyTracker() {
@@ -51,7 +56,10 @@ function renderEnergyTracker() {
             <div class="stat"><div class="k">You — ${label}</div><div class="v good">${Math.round(mine.total).toLocaleString()}</div><div class="s">energy trained in the gym</div></div>
             <div class="stat"><div class="k">Per day</div><div class="v">${Math.round(mine.avg).toLocaleString()}</div><div class="s">on average</div></div>
             <div class="stat"><div class="k">Your place</div><div class="v">#${rows.indexOf(mine) + 1}</div><div class="s">of ${rows.length}</div></div>
-        </div>` : '<p style="color:var(--muted);margin:0;">No energy of yours has been counted in these days yet.</p>';
+        </div>
+        ${mine.weekly ? `<p style="color:var(--muted);font-size:12px;margin:8px 0 0;">Your weekly average is ${etK(mine.weeklyAvg)} E against your own weekly minimum of ${etK(mine.weekly)} E (from your total battle stats) — <span style="color:${mine.weeklyAvg >= mine.weekly ? 'var(--reagent)' : 'var(--danger)'};font-weight:700;">${mine.weeklyAvg >= mine.weekly ? 'meeting it' : 'below it'}</span>.</p>`
+            : `<p style="color:var(--muted);font-size:12px;margin:8px 0 0;">Open the Energy planner once to have your personal weekly minimum shown here and in the table below.</p>`}`
+        : '<p style="color:var(--muted);margin:0;">No energy of yours has been counted in these days yet.</p>';
 
     const first = etData.firstSnapshotDay;
     const base = first
@@ -62,15 +70,22 @@ function renderEnergyTracker() {
     const upd = etData.todayUpdatedHour;
     $('et-note').textContent = base + (upd ? ` Today's row is up to date as of ${new Date(upd * 3600e3).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', timeZone: 'UTC' })} TCT.` : '');
 
+    // Weekly avg vs. this member's OWN weekly minimum (from their own battle stats — see etRow()): green if
+    // they're meeting it, red if not, muted with a tooltip if they've never opened the Energy planner yet
+    // (so there's nothing to compare against — never guessed).
+    const reqCell = r => r.weekly
+        ? `<td style="padding:5px 8px;text-align:right;font-family:var(--mono);font-weight:700;color:${r.weeklyAvg >= r.weekly ? 'var(--reagent)' : 'var(--danger)'};" title="Weekly minimum: ${etK(r.weekly)} E">${etK(r.weeklyAvg)}</td>`
+        : `<td style="padding:5px 8px;text-align:right;font-family:var(--mono);color:var(--muted);" title="No personal weekly minimum yet — needs to open the Energy planner once">${etK(r.weeklyAvg)}</td>`;
     $('et-table').innerHTML = rows.length ? `
         <table style="width:100%;font-size:13px;border-collapse:collapse;">
             <thead><tr style="color:var(--muted);text-align:right;">
-                <th style="padding:4px 8px;text-align:left;">Member</th><th style="padding:4px 8px;">Avg E/day</th><th style="padding:4px 8px;">STR Energy</th><th style="padding:4px 8px;">SPD Energy</th><th style="padding:4px 8px;">DEF Energy</th><th style="padding:4px 8px;">DEX Energy</th><th style="padding:4px 8px;">Total E</th>
+                <th style="padding:4px 8px;text-align:left;">Member</th><th style="padding:4px 8px;">Avg E/day</th><th style="padding:4px 8px;" title="Daily average scaled to a week, against this member's own weekly minimum from their total battle stats">Weekly avg</th><th style="padding:4px 8px;">STR Energy</th><th style="padding:4px 8px;">SPD Energy</th><th style="padding:4px 8px;">DEF Energy</th><th style="padding:4px 8px;">DEX Energy</th><th style="padding:4px 8px;">Total E</th>
             </tr></thead>
             <tbody>${rows.map((r, i) => `
                 <tr class="et-row" data-id="${esc(r.id)}" style="border-top:1px solid var(--line);cursor:pointer;${r.id === etData.me ? 'background:rgba(53,217,155,.10);' : ''}">
                     <td style="padding:5px 8px;text-align:left;white-space:nowrap;"><span style="color:var(--muted);">${i + 1}</span> <b>${esc(r.name)}</b> <span style="color:var(--muted);font-size:11px;">${etOpen.has(r.id) ? '▾' : '▸'}</span></td>
                     <td style="padding:5px 8px;text-align:right;color:var(--muted);font-family:var(--mono);">${etK(r.avg)}</td>
+                    ${reqCell(r)}
                     <td style="padding:5px 8px;text-align:right;font-family:var(--mono);">${etK(r.totals[0])}</td>
                     <td style="padding:5px 8px;text-align:right;font-family:var(--mono);">${etK(r.totals[2])}</td>
                     <td style="padding:5px 8px;text-align:right;font-family:var(--mono);">${etK(r.totals[1])}</td>
@@ -79,7 +94,7 @@ function renderEnergyTracker() {
                 </tr>
                 ${etOpen.has(r.id) ? r.days.filter(([, a]) => etSum(a) > 0).map(([date, a]) => `
                 <tr style="background:var(--bench-2);">
-                    <td style="padding:3px 8px 3px 26px;text-align:left;color:var(--muted);">${etDate(date)}</td><td></td>
+                    <td style="padding:3px 8px 3px 26px;text-align:left;color:var(--muted);">${etDate(date)}</td><td></td><td></td>
                     <td style="padding:3px 8px;text-align:right;font-family:var(--mono);">${etK(a[0])}</td><td style="padding:3px 8px;text-align:right;font-family:var(--mono);">${etK(a[2])}</td>
                     <td style="padding:3px 8px;text-align:right;font-family:var(--mono);">${etK(a[1])}</td><td style="padding:3px 8px;text-align:right;font-family:var(--mono);">${etK(a[3])}</td>
                     <td style="padding:3px 8px;text-align:right;font-family:var(--mono);">${etK(etSum(a))}</td></tr>`).join('') : ''}`).join('')}
