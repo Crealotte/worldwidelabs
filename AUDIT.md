@@ -430,3 +430,10 @@ absent (not "Building"/"Error"), push a trivial follow-up commit to re-trigger i
 5. ~~Happy Jumping Guide's impossible "4 Xanax back-to-back"~~ — **fixed in both places it appeared,
    2026-09-27**, see Confirmed issue #3. Candy jump (2x daily) added and wired into the comparison
    chart. Daily-Xanax-cap input for the simpler weekly checklist is still open, waiting on you.
+6. ~~"Please join an Organized Crime" personal reminder~~ — **added 2026-09-27**. New check in
+   `api/war-payout.js`'s `member-todo` action (the same one behind the userscript's revive/
+   availability/feedback/Discord/Intel/CAT reminders): pulls `v2/user?selections=organizedcrimes`
+   with the member's own key (no faction API access needed, since it's their own membership), and
+   adds "You're not in an Organized Crime right now" with a link to the OC tab if they hold no slot
+   in one. Shows up in the userscript's To do tab automatically — no userscript version bump needed,
+   since that tab already renders whatever `member-todo` returns generically.
