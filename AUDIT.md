@@ -30,17 +30,21 @@ Blood Bag types this covers.
 means by "candy/alcohol/blood bags used" (armory stock, not personal lifetime habit). 78 vs 34 is
 consistent with solo050 having also drawn blood outside of what he filled for the faction.
 
-**Decision needed before this gets fixed:**
-- **Option A** — switch Candy/Alcohol/Blood-bags on Member Overview, the dashboard and the
-  newsletter to the armory-news-based per-player numbers (accurate, matches the log exactly, but
-  costs more Torn calls per period shown and Torn's own news history only goes back so far — needs
-  checking how far).
-- **Option B** — keep the personal-stat numbers but relabel them honestly (e.g. "Candy eaten
-  (personal stat, may include non-faction candy)") so nobody expects it to match the armory log.
-- **Option C** — show both, armory-sourced as the "official" competition number and the personal
-  stat as a side figure.
+**Fixed 2026-09-27 (Option A).** Candy/Alcohol/Blood-bags on Member Overview, the dashboard's "Your
+standing" card, and the newsletter now come from a new tracker,
+[lib/armoryConsumption.js](lib/armoryConsumption.js), that reads the same real armory news log a
+leader checks by hand — "X used one of the faction's Candy/Alcohol items" and "X filled a Blood Bag
+for the faction armory" — per player, per day. The old personal-lifetime-stat system
+(`candyused`/`alcoholused`/`bloodwithdrawn` snapshots) is removed.
 
-Not touched yet — waiting on which option you want.
+- Kept up to date automatically, a little at a time, whenever a leader opens Member Overview.
+- **Coverage only starts from the day this went live**, same limit as respect gained/perk levels
+  elsewhere — except a leader can press **"Dig deeper"** (shown right under the period picker,
+  Member Overview) to walk back further into Torn's armory news history, as far as it still goes.
+  You only need it to reach back through the current newsletter period.
+- The "filled a Blood Bag" wording match is an educated guess (not confirmed against a real Torn
+  news line, unlike the "used" wording which is) — if Blood bags filled looks off after this ships,
+  send a real news line from your faction's armory log and it can be corrected.
 
 ---
 
@@ -92,4 +96,4 @@ or missing. Mark `[x]` once checked, with a one-line note (even "looks correct" 
 
 ## Fixes queued from the audit (add here as we find them)
 
-1. Candy/Alcohol/Blood bags data source — see above. **Waiting on a decision.**
+1. ~~Candy/Alcohol/Blood bags data source~~ — **fixed 2026-09-27**, see above.

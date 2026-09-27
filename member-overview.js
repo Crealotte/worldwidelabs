@@ -15,7 +15,7 @@
 
 let moData = null; // { members, wars, hits, tiers, energyTarget, settings }
 let moEnergy = null; // { perMember: { id: energy }, partial, sinceDay } — energy trained in the gym over the period, from the daily contributor snapshots
-let moStats = {}; // "<id>:<timestamp>" -> { candyused, alcoholused, bloodwithdrawn }
+let moConsumption = null; // { perMember: { id: {candyused, alcoholused, bloodwithdrawn} }, partial, sinceDay } — from the real armory log, see lib/armoryConsumption.js
 let moPeriodId = null; // which option of the period dropdown is picked
 let moCustomWeeks = 4;
 let moDates = null; // { from, to } as YYYY-MM-DD, to = last whole day included — for matching another tool's dates
@@ -96,6 +96,27 @@ function renderPeriodBar() {
     $('mo-view-total').classList.toggle('active-toggle', !moPerWeek);
     $('mo-view-week').classList.toggle('active-toggle', moPerWeek);
     $('mo-period-note').textContent = (moEnergy?.partial && moEnergy.sinceDay ? `Energy trained is counted since ${moFmt(moEnergy.sinceDay * 86400)} — that is when the counting started. ` : '') + `${moDaysIn(cur)} days (${Math.round(moWeeksIn(cur) * 10) / 10} weeks) · ${moFmt(cur.start)} 00:00 → ${moFmt(cur.end)} 00:00 TCT${cur.id === 'dates' || cur.id === 'now' ? '' : ' (Sunday to Sunday)'}`;
+    const ccEl = $('mo-consumption-note');
+    if (ccEl) {
+        ccEl.innerHTML = moConsumption?.partial && moConsumption.sinceDay
+            ? `Candy/Alcohol/Blood bags (from the real armory log) are only recorded from ${esc(moFmt(moConsumption.sinceDay * 86400))} on — this period reaches back further than that. <button class="ghost small" id="mo-dig-deeper">Dig deeper</button> <span id="mo-dig-status" style="color:var(--muted);"></span>`
+            : '';
+        $('mo-dig-deeper')?.addEventListener('click', async () => {
+            const btn = $('mo-dig-deeper'); btn.disabled = true;
+            const status = $('mo-dig-status');
+            status.textContent = 'Reading further back…';
+            try {
+                const r = await moFetch({ action: 'mo-consumption-deepsync' });
+                if (r.error) throw new Error(r.error);
+                status.textContent = r.reachedStart ? 'Reached the start of the armory log.' : `Went back ${r.pagesFetched} page(s), found ${r.synced} matching entr${r.synced === 1 ? 'y' : 'ies'} — press again for further back.`;
+                moConsumption = null; // re-read for whatever period is on screen
+                const p = moPeriod();
+                const c = await moFetch({ action: 'mo-consumption', from: p.start, to: p.end });
+                if (!c.error) moConsumption = c;
+                renderMemberOverview();
+            } catch (e) { status.textContent = e.message; } finally { btn.disabled = false; }
+        });
+    }
 }
 
 async function loadMemberOverview() {
@@ -127,27 +148,11 @@ async function loadMemberOverview() {
                 if (round === 10) problems.push(`War vs ${todo[i].opponent} is still being counted — press Refresh to continue.`);
             }
         }
-        // consumption snapshots at the period's start and end, in rounds until everything is in
-        const ids = moData.members.map(m => m.id);
         const p = moPeriod();
         try { const e = await moFetch({ action: 'mo-energy', from: p.start, to: p.end }); moEnergy = e.error ? null : e; renderMemberOverview(); } catch (e) { moEnergy = null; }
-        // Members' own dashboard (my-standing.js) always reads the CURRENT running period, whatever a leader
-        // happens to be viewing here (the dropdown defaults to the last FINISHED period, not "now"). So the
-        // current period's snapshot is requested every time too, or a member's candy/alcohol/blood numbers
-        // would only ever update on the rare visit where a leader had "Running now" selected.
-        const nowPeriod = moPeriods().find(x => x.id === 'now');
-        const timestamps = [...new Set(nowPeriod ? [p.start, p.end, nowPeriod.start, nowPeriod.end] : [p.start, p.end])];
-        let lastPending = Infinity;
-        for (let round = 0; round < 40; round++) {
-            const s = await moFetch({ action: 'mo-stats', ids, timestamps });
-            if (s.error) { problems.push(`Stats: ${s.error}`); break; }
-            Object.assign(moStats, s.values);
-            renderMemberOverview();
-            if (!s.pending) break;
-            if (s.pending >= lastPending && s.failed) { problems.push(`Couldn't read Torn stats for ${s.pending} lookups. Torn said: ${s.firstError || 'nothing'}`); break; }
-            lastPending = s.pending;
-            st.className = 'status ok'; st.textContent = `Reading stats… ${s.pending} lookups left (first time for this period only)`;
-        }
+        // Candy/Alcohol/Blood bags — from the real armory log (lib/armoryConsumption.js), kept up to
+        // date automatically by 'mo-get' above; this just reads whatever period is on screen.
+        try { const c = await moFetch({ action: 'mo-consumption', from: p.start, to: p.end }); moConsumption = c.error ? null : c; renderMemberOverview(); } catch (e) { moConsumption = null; }
         if (problems.length) { st.className = 'status err'; st.textContent = problems.join(' • '); } else { st.textContent = ''; st.className = 'status'; }
     } catch (e) {
         st.className = 'status err'; st.textContent = e.message;
@@ -161,16 +166,15 @@ function moWarsInPeriod() {
 
 // Used over the period (or per week), from two snapshots. Null when either snapshot is missing.
 function moUsed(id, stat) {
-    if (stat === 'energytrained') { // not a snapshot of personal stats: the faction's contributor counters
+    if (stat === 'energytrained') { // the faction's contributor counters, a separate tracker
         if (!moEnergy || !moEnergy.snapshots) return null;
         return (moEnergy.perMember[id] ?? 0) / (moPerWeek ? moWeeksIn(moPeriod()) : 1);
     }
-    const p = moPeriod();
-    const end = moStats[`${id}:${p.end}`];
-    const start = moStats[`${id}:${p.start}`];
-    if (!end || !start) return null;
-    const v = (end[stat] - start[stat]) / (moPerWeek ? moWeeksIn(p) : 1);
-    return v < 0 ? null : v;
+    // candyused / alcoholused / bloodwithdrawn — from the real armory log, see lib/armoryConsumption.js.
+    // Nothing recorded yet at all shows as unknown ("…"); recorded but zero for this member is a real 0.
+    if (!moConsumption || !moConsumption.hasData) return null;
+    const v = moConsumption.perMember[id]?.[stat] ?? 0;
+    return v / (moPerWeek ? moWeeksIn(moPeriod()) : 1);
 }
 
 // The war rule: a war counts for a member if they did at least `minWarHits` war hits — or, having
