@@ -25,7 +25,7 @@
 // handling and payout math below.
 
 const { tornFetch } = require('../lib/tornFetch');
-const { fetchWarHits, sleep, fetchLiveChainHits } = require('../lib/warHits');
+const { fetchWarHits, sleep, fetchLiveChainHits, isRateLimited } = require('../lib/warHits');
 const { fetchWarBadgeStats } = require('../lib/warBadgeStats');
 const { tornToDiscordIds, resolveDiscordIds, discordStatus } = require('../lib/discordMap');
 const { moHandle, moMe, loadExtra, isEventId } = require('../lib/memberOverview');
@@ -1491,20 +1491,45 @@ module.exports = async function handler(req, res) {
         if (action === 'badge-probe') {
             const { warStart, warEnd } = req.body;
             if (!warStart || !warEnd) return res.status(400).json({ error: 'Pick a war first.' });
-            const r = await tornFetch(`https://api.torn.com/v2/faction/attacks?from=${warStart}&to=${warEnd}&sort=ASC&key=${encodeURIComponent(key)}`,
-                { headers: { accept: 'application/json' } });
-            const data = await r.json();
-            if (data.error) return res.status(403).json({ error: data.error.error });
-            const list = Array.isArray(data.attacks) ? data.attacks : Object.values(data.attacks || {});
-            // Prefer our own outgoing hits (what the broken badges read), a mix of hospitalized-looking and
-            // ordinary ones if we can tell, else just the first several.
-            const ours = list.filter(a => String(a.attacker?.faction?.id ?? '') === factionId);
-            const sample = ours.slice(0, 8).map(a => ({
-                result: a.result, respect_gain: a.respect_gain, modifiers: a.modifiers,
-                is_ranked_war: a.is_ranked_war, ranked_war: a.ranked_war,
-                attacker: a.attacker?.id, defender: a.defender?.id, defender_faction: a.defender?.faction?.id,
-            }));
-            return res.status(200).json({ scanned: list.length, ownOutgoing: ours.length, sample });
+            // Walks the whole war (not just one page), tallying every distinct `result` value and every
+            // distinct `overseas` modifier value seen — not just a small raw sample — so a value that's
+            // rare (an assist, a hospitalization, a real abroad hit) isn't missed just because it wasn't
+            // in the first page.
+            const resultCounts = { outgoing: {}, incoming: {} };
+            const overseasValues = {};
+            let outgoingExample = null, hospitalLikeExample = null;
+            let from = warStart, scanned = 0, pages = 0;
+            const MAX_PAGES = 20;
+            while (from <= warEnd && pages < MAX_PAGES) {
+                if (pages > 0) await sleep(1100);
+                const r = await tornFetch(`https://api.torn.com/v2/faction/attacks?from=${from}&to=${warEnd}&sort=ASC&key=${encodeURIComponent(key)}`,
+                    { headers: { accept: 'application/json' } });
+                const data = await r.json();
+                if (data.error) { if (isRateLimited(data)) break; return res.status(403).json({ error: data.error.error }); }
+                const list = Array.isArray(data.attacks) ? data.attacks : Object.values(data.attacks || {});
+                if (!list.length) break;
+                pages++;
+                let newest = from;
+                for (const a of list) {
+                    const ts = a.ended ?? a.started ?? from;
+                    if (ts > newest) newest = ts;
+                    scanned++;
+                    const r0 = String(a.result ?? '');
+                    const ov = a.modifiers?.overseas;
+                    if (ov !== undefined) overseasValues[String(ov)] = (overseasValues[String(ov)] || 0) + 1;
+                    if (String(a.attacker?.faction?.id ?? '') === factionId) {
+                        resultCounts.outgoing[r0] = (resultCounts.outgoing[r0] || 0) + 1;
+                        if (!outgoingExample) outgoingExample = { result: a.result, modifiers: a.modifiers, is_ranked_war: a.is_ranked_war };
+                        if (/hospital|mug|assist/i.test(r0) && !hospitalLikeExample) hospitalLikeExample = { result: a.result, modifiers: a.modifiers, respect_gain: a.respect_gain };
+                    }
+                    if (String(a.defender?.faction?.id ?? '') === factionId) {
+                        resultCounts.incoming[r0] = (resultCounts.incoming[r0] || 0) + 1;
+                    }
+                }
+                if (newest <= from) break;
+                from = newest + 1;
+            }
+            return res.status(200).json({ scanned, pages, resultCounts, overseasValues, outgoingExample, hospitalLikeExample });
         }
 
         if (action === 'badge-stats') {

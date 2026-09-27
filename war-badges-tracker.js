@@ -138,7 +138,12 @@ $('wb-probe-btn')?.addEventListener('click', async () => {
         const r = await wbFetch({ action: 'badge-probe', warStart: wbSelectedReceipt.warStart, warEnd: wbSelectedReceipt.warEnd });
         if (r.error) throw new Error(r.error);
         const out = $('wb-probe-out');
-        out.textContent = `Scanned ${r.scanned} attack(s), ${r.ownOutgoing} of ours.\n\n${JSON.stringify(r.sample, null, 2)}`;
+        out.textContent = `Scanned ${r.scanned} attack(s) over ${r.pages} page(s) of the war.\n\n`
+            + `Result values on OUR outgoing hits: ${JSON.stringify(r.resultCounts.outgoing, null, 2)}\n\n`
+            + `Result values on hits WE took: ${JSON.stringify(r.resultCounts.incoming, null, 2)}\n\n`
+            + `"overseas" modifier values seen: ${JSON.stringify(r.overseasValues, null, 2)}\n\n`
+            + `A plain outgoing hit: ${JSON.stringify(r.outgoingExample, null, 2)}\n\n`
+            + (r.hospitalLikeExample ? `A hospital/mug/assist-looking one: ${JSON.stringify(r.hospitalLikeExample, null, 2)}` : 'No result value containing "hospital", "mug" or "assist" was found anywhere in this war.');
         out.style.display = 'block';
     } catch (e) { toast(e.message); } finally { btn.disabled = false; btn.textContent = 'Check what Torn sends for this war'; }
 });
