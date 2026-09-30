@@ -20,7 +20,7 @@ function ecState() {
     try { s = JSON.parse(localStorage.getItem(EC_KEY) || '{}'); } catch (e) { /* defaults */ }
     return {
         goal: s.goal ?? '', scenario: s.scenario || 'loss',
-        oc: s.oc ?? null, warBonus: s.warBonus ?? null, k: s.k ?? null, roster: s.roster ?? null,
+        oc: s.oc ?? null, warBonus: s.warBonus ?? null, rankUp: s.rankUp ?? 0, k: s.k ?? null, roster: s.roster ?? null,
         unavailPct: s.unavailPct ?? 10, baseHits: s.baseHits ?? null, xanaxHits: s.xanaxHits ?? 10,
     };
 }
@@ -101,12 +101,13 @@ function renderEffortCalc() {
 
     const oc = s.oc != null ? s.oc : (d.ocWeeklyAvg != null ? Math.round(d.ocWeeklyAvg) : 0);
     const warBonus = s.warBonus != null ? s.warBonus : (warAuto.avg != null ? Math.round(warAuto.avg) : 0);
+    const rankUp = Number(s.rankUp) || 0; // never auto-filled — a rank-up only happens near a real threshold, not every war
     const k = s.k != null ? s.k : (kAuto.k != null ? Math.round(kAuto.k * 100) / 100 : 0);
     const roster = s.roster != null ? s.roster : (d.rosterCount ?? 0);
     const baseHits = s.baseHits != null ? s.baseHits : (d.hitsPerBarAuto != null ? Math.round(d.hitsPerBarAuto * 10) / 10 : 4);
     const goal = Number(s.goal) || 0;
 
-    const fromChain = Math.max(0, goal - oc - warBonus);
+    const fromChain = Math.max(0, goal - oc - warBonus - rankUp);
     const targetHits = ecChainLengthForRespect(fromChain, k);
     const effectivePerHit = targetHits > 0 ? fromChain / targetHits : 0;
     const activeMembers = Math.max(0, Math.round(roster * (1 - (Number(s.unavailPct) || 0) / 100)));
@@ -174,12 +175,13 @@ function renderEffortCalc() {
         <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-bottom:6px;">
             <div class="field" style="margin:0;max-width:150px;"><label for="ec-oc">OC respect / week</label><input autocomplete="off" id="ec-oc" type="number" value="${oc}"></div>
             <div class="field" style="margin:0;max-width:150px;"><label for="ec-warbonus">War bonus</label><input autocomplete="off" id="ec-warbonus" type="number" value="${warBonus}" ${s.scenario === 'none' ? 'disabled title="No war this week — pick a scenario above to use this."' : ''}></div>
+            <div class="field" style="margin:0;max-width:160px;"><label for="ec-rankup" title="Only happens when the faction is already close to a rank threshold (e.g. Gold -> Gold II) — never assumed automatically. Leave at 0 unless you expect one this week.">Rank-up bonus (if expected)</label><input autocomplete="off" id="ec-rankup" type="number" value="${esc(s.rankUp)}"></div>
             <div class="field" style="margin:0;max-width:170px;"><label for="ec-k" title="Your own average target-level x Fair Fight, backed out from real chains. Multiplied by Torn's real chain-bonus curve, not a flat respect/hit rate — a 1500-hit chain earns more per hit than a 1000-hit one, and this accounts for that.">Chain respect factor (K)</label><input autocomplete="off" id="ec-k" type="number" step="0.01" value="${k}"></div>
             <div class="field" style="margin:0;max-width:120px;"><label for="ec-roster">Roster size</label><input autocomplete="off" id="ec-roster" type="number" value="${roster}"></div>
             <div class="field" style="margin:0;max-width:140px;"><label for="ec-unavail">% OD / absent</label><input autocomplete="off" id="ec-unavail" type="number" value="${esc(s.unavailPct)}"></div>
         </div>
         <div style="font-size:11px;color:var(--muted);margin-bottom:14px;line-height:1.6;">
-            OC: ${esc(ocNote)} · War bonus: ${esc(warNote)} · K: ${esc(kNote)} · Roster: ${esc(rosterNote)}
+            OC: ${esc(ocNote)} · War bonus: ${esc(warNote)} · Rank-up: ${esc(d.rankUp ? `not auto-filled — your history shows ~${ecN(d.rankUp.avg)} avg over ${d.rankUp.count} occurrence${d.rankUp.count === 1 ? '' : 's'}, only fill this in if you expect one` : 'no rank-up history yet')} · K: ${esc(kNote)} · Roster: ${esc(rosterNote)}
         </div>
         <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-bottom:14px;">
             <div class="field" style="margin:0;max-width:210px;"><label for="ec-basehits">Hits from one natural energy bar</label><input autocomplete="off" id="ec-basehits" type="number" step="0.1" value="${baseHits}"></div>
@@ -188,7 +190,7 @@ function renderEffortCalc() {
         <div style="font-size:11px;color:var(--muted);margin:-8px 0 14px;">Energy bar: ${esc(baseHitsNote)}</div>
         <div style="background:var(--bench-2);border-radius:var(--radius);padding:14px 16px;font-size:13px;line-height:2;">
             <div>Weekly goal: <b>${ecN(goal)}</b> respect</div>
-            <div>− OC: <b>${ecN(oc)}</b> &nbsp;·&nbsp; − War bonus: <b>${ecN(warBonus)}</b></div>
+            <div>− OC: <b>${ecN(oc)}</b> &nbsp;·&nbsp; − War bonus: <b>${ecN(warBonus)}</b>${rankUp ? ` &nbsp;·&nbsp; − Rank-up: <b>${ecN(rankUp)}</b>` : ''}</div>
             <div>= Needed from chain hits: <b style="color:var(--reagent);">${ecN(fromChain)}</b> respect</div>
             ${k > 0 ? `<div>Using Torn's real chain curve (K=${esc(k)}) → aim for a chain of about <b style="color:var(--reagent);">${ecN(targetHits)}</b> hits <span style="color:var(--muted);font-size:11px;">(≈${effectivePerHit.toFixed(1)} respect/hit at that length)</span></div>`
                 : `<div style="color:var(--danger);">Enter a real "Chain respect factor (K)" above to get a target chain length.</div>`}
@@ -214,7 +216,7 @@ function renderEffortCalc() {
         ${warScoresHtml}
         <p style="font-size:11px;color:var(--muted);margin:10px 0 0;">This is the MINIMUM to hit your goal — anyone who wants to do more still can, but nobody needs to stack further than this just to be able to train too. Every number above is your own faction's real history; overwrite any of them by hand if you want to plan for something different.</p>`;
 
-    const fieldMap = { 'ec-goal': 'goal', 'ec-oc': 'oc', 'ec-warbonus': 'warBonus', 'ec-k': 'k', 'ec-roster': 'roster', 'ec-unavail': 'unavailPct', 'ec-basehits': 'baseHits', 'ec-xanhits': 'xanaxHits' };
+    const fieldMap = { 'ec-goal': 'goal', 'ec-oc': 'oc', 'ec-warbonus': 'warBonus', 'ec-rankup': 'rankUp', 'ec-k': 'k', 'ec-roster': 'roster', 'ec-unavail': 'unavailPct', 'ec-basehits': 'baseHits', 'ec-xanhits': 'xanaxHits' };
     Object.keys(fieldMap).forEach(id => {
         $(id).addEventListener('change', () => {
             const key = fieldMap[id];

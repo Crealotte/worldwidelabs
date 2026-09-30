@@ -82,6 +82,9 @@ const warEntriesKey = (factionId) => `wwl:war-respect:${factionId}`; // manual e
 const warBonusDailyKey = (factionId) => `wwl:war-bonus-daily:${factionId}`; // auto-tracked
 const warBonusSeenKey = (factionId) => `wwl:war-bonus-seen:${factionId}`;
 const warBonusEntriesKey = (factionId) => `wwl:war-bonus-entries:${factionId}`; // [{ warId, end, bonus, won }] — per-war, for the effort calculator's win/loss split (warBonusDaily above is day-summed only, loses which war each bonus came from)
+const rankUpDailyKey = (factionId) => `wwl:rankup-respect-daily:${factionId}`; // day-summed rank-up bonus respect ("X ranked up from Gold to Gold II and received N bonus respect") — a real, separate source the war-bonus tracking above never saw
+const rankUpEntriesKey = (factionId) => `wwl:rankup-entries:${factionId}`; // [{ warId, at, respect, won }] — per event, for the effort calculator
+const rankUpCheckedKey = (factionId) => `wwl:rankup-checked:${factionId}`; // SET of warIds already checked for a rank-up around their end time, so a war missing one isn't re-checked forever
 const goalKey = (factionId) => `wwl:respect-goal:${factionId}`;
 
 // Goals used to be stored as a single object ({target, deadline, label}) before multiple goals
@@ -283,7 +286,13 @@ async function syncWarBonus(key, factionId) {
     const daily = dailyRaw ? JSON.parse(dailyRaw) : {};
     const entriesRaw = await redis(['GET', warBonusEntriesKey(factionId)]);
     const entries = entriesRaw ? JSON.parse(entriesRaw) : [];
-    let synced = 0, skippedUnresolved = 0, rateLimited = false, fetchedCount = 0;
+    const entriesStartLength = entries.length;
+    const rankUpDailyRaw = await redis(['GET', rankUpDailyKey(factionId)]);
+    const rankUpDaily = rankUpDailyRaw ? JSON.parse(rankUpDailyRaw) : {};
+    const rankUpEntriesRaw = await redis(['GET', rankUpEntriesKey(factionId)]);
+    const rankUpEntries = rankUpEntriesRaw ? JSON.parse(rankUpEntriesRaw) : [];
+    const rankUpEntriesStartLength = rankUpEntries.length;
+    let synced = 0, rankUpSynced = 0, skippedUnresolved = 0, rateLimited = false, fetchedCount = 0;
     for (const war of wars) {
         const warId = war.id || war.war_id;
         const startTs = war.war?.start || war.start;
@@ -329,14 +338,47 @@ async function syncWarBonus(key, factionId) {
             // Recorded whenever a war resolves at all (even a 0 bonus) — the start/end window is also
             // how the calculator tells a "war chain" (hits mostly at war's 2x rate) from a "peace chain".
             entries.push({ warId: String(warId), start: startTs || null, end: endTs, bonus, won, scoreUs, scoreThem });
+
+            // Rank-up bonus: a real, SEPARATE respect source the war's own report knows nothing about —
+            // confirmed against a real example that Torn posts "X ranked up from Gold to Gold II and
+            // received 5,084 bonus respect, ..." as its own faction news line, at the same moment as the
+            // war's own "defeated/lost to" result. No documented news category for this, so it's found
+            // by reading general news in a narrow window right around this war's end and matching the
+            // exact wording, rather than guessing a cat= value that might return nothing.
+            const alreadyCheckedRankUp = await redis(['SISMEMBER', rankUpCheckedKey(factionId), String(warId)]);
+            if (alreadyCheckedRankUp !== 1) {
+                await sleep(1100);
+                try {
+                    const newsRes = await tornFetch(`https://api.torn.com/v2/faction/news?striptags=true&limit=20&sort=ASC&from=${endTs - 30}&to=${endTs + 600}&key=${encodeURIComponent(key)}`,
+                        { headers: { accept: 'application/json' } });
+                    const newsData = await newsRes.json();
+                    if (!newsData.error) {
+                        const list = Array.isArray(newsData.news) ? newsData.news : Object.values(newsData.news || {});
+                        for (const item of list) {
+                            const text = String(item.text ?? item.news ?? '');
+                            const m = /ranked up from .+? to .+? and received ([\d,]+) bonus respect/i.exec(text);
+                            if (!m) continue;
+                            const respect = Number(m[1].replace(/,/g, ''));
+                            if (!(respect > 0)) continue;
+                            const dayKey = new Date((item.timestamp || endTs) * 1000).toISOString().slice(0, 10);
+                            rankUpDaily[dayKey] = (rankUpDaily[dayKey] || 0) + respect;
+                            rankUpEntries.push({ warId: String(warId), at: item.timestamp || endTs, respect, won });
+                            rankUpSynced++;
+                        }
+                        await redis(['SADD', rankUpCheckedKey(factionId), String(warId)]); // only mark done once the news read genuinely succeeded
+                    }
+                } catch (e) { /* network hiccup — not marked checked, retried on the next sync */ }
+            }
         } catch (e) { skippedUnresolved++; /* network hiccup — don't mark as seen, retry later */ }
     }
-    if (synced > 0) {
-        await redis(['SET', warBonusDailyKey(factionId), JSON.stringify(daily)]);
+    if (synced > 0) await redis(['SET', warBonusDailyKey(factionId), JSON.stringify(daily)]);
+    if (entries.length > entriesStartLength) {
         // Kept for the effort calculator's win/loss split — a faction's real war count stays small,
         // so this never needs aggressive trimming, but capped anyway against runaway growth.
         await redis(['SET', warBonusEntriesKey(factionId), JSON.stringify(entries.slice(-300))]);
     }
+    if (rankUpSynced > 0) await redis(['SET', rankUpDailyKey(factionId), JSON.stringify(rankUpDaily)]);
+    if (rankUpEntries.length > rankUpEntriesStartLength) await redis(['SET', rankUpEntriesKey(factionId), JSON.stringify(rankUpEntries.slice(-100))]);
     return { synced, totalAvailable: wars.length, skippedUnresolved, rateLimited };
 }
 
@@ -530,11 +572,12 @@ module.exports = async function handler(req, res) {
         const factionId = factionResult.factionId;
 
         if (action === 'read') {
-            const [ocDailyRaw, chainDailyRaw, hitsDailyRaw, warBonusDailyRaw, warRaw, goalRaw] = await Promise.all([
+            const [ocDailyRaw, chainDailyRaw, hitsDailyRaw, warBonusDailyRaw, rankUpDailyRaw, warRaw, goalRaw] = await Promise.all([
                 redis(['GET', ocDailyKey(factionId)]),
                 redis(['GET', chainDailyKey(factionId)]),
                 redis(['GET', hitsDailyKey(factionId)]),
                 redis(['GET', warBonusDailyKey(factionId)]),
+                redis(['GET', rankUpDailyKey(factionId)]),
                 redis(['GET', warEntriesKey(factionId)]),
                 redis(['GET', goalKey(factionId)]),
             ]);
@@ -543,6 +586,7 @@ module.exports = async function handler(req, res) {
                 chainDaily: chainDailyRaw ? JSON.parse(chainDailyRaw) : {},
                 hitsDaily: hitsDailyRaw ? JSON.parse(hitsDailyRaw) : {},
                 warBonusDaily: warBonusDailyRaw ? JSON.parse(warBonusDailyRaw) : {},
+                rankUpDaily: rankUpDailyRaw ? JSON.parse(rankUpDailyRaw) : {},
                 warEntries: warRaw ? JSON.parse(warRaw) : [],
                 goals: normalizeGoals(goalRaw),
             });
@@ -558,9 +602,10 @@ module.exports = async function handler(req, res) {
         // respect-per-hit ratio from the faction's own last 100 chains — Torn's own per-chain totals,
         // not a guess. A leader can still type over any of these in the calculator itself.
         if (action === 'calc-data') {
-            const [ocDailyRaw, entriesRaw, membersRes, chainsRes] = await Promise.all([
+            const [ocDailyRaw, entriesRaw, rankUpEntriesRaw, membersRes, chainsRes] = await Promise.all([
                 redis(['GET', ocDailyKey(factionId)]),
                 redis(['GET', warBonusEntriesKey(factionId)]),
+                redis(['GET', rankUpEntriesKey(factionId)]),
                 tornFetch(`https://api.torn.com/v2/faction/members?striptags=true&key=${encodeURIComponent(key)}`, { headers: { accept: 'application/json' } }).catch(() => null),
                 tornFetch(`https://api.torn.com/v2/faction/chains?limit=100&sort=desc&key=${encodeURIComponent(key)}`, { headers: { accept: 'application/json' } }).catch(() => null),
             ]);
@@ -572,6 +617,13 @@ module.exports = async function handler(req, res) {
             const entries = entriesRaw ? JSON.parse(entriesRaw) : [];
             const bySide = won => { const list = entries.filter(e => e.won === won); return list.length ? { avg: list.reduce((s, e) => s + e.bonus, 0) / list.length, count: list.length } : null; };
             const warBonus = { win: bySide(true), loss: bySide(false) };
+
+            // Rank-up bonus ("X ranked up from Gold to Gold II and received N bonus respect") — a real,
+            // separate respect source, conditional on already being close to a rank threshold, so it's
+            // surfaced as a reference average rather than folded automatically into the war-bonus figure
+            // above (a leader who doesn't expect one this week shouldn't have it silently assumed).
+            const rankUpEntries = rankUpEntriesRaw ? JSON.parse(rankUpEntriesRaw) : [];
+            const rankUp = rankUpEntries.length ? { avg: rankUpEntries.reduce((s, e) => s + e.respect, 0) / rankUpEntries.length, count: rankUpEntries.length } : null;
 
             // Real recent war scores, for reference — Torn's own target-score formula (the lead needed
             // to win) isn't published anywhere reliable, so rather than guess one, this shows what
@@ -632,7 +684,7 @@ module.exports = async function handler(req, res) {
                 }
             } catch (e) { /* leave null */ }
 
-            return res.status(200).json({ ocWeeklyAvg, ocDays: ocDays.length, warBonus, warScores, kPeace, kWar, peaceSample, warSample, rosterCount, hitsPerBarAuto });
+            return res.status(200).json({ ocWeeklyAvg, ocDays: ocDays.length, warBonus, rankUp, warScores, kPeace, kWar, peaceSample, warSample, rosterCount, hitsPerBarAuto });
         }
 
         if (action === 'sync-chains') {
