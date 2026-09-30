@@ -18,20 +18,16 @@ async function respectFetch(body) {
 // means genuinely untracked respect sources (territory, raids, etc.) that used to surface via an
 // "Other" column are no longer visible — a real tradeoff, but a wrong number is worse than a
 // missing one.
-function respectComputeDaily(ocDaily, chainDaily, hitsDaily, warBonusDaily, warEntries, rankUpDaily) {
+function respectComputeDaily(ocDaily, chainDaily, hitsDaily, warBonusDaily, warEntries) {
     const warByDate = {};
     for (const w of warEntries) warByDate[w.date] = (warByDate[w.date] || 0) + w.amount;
-    // Auto-tracked war bonuses (from rankedwarreport) and manually-logged entries both feed the
-    // same "War" total — the manual log stays useful as a supplement/fallback for anything the
-    // auto-tracking doesn't reach (e.g. wars from before this existed).
+    // Auto-tracked war bonuses and manually-logged entries both feed the same "War" total — the
+    // manual log stays useful as a supplement/fallback for anything the auto-tracking doesn't reach
+    // (e.g. wars from before this existed). The auto-tracked figure itself comes from the faction
+    // news line Torn posts when the war's rank change resolves ("X ranked up/down from A to B and
+    // received N bonus respect") — confirmed against real examples to be the actual, reliable source,
+    // not the war report's own rewards.respect field (see api/respect.js's syncWarBonus).
     for (const [date, amount] of Object.entries(warBonusDaily)) {
-        warByDate[date] = (warByDate[date] || 0) + amount;
-    }
-    // Rank-up bonus respect ("X ranked up from Gold to Gold II and received N bonus respect") folds
-    // into the same War total — Torn posts it as its own faction news line, separate from the
-    // triggering war's own report, but tied to war performance all the same. Missed entirely before
-    // this was added (confirmed against a real example — it's a genuinely separate respect source).
-    for (const [date, amount] of Object.entries(rankUpDaily || {})) {
         warByDate[date] = (warByDate[date] || 0) + amount;
     }
 
@@ -112,7 +108,7 @@ async function loadRespectGoalPanel() {
         if (totalRespect == null) { $('respect-goal-panel').style.display = 'none'; return; }
 
         const current = totalRespect;
-        const dailyRows = respectComputeDaily(data.ocDaily, data.chainDaily, data.hitsDaily, data.warBonusDaily, data.warEntries, data.rankUpDaily);
+        const dailyRows = respectComputeDaily(data.ocDaily, data.chainDaily, data.hitsDaily, data.warBonusDaily, data.warEntries);
 
         // Projected date (and whether that's on track for a deadline) from a given weekly rate — shared
         // by the main line below and the comparison row, so both use the exact same math.
@@ -251,7 +247,7 @@ async function loadRespectEditor() {
         }
 
         rgLastData = data; // stashed for the date-range filter below, no need to refetch
-        const daily = respectComputeDaily(data.ocDaily, data.chainDaily, data.hitsDaily, data.warBonusDaily, data.warEntries, data.rankUpDaily);
+        const daily = respectComputeDaily(data.ocDaily, data.chainDaily, data.hitsDaily, data.warBonusDaily, data.warEntries);
         rgLastDaily = daily;
         renderRgDailyTable(daily);
     } catch (e) {
