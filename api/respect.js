@@ -81,6 +81,7 @@ const lossesSeenKey = (factionId) => `wwl:losses-respect-seen:${factionId}`;
 const warEntriesKey = (factionId) => `wwl:war-respect:${factionId}`; // manual entries
 const warBonusDailyKey = (factionId) => `wwl:war-bonus-daily:${factionId}`; // auto-tracked
 const warBonusSeenKey = (factionId) => `wwl:war-bonus-seen:${factionId}`;
+const warBonusEntriesKey = (factionId) => `wwl:war-bonus-entries:${factionId}`; // [{ warId, end, bonus, won }] — per-war, for the effort calculator's win/loss split (warBonusDaily above is day-summed only, loses which war each bonus came from)
 const goalKey = (factionId) => `wwl:respect-goal:${factionId}`;
 
 // Goals used to be stored as a single object ({target, deadline, label}) before multiple goals
@@ -258,6 +259,8 @@ async function syncWarBonus(key, factionId) {
     const wars = Object.values(data.rankedwars || data.ranked_wars || {});
     const dailyRaw = await redis(['GET', warBonusDailyKey(factionId)]);
     const daily = dailyRaw ? JSON.parse(dailyRaw) : {};
+    const entriesRaw = await redis(['GET', warBonusEntriesKey(factionId)]);
+    const entries = entriesRaw ? JSON.parse(entriesRaw) : [];
     let synced = 0, skippedUnresolved = 0, rateLimited = false, fetchedCount = 0;
     for (const war of wars) {
         const warId = war.id || war.war_id;
@@ -283,16 +286,27 @@ async function syncWarBonus(key, factionId) {
             const bonus = mine?.rewards?.respect != null ? Number(mine.rewards.respect) : null;
             if (bonus === null) { skippedUnresolved++; continue; } // couldn't find our side — don't mark as seen, retry later
 
+            // Won/lost from the two factions' own final scores in this same report — no extra API
+            // call, and no reliance on a separate "winner" field that may or may not be present.
+            const them = Object.entries(factions).find(([id]) => id !== String(factionId))?.[1];
+            const won = (mine?.score != null && them?.score != null) ? Number(mine.score) > Number(them.score) : null;
+
             // Only mark as seen once we've genuinely resolved a value (even 0 counts as resolved).
             await redis(['SADD', warBonusSeenKey(factionId), String(warId)]);
             if (bonus > 0) {
                 const dayKey = new Date(endTs * 1000).toISOString().slice(0, 10);
                 daily[dayKey] = (daily[dayKey] || 0) + bonus;
+                entries.push({ warId: String(warId), end: endTs, bonus, won });
                 synced++;
             }
         } catch (e) { skippedUnresolved++; /* network hiccup — don't mark as seen, retry later */ }
     }
-    if (synced > 0) await redis(['SET', warBonusDailyKey(factionId), JSON.stringify(daily)]);
+    if (synced > 0) {
+        await redis(['SET', warBonusDailyKey(factionId), JSON.stringify(daily)]);
+        // Kept for the effort calculator's win/loss split — a faction's real war count stays small,
+        // so this never needs aggressive trimming, but capped anyway against runaway growth.
+        await redis(['SET', warBonusEntriesKey(factionId), JSON.stringify(entries.slice(-300))]);
+    }
     return { synced, totalAvailable: wars.length, skippedUnresolved, rateLimited };
 }
 
@@ -506,6 +520,44 @@ module.exports = async function handler(req, res) {
 
         // Everything below is leaders only.
         if (!(await isLeader(key))) return res.status(403).json({ error: 'Leaders only' });
+
+        // Real numbers for the "how much effort do we need to put in" calculator (respect-tracker.js's
+        // Effort calculator, e.g. for a termed loss where members should be free to also train instead
+        // of maxing the chain): this faction's own recent OC/week average, war bonus split by win/loss
+        // (from the same per-war reports syncWarBonus already reads, see warBonusEntriesKey), and a real
+        // respect-per-hit ratio from the faction's own last 100 chains — Torn's own per-chain totals,
+        // not a guess. A leader can still type over any of these in the calculator itself.
+        if (action === 'calc-data') {
+            const [ocDailyRaw, entriesRaw, membersRes, chainsRes] = await Promise.all([
+                redis(['GET', ocDailyKey(factionId)]),
+                redis(['GET', warBonusEntriesKey(factionId)]),
+                tornFetch(`https://api.torn.com/v2/faction/members?striptags=true&key=${encodeURIComponent(key)}`, { headers: { accept: 'application/json' } }).catch(() => null),
+                tornFetch(`https://api.torn.com/v2/faction/chains?limit=100&sort=desc&key=${encodeURIComponent(key)}`, { headers: { accept: 'application/json' } }).catch(() => null),
+            ]);
+
+            const ocDaily = ocDailyRaw ? JSON.parse(ocDailyRaw) : {};
+            const ocDays = Object.keys(ocDaily).sort().slice(-90); // last ~90 days of real coverage, whatever there is
+            const ocWeeklyAvg = ocDays.length ? (ocDays.reduce((s, d) => s + (ocDaily[d] || 0), 0) / ocDays.length) * 7 : null;
+
+            const entries = entriesRaw ? JSON.parse(entriesRaw) : [];
+            const bySide = won => { const list = entries.filter(e => e.won === won); return list.length ? { avg: list.reduce((s, e) => s + e.bonus, 0) / list.length, count: list.length } : null; };
+            const warBonus = { win: bySide(true), loss: bySide(false) };
+
+            let chainRespectPerHit = null, chainSample = null;
+            try {
+                const chainsData = chainsRes ? await chainsRes.json() : null;
+                const list = Array.isArray(chainsData?.chains) ? chainsData.chains : Object.values(chainsData?.chains || {});
+                const usable = list.filter(c => c && c.end && Number(c.chain) > 0 && Number(c.respect) > 0);
+                const totalHits = usable.reduce((s, c) => s + Number(c.chain), 0);
+                const totalRespect = usable.reduce((s, c) => s + Number(c.respect), 0);
+                if (totalHits > 0) { chainRespectPerHit = totalRespect / totalHits; chainSample = { chains: usable.length, hits: totalHits, respect: totalRespect }; }
+            } catch (e) { /* leave nulls — the calculator asks for it by hand instead */ }
+
+            let rosterCount = null;
+            try { const membersData = membersRes ? await membersRes.json() : null; rosterCount = Array.isArray(membersData?.members) ? membersData.members.length : null; } catch (e) { /* leave null */ }
+
+            return res.status(200).json({ ocWeeklyAvg, ocDays: ocDays.length, warBonus, chainRespectPerHit, chainSample, rosterCount });
+        }
 
         if (action === 'sync-chains') {
             const result = await syncChains(key, factionId);

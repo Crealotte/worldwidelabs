@@ -565,6 +565,7 @@
                         <a class="nav-item" data-page="announce-edit" href="/announce-edit">Announcements</a>
                         <a class="nav-item" data-page="feedback-edit" href="/feedback-edit">Feedback form</a>
                         <a class="nav-item" data-page="war-payout" href="/war-payout">War Payout</a>
+                        <a class="nav-item" data-page="effort-calc" href="/effort-calc">Effort Calculator</a>
                         <a class="nav-item" data-page="newsletter" href="/newsletter">Newsletter</a>
                         <a class="nav-item" data-page="leader-settings" href="/leader-settings">Leader settings</a>
                         <a class="nav-item" data-page="mentoring-admin" href="/mentoring-admin">Mentoring admin</a>
@@ -1122,6 +1123,7 @@
             <div id="respect-editor" style="display:none;">
                 <div class="panel" id="rg-goals-panel">
                     <h3>Goals</h3>
+                    <p style="color:var(--muted);font-size:12px;margin:-4px 0 10px;">Planning a termed war? The <a href="#" data-page="effort-calc" class="rg-effort-link" style="color:var(--reagent);">Effort Calculator</a> (Leadership → Leaders) works out the minimum chain effort needed to still hit a weekly goal.</p>
                     <div class="field" style="max-width:220px;">
                         <label for="rg-window" title="Saved with this goal when you add it below — each goal keeps its own, so a 28-day estimate and a 3-month one can exist side by side.">Pace calculated from</label>
                         <select id="rg-window">
@@ -1689,6 +1691,17 @@
                     <button class="ghost" id="sg-send">Add suggestion</button>
                     <div class="status" id="sg-status"></div>
                 </div>
+            </div>
+        </section>
+
+        <section class="page" id="page-effort-calc">
+            <div class="lab-label">WWL·30 / leaders</div>
+            <h2>Effort Calculator</h2>
+            <p class="pagedesc">Working out how much chain effort is actually needed to hit a weekly respect target — built for a termed loss, where the point is usually to give members room to also train, without that costing the faction the respect it still needs. Enter your goal and this week's plan (warring or not); OC, war bonus, respect-per-hit and roster size all start filled in from your own faction's real history, but every number can be overwritten.</p>
+            <div class="status" id="ec-status"></div>
+            <div class="panel" id="ec-locked" style="display:none;"><p style="color:var(--muted);margin:0;">🔒 Leaders and Co-leaders only.</p></div>
+            <div id="ec-editor" style="display:none;">
+                <div class="panel" id="ec-body"></div>
             </div>
         </section>
 
@@ -2365,6 +2378,7 @@
 <script src="oc-fit-tracker.js"></script>
 <script src="foreign-stock-tracker.js"></script>
 <script src="respect-tracker.js"></script>
+<script src="effort-calculator.js"></script>
 <script src="crimes-guide.js"></script>
 <script src="war-payout-tracker.js"></script>
 <script src="war-badges-tracker.js"></script>

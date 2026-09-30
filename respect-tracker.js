@@ -494,3 +494,5 @@ $('rg-reset-war-bonus').addEventListener('click', async () => {
     }
 });
 
+document.querySelector('.rg-effort-link')?.addEventListener('click', e => { e.preventDefault(); goToPage('effort-calc'); });
+
