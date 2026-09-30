@@ -250,6 +250,7 @@ function renderAvOd() {
     </div>`;
     el.innerHTML = html;
     $('av-od-refresh')?.addEventListener('click', () => scanAvOd());
+    if (d.scannedAt && d.members.length) wireSort(el, avOdSort, d.members, avOdAccessors(d.window.warStart), renderAvOd);
 }
 
 // Leader-only: this faction's own Discord destination(s). A faction on the shared server saves a
@@ -910,21 +911,29 @@ async function avCompareHits() {
         const totalHours = rows.reduce((s, r) => s + r.own, 0), totalHits = rows.reduce((s, r) => s + r.hits, 0);
         const rate = totalHours ? totalHits / totalHours : 0; // the faction's hits per ticked hour
         rows.forEach(r => { r.expected = r.own * rate; r.ratio = r.expected ? r.hits / r.expected : 1; r.flag = r.own >= 10 && r.ratio < 0.25; });
-        rows.sort((a, b) => a.ratio - b.ratio || b.hours - a.hours);
-        const flagged = rows.filter(r => r.flag);
-        out.innerHTML = `<div style="font-size:12px;color:var(--muted);margin-bottom:6px;">Using ${source}: the faction made about ${rate.toFixed(2)} hits per ticked hour. ⚠️ = ticked at least 10 hours but made under a quarter of what that would give — ${flagged.length} member${flagged.length === 1 ? '' : 's'} flagged.</div>
-            <div class="table-scroll" style="overflow:auto;"><table style="width:100%;font-size:13px;border-collapse:collapse;">
-                <thead><tr style="color:var(--muted);text-align:right;"><th style="padding:4px 8px;text-align:left;">Member</th><th style="padding:4px 8px;">Hours ticked</th><th style="padding:4px 8px;">Hits</th><th style="padding:4px 8px;">Hits per 10 h</th><th style="padding:4px 8px;"></th></tr></thead>
-                <tbody>${rows.map(r => `<tr style="border-top:1px solid var(--line);${r.flag ? 'background:rgba(224,85,85,.10);' : ''}">
-                    <td style="padding:4px 8px;text-align:left;">${esc(r.name)}</td>
-                    <td style="padding:4px 8px;text-align:right;font-family:var(--mono);"><b style="color:#35d99b;">${r.green}</b>${r.maybe ? ` <b style="color:#f0b432;">+${r.maybe}</b>` : ''}</td>
-                    <td style="padding:4px 8px;text-align:right;font-family:var(--mono);">${r.hits}</td>
-                    <td style="padding:4px 8px;text-align:right;font-family:var(--mono);color:var(--muted);">${r.hours ? (r.hits / r.hours * 10).toFixed(1) : '—'}</td>
-                    <td style="padding:4px 8px;text-align:left;">${r.flag ? '⚠️' : ''}</td></tr>`).join('')}</tbody></table></div>
-            <button class="ghost small" id="av-vs-copy" style="margin-top:8px;">Copy the flagged names</button>`;
-        $('av-vs-copy').addEventListener('click', () => navigator.clipboard.writeText(flagged.map(r => `${r.name} (${r.hours}h ticked, ${r.hits} hits)`).join('\n')).then(() => toast('Copied')));
+        avCompareHitsPaint(out, rows, rate, source);
     } catch (e) { out.innerHTML = `<span style="color:var(--danger);font-size:13px;">${esc(e.message)}</span>`; }
     finally { btn.disabled = false; }
+}
+// Sorts on its own (no re-fetch needed) once avCompareHits() has the rows — defaults to worst ratio
+// first, same as before this had clickable headers.
+let avCompareSort = { key: 'ratio', dir: 'asc' };
+const avCompareAccessors = { name: r => r.name.toLowerCase(), hours: r => r.hours, hits: r => r.hits, ratio: r => r.ratio };
+function avCompareHitsPaint(out, rows, rate, source) {
+    const sorted = sortRows(rows, avCompareSort, avCompareAccessors);
+    const flagged = rows.filter(r => r.flag);
+    out.innerHTML = `<div style="font-size:12px;color:var(--muted);margin-bottom:6px;">Using ${source}: the faction made about ${rate.toFixed(2)} hits per ticked hour. ⚠️ = ticked at least 10 hours but made under a quarter of what that would give — ${flagged.length} member${flagged.length === 1 ? '' : 's'} flagged.</div>
+        <div class="table-scroll" style="overflow:auto;"><table style="width:100%;font-size:13px;border-collapse:collapse;">
+            <thead><tr style="color:var(--muted);text-align:right;"><th data-sort="name" style="padding:4px 8px;text-align:left;">Member</th><th data-sort="hours" style="padding:4px 8px;">Hours ticked</th><th data-sort="hits" style="padding:4px 8px;">Hits</th><th style="padding:4px 8px;">Hits per 10 h</th><th data-sort="ratio" style="padding:4px 8px;"></th></tr></thead>
+            <tbody>${sorted.map(r => `<tr style="border-top:1px solid var(--line);${r.flag ? 'background:rgba(224,85,85,.10);' : ''}">
+                <td style="padding:4px 8px;text-align:left;">${esc(r.name)}</td>
+                <td style="padding:4px 8px;text-align:right;font-family:var(--mono);"><b style="color:#35d99b;">${r.green}</b>${r.maybe ? ` <b style="color:#f0b432;">+${r.maybe}</b>` : ''}</td>
+                <td style="padding:4px 8px;text-align:right;font-family:var(--mono);">${r.hits}</td>
+                <td style="padding:4px 8px;text-align:right;font-family:var(--mono);color:var(--muted);">${r.hours ? (r.hits / r.hours * 10).toFixed(1) : '—'}</td>
+                <td style="padding:4px 8px;text-align:left;">${r.flag ? '⚠️' : ''}</td></tr>`).join('')}</tbody></table></div>
+        <button class="ghost small" id="av-vs-copy" style="margin-top:8px;">Copy the flagged names</button>`;
+    $('av-vs-copy').addEventListener('click', () => navigator.clipboard.writeText(flagged.map(r => `${r.name} (${r.hours}h ticked, ${r.hits} hits)`).join('\n')).then(() => toast('Copied')));
+    wireSort(out, avCompareSort, rows, avCompareAccessors, () => avCompareHitsPaint(out, rows, rate, source));
 }
 
 // ---- The blue ring: hours I can watch the chain (a plan without a war) or coordinate the war (a plan linked to a ranked war) ----
@@ -1087,15 +1096,21 @@ function avPingLabel(ids, plain) {
 
 // The overdose list: every member who overdosed, with when it showed up in Torn's history and how long before the war start that was.
 // Torn only keeps stat history as snapshots, so the time is "by then", not the exact minute.
+let avOdSort = { key: null, dir: 'desc' }; // null = the default order below (most recent overdose first)
+function avOdAccessors(warStart) {
+    const at = m => m.when?.first?.to ?? null;
+    return { name: m => m.name.toLowerCase(), delta: m => m.delta, at: m => at(m) ?? -1, before: m => (warStart && at(m) ? warStart - at(m) : -Infinity) };
+}
 function avOdTable(d, fmt) {
     const warStart = d.window.warStart;
     const at = m => m.when?.first?.to ?? null; // the first overdose was in Torn's record by this moment
-    const rows = d.members.slice().sort((a, b) => (at(b) ?? 0) - (at(a) ?? 0) || b.delta - a.delta);
+    const defaultOrder = d.members.slice().sort((a, b) => (at(b) ?? 0) - (at(a) ?? 0) || b.delta - a.delta);
+    const rows = sortRows(defaultOrder, avOdSort, avOdAccessors(warStart));
     const hoursBefore = ts => (warStart && ts ? Math.round((warStart - ts) / 3600) : null);
     const tone = h => (h === null ? 'var(--muted)' : h < 24 ? '#e05555' : h < 48 ? '#f0b432' : 'var(--muted)');
     const missing = rows.filter(m => !m.when).length;
     return `<div class="table-scroll" style="overflow:auto;"><table style="width:100%;font-size:13px;border-collapse:collapse;">
-        <thead><tr style="color:var(--muted);text-align:left;"><th style="padding:4px 8px;">Member</th><th style="padding:4px 8px;text-align:right;">Overdoses</th><th style="padding:4px 8px;">In Torn's history by</th><th style="padding:4px 8px;text-align:right;">${warStart ? 'Before the start' : ''}</th></tr></thead>
+        <thead><tr style="color:var(--muted);text-align:left;"><th data-sort="name" style="padding:4px 8px;">Member</th><th data-sort="delta" style="padding:4px 8px;text-align:right;">Overdoses</th><th data-sort="at" style="padding:4px 8px;">In Torn's history by</th><th data-sort="before" style="padding:4px 8px;text-align:right;">${warStart ? 'Before the start' : ''}</th></tr></thead>
         <tbody>${rows.map(m => {
             const t = at(m), h = hoursBefore(t), last = m.when?.last?.to;
             const rel = h === null ? '' : h >= 0 ? `${h} h before` : `${-h} h after`;

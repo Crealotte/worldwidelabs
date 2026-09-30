@@ -7,6 +7,8 @@
 let crimesGuideLoaded = false;
 let cgActiveCrime = null;
 let cgActiveTab = 'overview';
+let cgUniquesSort = { key: null, dir: 'asc' };
+const cgUniquesAccessors = { location: u => u.location.toLowerCase(), name: u => u.name.toLowerCase(), skill: u => u.skill.toLowerCase() };
 let cgMeritCache = null; // avoid refetching honors every tab switch
 
 // Order and names match the in-game hub exactly (confirmed via screenshot). Category is only
@@ -415,13 +417,14 @@ function renderCrimeTabBody(crime) {
             body.innerHTML = '<div class="panel"><p style="color:var(--muted);">No uniques data added yet.</p></div>';
             return;
         }
+        const uniquesSorted = sortRows(d.uniques, cgUniquesSort, cgUniquesAccessors);
         body.innerHTML = `
             <table style="width:100%;font-size:13px;border-collapse:collapse;">
                 <thead><tr style="color:var(--muted);text-align:left;">
-                    <th style="padding:6px 8px;">Location</th><th style="padding:6px 8px;">Find</th>
-                    <th style="padding:6px 8px;">Skill req.</th><th style="padding:6px 8px;">Other req.</th>
+                    <th data-sort="location" style="padding:6px 8px;">Location</th><th data-sort="name" style="padding:6px 8px;">Find</th>
+                    <th data-sort="skill" style="padding:6px 8px;">Skill req.</th><th style="padding:6px 8px;">Other req.</th>
                 </tr></thead>
-                <tbody>${d.uniques.map(u => `
+                <tbody>${uniquesSorted.map(u => `
                     <tr style="border-top:1px solid var(--line);">
                         <td style="padding:6px 8px;white-space:nowrap;color:var(--muted);">${esc(u.location)}</td>
                         <td style="padding:6px 8px;">${esc(u.name)}</td>
@@ -430,6 +433,7 @@ function renderCrimeTabBody(crime) {
                     </tr>`).join('')}
                 </tbody>
             </table>`;
+        wireSort(body, cgUniquesSort, d.uniques, cgUniquesAccessors, () => renderCrimeTabBody(crime));
         return;
     }
 

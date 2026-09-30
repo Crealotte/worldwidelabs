@@ -160,11 +160,15 @@ function renderMtaSelects() {
 
 function mtaPupilCount(mentorId) { return Object.values(mtaProgram.pupils).filter(p => String(p.mentorId) === String(mentorId)).length; }
 
+let mtaMentorSort = { key: null, dir: 'asc' };
+const mtaMentorAccessors = { name: ([id, m]) => (m.name || `#${id}`).toLowerCase(), pupils: ([id]) => mtaPupilCount(id) };
+let mtaPupilSort = { key: null, dir: 'asc' };
+const mtaPupilAccessors = { name: ([id, p]) => (p.name || `#${id}`).toLowerCase(), mentor: ([, p]) => (mtaProgram.mentors[p.mentorId]?.name || '').toLowerCase() };
 function renderMta() {
-    const mentors = Object.entries(mtaProgram.mentors);
+    const mentors = sortRows(Object.entries(mtaProgram.mentors), mtaMentorSort, mtaMentorAccessors);
     $('mta-mentors').innerHTML = mentors.length ? `
         <table style="width:100%;font-size:13px;border-collapse:collapse;">
-            <thead><tr style="color:var(--muted);text-align:left;"><th style="padding:4px 8px;">Name</th><th style="padding:4px 8px;">Pupils</th><th style="padding:4px 8px;">Note</th><th style="padding:4px 8px;"></th></tr></thead>
+            <thead><tr style="color:var(--muted);text-align:left;"><th data-sort="name" style="padding:4px 8px;">Name</th><th data-sort="pupils" style="padding:4px 8px;">Pupils</th><th style="padding:4px 8px;">Note</th><th style="padding:4px 8px;"></th></tr></thead>
             <tbody>${mentors.map(([id, m]) => `<tr style="border-top:1px solid var(--line);">
                 <td style="padding:5px 8px;">${esc(m.name || `#${id}`)} <span style="color:var(--muted);font-size:11px;">[${id}]</span></td>
                 <td style="padding:5px 8px;">${mtaPupilCount(id)} / <select class="mta-cap" data-id="${id}" style="width:auto;display:inline-block;padding:2px 6px;"><option value="0" ${m.capacity === 0 ? 'selected' : ''}>0</option><option value="1" ${m.capacity === 1 ? 'selected' : ''}>1</option><option value="2" ${m.capacity === 2 ? 'selected' : ''}>2</option><option value="3" ${m.capacity === 3 ? 'selected' : ''}>3</option></select></td>
@@ -174,10 +178,10 @@ function renderMta() {
         </table>` : '<p style="color:var(--muted);font-size:13px;margin:0;">No mentors added yet.</p>';
 
     const roomyMentors = mentors.filter(([id, m]) => mtaPupilCount(id) < m.capacity);
-    const pupils = Object.entries(mtaProgram.pupils);
+    const pupils = sortRows(Object.entries(mtaProgram.pupils), mtaPupilSort, mtaPupilAccessors);
     $('mta-pupils').innerHTML = pupils.length ? `
         <table style="width:100%;font-size:13px;border-collapse:collapse;">
-            <thead><tr style="color:var(--muted);text-align:left;"><th style="padding:4px 8px;">Name</th><th style="padding:4px 8px;">Mentor</th><th style="padding:4px 8px;">Note</th><th style="padding:4px 8px;"></th></tr></thead>
+            <thead><tr style="color:var(--muted);text-align:left;"><th data-sort="name" style="padding:4px 8px;">Name</th><th data-sort="mentor" style="padding:4px 8px;">Mentor</th><th style="padding:4px 8px;">Note</th><th style="padding:4px 8px;"></th></tr></thead>
             <tbody>${pupils.map(([id, p]) => {
                 const options = ['<option value="">— unassigned —</option>']
                     .concat(roomyMentors.map(([mid, m]) => `<option value="${mid}" ${String(p.mentorId) === mid ? 'selected' : ''}>${esc(m.name || `#${mid}`)} (${mtaPupilCount(mid)}/${m.capacity})</option>`));
@@ -193,6 +197,8 @@ function renderMta() {
                 </tr>`;
             }).join('')}</tbody>
         </table>` : '<p style="color:var(--muted);font-size:13px;margin:0;">No pupils added yet.</p>';
+    wireSort($('mta-mentors'), mtaMentorSort, mentors, mtaMentorAccessors, renderMta);
+    wireSort($('mta-pupils'), mtaPupilSort, pupils, mtaPupilAccessors, renderMta);
 
     document.querySelectorAll('.mta-cap').forEach(sel => sel.addEventListener('change', async () => {
         const r = await mtFetch({ action: 'mentor-set-capacity', id: sel.dataset.id, capacity: sel.value });
