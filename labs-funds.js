@@ -64,6 +64,10 @@ function lfFactions() {
     }
     return Object.values(map).sort((a, b) => (b.income + b.out) - (a.income + a.out));
 }
+let lfFactionsSort = { key: null, dir: 'desc' }; // null = the default order lfFactions() already returns (funds, biggest first)
+const lfFactionsAccessors = { name: f => f.name.toLowerCase(), wars: f => f.wars, income: f => f.income, out: f => f.out, funds: f => f.income + f.out };
+let lfHistorySort = { key: 'date', dir: 'desc' };
+const lfHistoryAccessors = { date: e => e.date, name: e => lfName(e).toLowerCase(), kind: e => lfKind[e.kind] || e.kind, amount: e => e.amount };
 
 function renderLabsFunds() {
     // lfOwner is REAL (server-checked); also respect the "View as" preview, so a real owner previewing
@@ -84,13 +88,14 @@ function renderLabsFunds() {
         <div><div style="color:var(--muted);font-size:11px;">Spent / adjusted</div><div style="font-weight:700;">${lfMoney(out)}</div></div>
         <div><div style="color:var(--muted);font-size:11px;">Factions</div><div style="font-weight:700;">${counted.length}</div></div>`;
 
+    const factionsSorted = sortRows(factions, lfFactionsSort, lfFactionsAccessors);
     $('lf-factions').innerHTML = factions.length ? `
         <table style="width:100%;font-size:13px;border-collapse:collapse;">
             <thead><tr style="color:var(--muted);text-align:left;">
-                <th style="padding:4px 8px;">Faction</th><th style="padding:4px 8px;">Wars</th><th style="padding:4px 8px;">Cut received</th>
-                <th style="padding:4px 8px;">Spent / adj.</th><th style="padding:4px 8px;">Funds</th><th style="padding:4px 8px;">Count it</th>
+                <th data-sort="name" style="padding:4px 8px;">Faction</th><th data-sort="wars" style="padding:4px 8px;">Wars</th><th data-sort="income" style="padding:4px 8px;">Cut received</th>
+                <th data-sort="out" style="padding:4px 8px;">Spent / adj.</th><th data-sort="funds" style="padding:4px 8px;">Funds</th><th style="padding:4px 8px;">Count it</th>
             </tr></thead>
-            <tbody>${factions.map(f => `
+            <tbody>${factionsSorted.map(f => `
                 <tr style="border-top:1px solid var(--line);${lfExcluded.has(f.key) ? 'opacity:.45;' : ''}">
                     <td style="padding:4px 8px;"><a href="#" class="lf-filter" data-key="${esc(f.key)}" style="color:var(--text);">${esc(f.name)}</a></td>
                     <td style="padding:4px 8px;">${f.wars}</td>
@@ -103,6 +108,7 @@ function renderLabsFunds() {
         </table>
         <p style="color:var(--muted);font-size:12px;margin:8px 0 0;">Untick "Count it" for a faction that just uses the app but isn't one of your Labs — it's left out of the totals. Click a faction name to see only its history.</p>`
         : '<p style="color:var(--muted);margin:0;">Nothing recorded yet — use "Import existing receipts" below, or add entries by hand.</p>';
+    wireSort($('lf-factions'), lfFactionsSort, factions, lfFactionsAccessors, renderLabsFunds);
 
     // add-entry form: known factions to pick from, or type a new one
     const known = factions.map(f => `<option value="${esc(f.key)}">${esc(f.name)}</option>`).join('');
@@ -113,13 +119,14 @@ function renderLabsFunds() {
     const shown = lfFilter ? lfEntries.filter(e => e.factionKey === lfFilter) : lfEntries;
     $('lf-history-title').innerHTML = lfFilter
         ? `History — ${esc(lfName(shown[0] || {}))} <a href="#" id="lf-clear-filter" style="font-size:12px;color:var(--reagent);">show all</a>` : 'History';
+    const shownSorted = sortRows(shown, lfHistorySort, lfHistoryAccessors);
     $('lf-history').innerHTML = shown.length ? `
         <table style="width:100%;font-size:13px;border-collapse:collapse;">
             <thead><tr style="color:var(--muted);text-align:left;">
-                <th style="padding:4px 8px;">Date</th><th style="padding:4px 8px;">Faction</th><th style="padding:4px 8px;">Type</th>
-                <th style="padding:4px 8px;">Opponent / note</th><th style="padding:4px 8px;text-align:right;">Amount</th><th></th>
+                <th data-sort="date" style="padding:4px 8px;">Date</th><th data-sort="name" style="padding:4px 8px;">Faction</th><th data-sort="kind" style="padding:4px 8px;">Type</th>
+                <th style="padding:4px 8px;">Opponent / note</th><th data-sort="amount" style="padding:4px 8px;text-align:right;">Amount</th><th></th>
             </tr></thead>
-            <tbody>${shown.map(e => `
+            <tbody>${shownSorted.map(e => `
                 <tr style="border-top:1px solid var(--line);">
                     <td style="padding:4px 8px;white-space:nowrap;">${lfDate(e.date)}</td>
                     <td style="padding:4px 8px;">${esc(lfName(e))}</td>
@@ -130,6 +137,7 @@ function renderLabsFunds() {
                 </tr>`).join('')}
             </tbody>
         </table>` : '<p style="color:var(--muted);margin:0;">No entries.</p>';
+    wireSort($('lf-history'), lfHistorySort, shown, lfHistoryAccessors, renderLabsFunds);
 
     document.querySelectorAll('.lf-filter').forEach(a => a.addEventListener('click', ev => { ev.preventDefault(); lfFilter = a.dataset.key; renderLabsFunds(); }));
     $('lf-clear-filter')?.addEventListener('click', ev => { ev.preventDefault(); lfFilter = ''; renderLabsFunds(); });

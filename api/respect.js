@@ -82,7 +82,7 @@ const warEntriesKey = (factionId) => `wwl:war-respect:${factionId}`; // manual e
 const warBonusDailyKey = (factionId) => `wwl:war-bonus-daily:${factionId}`; // auto-tracked
 const warBonusSeenKey = (factionId) => `wwl:war-bonus-seen:${factionId}`;
 const goalKey = (factionId) => `wwl:respect-goal:${factionId}`;
-const windowKey = (factionId) => `wwl:respect-window:${factionId}`; // pace calculation window in days (14/21/28)
+const windowKey = (factionId) => `wwl:respect-window:${factionId}`; // pace calculation window in days (14/21/28/90)
 
 // Goals used to be stored as a single object ({target, deadline, label}) before multiple goals
 // were supported. Any faction that set a goal before that migration still has that old shape
@@ -509,7 +509,7 @@ module.exports = async function handler(req, res) {
 
         if (action === 'set-window') {
             const { windowDays } = req.body;
-            if (![14, 21, 28].includes(Number(windowDays))) return res.status(400).json({ error: 'windowDays must be 14, 21, or 28' });
+            if (![14, 21, 28, 90].includes(Number(windowDays))) return res.status(400).json({ error: 'windowDays must be 14, 21, 28, or 90' });
             await redis(['SET', windowKey(factionId), String(windowDays)]);
             return res.status(200).json({ ok: true });
         }

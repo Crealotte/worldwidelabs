@@ -56,8 +56,9 @@ function respectComputeDaily(ocDaily, chainDaily, hitsDaily, warBonusDaily, warE
     return rows.sort((a, b) => b.date.localeCompare(a.date)); // newest first
 }
 
-// Average weekly gain from the log-based daily totals — the trailing N days (14/21/28,
-// leader's choice), needs at least a couple of days of data to mean anything.
+// Average weekly gain from the log-based daily totals — the trailing N days (14/21/28/90,
+// leader's choice — a longer window smooths out a quiet week or two, useful when weekly gain is
+// spiky rather than steady), needs at least a couple of days of data to mean anything.
 function respectWeeklyRate(dailyRows, windowDays) {
     const windowStart = new Date();
     windowStart.setDate(windowStart.getDate() - (windowDays || 14));
@@ -214,20 +215,23 @@ async function loadRespectEditor() {
     }
 }
 
+let rgDailySort = { key: 'date', dir: 'desc' };
+const rgDailyAccessors = { date: d => d.date, total: d => d.totalGain, oc: d => d.oc, chains: d => d.chains, hits: d => d.hits, war: d => d.war };
 function renderRgDailyTable(daily) {
     const tableEl = $('rg-daily-table');
     if (!daily.length) {
         tableEl.innerHTML = '<p style="color:var(--muted);font-size:13px;">No data for this period yet.</p>';
         return;
     }
+    const sorted = sortRows(daily, rgDailySort, rgDailyAccessors);
     tableEl.innerHTML = `
         <table style="width:100%;font-size:13px;border-collapse:collapse;">
             <thead><tr style="color:var(--muted);text-align:left;">
-                <th style="padding:4px 8px;">Date</th><th style="padding:4px 8px;">Total gain</th>
-                <th style="padding:4px 8px;">OC</th><th style="padding:4px 8px;">Chains</th>
-                <th style="padding:4px 8px;">Hits</th><th style="padding:4px 8px;">War</th>
+                <th data-sort="date" style="padding:4px 8px;">Date</th><th data-sort="total" style="padding:4px 8px;">Total gain</th>
+                <th data-sort="oc" style="padding:4px 8px;">OC</th><th data-sort="chains" style="padding:4px 8px;">Chains</th>
+                <th data-sort="hits" style="padding:4px 8px;">Hits</th><th data-sort="war" style="padding:4px 8px;">War</th>
             </tr></thead>
-            <tbody>${daily.map(d => `
+            <tbody>${sorted.map(d => `
                 <tr style="border-top:1px solid var(--line);">
                     <td style="padding:4px 8px;">${esc(d.date)}</td>
                     <td style="padding:4px 8px;font-family:var(--mono);font-weight:700;">${d.totalGain.toLocaleString()}</td>
@@ -238,6 +242,7 @@ function renderRgDailyTable(daily) {
                 </tr>`).join('')}
             </tbody>
         </table>`;
+    wireSort(tableEl, rgDailySort, daily, rgDailyAccessors, () => renderRgDailyTable(daily));
 }
 
 let rgLastData = null;

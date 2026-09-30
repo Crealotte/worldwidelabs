@@ -12,6 +12,7 @@ let wpLinks = {}; // register: war or event id -> [chain ids]
 let wpCalcResult = null; // { members: [...] }
 let wpPenalties = {}; // memberId -> amount
 let wpPaidIds = new Set(); // memberId -> marked as paid this session
+let receiptSort = { key: null, dir: 'desc' }; // the shareable receipt viewer's own member-breakdown table
 let wpCosts = []; // { label, amount }
 
 async function wpFetch(body) {
@@ -215,11 +216,19 @@ $('wp-calculate').addEventListener('click', async () => {
     }
 });
 
+let wpResultsSort = { key: null, dir: 'desc' };
+function wpResultsAccessors() {
+    const acc = { name: m => m.name.toLowerCase(), warHits: m => m.warHits, overflowHits: m => m.overflowHits, totalHits: m => m.totalHits };
+    wpChains.forEach(c => { acc[`chain_${c.id}`] = m => m.perChain?.[c.id] ?? -1; });
+    return acc;
+}
 function renderWpResultsPreview() {
     const el = $('wp-results-body');
     const hideZero = $('wp-hide-zero')?.checked;
     const visible = hideZero ? wpCalcResult.members.filter(m => m.totalHits > 0) : wpCalcResult.members;
     const multi = wpChains.length > 1;
+    const accessors = wpResultsAccessors();
+    const sorted = sortRows(visible, wpResultsSort, accessors);
 
     el.innerHTML = `
         <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:12px;color:var(--muted);margin-bottom:8px;">
@@ -227,12 +236,12 @@ function renderWpResultsPreview() {
         </label>
         <table style="width:100%;font-size:13px;border-collapse:collapse;">
             <thead><tr style="color:var(--muted);text-align:left;">
-                <th style="padding:4px 8px;">Member</th>
-                ${multi ? wpChains.map(c => `<th style="padding:4px 8px;">#${esc(c.id)}</th>`).join('') : ''}
-                <th style="padding:4px 8px;">War hits</th>
-                <th style="padding:4px 8px;">Chain-only hits</th><th style="padding:4px 8px;">Total</th>
+                <th data-sort="name" style="padding:4px 8px;">Member</th>
+                ${multi ? wpChains.map(c => `<th data-sort="chain_${esc(c.id)}" style="padding:4px 8px;">#${esc(c.id)}</th>`).join('') : ''}
+                <th data-sort="warHits" style="padding:4px 8px;">War hits</th>
+                <th data-sort="overflowHits" style="padding:4px 8px;">Chain-only hits</th><th data-sort="totalHits" style="padding:4px 8px;">Total</th>
             </tr></thead>
-            <tbody>${visible.map(m => `
+            <tbody>${sorted.map(m => `
                 <tr style="border-top:1px solid var(--line);${m.totalHits === 0 ? 'opacity:.45;' : ''}">
                     <td style="padding:4px 8px;">${esc(m.name)}</td>
                     ${multi ? wpChains.map(c => `<td style="padding:4px 8px;font-family:var(--mono);color:var(--muted);">${m.perChain?.[c.id] ?? '—'}</td>`).join('') : ''}
@@ -243,6 +252,7 @@ function renderWpResultsPreview() {
             </tbody>
         </table>`;
     $('wp-hide-zero').addEventListener('change', renderWpResultsPreview);
+    wireSort(el, wpResultsSort, visible, accessors, renderWpResultsPreview);
 }
 
 function wpCostTotal() {
@@ -343,6 +353,8 @@ function wpCompute() {
     return { cfg, netPool, retained, payoutPool, rows, subSplit, totalWarHits, totalOverflowHits, totalAllHits, warRate, overflowRate, poolExceeded };
 }
 
+let wpPayoutSort = { key: null, dir: 'desc' };
+const wpPayoutAccessors = { name: r => r.name.toLowerCase(), gross: r => r.gross, penalty: r => r.penalty || 0, net: r => r.net };
 function renderWpPayout() {
     const computed = wpCompute();
     const el = $('wp-payout-body');
@@ -385,11 +397,11 @@ function renderWpPayout() {
         ${exceededHtml}
         <table style="width:100%;font-size:13px;border-collapse:collapse;margin-top:14px;">
             <thead><tr style="color:var(--muted);text-align:left;">
-                <th style="padding:4px 8px;">Member</th><th style="padding:4px 8px;">Breakdown</th>
-                <th style="padding:4px 8px;">Gross</th><th style="padding:4px 8px;">Penalty</th>
-                <th style="padding:4px 8px;">Net pay</th><th style="padding:4px 8px;"></th>
+                <th data-sort="name" style="padding:4px 8px;">Member</th><th style="padding:4px 8px;">Breakdown</th>
+                <th data-sort="gross" style="padding:4px 8px;">Gross</th><th data-sort="penalty" style="padding:4px 8px;">Penalty</th>
+                <th data-sort="net" style="padding:4px 8px;">Net pay</th><th style="padding:4px 8px;"></th>
             </tr></thead>
-            <tbody>${computed.rows.map(r => {
+            <tbody>${sortRows(computed.rows, wpPayoutSort, wpPayoutAccessors).map(r => {
                 const isPaid = wpPaidIds.has(r.id);
                 return `
                 <tr class="wp-payout-row" data-id="${esc(r.id)}" style="border-top:1px solid var(--line);${isPaid ? 'background:rgba(90,200,140,.08);' : ''}">
@@ -408,6 +420,7 @@ function renderWpPayout() {
             </tbody>
         </table>
         <p style="font-size:11px;color:var(--muted);margin-top:8px;">Tip: Ctrl/Cmd-click (or middle-click) "Pay" to open it in a background tab without leaving this page — handy for paying several people in a row.</p>`;
+    wireSort(el, wpPayoutSort, computed.rows, wpPayoutAccessors, renderWpPayout);
 
     el.querySelectorAll('.wp-penalty-input').forEach(inp => {
         inp.addEventListener('change', () => {
@@ -523,7 +536,10 @@ async function loadPayoutReceipt(id) {
                     <tr style="border-top:1px solid var(--line);"><td style="padding:2px 16px 2px 0;font-weight:700;">Total costs</td><td style="padding:2px 0;font-family:var(--mono);text-align:right;font-weight:700;">${money(costTotal)}</td></tr>
                 </table>
             </div>` : '';
-        el.innerHTML = `
+        const receiptAccessors = { name: row => row.name.toLowerCase(), gross: row => Number(row.gross) || 0, penalty: row => Number(row.penalty) || 0, net: row => Number(row.net) || 0 };
+        const paint = () => {
+            const sortedRows = sortRows(rows, receiptSort, receiptAccessors);
+            el.innerHTML = `
             <h3 style="margin-top:0;">${esc(title)} — ${esc(new Date(r.warEnd * 1000).toLocaleDateString())}${esc(outcome)}${esc(score)}</h3>
             <div style="color:var(--muted);font-size:11px;margin-bottom:4px;">Where the money went</div>
             <div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:14px;">
@@ -545,10 +561,10 @@ async function loadPayoutReceipt(id) {
             </div>
             <table style="width:100%;font-size:13px;border-collapse:collapse;">
                 <thead><tr style="color:var(--muted);text-align:left;">
-                    <th style="padding:4px 8px;">Member</th><th style="padding:4px 8px;">Breakdown</th>
-                    <th style="padding:4px 8px;">Gross</th><th style="padding:4px 8px;">Penalty</th><th style="padding:4px 8px;">Net pay</th>
+                    <th data-sort="name" style="padding:4px 8px;">Member</th><th style="padding:4px 8px;">Breakdown</th>
+                    <th data-sort="gross" style="padding:4px 8px;">Gross</th><th data-sort="penalty" style="padding:4px 8px;">Penalty</th><th data-sort="net" style="padding:4px 8px;">Net pay</th>
                 </tr></thead>
-                <tbody>${rows.map(row => `
+                <tbody>${sortedRows.map(row => `
                     <tr style="border-top:1px solid var(--line);">
                         <td style="padding:4px 8px;">${esc(row.name)}</td>
                         <td style="padding:4px 8px;font-family:var(--mono);font-size:12px;color:var(--muted);">
@@ -567,6 +583,9 @@ async function loadPayoutReceipt(id) {
                 </tbody>
             </table>
             ${(() => { const badgesHtml = renderReceiptBadgesHtml(r); return badgesHtml ? `<div style="margin-top:24px;"><h3 style="margin-bottom:10px;">🏆 War Badges</h3>${badgesHtml}</div>` : ''; })()}`;
+            wireSort(el, receiptSort, rows, receiptAccessors, paint);
+        };
+        paint();
     } catch (e) {
         el.innerHTML = `<p style="color:var(--danger);">${esc(e.message)}</p>`;
     }
