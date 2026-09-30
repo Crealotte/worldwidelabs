@@ -16,11 +16,15 @@ async function loadNewsletter() {
     $('nl-body').style.display = locked ? 'none' : 'block';
     if (locked) return;
     {
-        // the running period first (if a full week has passed since the last newsletter), then the finished ones
+        // Listed running-period-first (if a full week has passed since the last newsletter), then the
+        // finished ones — but DEFAULTS to the last one that actually finished, not the running one, since
+        // that's the period a newsletter is normally built for. Cuts down on a re-pick (and a second,
+        // wasted set of API calls building the draft for the wrong period) almost every time this opens.
         const keep = $('nl-period').value;
         const list = moPeriods().filter(p => p.id === 'now' || p.id.startsWith('p'));
         $('nl-period').innerHTML = list.map(p => `<option value="${p.id}">${esc(p.id === 'now' ? `Current period (so far) — ${moFmt(p.start)} → ${moFmt(p.end)}` : `${moFmt(p.start)} → ${moFmt(p.end)}`)}</option>`).join('');
         if (keep && list.some(p => p.id === keep)) $('nl-period').value = keep;
+        else { const lastFinished = list.find(p => p.id.startsWith('p')); if (lastFinished) $('nl-period').value = lastFinished.id; }
     }
 }
 

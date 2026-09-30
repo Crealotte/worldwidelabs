@@ -605,17 +605,36 @@ module.exports = async function handler(req, res) {
             const r = await energyDaily(redis, factionId, fromDay, toDay);
             const rosterRaw = await redis(['GET', `wwl:mo-roster:${factionId}`]); // names a leader's page saved, for members without one yet
             for (const m of (rosterRaw ? JSON.parse(rosterRaw) : [])) if (r.members[m.id] && !r.members[m.id].name) r.members[m.id].name = m.name;
-            // Each member's own personal weekly energy minimum (see lib/planSync.js) — piggybacked on their
-            // Energy planner plan record, since that's the only place it's ever known (it comes from THEIR
-            // OWN battle stats, private to their own key; there is no faction-wide way to ask Torn for it).
-            // One MGET for everyone shown, not one Redis call per member.
+            // Each member's own Energy tier + weekly minimum — the exact same source Member Overview's own
+            // "Energy tier" column uses (lib/memberOverview.js): a leader's manual override (wwl:mo-tiers),
+            // else auto-detected the moment that member has opened their own dashboard or the userscript once
+            // (wwl:mo-battle — Torn only ever shows a player their OWN battle stats, never a faction-wide
+            // list, so this is genuinely the only way to know it). Two HGETALLs cover the whole faction, not
+            // one Redis call per member. Falls back to a saved Energy planner plan (lib/planSync.js) only for
+            // the rare member who's used the planner but never opened the dashboard, so nothing already known
+            // is lost.
             const ids = Object.keys(r.members);
             if (ids.length) {
-                const plansRaw = await redis(['MGET', ...ids.map(id => `wwl:gym-plan:${id}`)]);
-                ids.forEach((id, i) => {
-                    if (!plansRaw[i]) return;
-                    try { const w = JSON.parse(plansRaw[i]).weekly; if (Number.isFinite(w) && w > 0) r.members[id].weekly = w; } catch (e) { /* skip a bad record */ }
-                });
+                const toMap = flat => { const o = {}; for (let i = 0; i < (flat || []).length; i += 2) o[flat[i]] = flat[i + 1]; return o; };
+                const [tiersRaw, battleRaw] = await Promise.all([
+                    redis(['HGETALL', `wwl:mo-tiers:${factionId}`]),
+                    redis(['HGETALL', `wwl:mo-battle:${factionId}`]),
+                ]);
+                const tiersMap = toMap(tiersRaw), battleMap = toMap(battleRaw);
+                const ENERGY_TARGET = { high: 4400, low: 2200 }, TIER_LIMIT = 1500000;
+                for (const id of ids) {
+                    let tier = tiersMap[id] === 'high' || tiersMap[id] === 'low' ? tiersMap[id] : null;
+                    if (!tier && battleMap[id]) { try { tier = JSON.parse(battleMap[id]).total >= TIER_LIMIT ? 'high' : 'low'; } catch (e) { /* skip a bad record */ } }
+                    if (tier) { r.members[id].tier = tier; r.members[id].weekly = ENERGY_TARGET[tier]; }
+                }
+                const stillUnknown = ids.filter(id => !r.members[id].weekly);
+                if (stillUnknown.length) {
+                    const plansRaw = await redis(['MGET', ...stillUnknown.map(id => `wwl:gym-plan:${id}`)]);
+                    stillUnknown.forEach((id, i) => {
+                        if (!plansRaw[i]) return;
+                        try { const w = JSON.parse(plansRaw[i]).weekly; if (Number.isFinite(w) && w > 0) r.members[id].weekly = w; } catch (e) { /* skip a bad record */ }
+                    });
+                }
             }
             return res.status(200).json({ ...r, days, today, fromDay, toDay, me: playerId });
         }
