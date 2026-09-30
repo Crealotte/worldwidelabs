@@ -36,6 +36,53 @@
         setTimeout(() => (t.style.display = 'none'), 1600);
     }
 
+    // ================= SORTABLE TABLES =================
+    // Shared by every page's own table-rendering function, so a table gets a clickable, sortable
+    // header the same way everywhere instead of each page reinventing it. A page using this:
+    //   1. keeps one small state object across re-renders: `let xxSort = { key: null, dir: 'desc' };`
+    //   2. gives it an accessor map: `const xxAccessors = { name: r => r.name, hits: r => r.hits, ... };`
+    //   3. sorts its rows before building HTML: `rows = sortRows(rows, xxSort, xxAccessors);`
+    //   4. marks each sortable <th> with `data-sort="key"` in the HTML it builds
+    //   5. right after setting that HTML, calls `wireSort($('the-table'), xxSort, rows, xxAccessors, renderThisTable);`
+    // `sortRows` leaves the array alone (returns a new one) if no column has been picked yet, so a
+    // table that never gets clicked renders in whatever order the page already gives it.
+    function sortRows(rows, state, accessors) {
+        if (!state.key || !accessors[state.key]) return rows;
+        const get = accessors[state.key];
+        const sorted = [...rows].sort((a, b) => {
+            const x = get(a), y = get(b);
+            if (x == null && y == null) return 0;
+            if (x == null) return 1; if (y == null) return -1; // unknown values sort to the end either way
+            return typeof x === 'string' ? x.localeCompare(y) : x - y;
+        });
+        if (state.dir === 'desc') sorted.reverse();
+        return sorted;
+    }
+    // Wires click handlers onto every `th[data-sort]` inside `tableEl` (a table is rebuilt from
+    // scratch on every render, so this runs again each time rather than once) and marks the active
+    // column with an arrow. Clicking the active column flips direction; picking a new one starts
+    // with the direction that makes sense for its kind of value — biggest number first, but A→Z for
+    // text — worked out from a real value already in `rows` rather than needing to be told.
+    function wireSort(tableEl, state, rows, accessors, rerender) {
+        if (!tableEl) return;
+        tableEl.querySelectorAll('th[data-sort]').forEach(th => {
+            const key = th.dataset.sort;
+            th.style.cursor = 'pointer';
+            th.style.userSelect = 'none';
+            if (key === state.key) th.innerHTML += state.dir === 'asc' ? ' ▲' : ' ▼';
+            th.addEventListener('click', () => {
+                if (state.key === key) {
+                    state.dir = state.dir === 'asc' ? 'desc' : 'asc';
+                } else {
+                    state.key = key;
+                    const sample = accessors[key] && rows.length ? accessors[key](rows.find(r => accessors[key](r) != null) || rows[0]) : null;
+                    state.dir = typeof sample === 'string' ? 'asc' : 'desc';
+                }
+                rerender();
+            });
+        });
+    }
+
     let apiKey = localStorage.getItem(KEY_STORAGE) || '';
     let profile = null;
 
