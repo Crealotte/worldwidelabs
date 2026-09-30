@@ -56,6 +56,9 @@ function respectComputeDaily(ocDaily, chainDaily, hitsDaily, warBonusDaily, warE
     return rows.sort((a, b) => b.date.localeCompare(a.date)); // newest first
 }
 
+const RESPECT_WINDOWS = [14, 21, 28, 90];
+const RESPECT_WINDOW_LABEL = { 14: '14d', 21: '21d', 28: '28d', 90: '3mo' };
+
 // Average weekly gain from the log-based daily totals — the trailing N days (14/21/28/90,
 // leader's choice — a longer window smooths out a quiet week or two, useful when weekly gain is
 // spiky rather than steady), needs at least a couple of days of data to mean anything.
@@ -104,9 +107,17 @@ async function loadRespectGoalPanel() {
         const dailyRows = respectComputeDaily(data.ocDaily, data.chainDaily, data.hitsDaily, data.warBonusDaily, data.warEntries);
         const weeklyRate = respectWeeklyRate(dailyRows, data.windowDays);
 
+        // Projected date (and whether that's on track for a deadline) from a given weekly rate — shared
+        // by the main line below and the comparison row, so both use the exact same math.
+        const projectFrom = (rate, target, deadline) => {
+            const weeksNeeded = (target - current) / rate;
+            const projected = new Date(Date.now() + weeksNeeded * 7 * 86400000);
+            return { projected, str: projected.toLocaleDateString(undefined, { day: '2-digit', month: 'short', year: 'numeric' }), onTrack: deadline ? projected <= new Date(deadline) : null };
+        };
+
         const cards = data.goals.map(({ target, deadline, label }) => {
             const pct = Math.max(0, Math.min(100, Math.round((current / target) * 100)));
-            let etaLine;
+            let etaLine, compareLine = '';
             if (current >= target) {
                 etaLine = `<span style="color:var(--reagent);">Goal reached! 🎉</span>`;
             } else if (weeklyRate == null) {
@@ -114,17 +125,26 @@ async function loadRespectGoalPanel() {
             } else if (weeklyRate <= 0) {
                 etaLine = `<span style="color:var(--danger);">Respect isn't trending upward right now — no ETA available.</span>`;
             } else {
-                const weeksNeeded = (target - current) / weeklyRate;
-                const projected = new Date(Date.now() + weeksNeeded * 7 * 86400000);
-                const projectedStr = projected.toLocaleDateString(undefined, { day: '2-digit', month: 'short', year: 'numeric' });
+                const { str: projectedStr, onTrack } = projectFrom(weeklyRate, target, deadline);
                 let deadlineNote = '';
                 if (deadline) {
-                    const onTrack = projected <= new Date(deadline);
                     deadlineNote = onTrack
                         ? ` — <span style="color:var(--reagent);">on track for your ${esc(new Date(deadline).toLocaleDateString(undefined, { day: '2-digit', month: 'short' }))} deadline</span>`
                         : ` — <span style="color:var(--danger);">behind your ${esc(new Date(deadline).toLocaleDateString(undefined, { day: '2-digit', month: 'short' }))} deadline at this pace</span>`;
                 }
                 etaLine = `At ~${Math.round(weeklyRate).toLocaleString()} respect/week <span style="color:var(--muted);font-size:11px;">(based on the past ${data.windowDays || 14} days)</span>, projected: <b>${projectedStr}</b>${deadlineNote}`;
+
+                // Every OTHER window's own pace and ETA, always shown alongside — so switching "Pace
+                // calculated from" above to compare windows never hides the one you just had, and a spiky
+                // vs. steady picture is visible at a glance instead of needing to flip back and forth.
+                const others = RESPECT_WINDOWS.filter(w => w !== (data.windowDays || 14)).map(w => {
+                    const r = respectWeeklyRate(dailyRows, w);
+                    const wLabel = RESPECT_WINDOW_LABEL[w];
+                    if (r == null) return `${wLabel}: <span style="color:var(--muted);">not enough data</span>`;
+                    if (r <= 0) return `${wLabel}: <span style="color:var(--danger);">no growth</span>`;
+                    return `${wLabel}: ~${Math.round(r).toLocaleString()}/wk → ${projectFrom(r, target, deadline).str}`;
+                });
+                compareLine = `<div style="font-size:11px;color:var(--muted);margin-top:4px;">Compare: ${others.join(' · ')}</div>`;
             }
             return `
                 <div style="margin-bottom:14px;">
@@ -134,6 +154,7 @@ async function loadRespectGoalPanel() {
                     </div>
                     <div class="bar-track"><div class="bar-fill" style="width:${pct}%;background:var(--reagent);"></div></div>
                     <p style="font-size:12px;color:var(--muted);margin:8px 0 0;">${pct}% there · ${etaLine}</p>
+                    ${compareLine}
                 </div>`;
         });
 
