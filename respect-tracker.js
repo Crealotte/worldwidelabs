@@ -57,7 +57,8 @@ function respectComputeDaily(ocDaily, chainDaily, hitsDaily, warBonusDaily, warE
 }
 
 const RESPECT_WINDOWS = [14, 21, 28, 90];
-const RESPECT_WINDOW_LABEL = { 14: '14d', 21: '21d', 28: '28d', 90: '3mo' };
+const RESPECT_WINDOW_LABEL = { 14: '14d', 21: '21d', 28: '28d', 90: '3mo' }; // compact, for the goal list and the "at other paces" comparison
+const RESPECT_WINDOW_LONG = { 14: '14 days', 21: '21 days', 28: '28 days', 90: '3 months' }; // spelled out, for the main ETA sentence
 
 // Average weekly gain from the log-based daily totals — the trailing N days (14/21/28/90,
 // leader's choice — a longer window smooths out a quiet week or two, useful when weekly gain is
@@ -105,7 +106,6 @@ async function loadRespectGoalPanel() {
 
         const current = totalRespect;
         const dailyRows = respectComputeDaily(data.ocDaily, data.chainDaily, data.hitsDaily, data.warBonusDaily, data.warEntries);
-        const weeklyRate = respectWeeklyRate(dailyRows, data.windowDays);
 
         // Projected date (and whether that's on track for a deadline) from a given weekly rate — shared
         // by the main line below and the comparison row, so both use the exact same math.
@@ -115,9 +115,14 @@ async function loadRespectGoalPanel() {
             return { projected, str: projected.toLocaleDateString(undefined, { day: '2-digit', month: 'short', year: 'numeric' }), onTrack: deadline ? projected <= new Date(deadline) : null };
         };
 
-        const cards = data.goals.map(({ target, deadline, label }) => {
+        const cards = data.goals.map(({ target, deadline, label, windowDays }) => {
+            // Each goal has its OWN pace window (set when it was added) — was a single setting shared by
+            // every goal, so a 28-day estimate and a separate 3-month one for another goal used to end up
+            // both showing whichever window was picked last.
+            const win = windowDays || 28;
+            const weeklyRate = respectWeeklyRate(dailyRows, win);
             const pct = Math.max(0, Math.min(100, Math.round((current / target) * 100)));
-            let etaLine, compareLine = '';
+            let etaLine, compareLine = '', requiredLine = '';
             if (current >= target) {
                 etaLine = `<span style="color:var(--reagent);">Goal reached! 🎉</span>`;
             } else if (weeklyRate == null) {
@@ -132,19 +137,31 @@ async function loadRespectGoalPanel() {
                         ? ` — <span style="color:var(--reagent);">on track for your ${esc(new Date(deadline).toLocaleDateString(undefined, { day: '2-digit', month: 'short' }))} deadline</span>`
                         : ` — <span style="color:var(--danger);">behind your ${esc(new Date(deadline).toLocaleDateString(undefined, { day: '2-digit', month: 'short' }))} deadline at this pace</span>`;
                 }
-                etaLine = `At ~${Math.round(weeklyRate).toLocaleString()} respect/week <span style="color:var(--muted);font-size:11px;">(based on the past ${data.windowDays || 14} days)</span>, projected: <b>${projectedStr}</b>${deadlineNote}`;
+                etaLine = `At ~${Math.round(weeklyRate).toLocaleString()} respect/week <span style="color:var(--muted);font-size:11px;">(based on the past ${RESPECT_WINDOW_LONG[win]})</span>, projected: <b>${projectedStr}</b>${deadlineNote}`;
 
-                // Every OTHER window's own pace and ETA, always shown alongside — so switching "Pace
-                // calculated from" above to compare windows never hides the one you just had, and a spiky
-                // vs. steady picture is visible at a glance instead of needing to flip back and forth.
-                const others = RESPECT_WINDOWS.filter(w => w !== (data.windowDays || 14)).map(w => {
+                // Every OTHER window's own pace and ETA — purely informational (this goal keeps the window
+                // it was set up with), so you can see how a spikier or steadier read would change things
+                // without it ever overwriting what this goal actually uses.
+                const others = RESPECT_WINDOWS.filter(w => w !== win).map(w => {
                     const r = respectWeeklyRate(dailyRows, w);
                     const wLabel = RESPECT_WINDOW_LABEL[w];
                     if (r == null) return `${wLabel}: <span style="color:var(--muted);">not enough data</span>`;
                     if (r <= 0) return `${wLabel}: <span style="color:var(--danger);">no growth</span>`;
                     return `${wLabel}: ~${Math.round(r).toLocaleString()}/wk → ${projectFrom(r, target, deadline).str}`;
                 });
-                compareLine = `<div style="font-size:11px;color:var(--muted);margin-top:4px;">Compare: ${others.join(' · ')}</div>`;
+                compareLine = `<div style="font-size:11px;color:var(--muted);margin-top:4px;">At other paces: ${others.join(' · ')}</div>`;
+            }
+            // The REQUIRED weekly rate to actually hit the deadline — working backward from the target and
+            // date, not from recent pace at all. This is the number to plan around: compare it against the
+            // "At ~X respect/week" line above to see whether the faction needs to speed up or is coasting.
+            if (current < target && deadline) {
+                const weeksLeft = (new Date(`${deadline}T00:00:00Z`) - Date.now()) / (7 * 86400000);
+                if (weeksLeft <= 0) {
+                    requiredLine = `<p style="font-size:12px;color:var(--danger);margin:4px 0 0;">The ${esc(new Date(deadline).toLocaleDateString(undefined, { day: '2-digit', month: 'short' }))} deadline has already passed.</p>`;
+                } else {
+                    const required = (target - current) / weeksLeft;
+                    requiredLine = `<p style="font-size:12px;margin:4px 0 0;">Needs <b>~${Math.round(required).toLocaleString()} respect/week</b> from now to hit it by ${esc(new Date(deadline).toLocaleDateString(undefined, { day: '2-digit', month: 'short' }))} (${weeksLeft.toFixed(1)} week${weeksLeft >= 1.05 ? 's' : ''} left).</p>`;
+                }
             }
             return `
                 <div style="margin-bottom:14px;">
@@ -154,6 +171,7 @@ async function loadRespectGoalPanel() {
                     </div>
                     <div class="bar-track"><div class="bar-fill" style="width:${pct}%;background:var(--reagent);"></div></div>
                     <p style="font-size:12px;color:var(--muted);margin:8px 0 0;">${pct}% there · ${etaLine}</p>
+                    ${requiredLine}
                     ${compareLine}
                 </div>`;
         });
@@ -179,15 +197,13 @@ async function loadRespectEditor() {
         const data = await respectFetch({ action: 'read' });
         if (data.error) throw new Error(data.error);
 
-        $('rg-window').value = String(data.windowDays || 14);
-
         const goalList = $('rg-goal-list');
         if (!data.goals || !data.goals.length) {
             goalList.innerHTML = '<p style="color:var(--muted);font-size:13px;">No goals set yet.</p>';
         } else {
             goalList.innerHTML = [...data.goals].reverse().map(g => `
                 <div style="display:flex;align-items:center;gap:10px;padding:6px 0;border-top:1px solid var(--line);">
-                    <span style="flex:1;">${esc(g.label)} <span style="color:var(--muted);font-size:12px;">target ${Number(g.target).toLocaleString()}${g.deadline ? ` · by ${esc(g.deadline)}` : ''}</span></span>
+                    <span style="flex:1;">${esc(g.label)} <span style="color:var(--muted);font-size:12px;">target ${Number(g.target).toLocaleString()}${g.deadline ? ` · by ${esc(g.deadline)}` : ''} · pace: ${esc(RESPECT_WINDOW_LABEL[g.windowDays] || '28d')}</span></span>
                     <button class="ghost small rg-goal-remove" data-id="${esc(g.id)}">Remove</button>
                 </div>`).join('');
             goalList.querySelectorAll('.rg-goal-remove').forEach(btn => {
@@ -282,11 +298,6 @@ function respectRangeSummary(daily, fromDate, toDate) {
     return { totalGain, oc, chains, hits, war, days: inRange.length };
 }
 
-$('rg-window').addEventListener('change', async () => {
-    const result = await respectFetch({ action: 'set-window', windowDays: Number($('rg-window').value) });
-    if (!result.error) { toast('Pace window updated'); loadRespectGoalPanel(); }
-});
-
 $('rg-save').addEventListener('click', async () => {
     const btn = $('rg-save');
     const st = $('rg-status');
@@ -296,6 +307,7 @@ $('rg-save').addEventListener('click', async () => {
     try {
         const result = await respectFetch({
             action: 'set-goal', target, deadline: $('rg-deadline').value || null, label: $('rg-label').value.trim() || 'Respect goal',
+            windowDays: Number($('rg-window').value), // this goal's OWN pace window from now on — see api/respect.js's set-goal
         });
         if (result.error) throw new Error(result.error);
         $('rg-label').value = ''; $('rg-target').value = ''; $('rg-deadline').value = '';

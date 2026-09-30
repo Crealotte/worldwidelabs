@@ -82,7 +82,6 @@ const warEntriesKey = (factionId) => `wwl:war-respect:${factionId}`; // manual e
 const warBonusDailyKey = (factionId) => `wwl:war-bonus-daily:${factionId}`; // auto-tracked
 const warBonusSeenKey = (factionId) => `wwl:war-bonus-seen:${factionId}`;
 const goalKey = (factionId) => `wwl:respect-goal:${factionId}`;
-const windowKey = (factionId) => `wwl:respect-window:${factionId}`; // pace calculation window in days (14/21/28/90)
 
 // Goals used to be stored as a single object ({target, deadline, label}) before multiple goals
 // were supported. Any faction that set a goal before that migration still has that old shape
@@ -487,14 +486,13 @@ module.exports = async function handler(req, res) {
         const factionId = factionResult.factionId;
 
         if (action === 'read') {
-            const [ocDailyRaw, chainDailyRaw, hitsDailyRaw, warBonusDailyRaw, warRaw, goalRaw, windowRaw] = await Promise.all([
+            const [ocDailyRaw, chainDailyRaw, hitsDailyRaw, warBonusDailyRaw, warRaw, goalRaw] = await Promise.all([
                 redis(['GET', ocDailyKey(factionId)]),
                 redis(['GET', chainDailyKey(factionId)]),
                 redis(['GET', hitsDailyKey(factionId)]),
                 redis(['GET', warBonusDailyKey(factionId)]),
                 redis(['GET', warEntriesKey(factionId)]),
                 redis(['GET', goalKey(factionId)]),
-                redis(['GET', windowKey(factionId)]),
             ]);
             return res.status(200).json({
                 ocDaily: ocDailyRaw ? JSON.parse(ocDailyRaw) : {},
@@ -503,15 +501,7 @@ module.exports = async function handler(req, res) {
                 warBonusDaily: warBonusDailyRaw ? JSON.parse(warBonusDailyRaw) : {},
                 warEntries: warRaw ? JSON.parse(warRaw) : [],
                 goals: normalizeGoals(goalRaw),
-                windowDays: windowRaw ? Number(windowRaw) : 14,
             });
-        }
-
-        if (action === 'set-window') {
-            const { windowDays } = req.body;
-            if (![14, 21, 28, 90].includes(Number(windowDays))) return res.status(400).json({ error: 'windowDays must be 14, 21, 28, or 90' });
-            await redis(['SET', windowKey(factionId), String(windowDays)]);
-            return res.status(200).json({ ok: true });
         }
 
         // Everything below is leaders only.
@@ -624,12 +614,16 @@ module.exports = async function handler(req, res) {
         }
 
         if (action === 'set-goal') {
-            const { target, deadline, label } = req.body;
+            const { target, deadline, label, windowDays } = req.body;
             if (!target) return res.status(400).json({ error: 'Missing target' });
+            // Each goal keeps its OWN pace window (was a single setting shared by every goal, so
+            // making a 28-day estimate and then a 3-month one for a second goal silently switched
+            // the first goal's pace too, since there was only ever one stored value).
+            const win = [14, 21, 28, 90].includes(Number(windowDays)) ? Number(windowDays) : 28;
             const raw = await redis(['GET', goalKey(factionId)]);
             const goals = normalizeGoals(raw);
             const id = Math.random().toString(36).slice(2, 10);
-            goals.push({ id, target: Number(target), deadline: deadline || null, label: label || 'Respect goal', setAt: Date.now() });
+            goals.push({ id, target: Number(target), deadline: deadline || null, label: label || 'Respect goal', windowDays: win, setAt: Date.now() });
             await redis(['SET', goalKey(factionId), JSON.stringify(goals)]);
             return res.status(200).json({ ok: true, id });
         }
