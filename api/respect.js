@@ -102,6 +102,28 @@ function normalizeGoals(raw) {
 
 function todayKey() { return new Date().toISOString().slice(0, 10); }
 
+// ---- Torn's real chain-bonus formula, for the Effort Calculator ----
+// respect per hit = base(target level) * chainScale(hit position) * Fair Fight. chainScale is flat at
+// 1.00 for the first 10 hits, then climbs on a log curve for the rest of the chain — this (not a flat
+// rate) is why a hit late in a long chain earns more respect than an early one, and why a 1500-hit
+// chain earns more respect PER HIT on average than a 1000-hit one. Milestone bonuses (10/25/50/100/
+// 250/500/1000/2500/5000/10000/25000/50000/100000) are flat, one-off amounts that double at each step
+// (10, 20, 40, 80, ... 40960). Cross-checked against community documentation of the official mechanic.
+const CHAIN_MILESTONES = [10, 25, 50, 100, 250, 500, 1000, 2500, 5000, 10000, 25000, 50000, 100000];
+const chainScale = hit => (hit <= 10 ? 1 : 0.25 * Math.log10(hit) + 0.75);
+function chainScaleSum(length) {
+    const L = Math.max(0, Math.floor(length));
+    if (!L) return 0;
+    let sum = Math.min(L, 10);
+    for (let h = 11; h <= L; h++) sum += chainScale(h);
+    return sum;
+}
+function milestoneBonusSum(length) {
+    let sum = 0;
+    CHAIN_MILESTONES.forEach((m, i) => { if (length >= m) sum += 10 * Math.pow(2, i); });
+    return sum;
+}
+
 function normScenario(name) {
     return (name || 'Unknown').trim().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
         .toLowerCase().replace(/\s+v\d+$/i, '').trim();
@@ -264,6 +286,7 @@ async function syncWarBonus(key, factionId) {
     let synced = 0, skippedUnresolved = 0, rateLimited = false, fetchedCount = 0;
     for (const war of wars) {
         const warId = war.id || war.war_id;
+        const startTs = war.war?.start || war.start;
         const endTs = war.war?.end || war.end;
         if (!warId || !endTs) continue; // still ongoing, or missing data
 
@@ -286,19 +309,26 @@ async function syncWarBonus(key, factionId) {
             const bonus = mine?.rewards?.respect != null ? Number(mine.rewards.respect) : null;
             if (bonus === null) { skippedUnresolved++; continue; } // couldn't find our side — don't mark as seen, retry later
 
-            // Won/lost from the two factions' own final scores in this same report — no extra API
-            // call, and no reliance on a separate "winner" field that may or may not be present.
+            // Won/lost, and both final scores, from this same report — no extra API call, and no
+            // reliance on a separate "winner" field that may or may not be present. Scores are kept
+            // (not just win/loss) so the Effort Calculator can show real past war scores as a reference
+            // — Torn's own target-score formula isn't published anywhere, so a real example beats a
+            // guessed one.
             const them = Object.entries(factions).find(([id]) => id !== String(factionId))?.[1];
-            const won = (mine?.score != null && them?.score != null) ? Number(mine.score) > Number(them.score) : null;
+            const scoreUs = mine?.score != null ? Number(mine.score) : null;
+            const scoreThem = them?.score != null ? Number(them.score) : null;
+            const won = (scoreUs != null && scoreThem != null) ? scoreUs > scoreThem : null;
 
             // Only mark as seen once we've genuinely resolved a value (even 0 counts as resolved).
             await redis(['SADD', warBonusSeenKey(factionId), String(warId)]);
             if (bonus > 0) {
                 const dayKey = new Date(endTs * 1000).toISOString().slice(0, 10);
                 daily[dayKey] = (daily[dayKey] || 0) + bonus;
-                entries.push({ warId: String(warId), end: endTs, bonus, won });
                 synced++;
             }
+            // Recorded whenever a war resolves at all (even a 0 bonus) — the start/end window is also
+            // how the calculator tells a "war chain" (hits mostly at war's 2x rate) from a "peace chain".
+            entries.push({ warId: String(warId), start: startTs || null, end: endTs, bonus, won, scoreUs, scoreThem });
         } catch (e) { skippedUnresolved++; /* network hiccup — don't mark as seen, retry later */ }
     }
     if (synced > 0) {
@@ -543,20 +573,66 @@ module.exports = async function handler(req, res) {
             const bySide = won => { const list = entries.filter(e => e.won === won); return list.length ? { avg: list.reduce((s, e) => s + e.bonus, 0) / list.length, count: list.length } : null; };
             const warBonus = { win: bySide(true), loss: bySide(false) };
 
-            let chainRespectPerHit = null, chainSample = null;
+            // Real recent war scores, for reference — Torn's own target-score formula (the lead needed
+            // to win) isn't published anywhere reliable, so rather than guess one, this shows what
+            // actually happened in the faction's own recent wars instead.
+            const warScores = entries.filter(e => e.scoreUs != null && e.scoreThem != null)
+                .sort((a, b) => b.end - a.end).slice(0, 10)
+                .map(e => ({ end: e.end, scoreUs: e.scoreUs, scoreThem: e.scoreThem, won: e.won }));
+
+            // Chain calibration: back out K (this faction's own average target-level x Fair Fight) from
+            // real chains using Torn's actual chain-bonus formula (chainScaleSum/milestoneBonusSum
+            // above), instead of a flat respect/hit average that can't tell a 1000-hit chain from a
+            // 1500-hit one apart. Split into "war" chains (their time window overlaps a real war — hits
+            // during a war are worth 2x, "inside" attacks on the enemy) and "peace" chains, calibrated
+            // separately — a war chain's real K already reflects whatever mix of inside/outside hits
+            // this faction actually gets during a war, more honest than just doubling the peace figure.
+            let kPeace = null, kWar = null, peaceSample = null, warSample = null;
             try {
                 const chainsData = chainsRes ? await chainsRes.json() : null;
                 const list = Array.isArray(chainsData?.chains) ? chainsData.chains : Object.values(chainsData?.chains || {});
                 const usable = list.filter(c => c && c.end && Number(c.chain) > 0 && Number(c.respect) > 0);
-                const totalHits = usable.reduce((s, c) => s + Number(c.chain), 0);
-                const totalRespect = usable.reduce((s, c) => s + Number(c.respect), 0);
-                if (totalHits > 0) { chainRespectPerHit = totalRespect / totalHits; chainSample = { chains: usable.length, hits: totalHits, respect: totalRespect }; }
+                const warWindows = entries.filter(e => e.start && e.end);
+                const overlaps = (cs, ce) => warWindows.some(w => cs <= w.end && ce >= w.start);
+
+                const calibrate = chains => {
+                    const ks = [];
+                    let hits = 0, respect = 0;
+                    for (const c of chains) {
+                        const L = Number(c.chain);
+                        const scaleSum = chainScaleSum(L);
+                        if (scaleSum <= 0) continue;
+                        const k = (Number(c.respect) - milestoneBonusSum(L)) / scaleSum;
+                        if (k > 0 && Number.isFinite(k)) { ks.push(k); hits += L; respect += Number(c.respect); }
+                    }
+                    if (!ks.length) return { k: null, sample: null };
+                    return { k: ks.reduce((s, v) => s + v, 0) / ks.length, sample: { chains: ks.length, hits, respect } };
+                };
+
+                const warChains = usable.filter(c => c.start && overlaps(Number(c.start), Number(c.end)));
+                const peaceChains = usable.filter(c => !(c.start && overlaps(Number(c.start), Number(c.end))));
+                const peaceCal = calibrate(peaceChains); kPeace = peaceCal.k; peaceSample = peaceCal.sample;
+                const warCal = calibrate(warChains); kWar = warCal.k; warSample = warCal.sample;
+                // Too few chains for the split to mean anything — fall back to one blend across everything.
+                if (kPeace == null && kWar == null) { const all = calibrate(usable); kPeace = all.k; peaceSample = all.sample; }
             } catch (e) { /* leave nulls — the calculator asks for it by hand instead */ }
 
-            let rosterCount = null;
-            try { const membersData = membersRes ? await membersRes.json() : null; rosterCount = Array.isArray(membersData?.members) ? membersData.members.length : null; } catch (e) { /* leave null */ }
+            // Hits from one natural energy bar: a real, faction-specific average instead of a guessed 4
+            // or 6 — worked out from how many of the roster are actually donators (150E bar) vs not
+            // (100E), at Torn's standard 25 energy per attack (100/25=4, 150/25=6).
+            let rosterCount = null, hitsPerBarAuto = null;
+            try {
+                const membersData = membersRes ? await membersRes.json() : null;
+                const members = Array.isArray(membersData?.members) ? membersData.members : [];
+                rosterCount = members.length || null;
+                const known = members.filter(m => typeof m.is_donator === 'boolean');
+                if (known.length) {
+                    const donators = known.filter(m => m.is_donator).length;
+                    hitsPerBarAuto = (donators * 6 + (known.length - donators) * 4) / known.length;
+                }
+            } catch (e) { /* leave null */ }
 
-            return res.status(200).json({ ocWeeklyAvg, ocDays: ocDays.length, warBonus, chainRespectPerHit, chainSample, rosterCount });
+            return res.status(200).json({ ocWeeklyAvg, ocDays: ocDays.length, warBonus, warScores, kPeace, kWar, peaceSample, warSample, rosterCount, hitsPerBarAuto });
         }
 
         if (action === 'sync-chains') {
