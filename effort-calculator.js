@@ -22,6 +22,7 @@ function ecState() {
         goal: s.goal ?? '', scenario: s.scenario || 'loss',
         oc: s.oc ?? null, warBonus: s.warBonus ?? null, k: s.k ?? null, roster: s.roster ?? null,
         unavailPct: s.unavailPct ?? 10, baseHits: s.baseHits ?? null, xanaxHits: s.xanaxHits ?? 10,
+        targetScore: s.targetScore ?? '', kOutside: s.kOutside ?? null,
     };
 }
 function ecSave(patch) { try { localStorage.setItem(EC_KEY, JSON.stringify({ ...ecState(), ...patch })); } catch (e) { /* not critical */ } }
@@ -107,7 +108,23 @@ function renderEffortCalc() {
     const goal = Number(s.goal) || 0;
 
     const fromChain = Math.max(0, goal - oc - warBonus);
-    const targetHits = ecChainLengthForRespect(fromChain, k);
+
+    // Inside-the-war vs. outside hits: if a target war score is given, work out how many hits are
+    // needed just to reach that score (from this faction's own real score-per-hit average — Torn
+    // doesn't publish a formula for this either, so it's backed out from real wars, NOT assumed to
+    // follow the same curve as respect). Those inside hits already earn real respect at the war's 2x
+    // rate (K above); whatever respect is still short of the goal after that gets made up with outside
+    // (peace-rate) chain hits instead. Without a target score, it falls back to one bucket at K, same
+    // as before — most of a term war's hits are usually "inside" anyway.
+    const hasScore = s.scenario !== 'none' && Number(s.targetScore) > 0 && d.scorePerHit != null;
+    const kOutside = s.kOutside != null ? s.kOutside : (d.kPeace != null ? Math.round(d.kPeace * 100) / 100 : 0);
+    let insideHits = 0, outsideHits = 0, insideRespect = 0;
+    if (hasScore) {
+        insideHits = Math.ceil(Number(s.targetScore) / d.scorePerHit);
+        insideRespect = k * ecChainScaleSum(insideHits) + ecMilestoneBonusSum(insideHits);
+        outsideHits = ecChainLengthForRespect(Math.max(0, fromChain - insideRespect), kOutside);
+    }
+    const targetHits = hasScore ? insideHits + outsideHits : ecChainLengthForRespect(fromChain, k);
     const effectivePerHit = targetHits > 0 ? fromChain / targetHits : 0;
     const activeMembers = Math.max(0, Math.round(roster * (1 - (Number(s.unavailPct) || 0) / 100)));
     const hitsPerMember = activeMembers > 0 ? Math.ceil(targetHits / activeMembers) : 0;
@@ -170,6 +187,9 @@ function renderEffortCalc() {
                     <option value="none" ${s.scenario === 'none' ? 'selected' : ''}>Not warring (chain only)</option>
                 </select>
             </div>
+            <div class="field" style="margin:0;max-width:170px;" title="Optional — splits hits into 'inside the war' (needed for this score, 2x respect) and 'outside' (chain hits elsewhere, 1x). Leave blank to just assume most hits are inside, same as before.">
+                <label for="ec-targetscore">Target war score (optional)</label><input autocomplete="off" id="ec-targetscore" type="number" value="${esc(s.targetScore)}" placeholder="e.g. 4000" ${s.scenario === 'none' ? 'disabled title="No war this week"' : ''}>
+            </div>
         </div>
         <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-bottom:6px;">
             <div class="field" style="margin:0;max-width:150px;"><label for="ec-oc">OC respect / week</label><input autocomplete="off" id="ec-oc" type="number" value="${oc}"></div>
@@ -178,8 +198,11 @@ function renderEffortCalc() {
             <div class="field" style="margin:0;max-width:120px;"><label for="ec-roster">Roster size</label><input autocomplete="off" id="ec-roster" type="number" value="${roster}"></div>
             <div class="field" style="margin:0;max-width:140px;"><label for="ec-unavail">% OD / absent</label><input autocomplete="off" id="ec-unavail" type="number" value="${esc(s.unavailPct)}"></div>
         </div>
+        ${hasScore ? `<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-bottom:6px;">
+            <div class="field" style="margin:0;max-width:210px;" title="Your own real peacetime chain factor — used for whatever respect the inside-war hits don't already cover."><label for="ec-koutside">Outside chain factor (peace K)</label><input autocomplete="off" id="ec-koutside" type="number" step="0.01" value="${kOutside}"></div>
+        </div>` : ''}
         <div style="font-size:11px;color:var(--muted);margin-bottom:14px;line-height:1.6;">
-            OC: ${esc(ocNote)} · War bonus: ${esc(warNote)} · K: ${esc(kNote)} · Roster: ${esc(rosterNote)}
+            OC: ${esc(ocNote)} · War bonus: ${esc(warNote)} · K: ${esc(kNote)} · Roster: ${esc(rosterNote)}${hasScore ? ` · Score/hit: ${esc(d.scorePerHit != null ? `your own avg over ${d.scoreSampleCount} war${d.scoreSampleCount === 1 ? '' : 's'} (${d.scorePerHit.toFixed(1)}/hit)` : 'no data yet')}` : ''}
         </div>
         <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-bottom:14px;">
             <div class="field" style="margin:0;max-width:210px;"><label for="ec-basehits">Hits from one natural energy bar</label><input autocomplete="off" id="ec-basehits" type="number" step="0.1" value="${baseHits}"></div>
@@ -190,7 +213,11 @@ function renderEffortCalc() {
             <div>Weekly goal: <b>${ecN(goal)}</b> respect</div>
             <div>− OC: <b>${ecN(oc)}</b> &nbsp;·&nbsp; − War bonus: <b>${ecN(warBonus)}</b></div>
             <div>= Needed from chain hits: <b style="color:var(--reagent);">${ecN(fromChain)}</b> respect</div>
-            ${k > 0 ? `<div>Using Torn's real chain curve (K=${esc(k)}) → aim for a chain of about <b style="color:var(--reagent);">${ecN(targetHits)}</b> hits <span style="color:var(--muted);font-size:11px;">(≈${effectivePerHit.toFixed(1)} respect/hit at that length)</span></div>`
+            ${hasScore ? `
+            <div>To reach a war score of ${ecN(Number(s.targetScore))} (~${d.scorePerHit.toFixed(1)}/hit) → <b style="color:var(--reagent);">${ecN(insideHits)}</b> hits inside the war, earning ~<b>${ecN(insideRespect)}</b> respect at the war's 2x rate</div>
+            <div>Still short: <b style="color:var(--reagent);">${ecN(Math.max(0, fromChain - insideRespect))}</b> respect → ${kOutside > 0 ? `<b style="color:var(--reagent);">${ecN(outsideHits)}</b> more hits outside the war (peace K=${esc(kOutside)})` : '<span style="color:var(--danger);">enter a real "Outside chain factor" to size this</span>'}</div>
+            <div>Combined chain: <b style="color:var(--reagent);">${ecN(targetHits)}</b> hits (${ecN(insideHits)} inside + ${ecN(outsideHits)} outside)</div>`
+                : k > 0 ? `<div>Using Torn's real chain curve (K=${esc(k)}) → aim for a chain of about <b style="color:var(--reagent);">${ecN(targetHits)}</b> hits <span style="color:var(--muted);font-size:11px;">(≈${effectivePerHit.toFixed(1)} respect/hit at that length)</span></div>`
                 : `<div style="color:var(--danger);">Enter a real "Chain respect factor (K)" above to get a target chain length.</div>`}
             <div>${ecN(activeMembers)} of ${ecN(roster)} members active (${esc(s.unavailPct)}% OD/absent) → about <b style="color:var(--reagent);">${ecN(hitsPerMember)}</b> hits needed per member</div>
             <div>A natural bar alone gets ${ecN(baseHits)} hits → each member needs about <b style="color:var(--reagent);">${xanaxNeeded} Xanax</b>${xanaxNeeded ? ` (+${ecN(xanaxNeeded * xanaxHits)} hits)` : ''} to reach ${ecN(hitsPerMember)}</div>
@@ -214,12 +241,13 @@ function renderEffortCalc() {
         ${warScoresHtml}
         <p style="font-size:11px;color:var(--muted);margin:10px 0 0;">This is the MINIMUM to hit your goal — anyone who wants to do more still can, but nobody needs to stack further than this just to be able to train too. Every number above is your own faction's real history; overwrite any of them by hand if you want to plan for something different.</p>`;
 
-    const fieldMap = { 'ec-goal': 'goal', 'ec-oc': 'oc', 'ec-warbonus': 'warBonus', 'ec-k': 'k', 'ec-roster': 'roster', 'ec-unavail': 'unavailPct', 'ec-basehits': 'baseHits', 'ec-xanhits': 'xanaxHits' };
+    const fieldMap = { 'ec-goal': 'goal', 'ec-oc': 'oc', 'ec-warbonus': 'warBonus', 'ec-k': 'k', 'ec-roster': 'roster', 'ec-unavail': 'unavailPct', 'ec-basehits': 'baseHits', 'ec-xanhits': 'xanaxHits', 'ec-targetscore': 'targetScore', 'ec-koutside': 'kOutside' };
+    const STRING_FIELDS = new Set(['ec-goal', 'ec-targetscore']); // kept as typed text (so a blank field means "not set", not 0)
     Object.keys(fieldMap).forEach(id => {
-        $(id).addEventListener('change', () => {
+        $(id)?.addEventListener('change', () => {
             const key = fieldMap[id];
-            const val = id === 'ec-goal' ? $(id).value.trim() : Number($(id).value);
-            ecSave({ [key]: id === 'ec-goal' ? val : (Number.isFinite(val) ? val : null) });
+            const val = STRING_FIELDS.has(id) ? $(id).value.trim() : Number($(id).value);
+            ecSave({ [key]: STRING_FIELDS.has(id) ? val : (Number.isFinite(val) ? val : null) });
             renderEffortCalc();
         });
     });

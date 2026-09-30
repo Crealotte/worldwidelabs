@@ -639,6 +639,15 @@ module.exports = async function handler(req, res) {
                 .sort((a, b) => b.end - a.end).slice(0, 10)
                 .map(e => ({ end: e.end, scoreUs: e.scoreUs, scoreThem: e.scoreThem, won: e.won }));
 
+            // Score per war hit: also not published anywhere, so backed out empirically from this
+            // faction's own real (final score, real hit count) pairs — the real hit count comes from
+            // Torn's own attack log (see syncWarBonus/lib/warHits.js), a couple of wars calibrated at a
+            // time. This is NOT assumed to follow the same log-curve as respect (nothing confirms
+            // that) — just a plain average, same idea as K but for score instead of respect.
+            const scoreSamples = entries.filter(e => e.scoreUs > 0 && e.warHits > 0).map(e => e.scoreUs / e.warHits);
+            const scorePerHit = scoreSamples.length ? scoreSamples.reduce((s, v) => s + v, 0) / scoreSamples.length : null;
+            const scoreSampleCount = scoreSamples.length;
+
             // Chain calibration: back out K (this faction's own average target-level x Fair Fight) from
             // real chains using Torn's actual chain-bonus formula (chainScaleSum/milestoneBonusSum
             // above), instead of a flat respect/hit average that can't tell a 1000-hit chain from a
@@ -691,7 +700,7 @@ module.exports = async function handler(req, res) {
                 }
             } catch (e) { /* leave null */ }
 
-            return res.status(200).json({ ocWeeklyAvg, ocDays: ocDays.length, warBonus, warScores, kPeace, kWar, peaceSample, warSample, rosterCount, hitsPerBarAuto });
+            return res.status(200).json({ ocWeeklyAvg, ocDays: ocDays.length, warBonus, warScores, scorePerHit, scoreSampleCount, kPeace, kWar, peaceSample, warSample, rosterCount, hitsPerBarAuto });
         }
 
         if (action === 'sync-chains') {
