@@ -414,23 +414,21 @@ module.exports = async function handler(req, res) {
             return res.status(200).json({ receipt: JSON.parse(raw) });
         }
 
-        if (!key) return res.status(400).json({ error: 'Missing key' });
-
-        const profile = await getProfile(key);
-        if (!profile) return res.status(403).json({ error: `Could not determine your faction from this key${getProfile.lastError ? ` — ${getProfile.lastError}` : ''}` });
-        const { factionId, playerId, name: playerName, factionName, daysInFaction } = profile;
-
-        // Lets the userscript flag a newer version without doing its own raw GET-and-regex fetch of the
-        // live .user.js file, which needs a GET-capable bridge TornPDA's script manager doesn't provide
-        // (only a POST one) — that's why version-flagging only ever worked on a computer before. Reading
-        // the same on-disk file the /worldwidelabs.user.js download itself serves (see the GET handler
-        // above) keeps this as the one source of truth, nothing to remember to keep in sync by hand.
+        // Lets the userscript flag a newer version without doing its own raw GET-and-regex fetch of the live .user.js file
+        // (TornPDA's script manager only has a POST bridge). Reads the same on-disk file the /worldwidelabs.user.js download
+        // serves, so it is the one source of truth. It sits ABOVE the key and profile checks on purpose: the version number
+        // is public anyway, and answering it with no key means no Torn call and no database command at all — the cheapest
+        // way to check for an update, so it can be asked as often as needed.
         if (action === 'script-version') {
             const src = require('fs').readFileSync(require('path').join(process.cwd(), 'userscripts', 'energy-plan.user.js'), 'utf8');
             const m = /@version\s+([\d.]+)/.exec(src);
             return res.status(200).json({ version: m ? m[1] : null });
         }
+        if (!key) return res.status(400).json({ error: 'Missing key' });
 
+        const profile = await getProfile(key);
+        if (!profile) return res.status(403).json({ error: `Could not determine your faction from this key${getProfile.lastError ? ` — ${getProfile.lastError}` : ''}` });
+        const { factionId, playerId, name: playerName, factionName, daysInFaction } = profile;
         // Open to any logged-in member of the faction, not leader-gated — this is what lets the
         // faction dashboard show the latest war's badge winners to everyone, not just leaders.
         if (action === 'get-latest-badges') {

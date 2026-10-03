@@ -2,7 +2,7 @@
 // @name         World Wide Labs
 // @namespace    https://worldwidelabs.vercel.app
 // @author       CreaLotte
-// @version      1.35
+// @version      1.36
 // @updateURL    __WWL_BASE__/worldwidelabs.user.js
 // @downloadURL  __WWL_BASE__/worldwidelabs.user.js
 // @description  Shows your WorldWideLabs weekly energy plan (the checklist from the Energy planner) inside Torn, a To do tab with small personal reminders (revive setting, feedback, timezone map, availability, Discord/Intel/CAT), your My Targets list, a simplified energy/war standing strip, and — if you are in the Mentoring Platform — your mentoring checklist too. Also shows faction banners at the top of every Torn page. A small ⚙ in the header shows the installed version, flags when a newer one is out, lets you set/replace your API key, and — for a leader — add or remove your faction's banners right from Torn. On a computer it is a small window you can drag around and close; in TornPDA it is a menu. Ticks are shared with the WWL site.
@@ -26,7 +26,7 @@
     const KEY_NAME = 'wwl_api_key', POS_NAME = 'wwl_plan_pos', STATE_NAME = 'wwl_plan_state';
     // GM_info gives the version Tampermonkey actually has installed right now — falls back to a
     // hardcoded copy (kept in sync with @version above) for TornPDA, which doesn't grant GM_info.
-    const SCRIPT_VERSION = (typeof GM_info !== 'undefined' && GM_info.script?.version) || '1.35';
+    const SCRIPT_VERSION = (typeof GM_info !== 'undefined' && GM_info.script?.version) || '1.36';
     const versionGreater = (a, b) => {
         const pa = String(a).split('.').map(Number), pb = String(b).split('.').map(Number);
         for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
@@ -430,7 +430,7 @@
         </div>`;
     }
     function render() {
-        if (tab === 'settings') { body.innerHTML = renderSettingsTab(); wireSettingsTab(); return; }
+        if (tab === 'settings') { body.innerHTML = renderSettingsTab(); wireSettingsTab(); try { checkForUpdate(true); } catch (e) { /* the script is still starting up - the passive check will run */ } return; }
         const tabContent = tab === 'mentoring' ? renderMentoringTab() : tab === 'targets' ? renderTargetsTab() : tab === 'todo' ? renderTodoTab() : renderEnergyTab();
         body.innerHTML = updateBanner() + renderStandingStrip() + tabBar() + tabContent;
         showProgress();
@@ -527,12 +527,19 @@
     }
     let updateCached = null; try { updateCached = JSON.parse(store.get(UPDATE_CHECK_NAME) || 'null'); } catch (e) { /* none */ }
     if (updateCached?.remote && versionGreater(updateCached.remote, SCRIPT_VERSION)) markUpdateAvailable(updateCached.remote);
-    if (getKey() && !(updateCached && Date.now() - updateCached.at < 6 * 3600000)) {
-        api({ action: 'script-version' }).then(r => {
-            store.set(UPDATE_CHECK_NAME, JSON.stringify({ at: Date.now(), remote: r.version }));
+    // The version question needs no key and costs the server no database command (the number is public), so it is
+    // asked without api(): passively about every 6 hours, and again whenever ⚙ Settings is opened (at most every
+    // 5 minutes), so a new version shows up as soon as someone looks instead of hours later.
+    function checkForUpdate(force) {
+        const age = updateCached ? Date.now() - updateCached.at : Infinity;
+        if (age < (force ? 300000 : 6 * 3600000)) return;
+        post(`${WWL}/api/war-payout`, { action: 'script-version' }).then(r => {
+            updateCached = { at: Date.now(), remote: r.version };
+            store.set(UPDATE_CHECK_NAME, JSON.stringify(updateCached));
             if (r.version && versionGreater(r.version, SCRIPT_VERSION)) markUpdateAvailable(r.version);
         }).catch(() => {});
     }
+    checkForUpdate(false);
 
     // ---- Torn-wide banners: the same ones a leader sets in Leader settings → Banners on the WWL
     // site, shown here too since faction messages posted in Torn's own event feed get lost. Inserted
