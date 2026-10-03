@@ -507,31 +507,78 @@ function processNewsPage(newsEntries, factionId, daily, seenIds) {
         dailyChanged = true;
         synced++;
     }
-    return { synced, dailyChanged, oldestSeen };
+    return { synced, dailyChanged, oldestSeen, count: Object.keys(newsEntries).length };
 }
 
-async function syncLosses(key, factionId) {
-    const r = await tornFetch(`https://api.torn.com/faction/?selections=attacknews&key=${encodeURIComponent(key)}`);
-    const data = await r.json();
-    if (data.error) return { synced: 0, error: data.error.error };
+// attacknews hands back at most ~100 entries per call — during a war that is only about an hour of
+// events. Anything beyond that in the requested window is silently dropped, which is how losses went
+// missing: a plain sync only saw the latest hour, and the old fixed 6-hour deep windows kept just 100
+// of the (often 400+) events inside each. This walks a window properly: whenever a call comes back
+// full, it asks again for the part of the window still older than the oldest entry it got, until a
+// call comes back short (the window is covered). Already-counted entries are skipped by id, so
+// re-walking a stretch never double counts.
+const NEWS_PAGE_CAP = 90; // a page this full (the API gives ~100) means there may be more behind it
 
-    const newsEntries = data.attacknews || {};
+async function walkLosses(key, factionId, from, to, daily, seenIds, budget) {
+    let synced = 0, entries = 0, error = null, rateLimited = false, done = false;
+    while (budget.pages < budget.max) {
+        if (budget.pages > 0) await sleep(1100);
+        budget.pages++;
+        const r = await tornFetch(`https://api.torn.com/faction/?selections=attacknews&from=${from}&to=${to}&key=${encodeURIComponent(key)}`);
+        const data = await r.json();
+        if (data.error) { error = data.error.error || data.error.code; rateLimited = isRateLimited(data); break; }
+        const page = processNewsPage(data.attacknews || {}, factionId, daily, seenIds);
+        synced += page.synced;
+        entries += page.count;
+        if (page.dailyChanged) {
+            await redis(['SET', hitsDailyKey(factionId), JSON.stringify(daily)]);
+            await redis(['SET', lossesSeenKey(factionId), JSON.stringify([...seenIds])]);
+        }
+        if (page.count >= NEWS_PAGE_CAP && page.oldestSeen !== null) {
+            to = page.oldestSeen >= to ? to - 1 : page.oldestSeen; // keep going back inside this same window
+            if (to < from) { done = true; break; }
+        } else { done = true; break; }
+    }
+    return { synced, entries, error, rateLimited, done, nextTo: to };
+}
+
+// Regular sync: catches up everything since the last time it fully caught up (first run: the last 24
+// hours), paging back from now as far as the per-call budget allows. If a long war stretch needs more
+// calls than one click allows, the position is remembered so the next click carries on from there
+// instead of redoing the newest part.
+const lossesCatchupKey = (factionId) => `wwl:losses-catchup:${factionId}`;
+const lossesCoveredKey = (factionId) => `wwl:losses-covered:${factionId}`;
+
+async function syncLosses(key, factionId) {
+    const now = Math.floor(Date.now() / 1000);
     const dailyRaw = await redis(['GET', hitsDailyKey(factionId)]);
     const daily = dailyRaw ? JSON.parse(dailyRaw) : {};
     const seenRaw = await redis(['GET', lossesSeenKey(factionId)]);
     const seenIds = new Set(seenRaw ? JSON.parse(seenRaw) : []);
-    const result = processNewsPage(newsEntries, factionId, daily, seenIds);
-    if (result.dailyChanged) {
-        await redis(['SET', hitsDailyKey(factionId), JSON.stringify(daily)]);
-        await redis(['SET', lossesSeenKey(factionId), JSON.stringify([...seenIds])]);
+
+    let st = null;
+    try { st = JSON.parse(await redis(['GET', lossesCatchupKey(factionId)]) || 'null'); } catch (_) { st = null; }
+    if (!st) {
+        const covered = Number(await redis(['GET', lossesCoveredKey(factionId)])) || 0;
+        st = { top: now, to: now, floor: covered ? covered - 120 : now - 24 * 3600 };
     }
-    return { synced: result.synced, totalAvailable: Object.keys(newsEntries).length };
+    const res = await walkLosses(key, factionId, st.floor, st.to, daily, seenIds, { pages: 0, max: 6 });
+    if (res.error && res.entries === 0) return { synced: 0, error: res.error };
+    if (res.done) {
+        await redis(['SET', lossesCoveredKey(factionId), String(st.top)]);
+        await redis(['DEL', lossesCatchupKey(factionId)]);
+    } else {
+        await redis(['SET', lossesCatchupKey(factionId), JSON.stringify({ ...st, to: res.nextTo })]);
+    }
+    return { synced: res.synced, totalAvailable: res.entries, partial: !res.done };
 }
 
 // Deep backfill for losses — attacknews needs both "from" and "to" to page beyond the most
 // recent ~100 entries (a single timestamp alone gets ignored by Torn's API for news-type
 // selections), so this walks backward in fixed time chunks rather than relying on "oldest seen".
-const lossesDeepCursorKey = (factionId) => `wwl:losses-deep-cursor:${factionId}`;
+// "-v2": the old cursor had already walked past stretches where only 100 of many events were kept, so
+// everyone restarts from now (already-counted entries are skipped by id, nothing double counts).
+const lossesDeepCursorKey = (factionId) => `wwl:losses-deep-cursor-v2:${factionId}`;
 
 async function deepSyncLosses(key, factionId, maxPages = 15) {
     const dailyRaw = await redis(['GET', hitsDailyKey(factionId)]);
@@ -539,37 +586,30 @@ async function deepSyncLosses(key, factionId, maxPages = 15) {
     const seenRaw = await redis(['GET', lossesSeenKey(factionId)]);
     const seenIds = new Set(seenRaw ? JSON.parse(seenRaw) : []);
 
-    const CHUNK_SECONDS = 6 * 60 * 60; // 6-hour windows
+    const CHUNK_SECONDS = 6 * 60 * 60; // 6-hour windows, each paged until fully covered
     const cursorRaw = await redis(['GET', lossesDeepCursorKey(factionId)]);
     let to = cursorRaw ? Number(cursorRaw) : Math.floor(Date.now() / 1000);
-    let totalSynced = 0, pagesFetched = 0, emptyPagesInARow = 0, rateLimited = false, stopReason = 'max-pages';
+    let totalSynced = 0, emptyChunksInARow = 0, rateLimited = false, stopReason = 'max-pages';
+    const budget = { pages: 0, max: maxPages };
 
-    for (let page = 0; page < maxPages; page++) {
-        if (page > 0) await sleep(1100);
+    while (budget.pages < budget.max) {
         const from = to - CHUNK_SECONDS;
-        const r = await tornFetch(`https://api.torn.com/faction/?selections=attacknews&from=${from}&to=${to}&key=${encodeURIComponent(key)}`);
-        const data = await r.json();
-        if (data.error) {
-            if (isRateLimited(data)) rateLimited = true;
-            stopReason = `torn-error: ${data.error.error || data.error.code}`;
+        const res = await walkLosses(key, factionId, from, to, daily, seenIds, budget);
+        totalSynced += res.synced;
+        if (res.error) {
+            rateLimited = res.rateLimited;
+            stopReason = `torn-error: ${res.error}`;
             break;
         }
-        const newsEntries = data.attacknews || {};
-        pagesFetched++;
-
-        const result = processNewsPage(newsEntries, factionId, daily, seenIds);
-        totalSynced += result.synced;
-        if (result.dailyChanged) {
-            await redis(['SET', hitsDailyKey(factionId), JSON.stringify(daily)]);
-            await redis(['SET', lossesSeenKey(factionId), JSON.stringify([...seenIds])]);
-        }
-
-        to = from - 1; // always move the window back, even if this chunk was empty
-        await redis(['SET', lossesDeepCursorKey(factionId), String(to)]); // save progress after every chunk, not just at the end
-        emptyPagesInARow = result.synced === 0 ? emptyPagesInARow + 1 : 0;
-        if (emptyPagesInARow >= 5) { stopReason = '5-empty-chunks-in-a-row (no losses found in these 6-hour windows, or reached the edge of available history)'; break; }
+        to = res.done ? from - 1 : res.nextTo; // not done = out of calls mid-window: resume right there
+        await redis(['SET', lossesDeepCursorKey(factionId), String(to)]); // save progress, not just at the end
+        if (!res.done) break;
+        // Only stop once windows come back with no events at all (the edge of history) — a window full of
+        // already-counted events must not end the walk, or a re-run would never get past recent days.
+        emptyChunksInARow = res.entries === 0 ? emptyChunksInARow + 1 : 0;
+        if (emptyChunksInARow >= 5) { stopReason = '5-empty-chunks-in-a-row (reached the edge of available history)'; break; }
     }
-    return { synced: totalSynced, pagesFetched, rateLimited, stopReason };
+    return { synced: totalSynced, pagesFetched: budget.pages, rateLimited, stopReason };
 }
 
 module.exports = async function handler(req, res) {
@@ -729,7 +769,7 @@ module.exports = async function handler(req, res) {
         if (action === 'sync-losses') {
             const result = await syncLosses(key, factionId);
             if (result.error) return res.status(403).json({ error: result.error });
-            return res.status(200).json({ ok: true, synced: result.synced, totalAvailable: result.totalAvailable });
+            return res.status(200).json({ ok: true, synced: result.synced, totalAvailable: result.totalAvailable, partial: result.partial });
         }
 
         if (action === 'deep-sync-losses') {
