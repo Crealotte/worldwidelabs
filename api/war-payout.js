@@ -386,7 +386,7 @@ module.exports = async function handler(req, res) {
         // refreshes stored numbers.
         if (req.method === 'GET' && req.query?.cron) {
             const extra = String(process.env.WWL_SNAPSHOT_KEYS || '').split(',').map(s => s.trim()).filter(Boolean);
-            const results = await nightlyRun(redis, extra, getProfile);
+            const results = await nightlyRun(redis, extra, getProfile, (k, fid) => require('./respect').runTracking(k, fid));
             return res.status(200).json({ ran: results.length, results });
         }
 

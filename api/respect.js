@@ -426,23 +426,59 @@ async function processAttacksPageAsync(attacks, factionId, daily) {
     return { synced, dailyChanged, oldestSeen };
 }
 
-// Pulls real per-attack respect from faction:attacksfull — one page (whatever's currently in
-// Torn's rolling window of the most recent ~1000 attacks/defends). For a busy faction that window
-// can be just a few hours, which is why a single sync often only catches a handful of a day's
-// hits — use deepSyncHits below to page further back and get the rest.
-async function syncHits(key, factionId) {
-    const r = await tornFetch(`https://api.torn.com/faction/?selections=attacksfull&key=${encodeURIComponent(key)}`);
-    const data = await r.json();
-    if (data.error) return { synced: 0, error: data.error.error };
+// Same problem as losses (see walkLosses): a single attacksfull call only reaches back over the latest
+// ~1000 attacks, which in a busy war is a few hours, so a refresh made later never saw the earlier hits.
+// This catches up from the last point it fully covered (first run: the last 24h), paging back from now,
+// and remembers its place if one click runs out of calls. Only attacks newer than that point are processed,
+// so each run costs database commands in proportion to what is NEW, not to the ~1000 in every page.
+const hitsCatchupKey = (factionId) => `wwl:hits-catchup:${factionId}`;
+const hitsCoveredKey = (factionId) => `wwl:hits-covered:${factionId}`;
 
-    const attacks = data.attacks || {};
+async function syncHits(key, factionId, maxPages = 3) {
+    const now = Math.floor(Date.now() / 1000);
     const dailyRaw = await redis(['GET', hitsDailyKey(factionId)]);
     const daily = dailyRaw ? JSON.parse(dailyRaw) : {};
-    const result = await processAttacksPageAsync(attacks, factionId, daily);
-    if (result.dailyChanged) await redis(['SET', hitsDailyKey(factionId), JSON.stringify(daily)]);
-    return { synced: result.synced, totalAvailable: Object.keys(attacks).length };
+    let st = null;
+    try { st = JSON.parse(await redis(['GET', hitsCatchupKey(factionId)]) || 'null'); } catch (_) { st = null; }
+    if (!st) {
+        const covered = Number(await redis(['GET', hitsCoveredKey(factionId)])) || 0;
+        st = { top: now, to: now, floor: covered ? covered - 300 : now - 24 * 3600 };
+    }
+    let synced = 0, seen = 0, done = false;
+    for (let page = 0; page < maxPages; page++) {
+        if (page > 0) await sleep(1100);
+        const r = await tornFetch(`https://api.torn.com/faction/?selections=attacksfull&to=${st.to}&key=${encodeURIComponent(key)}`);
+        const data = await r.json();
+        if (data.error) {
+            if (page === 0) return { synced: 0, error: data.error.error };
+            break;
+        }
+        const attacks = data.attacks || {};
+        const stamp = a => a.timestamp_ended || a.timestamp_started || 0;
+        const ids = Object.keys(attacks);
+        seen += ids.length;
+        if (!ids.length) { done = true; break; }
+        const fresh = {};
+        let oldest = Infinity;
+        for (const id of ids) {
+            const ts = stamp(attacks[id]);
+            if (ts && ts < oldest) oldest = ts;
+            if (ts > st.floor) fresh[id] = attacks[id];
+        }
+        const result = await processAttacksPageAsync(fresh, factionId, daily);
+        synced += result.synced;
+        if (result.dailyChanged) await redis(['SET', hitsDailyKey(factionId), JSON.stringify(daily)]);
+        if (oldest <= st.floor || oldest >= st.to) { done = true; break; }
+        st.to = oldest - 1;
+    }
+    if (done) {
+        await redis(['SET', hitsCoveredKey(factionId), String(st.top)]);
+        await redis(['DEL', hitsCatchupKey(factionId)]);
+    } else {
+        await redis(['SET', hitsCatchupKey(factionId), JSON.stringify(st)]);
+    }
+    return { synced, totalAvailable: seen, partial: !done };
 }
-
 // Walks backward through time using Torn's "to" timestamp filter on attacksfull — since the
 // rolling window can be as little as a few hours of activity for a busy faction, a single sync
 // only ever sees a sliver of any given day. This pages back to actually capture full days,
@@ -549,7 +585,7 @@ async function walkLosses(key, factionId, from, to, daily, seenIds, budget) {
 const lossesCatchupKey = (factionId) => `wwl:losses-catchup:${factionId}`;
 const lossesCoveredKey = (factionId) => `wwl:losses-covered:${factionId}`;
 
-async function syncLosses(key, factionId) {
+async function syncLosses(key, factionId, maxPages = 6) {
     const now = Math.floor(Date.now() / 1000);
     const dailyRaw = await redis(['GET', hitsDailyKey(factionId)]);
     const daily = dailyRaw ? JSON.parse(dailyRaw) : {};
@@ -562,7 +598,7 @@ async function syncLosses(key, factionId) {
         const covered = Number(await redis(['GET', lossesCoveredKey(factionId)])) || 0;
         st = { top: now, to: now, floor: covered ? covered - 120 : now - 24 * 3600 };
     }
-    const res = await walkLosses(key, factionId, st.floor, st.to, daily, seenIds, { pages: 0, max: 6 });
+    const res = await walkLosses(key, factionId, st.floor, st.to, daily, seenIds, { pages: 0, max: maxPages });
     if (res.error && res.entries === 0) return { synced: 0, error: res.error };
     if (res.done) {
         await redis(['SET', lossesCoveredKey(factionId), String(st.top)]);
@@ -887,4 +923,23 @@ module.exports = async function handler(req, res) {
     } catch (e) {
         return res.status(500).json({ error: String(e.message || e) });
     }
+};
+
+// Used by the nightly job (lib/nightly.js) with a leader's stored key, so the tracker keeps itself up to
+// date on days nobody presses Refresh. Each step is independent: one failing doesn't stop the others.
+// More pages than a manual click gets, since this is the one run that has to catch a whole day of war.
+module.exports.runTracking = async function runTracking(key, factionId) {
+    const out = {};
+    const steps = [
+        ['oc', () => syncOc(key, factionId)],
+        ['chains', () => syncChains(key, factionId)],
+        ['hits', () => syncHits(key, factionId, 8)],
+        ['losses', () => syncLosses(key, factionId, 15)],
+        ['war', () => syncWarBonus(key, factionId)],
+    ];
+    for (const [name, fn] of steps) {
+        try { const r = await fn(); out[name] = r.error ? `error: ${r.error}` : r.synced; } catch (e) { out[name] = `error: ${String(e.message || e).slice(0, 60)}`; }
+        await sleep(700);
+    }
+    return out;
 };
