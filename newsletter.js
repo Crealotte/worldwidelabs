@@ -130,31 +130,42 @@ async function buildNewsletter() {
     finally { btn.disabled = false; }
 }
 
-function renderNewsletter(sections, title) {
-    const html = nlCardHtml(title, sections);
+// Announcements: one free-text box that sits after the last section and before the closing lines, so it goes into
+// both the preview card and the plain-text copy. Kept in this browser so a reload does not lose it.
+let nlAnnounce = '';
+try { nlAnnounce = localStorage.getItem('wwl_nl_announce') || ''; } catch (e) { /* just starts empty */ }
+
+function renderNewsletter(parts, title) {
+    // the closing lines are always last; the announcements go right before them
+    const closing = parts.filter(s => s.title === 'Closing'), body = parts.filter(s => s.title !== 'Closing');
+    const full = () => [...body, ...(nlAnnounce.trim() ? [{ title: 'Announcements', raw: true, lines: nlAnnounce.trim().split('\n') }] : []), ...closing];
+    const cardHtml = () => nlCardHtml(title, full());
     $('nl-parts').innerHTML = `
         <div class="panel">
             <div style="display:flex;gap:10px;align-items:center;margin-bottom:10px;flex-wrap:wrap;"><h3 style="margin:0;">Preview</h3>
                 <span style="margin-left:auto;"></span>
                 <button class="ghost small" id="nl-copy-rich">Copy formatted</button>
-                <button class="ghost small" id="nl-copy-all">Copy all as plain text</button></div>
-            <div id="nl-card" style="overflow-x:auto;">${html}</div>
-            <p style="color:var(--muted);font-size:12px;margin:8px 0 0;">The preview is what "Copy formatted" copies (paste it into the Torn editor and see what it keeps). To change wording, edit the plain-text boxes below and use their Copy buttons; the preview is not changed by those edits.</p>
-        </div>` + sections.map((s, i) => `
+                <button class="ghost small" id="nl-copy-all">Copy as plain text</button></div>
+            <div id="nl-card" style="overflow-x:auto;">${cardHtml()}</div>
+            <p style="color:var(--muted);font-size:12px;margin:8px 0 0;">"Copy formatted" copies the preview with its formatting (paste it into the Torn editor and see what it keeps); "Copy as plain text" copies the same thing without any formatting.</p>
+        </div>
         <div class="panel">
-            <div style="display:flex;gap:10px;align-items:center;margin-bottom:6px;"><h3 style="margin:0;">${esc(s.title)} (plain text)</h3><button class="ghost small nl-copy" data-i="${i}" style="margin-left:auto;">Copy</button></div>
-            <textarea class="nl-text" data-i="${i}" rows="${Math.min(22, nlPlain(s).split('\n').length + 1)}" style="width:100%;font-family:var(--mono);font-size:13px;">${esc(nlPlain(s))}</textarea>
-        </div>`).join('');
-    document.querySelectorAll('.nl-copy').forEach(b => b.addEventListener('click', () => {
-        navigator.clipboard.writeText(document.querySelector(`.nl-text[data-i="${b.dataset.i}"]`).value).then(() => toast('Copied'));
-    }));
+            <h3 style="margin:0 0 6px;">Announcements</h3>
+            <p style="color:var(--muted);font-size:12px;margin:0 0 6px;">Anything you type here is added after the last section and before the closing lines. Leave it empty to skip it.</p>
+            <textarea id="nl-announce" rows="6" style="width:100%;font-size:13px;" placeholder="Write your announcements here…">${esc(nlAnnounce)}</textarea>
+        </div>`;
+    $('nl-announce').addEventListener('input', () => {
+        nlAnnounce = $('nl-announce').value;
+        try { localStorage.setItem('wwl_nl_announce', nlAnnounce); } catch (e) { /* not remembered */ }
+        $('nl-card').innerHTML = cardHtml();
+    });
     $('nl-copy-all').addEventListener('click', () => {
-        navigator.clipboard.writeText([...document.querySelectorAll('.nl-text')].map(t => t.value).join('\n\n')).then(() => toast('Copied'));
+        navigator.clipboard.writeText(full().map(nlPlain).join('\n\n')).then(() => toast('Copied'));
     });
     $('nl-copy-rich').addEventListener('click', async () => {
         try {
-            const plain = sections.map(nlPlain).join('\n\n');
-            await navigator.clipboard.write([new ClipboardItem({ 'text/html': new Blob([html], { type: 'text/html' }), 'text/plain': new Blob([plain], { type: 'text/plain' }) })]);
+            const plain = full().map(nlPlain).join('\n\n');
+            await navigator.clipboard.write([new ClipboardItem({ 'text/html': new Blob([cardHtml()], { type: 'text/html' }), 'text/plain': new Blob([plain], { type: 'text/plain' }) })]);
             toast('Copied with formatting - paste it in the Torn editor');
         } catch (e) { toast('Your browser would not copy formatted text here - use the plain text instead.'); }
     });
