@@ -62,7 +62,7 @@ async function buildNewsletter() {
         if (!period) throw new Error('Pick a period first.');
         const running = period.id === 'now';
         const range = `${moFmt(period.start)} to ${moFmt(period.end)}${running ? ' (so far)' : ''}`;
-        const sections = [{ title: 'Intro', raw: true, lines: ['Hey everyone!', 'Here is our monthly wrap up of all we have accomplished:'] }];
+        const sections = [{ title: 'Intro', raw: true, lines: ['Hey everyone!', '', 'Here is our monthly wrap up of everything we have accomplished together, and all the things to look forward to this coming month.'] }];
 
         // 1. winners: only the winner of each competition; the runners-up are on the Member Overview page
         st.textContent = 'Reading the competition numbers (this can take a minute the first time)...';
@@ -70,7 +70,7 @@ async function buildNewsletter() {
         await loadMemberOverview();
         const fmt = v => Math.round(v).toLocaleString();
         const winners = moData ? moWinners(moRows()) : [];
-        sections.push({ title: 'Winners lead-in', raw: true, lines: ['A huge congrats to our winners!'] });
+        sections.push({ title: 'Winners lead-in', raw: true, lines: ['A huge congrats to our winners! You made this month shine.'] });
         sections.push({ title: 'Competition winners', groups: [{
             head: range,
             rows: winners.length ? winners.map(w => [w.label, w.top.length ? `${w.top[0].name} (${fmt(w.top[0].value)})` : 'no data']) : [['', 'The competition numbers could not be read - open Member Overview once and try again.']],
@@ -123,7 +123,7 @@ async function buildNewsletter() {
         if (todo.length) groups.push({ head: 'Up next', rows: todo.map(([perk, level, respect, date]) => [`${perk} ${fpRoman(level)}`, `needs ${nlNum(respect)} respect, planned ${fpDateLabel(date)}`]) });
         sections.push({ title: 'Respect and perks', groups });
 
-        sections.push({ title: 'Closing', raw: true, lines: ['^^'] });
+        sections.push({ title: 'Closing', raw: true, lines: ['Lots of Love', 'Crea <3'] });
         renderNewsletter(sections, `Newsletter - ${moFmt(period.start)} to ${moFmt(period.end)}`);
         st.textContent = '';
     } catch (e) { st.className = 'status err'; st.textContent = e.message; }
