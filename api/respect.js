@@ -779,6 +779,60 @@ module.exports = async function handler(req, res) {
             return res.status(200).json({ ocWeeklyAvg, ocDays: ocDays.length, warBonus, warScores, scorePerHit, scoreSampleCount, kPeace, kWar, peaceSample, warSample, rosterCount, hitsPerBarAuto });
         }
 
+        // Diagnostic: lines up what Torn's two sources say about the same recent window — incoming attacks
+        // from the attack log (by outcome, with its own respect_loss if it has one) against the negative
+        // numbers the news feed gave, grouped by the verb used. Shows whether Hospitalized / Mugged / Left
+        // hits against us carry a loss and whether the news feed captures them. Changes nothing.
+        if (action === 'loss-probe') {
+            const now = Math.floor(Date.now() / 1000);
+            const days = Math.min(7, Math.max(1, Number(req.body.days) || 2));
+            const from = now - days * 86400;
+            const out = { days };
+            const round = n => Math.round(n * 100) / 100;
+            try {
+                const r = await tornFetch(`https://api.torn.com/v2/faction/attacks?from=${from}&to=${now}&sort=DESC&limit=100&key=${encodeURIComponent(key)}`, { headers: { accept: 'application/json' } });
+                const d = await r.json();
+                if (d.error) out.attacksError = d.error.error;
+                else {
+                    const list = Array.isArray(d.attacks) ? d.attacks : Object.values(d.attacks || {});
+                    const isUs = (side, legacy) => String(side?.faction?.id ?? legacy ?? '') === String(factionId);
+                    const incoming = list.filter(a => isUs(a.defender, a.defender_faction) && !isUs(a.attacker, a.attacker_faction));
+                    const byResult = {};
+                    for (const a of incoming) {
+                        const k = a.result || '?';
+                        const b = byResult[k] || (byResult[k] = { count: 0, withLoss: 0, lossSum: 0 });
+                        b.count++;
+                        const l = Number(a.respect_loss);
+                        if (Number.isFinite(l) && l > 0) { b.withLoss++; b.lossSum = round(b.lossSum + l); }
+                    }
+                    const times = list.map(a => a.ended || a.started || a.timestamp_ended).filter(Boolean);
+                    out.attacks = { fetched: list.length, incoming: incoming.length, byResult, hasRespectLossField: list.some(a => 'respect_loss' in a), fields: list[0] ? Object.keys(list[0]) : [], from: times.length ? Math.min(...times) : null, to: times.length ? Math.max(...times) : null };
+                }
+            } catch (e) { out.attacksError = e.message; }
+            try {
+                const r = await tornFetch(`https://api.torn.com/faction/?selections=attacknews&from=${from}&to=${now}&key=${encodeURIComponent(key)}`);
+                const d = await r.json();
+                if (d.error) out.newsError = d.error.error;
+                else {
+                    const entries = Object.values(d.attacknews || {});
+                    const byVerb = {};
+                    let negSum = 0, neg = 0, noNumber = [];
+                    for (const e of entries) {
+                        const text = String(e.news || '').replace(/<[^>]*>/g, '').trim();
+                        const m = NEWS_RESPECT_RE.exec(text);
+                        if (!m) { if (noNumber.length < 5) noNumber.push(text); continue; }
+                        const v = Number(m[1]);
+                        if (v >= 0) continue;
+                        neg++; negSum += v;
+                        const verb = (text.match(/^\S+\s+(\S+(?:\s+but\s+lost)?)/) || [])[1] || '?';
+                        byVerb[verb] = (byVerb[verb] || 0) + 1;
+                    }
+                    out.news = { entries: entries.length, negativeCount: neg, negativeSum: round(negSum), negativeByVerb: byVerb, sampleWithoutNumber: noNumber };
+                }
+            } catch (e) { out.newsError = e.message; }
+            return res.status(200).json(out);
+        }
+
         if (action === 'sync-chains') {
             const result = await syncChains(key, factionId);
             if (result.error) return res.status(403).json({ error: result.error });

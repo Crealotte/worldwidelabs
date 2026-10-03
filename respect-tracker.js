@@ -457,6 +457,25 @@ $('rg-deep-sync-losses').addEventListener('click', async () => {
     }
 });
 
+// Read-only comparison of Torn's attack log and news feed for hits against us (see loss-probe in
+// api/respect.js) — shown as plain text so it can be copied back as-is.
+$('rg-loss-probe').addEventListener('click', async () => {
+    const btn = $('rg-loss-probe');
+    const st = $('rg-sync-status');
+    btn.disabled = true; btn.textContent = 'Checking…';
+    try {
+        const result = await respectFetch({ action: 'loss-probe', days: 2 });
+        if (result.error) throw new Error(result.error);
+        st.className = 'status ok';
+        st.style.whiteSpace = 'pre-wrap';
+        st.textContent = JSON.stringify(result, null, 1);
+    } catch (e) {
+        st.className = 'status err'; st.textContent = e.message;
+    } finally {
+        btn.disabled = false; btn.textContent = 'Check hits against us';
+    }
+});
+
 $('rg-reset-hits').addEventListener('click', async () => {
     if (!confirm('Reset Hits tracking? This clears everything counted before the chain-overlap fix (which may have been double-counted with Chains) and rebuilds from scratch. Already-saved OC, Chains, and War numbers are untouched.')) return;
     const btn = $('rg-reset-hits');
