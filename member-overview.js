@@ -20,7 +20,7 @@ let moPeriodId = null; // which option of the period dropdown is picked
 let moCustomWeeks = 4;
 let moDates = null; // { from, to } as YYYY-MM-DD, to = last whole day included — for matching another tool's dates
 let moPerWeek = false; // false = totals over the period, true = average per week
-let moSort = 'war';
+let moSort = { key: 'war', dir: 'desc' }; // shared sortRows/wireSort state (core.js)
 let moBusy = false;
 const MO_KEYS = [['energytrained', 'Energy trained'], ['bloodwithdrawn', 'Blood bags filled'], ['candyused', 'Candy'], ['alcoholused', 'Alcohol']]; // Energy drinks dropped per the leader's request — removing it from here also drops it from the table columns, sorting and the competitions list below, all driven off this one array
 const MO_DAY = 86400;
@@ -243,9 +243,22 @@ function renderMemberOverview() {
     if (!moData) return;
     renderPeriodBar();
     const rows = moRows();
-    const sortVal = { war: r => -r.war, chain: r => -r.chain, name: r => r.name.toLowerCase(), light: r => ({ red: 0, yellow: 1, green: 2, grey: 3 })[r.light], active: r => -(r.lastAction || 0) };
-    MO_KEYS.forEach(([k]) => { sortVal[k] = r => -(r.used[k] ?? -1); });
-    const sorted = rows.slice().sort((a, b) => { const x = sortVal[moSort](a), y = sortVal[moSort](b); return x < y ? -1 : x > y ? 1 : 0; });
+    // Every column is clickable (shared helper in core.js — click again to flip direction). Values are the
+    // natural ones (bigger = more), so the first click on a number column shows the biggest first; the
+    // traffic light is stored negated so that first click lists "needs a push" (red) at the top.
+    const warList = moWarsInPeriod();
+    const effTier = r => r.tier || moData.autoTier?.[r.id]?.tier || '';
+    const moAccessors = {
+        light: r => -({ red: 0, yellow: 1, green: 2, grey: 3 })[r.light],
+        name: r => r.name.toLowerCase(),
+        active: r => r.lastAction || 0,
+        warsok: r => (r.counted ? r.okWars / r.counted : -1),
+        tier: r => ({ high: 2, low: 1 })[effTier(r)] || 0,
+        war: r => r.war, chain: r => r.chain,
+    };
+    warList.forEach((w, i) => { moAccessors[`pw${i}`] = r => { const p = r.perWar[i]; return p && !p.notIn ? p.war : -1; }; });
+    MO_KEYS.forEach(([k]) => { moAccessors[k] = r => r.used[k] ?? -1; });
+    const sorted = sortRows(rows, moSort, moAccessors);
 
     const red = rows.filter(r => r.light === 'red');
     $('mo-summary').innerHTML = `
@@ -275,16 +288,16 @@ function renderMemberOverview() {
     $('mo-minchain').value = moData.settings.minChainHits;
     $('mo-need').value = moData.settings.needWars;
 
-    const th = (key, label) => `<th style="padding:4px 8px;cursor:pointer;white-space:nowrap;${moSort === key ? 'color:var(--reagent);' : ''}" data-sort="${key}">${label}${moSort === key ? ' ▾' : ''}</th>`;
-    const warHead = moWarsInPeriod().map(w => `<th style="padding:4px 8px;font-size:11px;white-space:nowrap;" title="${esc(w.event ? `Chain event: ${w.opponent}` : `vs ${w.opponent}`)}">${w.event ? '⛓ ' : ''}${esc(w.opponent.slice(0, 10))}<br><span style="color:var(--muted);">${new Date(w.end * 1000).toLocaleDateString(undefined, { day: '2-digit', month: 'short', timeZone: 'UTC' })}</span></th>`).join('');
+    const th = (key, label) => `<th style="padding:4px 8px;white-space:nowrap;" data-sort="${key}">${label}</th>`;
+    const warHead = warList.map((w, i) => `<th data-sort="pw${i}" style="padding:4px 8px;font-size:11px;white-space:nowrap;" title="${esc(w.event ? `Chain event: ${w.opponent}` : `vs ${w.opponent}`)}">${w.event ? '⛓ ' : ''}${esc(w.opponent.slice(0, 10))}<br><span style="color:var(--muted);">${new Date(w.end * 1000).toLocaleDateString(undefined, { day: '2-digit', month: 'short', timeZone: 'UTC' })}</span></th>`).join('');
     const unitLabel = moPerWeek ? 'per week' : 'in period';
     $('mo-table').innerHTML = `
         <table style="width:100%;font-size:13px;border-collapse:collapse;">
             <thead><tr style="color:var(--muted);text-align:left;">
                 ${th('light', '●')}${th('name', 'Member')}${th('active', 'Active')}
                 ${warHead}
-                <th style="padding:4px 8px;" title="Wars (of the last 5) where the war rule was met">Wars OK</th>
-                <th style="padding:4px 8px;" title="1.5m+ battle stats = ${moData.energyTarget.high} E/week, under = ${moData.energyTarget.low} E/week. Picked automatically from each member's own battle stats once they have opened the app; you can override it.">Energy tier</th>
+                <th data-sort="warsok" style="padding:4px 8px;" title="Wars (of the last 5) where the war rule was met">Wars OK</th>
+                <th data-sort="tier" style="padding:4px 8px;" title="1.5m+ battle stats = ${moData.energyTarget.high} E/week, under = ${moData.energyTarget.low} E/week. Picked automatically from each member's own battle stats once they have opened the app; you can override it.">Energy tier</th>
                 ${MO_KEYS.map(([k, l]) => th(k, `${l}<br><span style="font-size:10px;font-weight:400;">${unitLabel}</span>`)).join('')}
                 ${th('war', 'War hits')}${th('chain', 'Chain hits')}
             </tr></thead>
@@ -316,7 +329,7 @@ function renderMemberOverview() {
             </tbody>
         </table>`;
 
-    $('mo-table').querySelectorAll('[data-sort]').forEach(h => h.addEventListener('click', () => { moSort = h.dataset.sort; renderMemberOverview(); }));
+    wireSort($('mo-table'), moSort, rows, moAccessors, renderMemberOverview);
     $('mo-table').querySelectorAll('.mo-tier').forEach(s => s.addEventListener('change', async () => {
         if (s.value) moData.tiers[s.dataset.id] = s.value; else delete moData.tiers[s.dataset.id];
         const r = await moFetch({ action: 'mo-tier', id: s.dataset.id, tier: s.value });
@@ -357,6 +370,8 @@ function renderMoExtra() {
     if (el) el.textContent = n ? `⚠ ${n} chain${n === 1 ? '' : 's'} not placed yet` : '';
 }
 
+let moRegSort = { key: null, dir: 'desc' }; // null = Torn's own newest-first order
+const moRegAccessors = { id: c => Number(c.id) || 0, date: c => c.end || 0, hits: c => c.length ?? -1, placed: c => (c.target ? 1 : 0) };
 function renderMoReg() {
     const el = $('mo-extra');
     if (!el || !moReg) return;
@@ -371,8 +386,8 @@ function renderMoReg() {
     $('mo-reg-accept').style.display = pending.length ? '' : 'none';
     $('mo-reg-accept').textContent = `Accept all suggestions (${pending.length})`;
     el.innerHTML = `<div style="overflow-x:auto;"><table style="width:100%;font-size:13px;border-collapse:collapse;">
-        <thead><tr style="color:var(--muted);text-align:left;"><th style="padding:4px 8px;">Chain</th><th style="padding:4px 8px;">Date</th><th style="padding:4px 8px;">Hits</th><th style="padding:4px 8px;">Belongs to</th></tr></thead>
-        <tbody>${moReg.chains.map(c => `<tr style="border-top:1px solid var(--line);${c.target ? '' : 'background:var(--bench-2);'}">
+        <thead><tr style="color:var(--muted);text-align:left;"><th data-sort="id" style="padding:4px 8px;">Chain</th><th data-sort="date" style="padding:4px 8px;">Date</th><th data-sort="hits" style="padding:4px 8px;">Hits</th><th data-sort="placed" style="padding:4px 8px;">Belongs to</th></tr></thead>
+        <tbody>${sortRows(moReg.chains, moRegSort, moRegAccessors).map(c => `<tr style="border-top:1px solid var(--line);${c.target ? '' : 'background:var(--bench-2);'}">
             <td style="padding:4px 8px;font-family:var(--mono);"><a href="https://www.torn.com/war.php?step=chainreport&chainID=${esc(c.id)}" target="_blank" rel="noopener" style="color:var(--text);">#${esc(c.id)}</a></td>
             <td style="padding:4px 8px;color:var(--muted);white-space:nowrap;">${day(c.start)} → ${day(c.end)}</td>
             <td style="padding:4px 8px;font-family:var(--mono);">${c.length ?? '?'}</td>
@@ -381,6 +396,7 @@ function renderMoReg() {
         </tr>`).join('') || '<tr><td colspan="4" style="color:var(--muted);padding:8px;">Torn returned no completed chains.</td></tr>'}</tbody>
     </table></div>
     <div style="color:var(--muted);font-size:11px;margin-top:6px;">Shows the latest 100 chains.</div>`;
+    wireSort(el, moRegSort, moReg.chains, moRegAccessors, renderMoReg);
 
     const assign = async (chainId, target) => {
         const r = await moFetch({ action: 'mo-reg-assign', chainId, target });

@@ -5,6 +5,7 @@
 'use strict';
 
 let adoptionCache = null, adoptionCacheAt = 0; // { logins, members, discordMembers, verifyMap } — good for a few minutes
+let adoptionSort = { key: null, dir: 'desc' }; // Who's on board's clickable column sort
 
 async function fetchVerifyMap() {
     try {
@@ -51,8 +52,21 @@ async function loadAdoption(sfx = '') {
         }
         const { logins, members, discordMembers, verifyMap, userscriptMap } = data;
 
-        const sorted = members.slice().sort((a, b) =>
+        const defaultOrder = members.slice().sort((a, b) =>
             (logins[b.id]?.last || 0) - (logins[a.id]?.last || 0) || a.name.localeCompare(b.name));
+        // Every column is clickable to sort (see core.js's sortRows/wireSort); until one is clicked, it
+        // stays in the original most-recently-logged-in-first order.
+        const adoptionAccessors = {
+            name: m => m.name.toLowerCase(),
+            wwl: m => (logins[m.id] ? 1 : 0),
+            discord: m => (discordMembers ? (discordMembers[m.id] ? (discordMembers[m.id].verified ? 2 : 1) : 0) : -1),
+            exempt: m => (verifyMap[m.id]?.discordExempt ? 1 : 0),
+            intel: m => (verifyMap[m.id]?.intel ? 1 : 0),
+            cat: m => (verifyMap[m.id]?.cat ? 1 : 0),
+            userscript: m => { const at = userscriptMap[m.id] || 0; return !at ? 0 : Date.now() - at > US_STALE_MS ? 1 : 2; },
+            last: m => logins[m.id]?.last || 0,
+        };
+        const sorted = sortRows(defaultOrder, adoptionSort, adoptionAccessors);
 
         const onboard = sorted.filter(m => logins[m.id]).length;
         $('adoption-summary' + sfx).textContent = discordMembers
@@ -106,6 +120,7 @@ async function loadAdoption(sfx = '') {
                 <td class="num" style="font-family:var(--mono);font-size:12px;">${when}</td>
             </tr>`;
         }).join('');
+        wireSort($('adoption-body' + sfx).closest('table'), adoptionSort, members, adoptionAccessors, () => loadAdoption(sfx));
         $('adoption-body' + sfx).querySelectorAll('.adopt-verify').forEach(el => el.addEventListener('click', async () => {
             const id = el.dataset.id, tool = el.dataset.tool, next = !(adoptionCache?.verifyMap?.[id]?.[tool]);
             el.style.pointerEvents = 'none';
@@ -135,13 +150,21 @@ async function loadAdoption(sfx = '') {
         not_found: '<span style="color:var(--muted)">○ not found</span>',
     };
 
+    // One independent sort state per shared faction (each faction's table sorts on its own).
+    const sharedSort = {};
+    const sharedAccessors = {
+        name: m => m.name.toLowerCase(),
+        wwl: m => (m.onWWLabs ? 1 : 0),
+        discord: m => (m.discord === 'verified' ? 2 : m.discord === 'in_server' ? 1 : m.discord === null ? -1 : 0),
+    };
     function renderSharedFactionTable(data) {
         const onboard = data.members.filter(m => m.onWWLabs).length;
         const hasDiscord = data.members.some(m => m.discord !== null);
         const summary = hasDiscord
             ? `${onboard} of ${data.members.length} on WWLabs · ${data.members.filter(m => m.discord === 'verified').length} of ${data.members.length} verified in Discord.`
             : `${onboard} of ${data.members.length} on WWLabs.`;
-        const rows = data.members.map(m => `
+        const state = sharedSort[data.factionName] || (sharedSort[data.factionName] = { key: null, dir: 'desc' });
+        const rows = sortRows(data.members, state, sharedAccessors).map(m => `
             <tr${m.onWWLabs ? '' : ' style="opacity:.5"'}>
                 <td>${esc(m.name)} [${m.id}]</td>
                 <td>${m.onWWLabs ? '<span style="color:var(--reagent)">● on board</span>' : '<span style="color:var(--muted)">○ not yet</span>'}</td>
@@ -149,11 +172,11 @@ async function loadAdoption(sfx = '') {
             </tr>`).join('');
         const ago = Math.round((Date.now() - data.updatedAt) / 60000);
         return `
-            <div style="border-top:1px solid var(--line);padding-top:14px;margin-top:14px;">
+            <div class="sf-block" data-fac="${esc(data.factionName)}" style="border-top:1px solid var(--line);padding-top:14px;margin-top:14px;">
                 <h4 style="margin:0 0 4px;font-size:14px;">${esc(data.factionName)}</h4>
                 <p style="color:var(--muted);font-size:12px;margin:0 0 8px;">${summary} · updated ${ago < 1 ? 'just now' : ago + 'm ago'}</p>
                 <div class="table-scroll" style="max-height:280px;overflow-y:auto;">
-                    <table><thead><tr><th>Member</th><th>WWLabs</th><th>Discord</th></tr></thead>
+                    <table><thead><tr><th data-sort="name">Member</th><th data-sort="wwl">WWLabs</th><th data-sort="discord">Discord</th></tr></thead>
                     <tbody>${rows}</tbody></table>
                 </div>
             </div>`;
@@ -175,7 +198,14 @@ async function loadAdoption(sfx = '') {
 
             if (data.others?.length) {
                 $('shared-factions-panel').style.display = 'block';
-                $('shared-factions-list').innerHTML = data.others.map(renderSharedFactionTable).join('');
+                const paintShared = () => {
+                    $('shared-factions-list').innerHTML = data.others.map(renderSharedFactionTable).join('');
+                    $('shared-factions-list').querySelectorAll('.sf-block').forEach(block => {
+                        const f = data.others.find(o => o.factionName === block.dataset.fac);
+                        if (f) wireSort(block, sharedSort[f.factionName], f.members, sharedAccessors, paintShared);
+                    });
+                };
+                paintShared();
             } else {
                 $('shared-factions-panel').style.display = 'none';
             }

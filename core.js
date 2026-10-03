@@ -69,8 +69,12 @@
             const key = th.dataset.sort;
             th.style.cursor = 'pointer';
             th.style.userSelect = 'none';
-            if (key === state.key) th.innerHTML += state.dir === 'asc' ? ' ▲' : ' ▼';
-            th.addEventListener('click', () => {
+            // Idempotent, so it also works on a header that is static HTML and never rebuilt (e.g. Who's on
+            // board): the label is remembered once, the arrow is re-added fresh each call, and the click
+            // handler is replaced instead of stacked.
+            if (th.dataset.baseHtml === undefined) th.dataset.baseHtml = th.innerHTML;
+            th.innerHTML = th.dataset.baseHtml + (key === state.key ? (state.dir === 'asc' ? ' ▲' : ' ▼') : '');
+            th.onclick = () => {
                 if (state.key === key) {
                     state.dir = state.dir === 'asc' ? 'desc' : 'asc';
                 } else {
@@ -79,7 +83,7 @@
                     state.dir = typeof sample === 'string' ? 'asc' : 'desc';
                 }
                 rerender();
-            });
+            };
         });
     }
 

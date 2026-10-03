@@ -14,6 +14,8 @@ async function wrFetch(body) {
     try { return JSON.parse(text); } catch (e) { return { error: `Server problem (${res.status})` }; }
 }
 
+const wrPaySort = {}; // reportId -> { key, dir } — each report's pay-details table sorts on its own
+const wrPayAccessors = { name: m => (m.name || '').toLowerCase(), warHits: m => m.warHits ?? 0, overflowHits: m => m.overflowHits ?? 0, penalty: m => m.penalty || 0, net: m => m.net || 0 };
 let wrLastResult = null; // kept so the add-report panel can re-render the list after saving without a full reload
 let wrMatchingId = null; // the report currently showing its inline "match to a war" picker, or null
 
@@ -45,12 +47,7 @@ function renderWarReports(r) {
         const details = rows.length ? `
             <details style="margin-top:8px;">
                 <summary class="av-sum"><span style="font-size:13px;">Pay details${r.leader ? ` (${rows.length} members · ${wrMoney(x.totalPaid)} paid)` : ''}</span></summary>
-                <div class="table-scroll" style="max-height:340px;overflow:auto;margin-top:6px;"><table style="width:100%;font-size:13px;border-collapse:collapse;">
-                    <thead><tr style="color:var(--muted);text-align:left;"><th style="padding:4px 8px;">Member</th><th style="padding:4px 8px;">War hits</th><th style="padding:4px 8px;">Chain hits</th><th style="padding:4px 8px;">Penalty</th><th style="padding:4px 8px;text-align:right;">Paid</th></tr></thead>
-                    <tbody>${rows.slice().sort((a, b) => (b.net || 0) - (a.net || 0)).map(m => `<tr style="border-top:1px solid var(--line);">
-                        <td style="padding:4px 8px;">${esc(m.name)}</td><td style="padding:4px 8px;font-family:var(--mono);">${m.warHits ?? 0}</td><td style="padding:4px 8px;font-family:var(--mono);">${m.overflowHits ?? 0}</td>
-                        <td style="padding:4px 8px;font-family:var(--mono);">${m.penalty ? wrMoney(m.penalty) : '—'}</td><td style="padding:4px 8px;font-family:var(--mono);text-align:right;font-weight:700;color:var(--reagent);">${wrMoney(m.net)}</td></tr>`).join('')}</tbody>
-                </table></div>
+                <div class="wr-pay" data-id="${esc(x.id)}"></div>
             </details>`
             : (r.leader ? '' : '<div style="color:var(--muted);font-size:12px;margin-top:8px;">You weren\'t paid in this war.</div>');
         const removeBtn = r.leader ? `<button class="ghost small wr-remove" data-id="${esc(x.id)}" data-opponent="${esc(x.opponent)}" title="Remove from this list — the receipt itself and its link are kept, so pasting the link back in (above) brings it right back" style="color:var(--danger);">🗑</button>` : '';
@@ -76,6 +73,24 @@ function renderWarReports(r) {
             ${details}
         </div>`;
     }).join('');
+    // Each report's pay table fills and sorts on its own (its own sort state, repainting only that table
+    // so a report you've opened stays open while you click a column).
+    $('wr-list').querySelectorAll('.wr-pay').forEach(block => {
+        const rep = r.reports.find(x => String(x.id) === block.dataset.id);
+        const rows = rep?.rows || [];
+        if (!rows.length) return;
+        const state = wrPaySort[block.dataset.id] || (wrPaySort[block.dataset.id] = { key: 'net', dir: 'desc' });
+        const paint = () => {
+            block.innerHTML = `<div class="table-scroll" style="max-height:340px;overflow:auto;margin-top:6px;"><table style="width:100%;font-size:13px;border-collapse:collapse;">
+                <thead><tr style="color:var(--muted);text-align:left;"><th data-sort="name" style="padding:4px 8px;">Member</th><th data-sort="warHits" style="padding:4px 8px;">War hits</th><th data-sort="overflowHits" style="padding:4px 8px;">Chain hits</th><th data-sort="penalty" style="padding:4px 8px;">Penalty</th><th data-sort="net" style="padding:4px 8px;text-align:right;">Paid</th></tr></thead>
+                <tbody>${sortRows(rows, state, wrPayAccessors).map(m => `<tr style="border-top:1px solid var(--line);">
+                    <td style="padding:4px 8px;">${esc(m.name)}</td><td style="padding:4px 8px;font-family:var(--mono);">${m.warHits ?? 0}</td><td style="padding:4px 8px;font-family:var(--mono);">${m.overflowHits ?? 0}</td>
+                    <td style="padding:4px 8px;font-family:var(--mono);">${m.penalty ? wrMoney(m.penalty) : '—'}</td><td style="padding:4px 8px;font-family:var(--mono);text-align:right;font-weight:700;color:var(--reagent);">${wrMoney(m.net)}</td></tr>`).join('')}</tbody>
+            </table></div>`;
+            wireSort(block, state, rows, wrPayAccessors, paint);
+        };
+        paint();
+    });
     if (r.leader) {
         wrWireAddPanel();
         $('wr-list').querySelectorAll('.wr-restock').forEach(cb => cb.addEventListener('change', () => wrToggleRestocked(cb)));
