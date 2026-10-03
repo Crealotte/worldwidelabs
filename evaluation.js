@@ -109,7 +109,8 @@ function evMessage(r) {
         const skipped = r.perWar.filter(x => x?.skipped).length;
         if (skipped) lines.push(`  (${skipped} war${skipped === 1 ? '' : 's'} you told us beforehand you could not make ${skipped === 1 ? 'is' : 'are'} not counted against you.)`);
     }
-    // training
+    // training (a blank line after the war part, so the message is not one block)
+    lines.push('');
     if (r.pct === null) lines.push(r.tierEff ? 'Training: I could not read your trained energy for this period.' : 'Training: your energy tier is not known yet.');
     else lines.push(`Training: you trained ${evNum(r.trained)} E in this period; your target is ${evNum(r.energyNeed)} E (${Math.round(r.pct * 100)}%).${r.trainBelow ? ' That is below what we ask.' : ' That is fine.'}`);
     // earlier
