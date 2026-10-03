@@ -107,8 +107,9 @@ function evMessage(r) {
     if (r.light === 'grey') lines.push('War participation: you have not been here for enough wars to judge yet.');
     else {
         lines.push(`War participation: you met the war rule (${s.minWarHits} war hits, or ${s.minChainHits} chain hits, in a war) in ${r.okWars} of the last ${r.counted} wars you were here for — we need ${r.need}.${r.warBelow ? ' That is below what we ask.' : ' That is fine.'}`);
-        const per = r.perWar.map((x, i) => x && !x.notIn ? `${wars[i].event ? 'chain event' : 'vs'} ${wars[i].opponent}: ${x.war} war${x.chain ? ` + ${x.chain} chain` : ''} hits${x.skipped ? ' (you told us beforehand you could not make it, so it is not held against you)' : ''}` : null).filter(Boolean);
-        if (per.length) lines.push(`  ${per.join(' · ')}`);
+        // one war per line, so it reads as a short list instead of a wall of numbers
+        const per = r.perWar.map((x, i) => x && !x.notIn ? `- ${wars[i].event ? 'Chain event' : 'War vs'} ${wars[i].opponent}: ${x.war} war hits${x.chain ? `, ${x.chain} chain hits` : ''} — ${x.ok ? 'met' : x.skipped ? 'not met, but you told us beforehand so it is not held against you' : 'not met'}` : null).filter(Boolean);
+        if (per.length) lines.push(...per);
     }
     // training
     if (r.pct === null) lines.push(r.tierEff ? 'Training: I could not read your trained energy for this period.' : 'Training: your energy tier is not known yet.');
