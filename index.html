@@ -581,6 +581,7 @@
                         <a class="nav-item" data-page="feedback-edit" href="/feedback-edit">Feedback form</a>
                         <a class="nav-item" data-page="war-payout" href="/war-payout">War Payout</a>
                         <a class="nav-item" data-page="effort-calc" href="/effort-calc">Effort Calculator</a>
+                        <a class="nav-item" data-page="evaluation" href="/evaluation">Monthly evaluation</a>
                         <a class="nav-item" data-page="newsletter" href="/newsletter">Newsletter</a>
                         <a class="nav-item" data-page="leader-settings" href="/leader-settings">Leader settings</a>
                         <a class="nav-item" data-page="mentoring-admin" href="/mentoring-admin">Mentoring admin</a>
@@ -1722,6 +1723,37 @@
             </div>
         </section>
 
+        <section class="page" id="page-evaluation">
+            <div class="lab-label">WWL·31 / leaders</div>
+            <h2>Monthly evaluation</h2>
+            <p class="pagedesc">The monthly check-in: every member against the two requirements (the war rule and training), next to what they were told before, with a ready-to-send message asking their plans for whoever is below. Click a member for their message and history.</p>
+            <div class="status" id="ev-status"></div>
+            <div class="panel" id="ev-locked" style="display:none;"><p style="color:var(--muted);margin:0;">🔒 Leaders and Co-leaders only.</p></div>
+            <div id="ev-editor" style="display:none;">
+                <div class="panel">
+                    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:10px;">
+                        <select id="ev-period" style="width:auto;max-width:100%;font-size:13px;"></select>
+                        <label style="display:inline-flex;gap:6px;align-items:center;font-size:13px;"><input type="checkbox" id="ev-below" style="width:auto;"> Only members below requirement</label>
+                        <button class="ghost small" id="ev-refresh">Reload</button>
+                        <button class="small" id="ev-copy-all">Copy all messages</button>
+                    </div>
+                    <div id="ev-summary" style="display:flex;gap:24px;flex-wrap:wrap;margin-bottom:10px;"></div>
+                    <div id="ev-notes" style="color:var(--muted);font-size:12px;margin-bottom:10px;"></div>
+                    <div class="table-scroll" style="overflow:auto;max-height:75vh;"><div id="ev-table"></div></div>
+                </div>
+                <div class="panel">
+                    <details>
+                        <summary style="cursor:pointer;font-weight:600;">Import an earlier evaluation report</summary>
+                        <p style="color:var(--muted);font-size:12px;">Paste a report that lists each member with a "Verdict:" line (like the one from 6 September) and the date it was made. Each verdict is added to that member's log (matched by name), so you can see who already got a warning. Importing the same report again replaces its own entries instead of doubling them. Members who have since left keep their history too.</p>
+                        <div style="display:flex;gap:8px;align-items:center;margin-bottom:6px;"><label for="ev-import-date" style="font-size:13px;">Date of the report</label><input type="date" id="ev-import-date" style="width:auto;"></div>
+                        <textarea id="ev-import-text" rows="8" style="width:100%;font-size:12px;" placeholder="Paste the report here…"></textarea>
+                        <button class="small" id="ev-import-btn" style="margin-top:6px;">Import</button>
+                        <div class="status" id="ev-import-status"></div>
+                    </details>
+                </div>
+            </div>
+        </section>
+
         <section class="page" id="page-newsletter">
             <div class="lab-label">WWL·25 / leaders &amp; council</div>
             <h2>Newsletter</h2>
@@ -2396,6 +2428,7 @@
 <script src="foreign-stock-tracker.js"></script>
 <script src="respect-tracker.js"></script>
 <script src="effort-calculator.js"></script>
+<script src="evaluation.js"></script>
 <script src="crimes-guide.js"></script>
 <script src="war-payout-tracker.js"></script>
 <script src="war-badges-tracker.js"></script>

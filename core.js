@@ -391,6 +391,7 @@
         if (page === 'respect-edit') loadRespectEditor();
         if (page === 'war-payout') loadWarPayout();
         if (page === 'effort-calc') loadEffortCalc();
+        if (page === 'evaluation') loadEvaluation();
         if (page === 'war-badges') loadWarBadges();
         if (page === 'availability' || page === 'availability-leaders') loadAvailability();
         if (page === 'energy') loadGymPlanner();

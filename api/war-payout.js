@@ -29,6 +29,7 @@ const { fetchWarHits, sleep, fetchLiveChainHits, isRateLimited } = require('../l
 const { fetchWarBadgeStats } = require('../lib/warBadgeStats');
 const { tornToDiscordIds, resolveDiscordIds, discordStatus } = require('../lib/discordMap');
 const { moHandle, moMe, loadExtra, isEventId } = require('../lib/memberOverview');
+const { evHandle } = require('../lib/evaluation');
 const { gymHandle } = require('../lib/gymStats');
 const { warReports } = require('../lib/warReports');
 const { sendBugReport, bugsHandle, suggestHandle } = require('../lib/bugReport');
@@ -867,6 +868,7 @@ module.exports = async function handler(req, res) {
 
         // Member Overview (who follows the rules / needs a push) — logic in lib/memberOverview.js.
         if (action.startsWith('mo-')) return res.status(200).json(await moHandle(action, req.body, { redis, key, factionId }));
+        if (action.startsWith('ev-')) return res.status(200).json(await evHandle(action, req.body, { redis, factionId }));
 
         // The leader's side of manual verification (see 'verify-mine' above): the whole faction's Intel/CAT
         // status, and ticking one member's for either tool.
