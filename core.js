@@ -441,7 +441,7 @@
             if (marker) t.style.setProperty('--stk1', `${first.offsetWidth}px`);
         });
     }
-    const queue = () => { if (!queued) { queued = true; requestAnimationFrame(apply); } };
+    const queue = () => { if (!queued) { queued = true; setTimeout(apply, 60); } };
     new MutationObserver(queue).observe(document.body, { childList: true, subtree: true });
     window.addEventListener('resize', queue);
     queue();
