@@ -688,6 +688,15 @@ module.exports = async function handler(req, res) {
         // keyed by the caller's own verified playerId. Has to live ABOVE the leader-only gate below:
         // it used to sit under it, so every non-leader's check-in was rejected with a 403 (which the
         // script swallows silently) and only leaders ever showed up in the Userscript column.
+        // The caller's own userscript status for the dashboard's install/update card: when their script last checked in,
+        // which version it reported, and the newest version — two small reads, only about the caller.
+        if (action === 'script-status') {
+            const [seen, info] = await Promise.all([redis(['HGET', userscriptSeenKey(factionId), playerId]), redis(['HGET', userscriptInfoKey(factionId), playerId])]);
+            const [v, p] = info ? String(info).split('|') : [null, null];
+            let latest = null;
+            try { latest = (/@version\s+([\d.]+)/.exec(require('fs').readFileSync(require('path').join(process.cwd(), 'userscripts', 'energy-plan.user.js'), 'utf8')) || [])[1] || null; } catch (e) { /* no comparison */ }
+            return res.status(200).json({ seen: Number(seen) || 0, version: v, pda: p === 'pda', latest });
+        }
         if (action === 'script-checkin') {
             await redis(['HSET', userscriptSeenKey(factionId), playerId, String(Date.now())]);
             const ver = String(req.body.v || '').replace(/[^0-9.]/g, '').slice(0, 12);
