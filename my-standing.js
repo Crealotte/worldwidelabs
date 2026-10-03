@@ -35,9 +35,9 @@ async function loadMyStanding() {
 
         const warColor = !r.eligible ? 'var(--muted)' : r.okWars >= r.need ? 'var(--reagent)' : 'var(--danger)';
         const chips = r.wars.map(w => {
-            const color = w.unknown || w.notIn ? 'var(--muted)' : w.ok ? 'var(--reagent)' : 'var(--danger)';
-            const text = w.unknown ? '…' : w.notIn ? '—' : `${w.war}${w.chain ? `+${w.chain}` : ''}`;
-            return `<span title="${w.event ? `Chain event: ${esc(w.opponent)}` : `vs ${esc(w.opponent)}`}" style="font-family:var(--mono);font-size:12px;color:${color};margin-right:10px;">${text}</span>`;
+            const color = w.unknown || w.notIn || w.skipped ? 'var(--muted)' : w.ok ? 'var(--reagent)' : 'var(--danger)';
+            const text = w.unknown ? '…' : w.notIn ? '—' : `${w.war}${w.chain ? `+${w.chain}` : ''}${w.excused ? ' 🚫' : ''}`;
+            return `<span title="${w.event ? `Chain event: ${esc(w.opponent)}` : `vs ${esc(w.opponent)}`}${w.excused ? (w.excused.before ? ' — you said beforehand you could not make it, so it is not held against you' : ' — marked unavailable after the war started, still counted') : ''}" style="font-family:var(--mono);font-size:12px;color:${color};margin-right:10px;">${text}</span>`;
         }).join('');
         const warTile = `
             <div class="stat">

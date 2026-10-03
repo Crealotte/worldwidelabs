@@ -181,6 +181,10 @@ function moUsed(id, stat) {
     return v / (moPerWeek ? moWeeksIn(moPeriod()) : 1);
 }
 
+// Tooltip for the 🚫 shown on a war the member marked "I can't make this war" in the availability tracker.
+function moExcuseTitle(ex) {
+    return `${ex.before ? 'Said beforehand they could not make this war — not held against them' : 'Marked as unavailable AFTER the war started — still counted'}${ex.note ? `: “${ex.note}”` : ''}`;
+}
 // The war rule: a war counts for a member if they did at least `minWarHits` war hits — or, having
 // done fewer than that, at least `minChainHits` chain hits instead.
 function moWarOk(p, s) { return !!p && (p.war >= s.minWarHits || (p.war < s.minWarHits && p.chain >= s.minChainHits)); }
@@ -206,8 +210,11 @@ function moRows() {
             // competition win twice. The 3-of-5 rule (war/chain/okWars above) is unaffected, always the last 5.
             if (w.end >= period.start && w.end < period.end) { periodWar += p.war; periodChain += p.chain; }
             if (joinedBy > w.start) { p.notIn = true; return p; } // not in the faction yet
-            eligible++;
             p.ok = moWarOk(p, settings);
+            const ex = moData.excused?.[w.id]?.[m.id]; // said "I can't make this war" in the availability tracker
+            if (ex) p.excused = ex;
+            if (ex?.before && !p.ok) { p.skipped = true; return p; } // let us know beforehand — not held against them
+            eligible++;
             if (p.ok) okWars++;
             return p;
         });
@@ -306,7 +313,7 @@ function renderMemberOverview() {
                     <td style="padding:4px 8px;"><span title="${r.isNew && r.light === 'grey' ? 'Fewer than ' + moData.settings.needWars + ' wars since joining — judged on the wars they were here for' : r.light}" style="display:inline-block;width:12px;height:12px;border-radius:50%;background:${MO_LIGHT[r.light]};"></span></td>
                     <td style="padding:4px 8px;white-space:nowrap;"><a href="https://www.torn.com/profiles.php?XID=${esc(r.id)}" target="_blank" rel="noopener" style="color:var(--text);">${esc(r.name)}</a></td>
                     <td style="padding:4px 8px;color:var(--muted);white-space:nowrap;">${moAgo(r.lastAction)}</td>
-                    ${r.perWar.map(p => `<td style="padding:4px 8px;font-family:var(--mono);white-space:nowrap;${p ? `color:${p.notIn ? MO_LIGHT.grey : p.ok ? MO_LIGHT.green : MO_LIGHT.red};` : ''}" ${p?.notIn ? 'title="Not in the faction yet when this war started"' : ''}>${p ? (p.notIn ? '—' : `${p.war}${p.chain ? `<span style="color:var(--muted);">+${p.chain}</span>` : ''}`) : '…'}</td>`).join('')}
+                    ${r.perWar.map(p => `<td style="padding:4px 8px;font-family:var(--mono);white-space:nowrap;${p ? `color:${p.notIn || p.skipped ? MO_LIGHT.grey : p.ok ? MO_LIGHT.green : MO_LIGHT.red};` : ''}" ${p?.notIn ? 'title="Not in the faction yet when this war started"' : p?.excused ? `title="${esc(moExcuseTitle(p.excused))}"` : ''}>${p ? (p.notIn ? '—' : `${p.war}${p.chain ? `<span style="color:var(--muted);">+${p.chain}</span>` : ''}${p.excused ? ' 🚫' : ''}`) : '…'}</td>`).join('')}
                     <td style="padding:4px 8px;font-family:var(--mono);font-weight:700;color:${MO_LIGHT[r.light]};">${r.counted ? `${r.okWars}/${r.counted}` : '…'}</td>
                     <td style="padding:4px 8px;white-space:nowrap;">${(() => {
                         const auto = moData.autoTier?.[r.id];

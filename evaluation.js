@@ -107,7 +107,7 @@ function evMessage(r) {
     if (r.light === 'grey') lines.push('War participation: you have not been here for enough wars to judge yet.');
     else {
         lines.push(`War participation: you met the war rule (${s.minWarHits} war hits, or ${s.minChainHits} chain hits, in a war) in ${r.okWars} of the last ${r.counted} wars you were here for — we need ${r.need}.${r.warBelow ? ' That is below what we ask.' : ' That is fine.'}`);
-        const per = r.perWar.map((x, i) => x && !x.notIn ? `${wars[i].event ? 'chain event' : 'vs'} ${wars[i].opponent}: ${x.war} war${x.chain ? ` + ${x.chain} chain` : ''} hits` : null).filter(Boolean);
+        const per = r.perWar.map((x, i) => x && !x.notIn ? `${wars[i].event ? 'chain event' : 'vs'} ${wars[i].opponent}: ${x.war} war${x.chain ? ` + ${x.chain} chain` : ''} hits${x.skipped ? ' (you told us beforehand you could not make it, so it is not held against you)' : ''}` : null).filter(Boolean);
         if (per.length) lines.push(`  ${per.join(' · ')}`);
     }
     // training
@@ -170,7 +170,7 @@ function renderEvaluation() {
                 const open = evOpen.has(r.id);
                 const last = r.history[0];
                 const perWar = r.perWar.map((x, i) => !x ? '<span style="color:var(--muted);">·</span>' : x.notIn ? '<span style="color:#666;" title="not in the faction yet">–</span>'
-                    : `<span style="color:${x.ok ? MO_LIGHT.green : MO_LIGHT.red};" title="${esc(wars[i]?.opponent || '')}">${x.war}${x.chain ? `+${x.chain}` : ''}</span>`).join(' <span style="color:var(--line);">|</span> ');
+                    : `<span style="color:${x.skipped ? '#8b98a8' : x.ok ? MO_LIGHT.green : MO_LIGHT.red};" title="${esc(`${wars[i]?.opponent || ''}${x.excused ? ` — ${moExcuseTitle(x.excused)}` : ''}`)}">${x.war}${x.chain ? `+${x.chain}` : ''}${x.excused ? ' 🚫' : ''}</span>`).join(' <span style="color:var(--line);">|</span> ');
                 const [stLabel, stColor] = EV_STATUS[r.status];
                 return `
                 <tr class="ev-row" data-id="${esc(r.id)}" style="border-top:1px solid var(--line);cursor:pointer;">
