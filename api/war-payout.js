@@ -59,6 +59,7 @@ async function redis(command) {
 const restockedKey = (factionId) => `wwl:restocked-wars:${factionId}`;
 const manualVerifyKey = (factionId) => `wwl:manual-verify:${factionId}`; // hash: playerId -> { intel, cat, updatedAt } — Torn Intel / CAT have no API to check, so a leader ticks it by hand
 const userscriptSeenKey = (factionId) => `wwl:userscript-seen:${factionId}`; // hash: playerId -> last-seen epoch ms, stamped by the userscript itself (see 'script-checkin') for Who's on board
+const userscriptInfoKey = (factionId) => `wwl:userscript-info:${factionId}`; // hash: playerId -> "version|pda" (or "version|pc"), sent by the script's own check-in
 // Availability "plans": several trackers can exist at once (this weekend AND next weekend), each
 // with its own grid, entries and linked war, picked from a dropdown. 'main' is the original
 // single-tracker key from before plans existed, so an existing tracker keeps working untouched;
@@ -669,6 +670,8 @@ module.exports = async function handler(req, res) {
         // script swallows silently) and only leaders ever showed up in the Userscript column.
         if (action === 'script-checkin') {
             await redis(['HSET', userscriptSeenKey(factionId), playerId, String(Date.now())]);
+            const ver = String(req.body.v || '').replace(/[^0-9.]/g, '').slice(0, 12);
+            if (ver) await redis(['HSET', userscriptInfoKey(factionId), playerId, `${ver}|${req.body.pda ? 'pda' : 'pc'}`]);
             return res.status(200).json({ ok: true });
         }
         // Banners at the top of every page. Everyone reads the ones meant for them; leaders write them for THEIR OWN faction, and only an owner
@@ -718,6 +721,15 @@ module.exports = async function handler(req, res) {
             return res.status(200).json(await leaderTodos(key, factionId));
         }
         // The weekly energy plan, shared between the Energy planner page and the userscript in Torn.
+        if (action === 'plan-get') {
+            // Only the userscript calls this, and every version of it does — including the ones from before
+            // 'script-checkin' existed — so it also counts as a sign of life for Who's on board's Userscript column
+            // (at most one write an hour per member).
+            try {
+                const seen = Number(await redis(['HGET', userscriptSeenKey(factionId), playerId])) || 0;
+                if (Date.now() - seen > 3600000) await redis(['HSET', userscriptSeenKey(factionId), playerId, String(Date.now())]);
+            } catch (e) { /* the plan still loads */ }
+        }
         if (action.startsWith('plan-')) return res.status(200).json(await planHandle(action, req.body, { redis, playerId }));
         // Timezone map — every member reports their own timezone; everyone reads anonymous counts.
         if (action.startsWith('tz-')) return res.status(200).json(await tzHandle(action, req.body, { redis, factionId, playerId }));
@@ -897,7 +909,14 @@ module.exports = async function handler(req, res) {
             const flat = (await redis(['HGETALL', userscriptSeenKey(factionId)])) || [];
             const map = {};
             for (let i = 0; i < flat.length; i += 2) map[flat[i]] = Number(flat[i + 1]) || 0;
-            return res.status(200).json({ map });
+            // version + platform each script reported (only scripts new enough to send it), and the newest version, so
+            // Who's on board can tell "installed but an old version" from "not installed at all"
+            const infoFlat = (await redis(['HGETALL', userscriptInfoKey(factionId)])) || [];
+            const info = {};
+            for (let i = 0; i < infoFlat.length; i += 2) { const [v, p] = String(infoFlat[i + 1]).split('|'); info[infoFlat[i]] = { v, pda: p === 'pda' }; }
+            let latest = null;
+            try { latest = (/@version\s+([\d.]+)/.exec(require('fs').readFileSync(require('path').join(process.cwd(), 'userscripts', 'energy-plan.user.js'), 'utf8')) || [])[1] || null; } catch (e) { /* no comparison shown */ }
+            return res.status(200).json({ map, info, latest });
         }
 
         // This faction's own Discord destination(s) (see getDiscordPoster). Leader-only. The webhook

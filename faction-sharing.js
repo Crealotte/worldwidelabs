@@ -17,14 +17,18 @@ async function fetchVerifyMap() {
 
 // Stamped by the userscript itself (see 'script-checkin'), at most about once an hour per browser —
 // a real "has this member actually opened it recently" signal, not just "installed it once ever".
+let usInfo = {}, usLatest = null; // version/platform each script reported, and the newest script version
 async function fetchUserscriptMap() {
     try {
         const res = await fetch('/api/war-payout', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key: apiKey, action: 'userscript-get' }) });
         const data = await res.json();
-        return data.error ? {} : (data.map || {});
+        if (data.error) return {};
+        usInfo = data.info || {}; usLatest = data.latest || null;
+        return data.map || {};
     } catch (e) { return {}; }
 }
 const US_STALE_MS = 30 * 24 * 60 * 60 * 1000; // seen once but not in the last 30 days — probably uninstalled or stopped using it
+const versionLess = (a, b) => { const pa = String(a).split('.').map(Number), pb = String(b).split('.').map(Number); for (let i = 0; i < Math.max(pa.length, pb.length); i++) { const x = pa[i] || 0, y = pb[i] || 0; if (x !== y) return x < y; } return false; };
 
 // Leaders only: who in the faction has logged into WWLabs, and who hasn't yet. `sfx` picks which set of
 // elements to fill in — '' for the dashboard's own panel, '-mo' for the copy on Member Overview.
@@ -105,10 +109,14 @@ async function loadAdoption(sfx = '') {
             }
             const v = verifyMap[m.id] || {};
             const usAt = userscriptMap[m.id] || 0;
-            const usCell = !usAt ? '<span style="color:var(--muted)">○ not seen</span>'
+            const usInfoRow = usInfo[m.id];
+            const usOld = usInfoRow && usLatest && versionLess(usInfoRow.v, usLatest);
+            const usTip = usAt ? `Last seen ${new Date(usAt).toLocaleString()}${usInfoRow ? ` · script ${usInfoRow.v}${usInfoRow.pda ? ' on TornPDA' : ' on a computer'}` : ' · an older script that does not report its version'}` : 'No check-in from the script yet — it has to be installed, have a key saved in its ⚙ Settings, and a Torn page opened';
+            const usCell = !usAt ? `<span style="color:var(--muted)" title="${esc(usTip)}">○ not seen</span>`
                 : Date.now() - usAt > US_STALE_MS
-                    ? `<span style="color:var(--happy)" title="Last seen ${new Date(usAt).toLocaleDateString()}">● seen, quiet lately</span>`
-                    : '<span style="color:var(--reagent)">● installed</span>';
+                    ? `<span style="color:var(--happy)" title="${esc(usTip)}">● seen, quiet lately</span>`
+                    : usOld || !usInfoRow ? `<span style="color:var(--happy)" title="${esc(usTip)}">● installed, update needed</span>`
+                    : `<span style="color:var(--reagent)" title="${esc(usTip)}">● installed</span>`;
             return `<tr${l ? '' : ' style="opacity:.5"'}>
                 <td>${esc(m.name)} [${m.id}]</td>
                 <td>${l ? '<span style="color:var(--reagent)">● on board</span>' : '<span style="color:var(--muted)">○ not yet</span>'}</td>
