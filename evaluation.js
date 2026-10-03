@@ -77,7 +77,12 @@ function evRows() {
     const weeks = moWeeksIn(p);
     return moRows().map(r => {
         const tier = r.tier || moData.autoTier?.[r.id]?.tier || '';
-        const need = tier ? Math.round(moData.energyTarget[tier] * weeks) : null;
+        // Joined during this period (Torn only gives whole days in the faction, so this is approximate): the target
+        // counts only the time they have been here, and they get the softer approach like other new members.
+        const joinedTs = r.daysInFaction == null ? null : Math.floor(Date.now() / 1000) - r.daysInFaction * 86400;
+        const partial = joinedTs !== null && joinedTs > p.start;
+        const presentWeeks = partial ? Math.max(1 / 7, (p.end - joinedTs) / (7 * 86400)) : weeks;
+        const need = tier ? Math.round(moData.energyTarget[tier] * presentWeeks) : null;
         const trained = evEnergy?.snapshots ? (evEnergy.perMember[r.id] ?? 0) : null;
         const pct = need && trained !== null ? trained / need : null;
         const trainBelow = pct !== null && pct < 1;
@@ -86,14 +91,14 @@ function evRows() {
         const warned = history.some(h => h.kind === 'warning' || h.kind === 'probation');
         const fails = (warBelow ? 1 : 0) + (trainBelow ? 1 : 0);
         // New: has only been around for a few wars (up to the number the rule asks for), so they get a softer approach.
-        const fresh = r.counted <= moData.settings.needWars;
+        const fresh = r.counted <= moData.settings.needWars || partial;
         let status = 'ok';
         if (r.light === 'grey' && pct === null) status = 'nodata';
         else if (fails && fresh) status = 'new';
         else if (fails === 1) status = 'improve';
         else if (fails === 2) status = 'risk';
         const severity = { ok: 0, nodata: 1, new: 1.5, improve: 2, risk: 3 }[status] + (fails && warned ? 0.5 : 0);
-        return { ...r, fresh, tierEff: tier, energyNeed: need, trained, pct, trainBelow, warBelow, history, warned, fails, status, severity, weekly: trained === null ? null : trained / weeks };
+        return { ...r, fresh, partial, tierEff: tier, energyNeed: need, trained, pct, trainBelow, warBelow, history, warned, fails, status, severity, weekly: trained === null ? null : trained / presentWeeks };
     });
 }
 
@@ -120,7 +125,7 @@ function evMessage(r) {
     // training (a blank line after the war part, so the message is not one block)
     lines.push('');
     if (r.pct === null) lines.push(r.tierEff ? 'Training: I could not read your trained energy for this period.' : 'Training: your energy tier is not known yet.');
-    else lines.push(`Training: you trained ${evNum(r.trained)} E in this period; your target is ${evNum(r.energyNeed)} E (${Math.round(r.pct * 100)}%).${r.trainBelow ? (soft ? ' You are still settling in, so this is just so you know what we are aiming for.' : ' That is below what we ask.') : ' That is fine.'}`);
+    else lines.push(`Training: you trained ${evNum(r.trained)} E in this period; your target is ${evNum(r.energyNeed)} E${r.partial ? ` (it only counts the time you have been with us this period, about ${r.daysInFaction} days)` : ""} (${Math.round(r.pct * 100)}%).${r.trainBelow ? (soft ? ' You are still settling in, so this is just so you know what we are aiming for.' : ' That is below what we ask.') : ' That is fine.'}`);
     // earlier
     const prev = r.history.find(h => h.kind === 'warning' || h.kind === 'probation' || h.kind === 'excused');
     if (prev) lines.push('', `Earlier: on ${evDate(prev.date)} this was noted for you — ${prev.verdict || EV_KIND_LABEL[prev.kind]}${prev.note && prev.source === 'manual' ? ` (${prev.note})` : ''}.`);
