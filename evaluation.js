@@ -90,7 +90,7 @@ function evRows() {
         else if (fails === 1) status = 'improve';
         else if (fails === 2) status = 'risk';
         const severity = { ok: 0, nodata: 1, improve: 2, risk: 3 }[status] + (fails && warned ? 0.5 : 0);
-        return { ...r, tierEff: tier, need, trained, pct, trainBelow, warBelow, history, warned, fails, status, severity, weekly: trained === null ? null : trained / weeks };
+        return { ...r, tierEff: tier, energyNeed: need, trained, pct, trainBelow, warBelow, history, warned, fails, status, severity, weekly: trained === null ? null : trained / weeks };
     });
 }
 
@@ -112,7 +112,7 @@ function evMessage(r) {
     }
     // training
     if (r.pct === null) lines.push(r.tierEff ? 'Training: I could not read your trained energy for this period.' : 'Training: your energy tier is not known yet.');
-    else lines.push(`Training: you trained ${evNum(r.trained)} E in this period; your target is ${evNum(r.need)} E (${Math.round(r.pct * 100)}%).${r.trainBelow ? ' That is below what we ask.' : ' That is fine.'}`);
+    else lines.push(`Training: you trained ${evNum(r.trained)} E in this period; your target is ${evNum(r.energyNeed)} E (${Math.round(r.pct * 100)}%).${r.trainBelow ? ' That is below what we ask.' : ' That is fine.'}`);
     // earlier
     const prev = r.history.find(h => h.kind === 'warning' || h.kind === 'probation' || h.kind === 'excused');
     if (prev) lines.push('', `Earlier: on ${evDate(prev.date)} this was noted for you — ${prev.verdict || EV_KIND_LABEL[prev.kind]}${prev.note && prev.source === 'manual' ? ` (${prev.note})` : ''}.`);
@@ -177,7 +177,7 @@ function renderEvaluation() {
                     <td style="padding:6px 8px;white-space:nowrap;"><span style="color:var(--muted);">${open ? '▾' : '▸'}</span> ${esc(r.name)}</td>
                     <td style="padding:6px 8px;white-space:nowrap;font-family:var(--mono);color:${MO_LIGHT[r.light]};">${dot(MO_LIGHT[r.light])}${r.counted ? `${r.okWars}/${r.counted} (need ${r.need})` : 'new'}</td>
                     <td style="padding:6px 8px;white-space:nowrap;font-family:var(--mono);">${perWar}</td>
-                    <td style="padding:6px 8px;white-space:nowrap;font-family:var(--mono);color:${r.pct === null ? 'var(--muted)' : r.trainBelow ? MO_LIGHT.red : MO_LIGHT.green};">${r.pct === null ? (r.tierEff ? '…' : 'no tier') : `${evNum(r.trained)} / ${evNum(r.need)} (${Math.round(r.pct * 100)}%)`}</td>
+                    <td style="padding:6px 8px;white-space:nowrap;font-family:var(--mono);color:${r.pct === null ? 'var(--muted)' : r.trainBelow ? MO_LIGHT.red : MO_LIGHT.green};">${r.pct === null ? (r.tierEff ? '…' : 'no tier') : `${evNum(r.trained)} / ${evNum(r.energyNeed)} (${Math.round(r.pct * 100)}%)`}</td>
                     <td style="padding:6px 8px;white-space:nowrap;color:${stColor};font-weight:600;">${stLabel}${r.fails && r.warned ? ' <span title="Below requirement and has an earlier warning/probation" style="color:var(--danger);">· repeat</span>' : ''}</td>
                     <td style="padding:6px 8px;white-space:nowrap;">${last ? `<span style="color:${EV_KIND_COLOR[last.kind]};">${esc(EV_KIND_LABEL[last.kind])}</span> <span style="color:var(--muted);">${esc(evDate(last.date))}${r.history.length > 1 ? ` · ${r.history.length} entries` : ''}</span>` : '<span style="color:var(--muted);">—</span>'}</td>
                 </tr>
