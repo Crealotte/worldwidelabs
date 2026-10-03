@@ -472,12 +472,24 @@ async function auditWarBonus(key, factionId, apply) {
 //     is being replaced by attacknews's own exact computed loss figure (see syncLosses below).
 async function processAttacksPageAsync(attacks, factionId, daily, chainDaily, windows = []) {
     let synced = 0, dailyChanged = false, oldestSeen = null;
+    const own = [];
     for (const [attackId, attack] of Object.entries(attacks)) {
         const ts = attack.timestamp_ended || attack.timestamp_started;
         if (ts && (oldestSeen === null || ts < oldestSeen)) oldestSeen = ts;
-        if (String(attack.attacker_faction) !== factionId) continue; // not our own outgoing attack
-        const added = await redis(['SADD', hitsSeenKey(factionId), attackId]);
-        if (added !== 1) continue; // already counted
+        if (String(attack.attacker_faction) === factionId) own.push([attackId, attack, ts]); // only our own outgoing attacks
+    }
+    // Which of these were already counted: ONE command for the whole page (SMISMEMBER), and one more to remember the
+    // new ones (SADD with every id) — instead of a SADD per attack, which cost a database command for every single
+    // hit (a page is up to ~1000) and was one of the biggest sources of requests against the monthly allowance.
+    const fresh = [];
+    for (let i = 0; i < own.length; i += 500) {
+        const chunk = own.slice(i, i + 500);
+        const known = await redis(['SMISMEMBER', hitsSeenKey(factionId), ...chunk.map(c => c[0])]);
+        const isNew = chunk.filter((c, j) => !known[j]);
+        if (isNew.length) await redis(['SADD', hitsSeenKey(factionId), ...isNew.map(c => c[0])]);
+        fresh.push(...isNew);
+    }
+    for (const [, attack, ts] of fresh) {
         const respect = Number(attack.respect ?? attack.respect_gain ?? 0);
         if (!respect) continue; // a loss gives 0 respect — nothing to add
 
