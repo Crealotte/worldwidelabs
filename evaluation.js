@@ -85,39 +85,49 @@ function evRows() {
         const history = (evLog[evKey(r.name)] || []).slice().sort((a, b) => b.date.localeCompare(a.date));
         const warned = history.some(h => h.kind === 'warning' || h.kind === 'probation');
         const fails = (warBelow ? 1 : 0) + (trainBelow ? 1 : 0);
+        // New: has only been around for a few wars (up to the number the rule asks for), so they get a softer approach.
+        const fresh = r.counted <= moData.settings.needWars;
         let status = 'ok';
         if (r.light === 'grey' && pct === null) status = 'nodata';
+        else if (fails && fresh) status = 'new';
         else if (fails === 1) status = 'improve';
         else if (fails === 2) status = 'risk';
-        const severity = { ok: 0, nodata: 1, improve: 2, risk: 3 }[status] + (fails && warned ? 0.5 : 0);
-        return { ...r, tierEff: tier, energyNeed: need, trained, pct, trainBelow, warBelow, history, warned, fails, status, severity, weekly: trained === null ? null : trained / weeks };
+        const severity = { ok: 0, nodata: 1, new: 1.5, improve: 2, risk: 3 }[status] + (fails && warned ? 0.5 : 0);
+        return { ...r, fresh, tierEff: tier, energyNeed: need, trained, pct, trainBelow, warBelow, history, warned, fails, status, severity, weekly: trained === null ? null : trained / weeks };
     });
 }
 
 const EV_STATUS = {
-    ok: ['On track', '#35d99b'], improve: ['Needs improvement', '#f0b432'], risk: ['At risk', '#e05555'], nodata: ['Not enough data yet', '#8b98a8'],
+    ok: ['On track', '#35d99b'], improve: ['Needs improvement', '#f0b432'], risk: ['At risk', '#e05555'], nodata: ['Not enough data yet', '#8b98a8'], new: ['New — settling in', '#58a6ff'],
 };
 
 function evMessage(r) {
     const p = evPeriod();
     const s = moData.settings;
+    const soft = r.fresh && r.fails; // new member (only a few wars so far) below requirement: softer wording
     const lines = [`Hi ${r.name},`, '', `This is our monthly check-in (${moFmt(p.start)} → ${moFmt(p.end - (p.id === 'now' ? 0 : 86400))}).`, ''];
     // war
-    if (r.light === 'grey') lines.push('War participation: you have not been here for enough wars to judge yet.');
-    else {
+    if (r.light === 'grey') lines.push('War participation: you have not been with us for enough wars to judge yet — no worries, take your time to settle in.');
+    else if (soft && r.warBelow) {
+        lines.push(`War participation: you have been with us for ${r.counted} war${r.counted === 1 ? '' : 's'} so far and met the war rule (${s.minWarHits} war hits, or ${s.minChainHits} chain hits, in a war) in ${r.okWars} of ${r.counted === 1 ? 'it' : 'them'}. Remember we ask you to meet it in ${s.needWars} of the last 5 wars — but you are new, so you have some more time to adjust.`);
+    } else {
         lines.push(`War participation: you met the war rule (${s.minWarHits} war hits, or ${s.minChainHits} chain hits, in a war) in ${r.okWars} of the last ${r.counted} wars you were here for — we need ${r.need}.${r.warBelow ? ' That is below what we ask.' : ' That is fine.'}`);
+    }
+    if (r.light !== 'grey') {
         const skipped = r.perWar.filter(x => x?.skipped).length;
         if (skipped) lines.push(`  (${skipped} war${skipped === 1 ? '' : 's'} you told us beforehand you could not make ${skipped === 1 ? 'is' : 'are'} not counted against you.)`);
     }
     // training (a blank line after the war part, so the message is not one block)
     lines.push('');
     if (r.pct === null) lines.push(r.tierEff ? 'Training: I could not read your trained energy for this period.' : 'Training: your energy tier is not known yet.');
-    else lines.push(`Training: you trained ${evNum(r.trained)} E in this period; your target is ${evNum(r.energyNeed)} E (${Math.round(r.pct * 100)}%).${r.trainBelow ? ' That is below what we ask.' : ' That is fine.'}`);
+    else lines.push(`Training: you trained ${evNum(r.trained)} E in this period; your target is ${evNum(r.energyNeed)} E (${Math.round(r.pct * 100)}%).${r.trainBelow ? (soft ? ' You are still settling in, so this is just so you know what we are aiming for.' : ' That is below what we ask.') : ' That is fine.'}`);
     // earlier
     const prev = r.history.find(h => h.kind === 'warning' || h.kind === 'probation' || h.kind === 'excused');
     if (prev) lines.push('', `Earlier: on ${evDate(prev.date)} this was noted for you — ${prev.verdict || EV_KIND_LABEL[prev.kind]}${prev.note && prev.source === 'manual' ? ` (${prev.note})` : ''}.`);
     lines.push('');
-    if (r.fails) lines.push('Could you let me know what your plans are, and whether you expect this to improve next month? If something is going on (offline, ill, busy, a different play style) just say so and we will take it into account.', '', 'And is there anything we can do to help you improve? Tips on training or the war, a different schedule, a mentor — just tell us what would make it easier for you.');
+    if (soft) lines.push('There is no pressure — you are new, so you have some time to find your feet. But please do ask us for help if you need anything: tips on training or war hits, someone to show you the ropes, or a schedule that works for you. And feel free to tell us your plans and how it is going so far.');
+    else if (r.fails) lines.push('Could you let me know what your plans are, and whether you expect this to improve next month? If something is going on (offline, ill, busy, a different play style) just say so and we will take it into account.', '', 'And is there anything we can do to help you improve? Tips on training or the war, a different schedule, a mentor — just tell us what would make it easier for you.');
+    else if (r.light === 'grey' && r.pct === null) lines.push('Welcome to the faction! We do not have enough data to judge yet — if you need anything at all, just ask us.');
     else lines.push('You are meeting both of the requirements — thank you, keep it up!');
     lines.push('', 'Thanks!');
     return lines.join('\n');
@@ -136,6 +146,7 @@ function renderEvaluation() {
         <div><div style="color:var(--muted);font-size:11px;">Members</div><div style="font-weight:700;">${rows.length}</div></div>
         <div><div style="color:var(--muted);font-size:11px;">On track</div><div style="font-weight:700;color:${EV_STATUS.ok[1]};">${count('ok')}</div></div>
         <div><div style="color:var(--muted);font-size:11px;">Needs improvement</div><div style="font-weight:700;color:${EV_STATUS.improve[1]};">${count('improve')}</div></div>
+        <div><div style="color:var(--muted);font-size:11px;">New, settling in</div><div style="font-weight:700;color:${EV_STATUS.new[1]};">${count('new')}</div></div>
         <div><div style="color:var(--muted);font-size:11px;">At risk</div><div style="font-weight:700;color:${EV_STATUS.risk[1]};">${count('risk')}</div></div>
         <div><div style="color:var(--muted);font-size:11px;">Below AND warned before</div><div style="font-weight:700;">${rows.filter(r => r.fails && r.warned).length}</div></div>`;
     const notes = [];
