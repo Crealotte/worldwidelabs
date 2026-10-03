@@ -92,7 +92,7 @@ async function buildNewsletter() {
         try {
             const rd = await respectFetch({ action: 'read' });
             if (rd.error) throw new Error(rd.error);
-            const all = respectComputeDaily(rd.ocDaily || {}, rd.chainDaily || {}, rd.hitsDaily || {}, rd.warBonusDaily || {}, rd.warEntries || []);
+            const all = respectComputeDaily(rd.ocDaily || {}, rd.chainDaily || {}, rd.hitsDaily || {}, rd.warBonusDaily || {}, rd.warEntries || [], rd.lossDaily || {});
             const from = nlDay(period.start), to = nlDay(period.end); // days from the start, up to but not including the end Sunday
             const inRange = all.filter(r => r.date >= from && r.date < to);
             const sum = k => inRange.reduce((s, r) => s + (r[k] || 0), 0);
@@ -100,7 +100,7 @@ async function buildNewsletter() {
             if (!inRange.length) groups.push({ head: 'Respect gained', rows: [['', 'The respect tracker has no days in this period.']] });
             else groups.push({
                 head: 'Respect gained',
-                rows: [['Total', `+${nlNum(sum('totalGain'))}`], ['Organized crimes', nlNum(sum('oc'))], ['Hits and chains', nlNum(sum('hits') + sum('chains'))], ['War bonuses', nlNum(sum('war'))]],
+                rows: [['Total', `+${nlNum(sum('totalGain'))}`], ['Organized crimes', nlNum(sum('oc'))], ['Hits and chains (after losses)', nlNum(sum('hits') + sum('chains') + sum('losses'))], ['War bonuses', nlNum(sum('war'))]],
                 note: earliest && earliest > from ? `The respect tracker has data from ${earliest} on, so the start of this period is missing.` : '',
             });
         } catch (e) { groups.push({ head: 'Respect gained', rows: [['', `The respect tracker could not be read: ${e.message}`]] }); }

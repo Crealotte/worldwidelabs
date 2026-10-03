@@ -18,7 +18,8 @@ async function respectFetch(body) {
 // means genuinely untracked respect sources (territory, raids, etc.) that used to surface via an
 // "Other" column are no longer visible — a real tradeoff, but a wrong number is worse than a
 // missing one.
-function respectComputeDaily(ocDaily, chainDaily, hitsDaily, warBonusDaily, warEntries) {
+function respectComputeDaily(ocDaily, chainDaily, hitsDaily, warBonusDaily, warEntries, lossDaily) {
+    lossDaily = lossDaily || {};
     const warByDate = {};
     for (const w of warEntries) warByDate[w.date] = (warByDate[w.date] || 0) + w.amount;
     // Auto-tracked war bonuses and manually-logged entries both feed the same "War" total — the
@@ -33,28 +34,22 @@ function respectComputeDaily(ocDaily, chainDaily, hitsDaily, warBonusDaily, warE
 
     // Union of every date we know ANYTHING about, from any source.
     const allDates = new Set([
-        ...Object.keys(ocDaily), ...Object.keys(chainDaily), ...Object.keys(hitsDaily), ...Object.keys(warByDate),
+        ...Object.keys(ocDaily), ...Object.keys(chainDaily), ...Object.keys(hitsDaily), ...Object.keys(lossDaily), ...Object.keys(warByDate),
     ]);
 
     const rows = [];
     for (const date of allDates) {
         const oc = ocDaily[date] || 0;
-        const chainsRaw = chainDaily[date] || 0;
+        // hitsDaily is the respect of every outgoing hit, chainDaily the part of it that came from hits that
+        // were part of a chain (both bucketed by the day of the hit itself), lossDaily what hits against us
+        // took off (negative). So Chains is a breakdown WITHIN the hit total and can't exceed it.
         const hitsRaw = hitsDaily[date] || 0;
-        // Chain-attributed hits are already individually present in the raw Hits total (every
-        // outgoing attack counts, chain or not) — so Chains is a breakdown WITHIN Hits, not a
-        // separate amount on top. Adding both was double-counting the same respect twice.
-        //
-        // But Chains and Hits backfill independently and at very different depths — Chains pulls
-        // its ENTIRE history in one call, while Hits only gets backfilled a page at a time via
-        // "Dig deeper". Chains can never be attributed more than what raw Hits actually captured
-        // for that day, to avoid a nonsensical negative Hits value on days where backfill depth
-        // doesn't line up yet.
-        const chains = Math.min(chainsRaw, hitsRaw);
-        const hits = hitsRaw - chains; // always >= 0 by construction
+        const chains = Math.min(chainDaily[date] || 0, hitsRaw);
+        const hits = hitsRaw - chains;
+        const losses = lossDaily[date] || 0;
         const war = warByDate[date] || 0;
-        const totalGain = oc + hitsRaw + war; // chains NOT added again — already inside hitsRaw
-        rows.push({ date, totalGain, oc, chains, hits, war });
+        const totalGain = oc + hitsRaw + losses + war; // chains NOT added again — already inside hitsRaw
+        rows.push({ date, totalGain, oc, chains, hits, losses, war });
     }
     return rows.sort((a, b) => b.date.localeCompare(a.date)); // newest first
 }
@@ -108,7 +103,7 @@ async function loadRespectGoalPanel() {
         if (totalRespect == null) { $('respect-goal-panel').style.display = 'none'; return; }
 
         const current = totalRespect;
-        const dailyRows = respectComputeDaily(data.ocDaily, data.chainDaily, data.hitsDaily, data.warBonusDaily, data.warEntries);
+        const dailyRows = respectComputeDaily(data.ocDaily, data.chainDaily, data.hitsDaily, data.warBonusDaily, data.warEntries, data.lossDaily);
 
         // Projected date (and whether that's on track for a deadline) from a given weekly rate — shared
         // by the main line below and the comparison row, so both use the exact same math.
@@ -247,7 +242,7 @@ async function loadRespectEditor() {
         }
 
         rgLastData = data; // stashed for the date-range filter below, no need to refetch
-        const daily = respectComputeDaily(data.ocDaily, data.chainDaily, data.hitsDaily, data.warBonusDaily, data.warEntries);
+        const daily = respectComputeDaily(data.ocDaily, data.chainDaily, data.hitsDaily, data.warBonusDaily, data.warEntries, data.lossDaily);
         rgLastDaily = daily;
         renderRgDailyTable(daily);
     } catch (e) {
@@ -256,7 +251,7 @@ async function loadRespectEditor() {
 }
 
 let rgDailySort = { key: 'date', dir: 'desc' };
-const rgDailyAccessors = { date: d => d.date, total: d => d.totalGain, oc: d => d.oc, chains: d => d.chains, hits: d => d.hits, war: d => d.war };
+const rgDailyAccessors = { date: d => d.date, total: d => d.totalGain, oc: d => d.oc, chains: d => d.chains, hits: d => d.hits, losses: d => d.losses, war: d => d.war };
 function renderRgDailyTable(daily) {
     const tableEl = $('rg-daily-table');
     if (!daily.length) {
@@ -269,7 +264,7 @@ function renderRgDailyTable(daily) {
             <thead><tr style="color:var(--muted);text-align:left;">
                 <th data-sort="date" style="padding:4px 8px;">Date</th><th data-sort="total" style="padding:4px 8px;">Total gain</th>
                 <th data-sort="oc" style="padding:4px 8px;">OC</th><th data-sort="chains" style="padding:4px 8px;">Chains</th>
-                <th data-sort="hits" style="padding:4px 8px;">Hits</th><th data-sort="war" style="padding:4px 8px;">War</th>
+                <th data-sort="hits" style="padding:4px 8px;">Hits</th><th data-sort="losses" style="padding:4px 8px;">Losses</th><th data-sort="war" style="padding:4px 8px;">War</th>
             </tr></thead>
             <tbody>${sorted.map(d => `
                 <tr style="border-top:1px solid var(--line);">
@@ -278,6 +273,7 @@ function renderRgDailyTable(daily) {
                     <td style="padding:4px 8px;font-family:var(--mono);color:var(--muted);">${d.oc.toLocaleString()}</td>
                     <td style="padding:4px 8px;font-family:var(--mono);color:var(--muted);">${d.chains.toLocaleString()}</td>
                     <td style="padding:4px 8px;font-family:var(--mono);color:var(--muted);">${d.hits.toLocaleString()}</td>
+                    <td style="padding:4px 8px;font-family:var(--mono);color:var(--muted);">${d.losses.toLocaleString()}</td>
                     <td style="padding:4px 8px;font-family:var(--mono);color:var(--muted);">${d.war.toLocaleString()}</td>
                 </tr>`).join('')}
             </tbody>
@@ -295,10 +291,11 @@ function respectRangeSummary(daily, fromDate, toDate) {
     const oc = inRange.reduce((s, d) => s + d.oc, 0);
     const chains = inRange.reduce((s, d) => s + d.chains, 0);
     const hits = inRange.reduce((s, d) => s + d.hits, 0);
+    const losses = inRange.reduce((s, d) => s + d.losses, 0);
     const war = inRange.reduce((s, d) => s + d.war, 0);
-    const totalGain = oc + chains + hits + war;
+    const totalGain = oc + chains + hits + losses + war;
 
-    return { totalGain, oc, chains, hits, war, days: inRange.length };
+    return { totalGain, oc, chains, hits, losses, war, days: inRange.length };
 }
 
 $('rg-save').addEventListener('click', async () => {
@@ -359,6 +356,7 @@ $('rg-range-show').addEventListener('click', () => {
             <div><div style="font-size:11px;color:var(--muted);">OC</div><div style="font-family:var(--mono);">${s.oc.toLocaleString()}</div></div>
             <div><div style="font-size:11px;color:var(--muted);">Chains</div><div style="font-family:var(--mono);">${s.chains.toLocaleString()}</div></div>
             <div><div style="font-size:11px;color:var(--muted);">Hits</div><div style="font-family:var(--mono);">${s.hits.toLocaleString()}</div></div>
+            <div><div style="font-size:11px;color:var(--muted);">Losses</div><div style="font-family:var(--mono);">${s.losses.toLocaleString()}</div></div>
             <div><div style="font-size:11px;color:var(--muted);">War</div><div style="font-family:var(--mono);">${s.war.toLocaleString()}</div></div>
         </div>
         <p style="font-size:11px;color:var(--muted);margin-top:6px;">${esc(from)} to ${esc(to)} · ${s.days} day${s.days === 1 ? '' : 's'} with data</p>`;

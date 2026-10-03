@@ -77,6 +77,9 @@ const chainDailyKey = (factionId) => `wwl:chain-respect-daily:${factionId}`;
 const chainSeenKey = (factionId) => `wwl:chain-respect-seen:${factionId}`;
 const hitsDailyKey = (factionId) => `wwl:hits-respect-daily:${factionId}`;
 const hitsSeenKey = (factionId) => `wwl:hits-respect-seen:${factionId}`;
+const chainHitsDailyKey = (factionId) => `wwl:chain-hits-respect-daily:${factionId}`; // respect from outgoing hits that were part of a chain, same day bucketing as hits
+const lossDailyKey = (factionId) => `wwl:losses-respect-daily:${factionId}`; // respect lost to hits against us, kept apart from gains (negative numbers)
+const schemaKey = (factionId) => `wwl:respect-schema:${factionId}`;
 const lossesSeenKey = (factionId) => `wwl:losses-respect-seen:${factionId}`;
 const warEntriesKey = (factionId) => `wwl:war-respect:${factionId}`; // manual entries
 const warBonusDailyKey = (factionId) => `wwl:war-bonus-daily:${factionId}`; // auto-tracked
@@ -407,7 +410,7 @@ async function syncWarBonus(key, factionId) {
 //     hits during a chain window would incorrectly remove real respect, not prevent double-counting.
 //   - No defender-side loss estimate. Guessing 25% of the attacker's gain was never verified and
 //     is being replaced by attacknews's own exact computed loss figure (see syncLosses below).
-async function processAttacksPageAsync(attacks, factionId, daily) {
+async function processAttacksPageAsync(attacks, factionId, daily, chainDaily) {
     let synced = 0, dailyChanged = false, oldestSeen = null;
     for (const [attackId, attack] of Object.entries(attacks)) {
         const ts = attack.timestamp_ended || attack.timestamp_started;
@@ -420,10 +423,30 @@ async function processAttacksPageAsync(attacks, factionId, daily) {
 
         const dayKey = new Date(ts * 1000).toISOString().slice(0, 10);
         daily[dayKey] = (daily[dayKey] || 0) + respect;
+        if (Number(attack.chain) > 0) chainDaily[dayKey] = (chainDaily[dayKey] || 0) + respect; // this hit was part of a chain
         dailyChanged = true;
         synced++;
     }
     return { synced, dailyChanged, oldestSeen };
+}
+
+async function saveHits(factionId, daily, chainHits) {
+    await redis(['SET', hitsDailyKey(factionId), JSON.stringify(daily)]);
+    await redis(['SET', chainHitsDailyKey(factionId), JSON.stringify(chainHits)]);
+}
+
+// The tracker used to keep losses folded into the hits total and take Chains from each chain's own total
+// (which includes milestone bonuses and is booked on the day the chain ended), then cap it by the day's net
+// hits — which on a chain day pushed the Hits column to 0. It now keeps three separate series (gross hits,
+// the part of them that was chain hits, losses) so each column can be shown honestly. Old stored hits and
+// losses can't be pulled apart, so the first time a faction touches the tracker after this change they are
+// cleared and rebuild from Torn's history (OC, war bonus and manual entries are untouched).
+async function ensureSchema(factionId) {
+    if (await redis(['GET', schemaKey(factionId)]) === '2') return;
+    for (const k of [hitsDailyKey, hitsSeenKey, lossesSeenKey, lossDailyKey, chainHitsDailyKey, hitsDeepCursorKey, lossesDeepCursorKey, hitsCatchupKey, hitsCoveredKey, lossesCatchupKey, lossesCoveredKey]) {
+        await redis(['DEL', k(factionId)]);
+    }
+    await redis(['SET', schemaKey(factionId), '2']);
 }
 
 // Same problem as losses (see walkLosses): a single attacksfull call only reaches back over the latest
@@ -438,6 +461,8 @@ async function syncHits(key, factionId, maxPages = 3) {
     const now = Math.floor(Date.now() / 1000);
     const dailyRaw = await redis(['GET', hitsDailyKey(factionId)]);
     const daily = dailyRaw ? JSON.parse(dailyRaw) : {};
+    const chainHitsRaw = await redis(['GET', chainHitsDailyKey(factionId)]);
+    const chainHits = chainHitsRaw ? JSON.parse(chainHitsRaw) : {};
     let st = null;
     try { st = JSON.parse(await redis(['GET', hitsCatchupKey(factionId)]) || 'null'); } catch (_) { st = null; }
     if (!st) {
@@ -465,9 +490,9 @@ async function syncHits(key, factionId, maxPages = 3) {
             if (ts && ts < oldest) oldest = ts;
             if (ts > st.floor) fresh[id] = attacks[id];
         }
-        const result = await processAttacksPageAsync(fresh, factionId, daily);
+        const result = await processAttacksPageAsync(fresh, factionId, daily, chainHits);
         synced += result.synced;
-        if (result.dailyChanged) await redis(['SET', hitsDailyKey(factionId), JSON.stringify(daily)]);
+        if (result.dailyChanged) await saveHits(factionId, daily, chainHits);
         if (oldest <= st.floor || oldest >= st.to) { done = true; break; }
         st.to = oldest - 1;
     }
@@ -488,6 +513,8 @@ const hitsDeepCursorKey = (factionId) => `wwl:hits-deep-cursor:${factionId}`;
 async function deepSyncHits(key, factionId, maxPages = 15) {
     const dailyRaw = await redis(['GET', hitsDailyKey(factionId)]);
     const daily = dailyRaw ? JSON.parse(dailyRaw) : {};
+    const chainHitsRaw = await redis(['GET', chainHitsDailyKey(factionId)]);
+    const chainHits = chainHitsRaw ? JSON.parse(chainHitsRaw) : {};
 
     const cursorRaw = await redis(['GET', hitsDeepCursorKey(factionId)]);
     let to = cursorRaw ? Number(cursorRaw) : Math.floor(Date.now() / 1000);
@@ -506,9 +533,9 @@ async function deepSyncHits(key, factionId, maxPages = 15) {
         if (!Object.keys(attacks).length) { stopReason = 'empty-page (Torn returned no attacks at this point in time)'; break; }
         pagesFetched++;
 
-        const result = await processAttacksPageAsync(attacks, factionId, daily);
+        const result = await processAttacksPageAsync(attacks, factionId, daily, chainHits);
         totalSynced += result.synced;
-        if (result.dailyChanged) await redis(['SET', hitsDailyKey(factionId), JSON.stringify(daily)]);
+        if (result.dailyChanged) await saveHits(factionId, daily, chainHits);
 
         if (result.oldestSeen === null || result.oldestSeen >= to) { stopReason = 'no-progress (oldest attack on this page wasn\'t older than the last page)'; break; }
         to = result.oldestSeen - 1;
@@ -567,7 +594,7 @@ async function walkLosses(key, factionId, from, to, daily, seenIds, budget) {
         synced += page.synced;
         entries += page.count;
         if (page.dailyChanged) {
-            await redis(['SET', hitsDailyKey(factionId), JSON.stringify(daily)]);
+            await redis(['SET', lossDailyKey(factionId), JSON.stringify(daily)]);
             await redis(['SET', lossesSeenKey(factionId), JSON.stringify([...seenIds])]);
         }
         if (page.count >= NEWS_PAGE_CAP && page.oldestSeen !== null) {
@@ -587,7 +614,7 @@ const lossesCoveredKey = (factionId) => `wwl:losses-covered:${factionId}`;
 
 async function syncLosses(key, factionId, maxPages = 6) {
     const now = Math.floor(Date.now() / 1000);
-    const dailyRaw = await redis(['GET', hitsDailyKey(factionId)]);
+    const dailyRaw = await redis(['GET', lossDailyKey(factionId)]);
     const daily = dailyRaw ? JSON.parse(dailyRaw) : {};
     const seenRaw = await redis(['GET', lossesSeenKey(factionId)]);
     const seenIds = new Set(seenRaw ? JSON.parse(seenRaw) : []);
@@ -617,7 +644,7 @@ async function syncLosses(key, factionId, maxPages = 6) {
 const lossesDeepCursorKey = (factionId) => `wwl:losses-deep-cursor-v2:${factionId}`;
 
 async function deepSyncLosses(key, factionId, maxPages = 15) {
-    const dailyRaw = await redis(['GET', hitsDailyKey(factionId)]);
+    const dailyRaw = await redis(['GET', lossDailyKey(factionId)]);
     const daily = dailyRaw ? JSON.parse(dailyRaw) : {};
     const seenRaw = await redis(['GET', lossesSeenKey(factionId)]);
     const seenIds = new Set(seenRaw ? JSON.parse(seenRaw) : []);
@@ -661,12 +688,14 @@ module.exports = async function handler(req, res) {
         const factionResult = await getFactionId(key);
         if (factionResult.error) return res.status(403).json({ error: `Could not check your faction right now: ${factionResult.error}` });
         const factionId = factionResult.factionId;
+        await ensureSchema(factionId);
 
         if (action === 'read') {
-            const [ocDailyRaw, chainDailyRaw, hitsDailyRaw, warBonusDailyRaw, warRaw, goalRaw] = await Promise.all([
+            const [ocDailyRaw, chainDailyRaw, hitsDailyRaw, lossDailyRaw, warBonusDailyRaw, warRaw, goalRaw] = await Promise.all([
                 redis(['GET', ocDailyKey(factionId)]),
-                redis(['GET', chainDailyKey(factionId)]),
+                redis(['GET', chainHitsDailyKey(factionId)]),
                 redis(['GET', hitsDailyKey(factionId)]),
+                redis(['GET', lossDailyKey(factionId)]),
                 redis(['GET', warBonusDailyKey(factionId)]),
                 redis(['GET', warEntriesKey(factionId)]),
                 redis(['GET', goalKey(factionId)]),
@@ -675,6 +704,7 @@ module.exports = async function handler(req, res) {
                 ocDaily: ocDailyRaw ? JSON.parse(ocDailyRaw) : {},
                 chainDaily: chainDailyRaw ? JSON.parse(chainDailyRaw) : {},
                 hitsDaily: hitsDailyRaw ? JSON.parse(hitsDailyRaw) : {},
+                lossDaily: lossDailyRaw ? JSON.parse(lossDailyRaw) : {},
                 warBonusDaily: warBonusDailyRaw ? JSON.parse(warBonusDailyRaw) : {},
                 warEntries: warRaw ? JSON.parse(warRaw) : [],
                 goals: normalizeGoals(goalRaw),
@@ -873,6 +903,12 @@ module.exports = async function handler(req, res) {
             // attacknews) — old stored numbers used the previous logic, so this wipes
             // everything and lets it rebuild cleanly from scratch.
             await redis(['DEL', hitsDailyKey(factionId)]);
+            await redis(['DEL', chainHitsDailyKey(factionId)]);
+            await redis(['DEL', lossDailyKey(factionId)]);
+            await redis(['DEL', hitsCatchupKey(factionId)]);
+            await redis(['DEL', hitsCoveredKey(factionId)]);
+            await redis(['DEL', lossesCatchupKey(factionId)]);
+            await redis(['DEL', lossesCoveredKey(factionId)]);
             await redis(['DEL', hitsSeenKey(factionId)]);
             await redis(['DEL', lossesSeenKey(factionId)]);
             await redis(['DEL', hitsDeepCursorKey(factionId)]);
@@ -983,6 +1019,7 @@ module.exports = async function handler(req, res) {
 // date on days nobody presses Refresh. Each step is independent: one failing doesn't stop the others.
 // More pages than a manual click gets, since this is the one run that has to catch a whole day of war.
 module.exports.runTracking = async function runTracking(key, factionId) {
+    await ensureSchema(factionId);
     const out = {};
     const steps = [
         ['oc', () => syncOc(key, factionId)],
