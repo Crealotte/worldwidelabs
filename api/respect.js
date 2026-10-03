@@ -79,6 +79,7 @@ const hitsDailyKey = (factionId) => `wwl:hits-respect-daily:${factionId}`;
 const hitsSeenKey = (factionId) => `wwl:hits-respect-seen:${factionId}`;
 const chainHitsDailyKey = (factionId) => `wwl:chain-hits-respect-daily:${factionId}`; // respect from outgoing hits that were part of a chain, same day bucketing as hits
 const lossDailyKey = (factionId) => `wwl:losses-respect-daily:${factionId}`; // respect lost to hits against us, kept apart from gains (negative numbers)
+const chainWindowsKey = (factionId) => `wwl:chain-windows:${factionId}`; // [{start,end}] of recent chains, to tell chain hits from other hits by timestamp
 const schemaKey = (factionId) => `wwl:respect-schema:${factionId}`;
 const lossesSeenKey = (factionId) => `wwl:losses-respect-seen:${factionId}`;
 const warEntriesKey = (factionId) => `wwl:war-respect:${factionId}`; // manual entries
@@ -252,6 +253,8 @@ async function syncChains(key, factionId) {
     if (data.error) return { synced: 0, error: data.error.error };
 
     const chains = data.chains || {};
+    const windows = Object.values(chains).filter(c => c.start && c.end).map(c => ({ start: Number(c.start), end: Number(c.end) }));
+    if (windows.length) await redis(['SET', chainWindowsKey(factionId), JSON.stringify(windows)]);
     const dailyRaw = await redis(['GET', chainDailyKey(factionId)]);
     const daily = dailyRaw ? JSON.parse(dailyRaw) : {};
     let synced = 0;
@@ -410,7 +413,7 @@ async function syncWarBonus(key, factionId) {
 //     hits during a chain window would incorrectly remove real respect, not prevent double-counting.
 //   - No defender-side loss estimate. Guessing 25% of the attacker's gain was never verified and
 //     is being replaced by attacknews's own exact computed loss figure (see syncLosses below).
-async function processAttacksPageAsync(attacks, factionId, daily, chainDaily) {
+async function processAttacksPageAsync(attacks, factionId, daily, chainDaily, windows = []) {
     let synced = 0, dailyChanged = false, oldestSeen = null;
     for (const [attackId, attack] of Object.entries(attacks)) {
         const ts = attack.timestamp_ended || attack.timestamp_started;
@@ -423,7 +426,8 @@ async function processAttacksPageAsync(attacks, factionId, daily, chainDaily) {
 
         const dayKey = new Date(ts * 1000).toISOString().slice(0, 10);
         daily[dayKey] = (daily[dayKey] || 0) + respect;
-        if (Number(attack.chain) > 0) chainDaily[dayKey] = (chainDaily[dayKey] || 0) + respect; // this hit was part of a chain
+        // A chain hit = Torn marks it as one, OR its timestamp falls inside a known chain's start-end window.
+        if (Number(attack.chain) > 0 || windows.some(w => ts >= w.start && ts <= w.end)) chainDaily[dayKey] = (chainDaily[dayKey] || 0) + respect;
         dailyChanged = true;
         synced++;
     }
@@ -463,6 +467,7 @@ async function syncHits(key, factionId, maxPages = 3) {
     const daily = dailyRaw ? JSON.parse(dailyRaw) : {};
     const chainHitsRaw = await redis(['GET', chainHitsDailyKey(factionId)]);
     const chainHits = chainHitsRaw ? JSON.parse(chainHitsRaw) : {};
+    const windows = JSON.parse(await redis(['GET', chainWindowsKey(factionId)]) || '[]');
     let st = null;
     try { st = JSON.parse(await redis(['GET', hitsCatchupKey(factionId)]) || 'null'); } catch (_) { st = null; }
     if (!st) {
@@ -490,7 +495,7 @@ async function syncHits(key, factionId, maxPages = 3) {
             if (ts && ts < oldest) oldest = ts;
             if (ts > st.floor) fresh[id] = attacks[id];
         }
-        const result = await processAttacksPageAsync(fresh, factionId, daily, chainHits);
+        const result = await processAttacksPageAsync(fresh, factionId, daily, chainHits, windows);
         synced += result.synced;
         if (result.dailyChanged) await saveHits(factionId, daily, chainHits);
         if (oldest <= st.floor || oldest >= st.to) { done = true; break; }
@@ -515,6 +520,7 @@ async function deepSyncHits(key, factionId, maxPages = 15) {
     const daily = dailyRaw ? JSON.parse(dailyRaw) : {};
     const chainHitsRaw = await redis(['GET', chainHitsDailyKey(factionId)]);
     const chainHits = chainHitsRaw ? JSON.parse(chainHitsRaw) : {};
+    const windows = JSON.parse(await redis(['GET', chainWindowsKey(factionId)]) || '[]');
 
     const cursorRaw = await redis(['GET', hitsDeepCursorKey(factionId)]);
     let to = cursorRaw ? Number(cursorRaw) : Math.floor(Date.now() / 1000);
@@ -533,7 +539,7 @@ async function deepSyncHits(key, factionId, maxPages = 15) {
         if (!Object.keys(attacks).length) { stopReason = 'empty-page (Torn returned no attacks at this point in time)'; break; }
         pagesFetched++;
 
-        const result = await processAttacksPageAsync(attacks, factionId, daily, chainHits);
+        const result = await processAttacksPageAsync(attacks, factionId, daily, chainHits, windows);
         totalSynced += result.synced;
         if (result.dailyChanged) await saveHits(factionId, daily, chainHits);
 
