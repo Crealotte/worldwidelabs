@@ -425,3 +425,24 @@
         }
     }
 
+
+// Sticky first column (see the table CSS in index.html): when a table starts with a narrow marker column — like
+// Member Overview's status dot — the names are in the SECOND column, so that one is pinned too, right after the
+// first. Tables are drawn at all sorts of moments, so this watches for new/redrawn ones instead of hooking each.
+(function stickyNameColumns() {
+    let queued = false;
+    function apply() {
+        queued = false;
+        document.querySelectorAll('table:not(.av-table)').forEach(t => {
+            const first = t.querySelector('thead th:first-child');
+            if (!first) return;
+            const marker = ['', '●', '•', '#'].includes(first.textContent.trim());
+            t.classList.toggle('stk-two', marker && t.querySelectorAll('thead th').length > 2);
+            if (marker) t.style.setProperty('--stk1', `${first.offsetWidth}px`);
+        });
+    }
+    const queue = () => { if (!queued) { queued = true; requestAnimationFrame(apply); } };
+    new MutationObserver(queue).observe(document.body, { childList: true, subtree: true });
+    window.addEventListener('resize', queue);
+    queue();
+})();
