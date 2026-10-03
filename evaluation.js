@@ -101,15 +101,13 @@ const EV_STATUS = {
 function evMessage(r) {
     const p = evPeriod();
     const s = moData.settings;
-    const wars = moWarsInPeriod();
     const lines = [`Hi ${r.name},`, '', `This is our monthly check-in (${moFmt(p.start)} → ${moFmt(p.end - (p.id === 'now' ? 0 : 86400))}).`, ''];
     // war
     if (r.light === 'grey') lines.push('War participation: you have not been here for enough wars to judge yet.');
     else {
         lines.push(`War participation: you met the war rule (${s.minWarHits} war hits, or ${s.minChainHits} chain hits, in a war) in ${r.okWars} of the last ${r.counted} wars you were here for — we need ${r.need}.${r.warBelow ? ' That is below what we ask.' : ' That is fine.'}`);
-        // one war per line, so it reads as a short list instead of a wall of numbers
-        const per = r.perWar.map((x, i) => x && !x.notIn ? `- ${wars[i].event ? 'Chain event' : 'War vs'} ${wars[i].opponent}: ${x.war} war hits${x.chain ? `, ${x.chain} chain hits` : ''} — ${x.ok ? 'met' : x.skipped ? 'not met, but you told us beforehand so it is not held against you' : 'not met'}` : null).filter(Boolean);
-        if (per.length) lines.push(...per);
+        const skipped = r.perWar.filter(x => x?.skipped).length;
+        if (skipped) lines.push(`  (${skipped} war${skipped === 1 ? '' : 's'} you told us beforehand you could not make ${skipped === 1 ? 'is' : 'are'} not counted against you.)`);
     }
     // training
     if (r.pct === null) lines.push(r.tierEff ? 'Training: I could not read your trained energy for this period.' : 'Training: your energy tier is not known yet.');
@@ -143,6 +141,12 @@ function renderEvaluation() {
     if (!evEnergy?.snapshots) notes.push('No training snapshots cover this period yet, so training shows as unknown.');
     else if (evEnergy.partial && evEnergy.sinceDay) notes.push(`Energy trained is only counted since ${moFmt(evEnergy.sinceDay * 86400)} — that is when counting started.`);
     notes.push(`Training target = the member's own tier × the weeks in the period (${Math.round(moWeeksIn(p) * 10) / 10} weeks); war rule = ${moData.settings.minWarHits} war hits (or ${moData.settings.minChainHits} chain hits) in ${moData.settings.needWars} of the last 5 wars.`);
+    // which availability plan each war was matched to (and how many members excused themselves in it), so a missing 🚫 can be traced
+    const matched = moWarsInPeriod().filter(w => !w.event).map(w => {
+        const pl = moData.excusedInfo?.[w.id] || [];
+        return `${w.opponent}: ${pl.length ? `${pl.join(', ')} (${Object.keys(moData.excused?.[w.id] || {}).length} excused)` : 'no availability plan found'}`;
+    });
+    if (matched.length) notes.push(`Availability plans matched to the wars — ${matched.join(' · ')}.`);
     $('ev-notes').innerHTML = notes.map(esc).join('<br>');
     $('ev-below').checked = evOnlyBelow;
 
