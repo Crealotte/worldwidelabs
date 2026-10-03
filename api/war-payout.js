@@ -359,6 +359,22 @@ async function leaderTodos(key, factionId) {
 }
 
 
+
+// Turns the work file into a separately installable "DEV" userscript (see the GET handler: ?script=1&dev=1): its own
+// name/namespace and update address, a DEV tag on the button and window, a separate update channel for the version
+// check, and its own saved update/check-in state (it shares the saved key and position with the normal script).
+function devizeScript(src) {
+    return src
+        .replace(/\/worldwidelabs\.user\.js/g, '/worldwidelabs-dev.user.js')
+        .replace(/(\/\/ @name\s+)World Wide Labs/, '$1World Wide Labs (DEV)')
+        .replace(/(\/\/ @namespace\s+\S+)/, '$1/dev')
+        .replace("{ action: 'script-version' }", "{ action: 'script-version', channel: 'dev' }")
+        .replace(/'wwl_update_check'/g, "'wwl_update_check_dev'")
+        .replace(/'wwl_script_checkin_at'/g, "'wwl_script_checkin_at_dev'")
+        .replace(/'wwl_script_checkin_v'/g, "'wwl_script_checkin_v_dev'")
+        .replace('<b>WWL</b>', '<b>WWL DEV</b>')
+        .replace(/(<b style="flex:1;">World Wide Labs)/, '$1 DEV');
+}
 module.exports = async function handler(req, res) {
     try {
         // The WWL userscript runs on torn.com and reads/ticks the energy plan from here, so torn.com may call these actions.
@@ -373,10 +389,16 @@ module.exports = async function handler(req, res) {
         // updating). Tampermonkey installs it straight from this link; the site's own address is
         // filled in so the script talks to the right place.
         if (req.method === 'GET' && req.query?.script) {
-            const src = require('fs').readFileSync(require('path').join(process.cwd(), 'userscripts', 'energy-plan.user.js'), 'utf8');
+            // ?dev=1 serves the WORK file (userscripts/energy-plan.dev.user.js) as its own, separate userscript for testing:
+            // different name, its own update address and channel, and its own saved-state names, so it can sit next to
+            // (or replace) the normal one without the two confusing each other. Members never see it; a release is just
+            // copying the work file over energy-plan.user.js.
+            const dev = !!req.query.dev;
+            let src = require('fs').readFileSync(require('path').join(process.cwd(), 'userscripts', dev ? 'energy-plan.dev.user.js' : 'energy-plan.user.js'), 'utf8');
+            if (dev) src = devizeScript(src);
             const host = String(req.headers['x-forwarded-host'] || req.headers.host || '').replace(/[^\w.:-]/g, '');
             res.setHeader('Content-Type', 'text/javascript; charset=utf-8');
-            res.setHeader('Cache-Control', 'public, max-age=300');
+            res.setHeader('Cache-Control', dev ? 'no-store' : 'public, max-age=300');
             return res.status(200).send(src.split('__WWL_BASE__').join(`https://${host}`).split('__WWL_HOST__').join(host));
         }
         if (!REDIS_URL || !REDIS_TOKEN) {
@@ -420,7 +442,7 @@ module.exports = async function handler(req, res) {
         // is public anyway, and answering it with no key means no Torn call and no database command at all — the cheapest
         // way to check for an update, so it can be asked as often as needed.
         if (action === 'script-version') {
-            const src = require('fs').readFileSync(require('path').join(process.cwd(), 'userscripts', 'energy-plan.user.js'), 'utf8');
+            const src = require('fs').readFileSync(require('path').join(process.cwd(), 'userscripts', req.body?.channel === 'dev' ? 'energy-plan.dev.user.js' : 'energy-plan.user.js'), 'utf8');
             const m = /@version\s+([\d.]+)/.exec(src);
             return res.status(200).json({ version: m ? m[1] : null });
         }
