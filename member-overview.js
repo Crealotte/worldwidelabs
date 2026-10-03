@@ -79,7 +79,7 @@ function moPeriods() {
 }
 function moPeriod() {
     const list = moPeriods();
-    return list.find(p => p.id === moPeriodId) || list.find(p => p.id !== 'now' && p.id !== 'custom') || list[0];
+    return list.find(p => p.id === moPeriodId) || list.find(p => p.id === 'now') || list.find(p => p.id !== 'custom') || list[0]; // opens on the period still running; the last finished one only when none is running
 }
 const moWeeksIn = p => Math.max(1 / 7, (p.end - p.start) / (7 * MO_DAY)); // exact, so odd date ranges average correctly
 const moDaysIn = p => Math.round((p.end - p.start) / MO_DAY);

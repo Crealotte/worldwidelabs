@@ -13,18 +13,20 @@ function etNewsletterRange(cyclesBack) {
     const now = new Date();
     let end = etFirstSunday(now.getUTCFullYear(), now.getUTCMonth());
     if (end > now) end = etFirstSunday(now.getUTCFullYear(), now.getUTCMonth() - 1);
-    for (let i = 0; i < cyclesBack; i++) end = etFirstSunday(end.getUTCFullYear(), end.getUTCMonth() - 1);
+    // The running period starts at the latest first Sunday and runs up to today; each step back is the
+    // finished period before it (first Sunday to first Sunday, whole days only).
+    if (cyclesBack === 0) return { from: end.toISOString().slice(0, 10), to: now.toISOString().slice(0, 10) };
+    for (let i = 1; i < cyclesBack; i++) end = etFirstSunday(end.getUTCFullYear(), end.getUTCMonth() - 1);
     const start = etFirstSunday(end.getUTCFullYear(), end.getUTCMonth() - 1);
-    const to = cyclesBack === 0 ? now : new Date(end.getTime() - 86400e3); // whole days only for a finished period
-    return { from: start.toISOString().slice(0, 10), to: to.toISOString().slice(0, 10) };
+    return { from: start.toISOString().slice(0, 10), to: new Date(end.getTime() - 86400e3).toISOString().slice(0, 10) };
 }
 
 let etData = null;
 let etDays = 30;
-// Defaults to the LAST FINISHED newsletter period rather than a rolling 30 days — that is the cycle
-// members are actually judged on, and opening the page already showing it means no re-pick (and no
-// second fetch) is needed just to see the numbers that matter.
-let etRange = { ...etNewsletterRange(1), period: 'last' }; // { from, to, period: 'now' | 'last' | undefined (a custom pick) }
+// Defaults to the newsletter period still RUNNING (first Sunday up to today) rather than a rolling 30 days — that is the cycle
+// being built right now, and opening the page already showing it means no re-pick (and no
+// second fetch) is needed just to see the current numbers.
+let etRange = { ...etNewsletterRange(0), period: 'now' }; // { from, to, period: 'now' | 'last' | undefined (a custom pick) }
 let etOpen = new Set();
 let etSort = { key: 'total', dir: 'desc' }; // sortable table state — see core.js's sortRows/wireSort
 
