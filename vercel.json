@@ -1,7 +1,8 @@
 {
   "functions": {
     "api/war-payout.js": { "maxDuration": 60, "includeFiles": "userscripts/**" },
-    "api/armory-tracker.js": { "maxDuration": 60 }
+    "api/armory-tracker.js": { "maxDuration": 60 },
+    "api/respect.js": { "maxDuration": 60 }
   },
   "crons": [
     { "path": "/api/war-payout?cron=1", "schedule": "5 0 * * *" }

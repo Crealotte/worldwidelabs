@@ -455,6 +455,51 @@ $('rg-deep-sync-losses').addEventListener('click', async () => {
     }
 });
 
+// One click walks each source back to 3 months (what the goal planner's longest pace window needs) by
+// repeating the same "Dig deeper" call until it has gone far enough back, reached the edge of what Torn still
+// has, or stopped making progress. Each call stays inside the server's time limit, so this is just the
+// button pressed again for you, one source at a time, with a pause if Torn rate-limits.
+$('rg-load-history').addEventListener('click', async () => {
+    const btn = $('rg-load-history');
+    const st = $('rg-sync-status');
+    const target = Math.floor(Date.now() / 1000) - 90 * 86400;
+    const label = ts => new Date(ts * 1000).toISOString().slice(0, 10);
+    btn.disabled = true;
+    st.style.whiteSpace = '';
+    st.className = 'status ok';
+    try {
+        const sources = [['Hits', 'deep-sync-hits'], ['Losses', 'deep-sync-losses'], ['OC', 'deep-sync-oc']];
+        const summary = [];
+        for (const [name, action] of sources) {
+            let total = 0, last = null, stuck = 0, rateWaits = 0, end = 'reached 3 months';
+            for (let i = 0; i < 60; i++) {
+                btn.textContent = `Loading ${name}…`;
+                st.textContent = `${name}: ${total} found so far${last ? `, back to ${label(last)}` : ''} (target ${label(target)}) — keep this page open.`;
+                const r = await respectFetch({ action });
+                if (r.error) throw new Error(`${name}: ${r.error}`);
+                total += r.synced || 0;
+                if (r.rateLimited) {
+                    if (++rateWaits > 5) { end = 'stopped: Torn kept rate-limiting, run again in a few minutes'; break; }
+                    st.textContent = `${name}: Torn rate limit, waiting 30 seconds…`;
+                    await rgSleep(30000);
+                    continue;
+                }
+                if (r.cursor && last !== null && r.cursor >= last) { if (++stuck >= 2) { end = 'stopped making progress'; break; } } else stuck = 0;
+                if (r.cursor) last = r.cursor;
+                if (last !== null && last <= target) break;
+                if (r.stopReason && r.stopReason !== 'max-pages') { end = `reached the edge of Torn's history (${last ? label(last) : 'n/a'})`; break; }
+            }
+            summary.push(`${name} +${total} (${end})`);
+        }
+        st.textContent = `Done — ${summary.join(' · ')}`;
+        loadRespectEditor();
+    } catch (e) {
+        st.className = 'status err'; st.textContent = e.message;
+    } finally {
+        btn.disabled = false; btn.textContent = 'Load 3 months of history';
+    }
+});
+
 // Read-only comparison of Torn's attack log and news feed for hits against us (see loss-probe in
 // api/respect.js) — shown as plain text so it can be copied back as-is.
 $('rg-loss-probe').addEventListener('click', async () => {
