@@ -547,6 +547,7 @@
             </div>
             <div class="nav-group-items" data-group-items="faction">
                 <a class="nav-item" data-page="steadfast" href="/steadfast">Steadfast planner</a>
+                <a class="nav-item" data-page="competition" href="/competition">Competition</a>
                 <a class="nav-item" data-page="perk-roadmap" href="/perk-roadmap">Perk roadmap</a>
                 <a class="nav-item" data-page="tz-map" href="/tz-map">Timezone map</a>
         </div>
@@ -1756,6 +1757,15 @@
             </div>
         </section>
 
+        <section class="page" id="page-competition">
+            <div class="lab-label">WWL·32 / faction</div>
+            <h2>Competition</h2>
+            <p class="pagedesc">The full standings of every competition for the newsletter period — the newsletter only lists the winners. War and chain hits only count wars and chain events that ended inside the period.</p>
+            <div class="status" id="cp-status"></div>
+            <div style="margin-bottom:12px;"><select id="cp-period" style="width:auto;max-width:100%;font-size:13px;"></select></div>
+            <div id="cp-body" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:14px;"></div>
+        </section>
+
         <section class="page" id="page-newsletter">
             <div class="lab-label">WWL·25 / leaders &amp; council</div>
             <h2>Newsletter</h2>
@@ -2431,6 +2441,7 @@
 <script src="respect-tracker.js"></script>
 <script src="effort-calculator.js"></script>
 <script src="evaluation.js"></script>
+<script src="competition.js"></script>
 <script src="crimes-guide.js"></script>
 <script src="war-payout-tracker.js"></script>
 <script src="war-badges-tracker.js"></script>

@@ -28,7 +28,7 @@ const { tornFetch } = require('../lib/tornFetch');
 const { fetchWarHits, sleep, fetchLiveChainHits, isRateLimited } = require('../lib/warHits');
 const { fetchWarBadgeStats } = require('../lib/warBadgeStats');
 const { tornToDiscordIds, resolveDiscordIds, discordStatus } = require('../lib/discordMap');
-const { moHandle, moMe, loadExtra, isEventId } = require('../lib/memberOverview');
+const { moHandle, moMe, moStandings, loadExtra, isEventId } = require('../lib/memberOverview');
 const { evHandle } = require('../lib/evaluation');
 const { gymHandle } = require('../lib/gymStats');
 const { warReports } = require('../lib/warReports');
@@ -585,6 +585,8 @@ module.exports = async function handler(req, res) {
 
         // My standing (dashboard card) — open to every member; only ever describes the caller. See lib/memberOverview.js.
         if (action === 'mo-me') return res.status(200).json(await moMe({ redis, key, factionId, playerId, daysInFaction }));
+        // Competition page — the full standings, open to every member (built from stored data only).
+        if (action === 'mo-standings') return res.status(200).json(await moStandings({ redis, factionId }));
 
         // Gym stats page (history graph + goals) — open to every member, only ever about the caller. See lib/gymStats.js.
         if (action.startsWith('gym-')) return res.status(200).json(await gymHandle(action, req.body, { redis, key, playerId }));

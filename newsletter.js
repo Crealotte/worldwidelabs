@@ -74,7 +74,7 @@ async function buildNewsletter() {
         sections.push({ title: 'Competition winners', groups: [{
             head: range,
             rows: winners.length ? winners.map(w => [w.label, w.top.length ? `${w.top[0].name} (${fmt(w.top[0].value)})` : 'no data']) : [['', 'The competition numbers could not be read - open Member Overview once and try again.']],
-            note: 'Runners-up and the full standings are on WWL, under Member Overview.',
+            note: 'Runners-up and the full standings are on WWL, under Faction, Competition.',
         }] });
 
         // 2. Steadfast: the swap that happens now, and next month

@@ -392,6 +392,7 @@
         if (page === 'war-payout') loadWarPayout();
         if (page === 'effort-calc') loadEffortCalc();
         if (page === 'evaluation') loadEvaluation();
+        if (page === 'competition') loadCompetition();
         if (page === 'war-badges') loadWarBadges();
         if (page === 'availability' || page === 'availability-leaders') loadAvailability();
         if (page === 'energy') loadGymPlanner();
