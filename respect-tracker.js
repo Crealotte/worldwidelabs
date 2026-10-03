@@ -500,6 +500,24 @@ $('rg-load-history').addEventListener('click', async () => {
     }
 });
 
+// Compares every recent war's bonus with what Torn's news shows (see auditWarBonus in api/respect.js). The
+// second button also fills in any bonus Torn shows that the tracker is missing. Result is shown as plain text.
+async function rgWarAudit(apply) {
+    const st = $('rg-sync-status');
+    st.className = 'status ok'; st.style.whiteSpace = 'pre-wrap'; st.textContent = 'Reading each war from Torn… (a few seconds per war)';
+    try {
+        const r = await respectFetch({ action: 'audit-war-bonus', apply });
+        if (r.error) throw new Error(r.error);
+        const n = v => (v === null || v === undefined ? '—' : Number(v).toLocaleString());
+        const lines = r.rows.map(x => `${x.end}  vs ${x.opponent || x.warId}\n    tracker: ${x.stored === null ? 'war not recorded' : n(x.stored)}   ·   Torn news: ${x.error ? `error (${x.error})` : x.found === null ? `no bonus line found (${x.newsLines} news lines read)` : `${n(x.found)} (${x.won ? 'ranked up' : 'ranked down'})`}${x.fixed ? '   ← filled in' : ''}${x.sample ? `\n    first lines: ${x.sample.join(' | ')}` : ''}`);
+        const run = (r.running || []).map(x => `${x.start || '?'}  vs ${x.opponent || x.warId}  — Torn has no end time for this war yet, so it is not counted anywhere`);
+        st.textContent = `${lines.join('\n') || 'No finished wars found.'}${run.length ? `\n\nNot finished according to Torn:\n${run.join('\n')}` : ''}${apply ? `\n\n${r.fixed} bonus${r.fixed === 1 ? '' : 'es'} filled in.` : '\n\n(Nothing changed. Use "Check and fill in missing" to fill in bonuses Torn shows that the tracker is missing.)'}`;
+        if (apply && r.fixed) loadRespectEditor();
+    } catch (e) { st.className = 'status err'; st.textContent = e.message; }
+}
+$('rg-war-audit').addEventListener('click', () => rgWarAudit(false));
+$('rg-war-audit-fix').addEventListener('click', () => rgWarAudit(true));
+
 // Read-only comparison of Torn's attack log and news feed for hits against us (see loss-probe in
 // api/respect.js) — shown as plain text so it can be copied back as-is.
 $('rg-loss-probe').addEventListener('click', async () => {

@@ -33,6 +33,7 @@ async function loadNewsletter() {
 const nlDay = ts => new Date(ts * 1000).toISOString().slice(0, 10);
 
 function nlPlain(s) {
+    if (s.raw) return s.lines.join('\n'); // free text (intro / closing), no heading
     return [s.title.toUpperCase(), ...s.groups.map(g => [g.head || '', ...(g.rows || []).map(([l, v]) => l ? `${l}: ${v}` : v), g.note || ''].filter(Boolean).join('\n'))].join('\n\n');
 }
 
@@ -42,7 +43,7 @@ function nlCardHtml(title, sections) {
     return `<div style="background:${c.bg};color:${c.text};font-family:Arial,Helvetica,sans-serif;border:1px solid ${c.line};border-top:3px solid ${c.green};padding:18px 20px;max-width:640px;">
         <div style="font-size:20px;font-weight:bold;letter-spacing:1px;margin-bottom:2px;">${esc(title)}</div>
         <div style="font-size:12px;color:${c.muted};margin-bottom:14px;">World Wide Labs</div>
-        ${sections.map(s => `
+        ${sections.map(s => s.raw ? `<div style="font-size:14px;margin:0 0 12px;line-height:1.5;">${s.lines.map(esc).join('<br>')}</div>` : `
         <div style="background:${c.panel};border:1px solid ${c.line};border-left:3px solid ${c.green};padding:12px 14px;margin-bottom:12px;">
             <div style="font-size:14px;font-weight:bold;letter-spacing:1px;color:${c.green};margin-bottom:8px;">${esc(s.title.toUpperCase())}</div>
             ${s.groups.map(g => `
@@ -61,7 +62,7 @@ async function buildNewsletter() {
         if (!period) throw new Error('Pick a period first.');
         const running = period.id === 'now';
         const range = `${moFmt(period.start)} to ${moFmt(period.end)}${running ? ' (so far)' : ''}`;
-        const sections = [];
+        const sections = [{ title: 'Intro', raw: true, lines: ['Hey everyone!', 'Here is our monthly wrap up of all we have accomplished:'] }];
 
         // 1. winners: only the winner of each competition; the runners-up are on the Member Overview page
         st.textContent = 'Reading the competition numbers (this can take a minute the first time)...';
@@ -69,6 +70,7 @@ async function buildNewsletter() {
         await loadMemberOverview();
         const fmt = v => Math.round(v).toLocaleString();
         const winners = moData ? moWinners(moRows()) : [];
+        sections.push({ title: 'Winners lead-in', raw: true, lines: ['A huge congrats to our winners!'] });
         sections.push({ title: 'Competition winners', groups: [{
             head: range,
             rows: winners.length ? winners.map(w => [w.label, w.top.length ? `${w.top[0].name} (${fmt(w.top[0].value)})` : 'no data']) : [['', 'The competition numbers could not be read - open Member Overview once and try again.']],
@@ -92,7 +94,7 @@ async function buildNewsletter() {
             const rd = await respectFetch({ action: 'read' });
             if (rd.error) throw new Error(rd.error);
             const all = respectComputeDaily(rd.ocDaily || {}, rd.chainDaily || {}, rd.hitsDaily || {}, rd.warBonusDaily || {}, rd.warEntries || [], rd.lossDaily || {});
-            const from = nlDay(period.start), to = nlDay(period.end); // days from the start, up to but not including the end Sunday
+            const from = nlDay(period.start), to = running ? nlDay(Math.floor(Date.now() / 1000) + 86400) : nlDay(period.end); // days from the start, up to but not including the end Sunday (a running period includes today)
             const inRange = all.filter(r => r.date >= from && r.date < to);
             const sum = k => inRange.reduce((s, r) => s + (r[k] || 0), 0);
             const earliest = all.length ? all[all.length - 1].date : null;
@@ -121,6 +123,7 @@ async function buildNewsletter() {
         if (todo.length) groups.push({ head: 'Up next', rows: todo.map(([perk, level, respect, date]) => [`${perk} ${fpRoman(level)}`, `needs ${nlNum(respect)} respect, planned ${fpDateLabel(date)}`]) });
         sections.push({ title: 'Respect and perks', groups });
 
+        sections.push({ title: 'Closing', raw: true, lines: ['^^'] });
         renderNewsletter(sections, `Newsletter - ${moFmt(period.start)} to ${moFmt(period.end)}`);
         st.textContent = '';
     } catch (e) { st.className = 'status err'; st.textContent = e.message; }
@@ -146,11 +149,11 @@ function renderNewsletter(sections, title) {
         navigator.clipboard.writeText(document.querySelector(`.nl-text[data-i="${b.dataset.i}"]`).value).then(() => toast('Copied'));
     }));
     $('nl-copy-all').addEventListener('click', () => {
-        navigator.clipboard.writeText([title, ...[...document.querySelectorAll('.nl-text')].map(t => t.value)].join('\n\n')).then(() => toast('Copied'));
+        navigator.clipboard.writeText([...document.querySelectorAll('.nl-text')].map(t => t.value).join('\n\n')).then(() => toast('Copied'));
     });
     $('nl-copy-rich').addEventListener('click', async () => {
         try {
-            const plain = [title, ...sections.map(nlPlain)].join('\n\n');
+            const plain = sections.map(nlPlain).join('\n\n');
             await navigator.clipboard.write([new ClipboardItem({ 'text/html': new Blob([html], { type: 'text/html' }), 'text/plain': new Blob([plain], { type: 'text/plain' }) })]);
             toast('Copied with formatting - paste it in the Torn editor');
         } catch (e) { toast('Your browser would not copy formatted text here - use the plain text instead.'); }

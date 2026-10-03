@@ -403,6 +403,63 @@ async function syncWarBonus(key, factionId) {
     return { synced, totalAvailable: wars.length, skippedUnresolved, rateLimited };
 }
 
+// Cross-check of every recent ranked war's bonus against Torn's own news: for each of the latest wars it reads a
+// wide window around the war's end (the regular sync only looks at ~10 minutes and 20 lines, and treats "nothing
+// found" as final), finds the "ranked up/down ... received N bonus respect" line, and compares it with what the
+// tracker has stored. With `apply`, a bonus that Torn shows but the tracker has as 0/missing is filled in (and
+// counted on the war's end day, like the regular sync does). Returns one row per war so nothing is guessed.
+const WAR_BONUS_RE = /ranked (up|down) from .+? to .+? and received ([\d,]+) bonus respect/i;
+async function auditWarBonus(key, factionId, apply) {
+    const r = await tornFetch(`https://api.torn.com/v2/faction?selections=rankedwars&key=${encodeURIComponent(key)}`, { headers: { accept: 'application/json' } });
+    const data = await r.json();
+    if (data.error) return { error: data.error.error };
+    const wars = Object.values(data.rankedwars || data.ranked_wars || {})
+        .map(w => ({ id: String(w.id || w.war_id || ''), start: w.war?.start || w.start || null, end: w.war?.end || w.end || null, opponent: (w.factions || []).find(f => String(f.id) !== String(factionId))?.name || '' }))
+        .filter(w => w.id);
+    const running = wars.filter(w => !w.end).map(w => ({ warId: w.id, opponent: w.opponent, start: w.start ? new Date(w.start * 1000).toISOString().slice(0, 16).replace('T', ' ') : null }));
+    wars.splice(0, wars.length, ...wars.filter(w => w.end).sort((a, b) => b.end - a.end).slice(0, 8));
+    const entriesRaw = await redis(['GET', warBonusEntriesKey(factionId)]);
+    const entries = entriesRaw ? JSON.parse(entriesRaw) : [];
+    const dailyRaw = await redis(['GET', warBonusDailyKey(factionId)]);
+    const daily = dailyRaw ? JSON.parse(dailyRaw) : {};
+    const rows = [];
+    let changed = false;
+    for (let i = 0; i < wars.length; i++) {
+        const w = wars[i];
+        if (i > 0) await sleep(1100);
+        const row = { warId: w.id, opponent: w.opponent, end: new Date(w.end * 1000).toISOString().slice(0, 16).replace('T', ' '), stored: null, found: null, won: null, newsLines: null, fixed: false };
+        const stored = entries.find(e => e.warId === w.id);
+        row.stored = stored ? (stored.bonus || 0) : null; // null = this war was never recorded at all
+        try {
+            const nr = await tornFetch(`https://api.torn.com/v2/faction/news?striptags=true&limit=100&sort=ASC&from=${w.end - 600}&to=${w.end + 3600}&key=${encodeURIComponent(key)}`, { headers: { accept: 'application/json' } });
+            const nd = await nr.json();
+            if (nd.error) { row.error = nd.error.error || `Torn error ${nd.error.code}`; rows.push(row); continue; }
+            const list = Array.isArray(nd.news) ? nd.news : Object.values(nd.news || {});
+            row.newsLines = list.length;
+            for (const item of list) {
+                const m = WAR_BONUS_RE.exec(String(item.text ?? item.news ?? ''));
+                if (m) { row.found = Number(m[2].replace(/,/g, '')); row.won = m[1].toLowerCase() === 'up'; }
+            }
+            if (row.found === null) row.sample = list.slice(0, 3).map(x => String(x.text ?? x.news ?? '').slice(0, 90));
+            if (apply && row.found > 0 && !(row.stored > 0)) {
+                const dayKey = new Date(w.end * 1000).toISOString().slice(0, 10);
+                daily[dayKey] = (daily[dayKey] || 0) + row.found;
+                if (stored) { stored.bonus = row.found; stored.won = row.won; }
+                else entries.push({ warId: w.id, start: w.start, end: w.end, bonus: row.found, won: row.won, scoreUs: null, scoreThem: null, warHits: null });
+                await redis(['SADD', rankUpCheckedKey(factionId), w.id]);
+                await redis(['SADD', warBonusSeenKey(factionId), w.id]);
+                row.fixed = true; changed = true;
+            }
+        } catch (e) { row.error = String(e.message || e).slice(0, 80); }
+        rows.push(row);
+    }
+    if (changed) {
+        await redis(['SET', warBonusDailyKey(factionId), JSON.stringify(daily)]);
+        await redis(['SET', warBonusEntriesKey(factionId), JSON.stringify(entries.slice(-300))]);
+    }
+    return { rows, running, fixed: rows.filter(x => x.fixed).length };
+}
+
 // Processes one page of attacks. Shared between the regular single-page sync and the deep
 // multi-page backfill below. Only counts OUR OWN outgoing attacks (attacker_faction === us) —
 // attacksfull's "respect" field is always the attacker's own gain, so for our outgoing attacks
@@ -875,6 +932,12 @@ module.exports = async function handler(req, res) {
             const result = await syncChains(key, factionId);
             if (result.error) return res.status(403).json({ error: result.error });
             return res.status(200).json({ ok: true, synced: result.synced, totalAvailable: result.totalAvailable });
+        }
+
+        if (action === 'audit-war-bonus') {
+            const result = await auditWarBonus(key, factionId, !!req.body.apply);
+            if (result.error) return res.status(403).json({ error: result.error });
+            return res.status(200).json(result);
         }
 
         if (action === 'sync-war-bonus') {
