@@ -261,7 +261,7 @@ function renderMemberOverview() {
         active: r => r.lastAction || 0,
         warsok: r => (r.counted ? r.okWars / r.counted : -1),
         tier: r => ({ high: 2, low: 1 })[effTier(r)] || 0,
-        war: r => r.war, chain: r => r.chain,
+        war: r => r.war, chain: r => r.chain, pwar: r => r.periodWar, pchain: r => r.periodChain,
     };
     warList.forEach((w, i) => { moAccessors[`pw${i}`] = r => { const p = r.perWar[i]; return p && !p.notIn ? p.war : -1; }; });
     MO_KEYS.forEach(([k]) => { moAccessors[k] = r => r.used[k] ?? -1; });
@@ -306,7 +306,7 @@ function renderMemberOverview() {
                 <th data-sort="warsok" style="padding:4px 8px;" title="Wars (of the last 5) where the war rule was met">Wars OK</th>
                 <th data-sort="tier" style="padding:4px 8px;" title="1.5m+ battle stats = ${moData.energyTarget.high} E/week, under = ${moData.energyTarget.low} E/week. Picked automatically from each member's own battle stats once they have opened the app; you can override it.">Energy tier</th>
                 ${MO_KEYS.map(([k, l]) => th(k, `${l}<br><span style="font-size:10px;font-weight:400;">${unitLabel}</span>`)).join('')}
-                ${th('war', 'War hits')}${th('chain', 'Chain hits')}
+                ${th('war', 'War hits<br><span style="font-size:10px;font-weight:400;">last 5 wars</span>')}${th('chain', 'Chain hits<br><span style="font-size:10px;font-weight:400;">last 5 wars</span>')}${th('pwar', 'War hits<br><span style="font-size:10px;font-weight:400;">this period</span>')}${th('pchain', 'Chain hits<br><span style="font-size:10px;font-weight:400;">this period</span>')}
             </tr></thead>
             <tbody>${sorted.map(r => `
                 <tr style="border-top:1px solid var(--line);">
@@ -331,7 +331,7 @@ function renderMemberOverview() {
                         <div style="color:var(--muted);font-size:10px;">${need ? `${need.toLocaleString()} E needed` : ''}${auto ? ` · ${(auto.total / 1e6).toFixed(2)}m stats` : ''}</div>`;
                     })()}</td>
                     ${MO_KEYS.map(([k]) => `<td style="padding:4px 8px;font-family:var(--mono);">${moNum(r.used[k])}</td>`).join('')}
-                    <td style="padding:4px 8px;font-family:var(--mono);">${r.war}</td><td style="padding:4px 8px;font-family:var(--mono);">${r.chain}</td>
+                    <td style="padding:4px 8px;font-family:var(--mono);">${r.war}</td><td style="padding:4px 8px;font-family:var(--mono);">${r.chain}</td><td style="padding:4px 8px;font-family:var(--mono);font-weight:700;" title="Only wars and chain events that ended inside the picked period - the numbers the newsletter competition uses">${r.periodWar}</td><td style="padding:4px 8px;font-family:var(--mono);font-weight:700;" title="Only wars and chain events that ended inside the picked period - the numbers the newsletter competition uses">${r.periodChain}</td>
                 </tr>`).join('')}
             </tbody>
         </table>`;
