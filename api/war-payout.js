@@ -28,7 +28,7 @@ const { tornFetch } = require('../lib/tornFetch');
 const { fetchWarHits, sleep, fetchLiveChainHits, isRateLimited } = require('../lib/warHits');
 const { fetchWarBadgeStats } = require('../lib/warBadgeStats');
 const { tornToDiscordIds, resolveDiscordIds, discordStatus } = require('../lib/discordMap');
-const { moHandle, moMe, moStandings, loadExtra, isEventId } = require('../lib/memberOverview');
+const { moHandle, moMe, moStandings, xanaxOwedKey, loadExtra, isEventId } = require('../lib/memberOverview');
 const { evHandle } = require('../lib/evaluation');
 const { gymHandle } = require('../lib/gymStats');
 const { warReports } = require('../lib/warReports');
@@ -634,7 +634,7 @@ module.exports = async function handler(req, res) {
         // refreshes stored numbers.
         if (req.method === 'GET' && req.query?.cron) {
             const extra = String(process.env.WWL_SNAPSHOT_KEYS || '').split(',').map(s => s.trim()).filter(Boolean);
-            const results = await nightlyRun(redis, extra, getProfile, (k, fid) => require('./respect').runTracking(k, fid));
+            const results = await nightlyRun(redis, extra, getProfile, async (k, fid) => ({ ...(await require('./respect').runTracking(k, fid)), xanax: await require('./armory-tracker').refreshXanaxOwed(k, fid).catch(e => ({ error: String(e.message || e).slice(0, 60) })) }));
             return res.status(200).json({ ran: results.length, results });
         }
 
@@ -1136,6 +1136,18 @@ Cancel: ${cancelUrl}`, [], embeds, undefined, true);
                     }
                 }
             } catch (e) { /* skip this check on failure, don't fail the others */ }
+
+            // Xanax still to put back (everyone's amount is worked out once and kept: see moXanaxAll in lib/memberOverview.js, so this is a single
+            // cheap lookup). Worked out on the server and only displayed by the script — no script update needed.
+            try {
+                const rawX = await redis(['HGET', xanaxOwedKey(factionId), playerId]);
+                const xo = rawX ? JSON.parse(rawX) : null;
+                if (xo && xo.outstanding > 0) items.push({
+                    id: 'xanax-return',
+                    text: `💊 You still have ${xo.outstanding} Xanax to put back in the faction armory: you took more than your hits covered in this period's wars (every Xanax should be backed by 10 hits). See "Your standing" on the WWL dashboard for the details.`,
+                    cta: 'Open the armory', url: 'https://www.torn.com/factions.php?step=your#/tab=armoury',
+                });
+            } catch (e) { /* skip */ }
 
             // Xanax stacking warning: whenever a war is coming up (an availability plan linked to a war that has not started yet), everyone
             // is told clearly to stack Xanax from 48 hours before the start. Worked out here from the stored plans, so it shows in the

@@ -39,6 +39,7 @@
 const { tornFetch } = require('../lib/tornFetch');
 const { parseArmoryNewsEntry } = require('../lib/armoryNewsParser');
 const { fetchWarHits } = require('../lib/warHits');
+const { moXanaxAll } = require('../lib/memberOverview');
 const { TRACKED_ITEMS, BLOOD_BAG_RE } = require('../lib/trackedItems');
 
 const REDIS_URL = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL;
@@ -160,7 +161,10 @@ module.exports = async function handler(req, res) {
             }
             const result = { warId, leadHours, from, to, taken, entries: news.entries.length, rateLimited: news.rateLimited, hitPageCap: news.hitPageCap, unparsed, at: Date.now() };
             // only keep it when the window is closed and the whole log was read (a partial answer must not stick)
-            if (now > war.end + 86400 && !news.rateLimited && !news.hitPageCap) await redis(['SET', cacheKey(warId), JSON.stringify(result)]);
+            if (now > war.end + 86400 && !news.rateLimited && !news.hitPageCap) {
+                await redis(['SET', cacheKey(warId), JSON.stringify(result)]);
+                try { await moXanaxAll({ redis, factionId }); } catch (e) { /* the stored per-member list is refreshed next time */ }
+            }
             return res.status(200).json(result);
         }
 
@@ -188,6 +192,7 @@ module.exports = async function handler(req, res) {
             if (!news.rateLimited && !news.hitPageCap) {
                 await redis(['SET', ck, JSON.stringify(result), 'EX', '900']);
                 await redis(['SET', `wwl:xanax-dep-last:${factionId}`, JSON.stringify(result)]); // no expiry: members' own Xanax card reads this (it says when it was read)
+                try { await moXanaxAll({ redis, factionId }); } catch (e) { /* the stored per-member list is refreshed next time */ }
             }
             return res.status(200).json(result);
         }
@@ -387,4 +392,27 @@ module.exports = async function handler(req, res) {
     } catch (e) {
         return res.status(500).json({ error: String(e.message || e) });
     }
+};
+
+// Used by the nightly job (api/war-payout.js ?cron=1) with a leader's stored key: brings the deposits up to date incrementally (only the
+// armory log since the last reading, a page or two) and refreshes everyone's outstanding-Xanax list, so a member who has put Xanax back
+// stops being reminded without a leader pressing anything. Does nothing until the deposits were read once on the evaluation page.
+module.exports.refreshXanaxOwed = async function refreshXanaxOwed(key, factionId) {
+    const depRaw = await redis(['GET', `wwl:xanax-dep-last:${factionId}`]);
+    if (!depRaw) return { skipped: 'deposits not read yet' };
+    const dep = JSON.parse(depRaw);
+    const now = Math.floor(Date.now() / 1000);
+    const news = await fetchAllArmoryNews(key, dep.to + 1, now);
+    if (!news.rateLimited && !news.hitPageCap) {
+        for (const entry of news.entries) {
+            const p = parseArmoryNewsEntry(String(entry.id), entry);
+            if (p.unparsed || p.action !== 'deposited' || String(p.item).toLowerCase() !== 'xanax') continue;
+            const id = p.actorId || p.actor;
+            const d = dep.deposited[id] || (dep.deposited[id] = { name: p.actor, n: 0 });
+            d.n += p.quantity || 1;
+        }
+        dep.to = now; dep.at = Date.now();
+        await redis(['SET', `wwl:xanax-dep-last:${factionId}`, JSON.stringify(dep)]);
+    }
+    return await moXanaxAll({ redis, factionId });
 };
