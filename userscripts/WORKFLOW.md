@@ -22,3 +22,11 @@ Queue changes below instead of releasing each one. Nothing here is live for memb
 2. Set the next normal version in both `@version` and the `SCRIPT_VERSION` fallback (e.g. 1.38), in both files.
 3. Add ONE What's new entry for everything in the list, push once. Members get one update banner.
 4. Clear the list above.
+
+## Which changes go live at once, and which wait
+- **Server-side changes go live immediately.** The To do list, banners, plan and standing numbers are worked out on the
+  server and only DISPLAYED by the script (for example the "not in an OC" reminder, which lives in `member-todo` in
+  `api/war-payout.js`). Fix or add those straight away; no script update is needed.
+- **Changes to the script file itself wait for a batch.** Anything in `userscripts/energy-plan.dev.user.js` (new tabs,
+  buttons, layout, how it fetches or shows things) is queued in the list above and released together.
+- When a request is a mix, split it: the server part goes live now, the script part is queued.

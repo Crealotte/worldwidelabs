@@ -794,7 +794,7 @@ module.exports = async function handler(req, res) {
                 // real cost against the database's monthly request quota). Not counted in the Torn usage panel.
                 // organizedcrimes is bundled into the same call (below) rather than a second one — it's this
                 // member's own key, so no faction-level API access is needed to see their own OC membership.
-                const r = await fetch(`https://api.torn.com/v2/user/?selections=profile,organizedcrimes&key=${encodeURIComponent(key)}`, { headers: { accept: 'application/json' } });
+                const r = await fetch(`https://api.torn.com/v2/user/?selections=profile,organizedcrime&key=${encodeURIComponent(key)}`, { headers: { accept: 'application/json' } });
                 const d = await r.json();
                 // v2's response nests everything under "profile" (confirmed against a real reference
                 // userscript's own code, `data.profile.revivable`) — reading `d.revivable` directly
@@ -802,14 +802,17 @@ module.exports = async function handler(req, res) {
                 if (!d.error && d.profile?.revivable) {
                     items.push({ id: 'revive', text: "You have your revives on, set them to \"no one\".", cta: 'Open Preferences', url: 'https://www.torn.com/preferences.php#tab=privacy' });
                 }
-                // organizedcrimes (this member's own POV) only ever lists an OC they currently belong to —
-                // Torn drops it from here itself once it's finished, so any entry at all means "in one right
-                // now", no status filtering needed (unlike the faction-wide crimes list used elsewhere, which
-                // also holds finished ones for the rewards/role-skeleton history).
-                if (!d.error) {
-                    const oc = d.organizedcrimes ?? d.organized_crimes;
-                    const inOC = Array.isArray(oc) ? oc.length > 0 : !!(oc && Object.keys(oc).length > 0);
-                    if (!inOC) items.push({ id: 'oc', text: "You're not in an Organized Crime right now.", cta: 'Join an OC', url: 'https://www.torn.com/factions.php?step=your#/tab=crimes' });
+                // Torn's v2 "organizedcrime" (singular) is "your current ongoing organized crime" — null when you are not in one.
+                // (The plural "organizedcrimes" this used to read is something else entirely: the open slots of crimes that are
+                // still recruiting, which has nothing to do with whether THIS member is in one — that is why the reminder never
+                // showed.) The selection is valid, so a profile that came back with no organized-crime field means null: not in one.
+                if (!d.error && d.profile) {
+                    const known = ['organizedCrime', 'organizedcrime', 'organized_crime'].find(k => k in d);
+                    {
+                        const oc = known ? d[known] : null;
+                        const inOC = Array.isArray(oc) ? oc.length > 0 : !!(oc && typeof oc === 'object' && Object.keys(oc).length > 0);
+                        if (!inOC) items.push({ id: 'oc', text: "You're not in an Organized Crime right now.", cta: 'Join an OC', url: 'https://www.torn.com/factions.php?step=your#/tab=crimes' });
+                    }
                 }
             } catch (e) { /* skip this check on failure, don't fail the others */ }
 
