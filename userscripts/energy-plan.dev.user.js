@@ -2,7 +2,7 @@
 // @name         World Wide Labs
 // @namespace    https://worldwidelabs.vercel.app
 // @author       CreaLotte
-// @version      1.38.3
+// @version      1.38.4
 // @updateURL    __WWL_BASE__/worldwidelabs.user.js
 // @downloadURL  __WWL_BASE__/worldwidelabs.user.js
 // @description  Shows your WorldWideLabs weekly energy plan (the checklist from the Energy planner) inside Torn, a To do tab with small personal reminders (revive setting, feedback, timezone map, availability, Discord/Intel/CAT), your My Targets list, a simplified energy/war standing strip, and — if you are in the Mentoring Platform — your mentoring checklist too. Also shows faction banners at the top of every Torn page. A small ⚙ in the header shows the installed version, flags when a newer one is out, lets you set/replace your API key, and — for a leader — add or remove your faction's banners right from Torn. On a computer it is a small window you can drag around and close; in TornPDA it is a menu. Ticks are shared with the WWL site.
@@ -26,7 +26,7 @@
     const KEY_NAME = 'wwl_api_key', POS_NAME = 'wwl_plan_pos', STATE_NAME = 'wwl_plan_state';
     // GM_info gives the version Tampermonkey actually has installed right now — falls back to a
     // hardcoded copy (kept in sync with @version above) for TornPDA, which doesn't grant GM_info.
-    const SCRIPT_VERSION = (typeof GM_info !== 'undefined' && GM_info.script?.version) || '1.38.3';
+    const SCRIPT_VERSION = (typeof GM_info !== 'undefined' && GM_info.script?.version) || '1.38.4';
     const versionGreater = (a, b) => {
         const pa = String(a).split('.').map(Number), pb = String(b).split('.').map(Number);
         for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
@@ -151,7 +151,7 @@
         <div id="wwl-body" style="overflow:auto;padding:8px 12px 12px;"></div>`;
     root.appendChild(win);
     const body = win.querySelector('#wwl-body'), prog2 = win.querySelector('#wwl-prog2'), head = win.querySelector('#wwl-head');
-    let plan = null, mtPairs = null, mtTodos = [], todoItems = null, tab = 'todo', lastTab = 'todo'; // tab: 'energy' | 'mentoring' | 'todo' | 'settings' | 'targets' — the mentoring tab only appears once we know there's something to show there
+    let plan = null, mtPairs = null, mtTodos = [], mtIsPupil = false, welMine = null, welPupils = {}, todoItems = null, tab = 'todo', lastTab = 'todo'; // tab: 'energy' | 'mentoring' | 'todo' | 'settings' | 'targets' — the mentoring tab only appears once we know there's something to show there
     let settingsData = null, updateAvailable = null; // settingsData: { banners, leader, owner } once the Settings tab has been opened
     let standing = null; // from 'mo-me' — the same numbers the site's "Your standing" dashboard card shows
     let myTargets = null, targetStatus = {}; // My Targets list + live status, fetched separately (status can lag behind the list)
@@ -256,7 +256,7 @@
     function tabBar() {
         const n = todoCount();
         const tabs = [['todo', `✅ To do${n ? ` (${n})` : ''}`], ['energy', '⚡ Energy'], ['targets', '🎯 Targets']];
-        if (mtPairs && mtPairs.length) tabs.push(['mentoring', '🎓 Mentoring']);
+        if ((mtPairs && mtPairs.length) || mtIsPupil) tabs.push(['mentoring', '🎓 Mentoring']);
         tabs.push(['bank', '💰 Bank']);
         if (tabs.length < 2) return '';
         return `<div style="display:flex;gap:6px;margin-bottom:10px;">${tabs.map(([id, label]) =>
@@ -338,14 +338,41 @@
         }
         if (Date.now() - targetsFetchedAt > 60000) return refreshTargetStatus(); // statuses go stale fast, but not that fast
     }
+    // ---- welcome chapters (the pupil's missions, and what the mentor sees of their pupil) — from lib/welcome.js ----
+    const weRich = t => esc(String(t || '')).replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g, (m, label, url) => `<a href="${url}" target="_blank" rel="noopener" style="color:#35d99b;">${label}</a>`);
+    const weLink = t => { const l = String(t.link || '').trim(); if (!l) return ''; const h = /^https?:\/\//i.test(l) ? l : `${WWL}/${l.replace(/^\/+/, '')}`; return ` <a href="${esc(h)}" target="_blank" rel="noopener" style="color:#35d99b;white-space:nowrap;">${esc(t.label || 'Open')}</a>`; };
+    const weTask = (t, cls, extra) => `<label style="display:flex;gap:8px;align-items:flex-start;padding:${IS_PDA ? 8 : 4}px 0;${t.waiting ? 'opacity:.6;' : ''}"><input type="checkbox" class="${cls}" ${extra} data-id="${esc(t.id)}" ${t.done ? 'checked' : ''} ${t.auto || t.waiting ? 'disabled' : ''}><span style="flex:1;">${weRich(t.text)}${t.auto ? ' <span style="color:#9aa4b5;font-size:11px;">· ticks itself</span>' : ''}${t.waiting ? ` <span style="color:#f0b432;font-size:11px;">· from day ${t.fromDay + 1}</span>` : ''}${weLink(t)}</span></label>`;
+    function renderWelcomeMine() {
+        const r = welMine;
+        if (!r || !r.pupil) return '';
+        const c = r.chapters[r.current];
+        const total = r.chapters.reduce((s, x) => s + x.total, 0), done = r.chapters.reduce((s, x) => s + x.doneCount, 0);
+        return `<div style="margin-bottom:14px;padding-bottom:10px;border-bottom:1px solid #3a4352;">
+            <div style="font-weight:700;margin-bottom:4px;">👋 Your welcome missions <span style="font-weight:400;color:#9aa4b5;font-size:12px;">${r.allDone ? 'all done 🎉' : `${done} of ${total} steps`}</span></div>
+            <div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:6px;">${r.chapters.map((x, i) => `<span style="font-size:11px;border:1px solid ${i === r.current && !r.allDone ? '#35d99b' : '#3a4352'};border-radius:10px;padding:1px 7px;color:${x.complete ? '#35d99b' : x.locked ? '#9aa4b5' : '#e8ecf3'};">${x.complete ? '✓' : x.locked ? '🔒' : ''} ${i + 1}${x.locked ? '' : ` ${esc(x.title)}`}</span>`).join('')}</div>
+            ${r.allDone ? '<div style="color:#35d99b;">You finished everything. Well done! 🎉</div>' : `<div style="font-weight:700;margin:6px 0 2px;">${r.current + 1}. ${esc(c.title)}</div><div style="color:#9aa4b5;font-size:12px;white-space:pre-wrap;margin-bottom:4px;">${weRich(c.intro)}</div>${c.tasks.map(t => weTask(t, 'wwl-w-check', '')).join('')}`}
+        </div>`;
+    }
+    function renderWelcomePupil(pupilId) {
+        const r = welPupils[pupilId];
+        if (!r || r.error) return '';
+        if (r.allDone) return '<div style="color:#35d99b;margin-bottom:8px;">👋 Finished all welcome chapters 🎉</div>';
+        const c = r.chapters[r.current];
+        const total = r.chapters.reduce((s, x) => s + x.total, 0), done = r.chapters.reduce((s, x) => s + x.doneCount, 0);
+        return `<div style="margin:6px 0 10px;"><div style="font-size:12px;font-weight:700;">👋 Their welcome chapters: ${r.current + 1} of ${r.chapters.length}, ${done} of ${total} steps</div>
+            <div style="display:flex;gap:5px;flex-wrap:wrap;margin:4px 0;">${r.chapters.map((x, i) => `<span style="font-size:11px;border:1px solid ${i === r.current ? '#35d99b' : '#3a4352'};border-radius:10px;padding:1px 7px;color:${x.complete ? '#35d99b' : x.locked ? '#9aa4b5' : '#e8ecf3'};">${x.complete ? '✓' : x.locked ? '🔒' : ''} ${i + 1}. ${esc(x.title)} ${x.doneCount}/${x.total}</span>`).join('')}</div>
+            <div style="color:#9aa4b5;font-size:12px;">Now: ${esc(c.title)}. Tick a step for them if they showed you it is done.</div>${c.tasks.map(t => weTask(t, 'wwl-w-mtick', `data-pupil="${esc(pupilId)}"`)).join('')}</div>`;
+    }
     // The mentoring to-dos: one section per pairing (a mentor with several pupils gets one each), each ticked
     // separately — same shared checklist the WWL page itself shows, just without the chat (open the site for that).
     function renderMentoringTab() {
-        if (!mtPairs.length) return '<div style="padding:6px 0;color:#9aa4b5;">Not in a mentoring pair right now.</div>';
-        return mtPairs.map(p => {
+        const mine = renderWelcomeMine();
+        if (!mtPairs.length) return mine + '<div style="padding:6px 0;color:#9aa4b5;">No mentor yet: a leader matches you with someone who is online at the same time as you. Make sure your usual online hours are set on the site.</div>';
+        return mine + mtPairs.map(p => {
             const items = mtTodos.filter(t => t.role === 'both' || t.role === p.role);
             return `<div style="margin-bottom:14px;padding-bottom:10px;border-bottom:1px solid #3a4352;">
                 <div style="font-weight:700;margin-bottom:6px;">${p.role === 'mentor' ? `Mentoring ${esc(p.otherName)}` : `Your mentor: ${esc(p.otherName)}`}</div>
+                ${p.role === 'mentor' ? renderWelcomePupil(p.otherId) : ''}
                 ${items.length ? items.map(t => `<label style="display:flex;gap:8px;align-items:flex-start;padding:${IS_PDA ? 8 : 4}px 0;cursor:pointer;"><input type="checkbox" class="wwl-m-check" data-pair="${esc(p.pairId)}" data-id="${esc(t.id)}" ${p.done.includes(t.id) ? 'checked' : ''} style="margin-top:2px;"><span>${esc(t.text)}</span></label>`).join('')
                     : '<div style="color:#9aa4b5;">No checklist yet.</div>'}
             </div>`;
@@ -592,6 +619,14 @@
             if (cb.checked) p.done = [...new Set([...p.done, cb.dataset.id])]; else p.done = p.done.filter(id => id !== cb.dataset.id);
             try { await api({ action: 'mentor-todo-toggle', mentorId, pupilId, todoId: cb.dataset.id, checked: cb.checked }); } catch (e) { /* shown on next load */ }
         }));
+        body.querySelectorAll('.wwl-w-check').forEach(cb => cb.addEventListener('change', async () => {
+            try { await api({ action: 'wel-done', id: cb.dataset.id, done: cb.checked }); welMine = await api({ action: 'wel-my' }); } catch (e) { /* shown on next load */ }
+            render();
+        }));
+        body.querySelectorAll('.wwl-w-mtick').forEach(cb => cb.addEventListener('change', async () => {
+            try { welPupils[cb.dataset.pupil] = await api({ action: 'wel-mentor-tick', pupilId: cb.dataset.pupil, id: cb.dataset.id, done: cb.checked }); } catch (e) { /* shown on next load */ }
+            render();
+        }));
     }
     async function load() {
         body.innerHTML = '<div style="padding:6px 0;color:#9aa4b5;">Loading…</div>';
@@ -608,6 +643,12 @@
             ]);
             plan = planR.plan; store.set('wwl_plan_cache', JSON.stringify({ at: Date.now(), plan }));
             mtPairs = mtR?.pairs || []; mtTodos = mtR?.todos || [];
+            mtIsPupil = !!mtR?.isPupil;
+            welMine = null; welPupils = {};
+            const welJobs = []; // the welcome chapters: a pupil's own, and each pupil a mentor looks after (only for people in the program)
+            if (mtIsPupil) welJobs.push(api({ action: 'wel-my' }).then(r => { welMine = r; }).catch(() => { /* shows nothing */ }));
+            for (const p of mtPairs) if (p.role === 'mentor') welJobs.push(api({ action: 'wel-pupil', pupilId: p.otherId }).then(r => { welPupils[p.otherId] = r; }).catch(() => { /* shows nothing */ }));
+            await Promise.all(welJobs);
             todoItems = todoR?.items || [];
             standing = standingR;
             if (standingR && !standingFresh) store.set('wwl_standing_cache', JSON.stringify({ at: Date.now(), data: standingR }));
