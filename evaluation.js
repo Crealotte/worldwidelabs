@@ -181,8 +181,15 @@ function renderEvaluation() {
             ? '<span style="color:var(--muted);">Xanax: no war ended in this period.</span>'
             : `<span>🧪 Xanax (wars of this period: ${wars.map(w => esc(w.opponent)).join(', ')}): <b>${loaded} of ${wars.length}</b> checked${evXan.deposits !== null ? ', deposits read' : ', deposits not read yet'}.</span>
                <button class="small" id="ev-xan-load" type="button">${all && evXan.deposits !== null ? 'Re-check deposits' : 'Load Xanax data'}</button>
+               <button class="ghost small" id="ev-xan-probe" type="button" title="Shows the deposit lines Torn sends for the last 3 days">Check deposit log</button>
+               <div id="ev-xan-probe-out" style="width:100%;font-size:12px;color:var(--muted);white-space:pre-wrap;"></div>
                ${evXan.note ? `<span style="color:var(--danger);">${esc(evXan.note)}</span>` : ''}`;
-        $('ev-xan-load')?.addEventListener('click', () => { evXan.note = ''; evXanLoadAll(all && evXan.deposits !== null); });
+        $('ev-xan-load')?.addEventListener('click', () => { evXan.note = ''; evXanLoadAll(true); }); // always re-read the deposits fresh (the kept answer is up to 15 minutes old)
+        $('ev-xan-probe')?.addEventListener('click', async () => {
+            const out = $('ev-xan-probe-out'); out.textContent = 'Reading the last 3 days of the log…';
+            const r = await evXanFetch({ action: 'xanax-deposit-probe' });
+            out.textContent = r.error ? r.error : r.probe.map(p => p.error ? `${p.cat}: ${p.error}` : `${p.cat}: ${p.read} lines read, ${p.deposits} deposit line(s)${p.sample.length ? `\n    ${p.sample.join('\n    ')}` : ''}`).join('\n');
+        });
     }
     const notes = [];
     if (!evEnergy?.snapshots) notes.push('No training snapshots cover this period yet, so training shows as unknown.');

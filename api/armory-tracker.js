@@ -77,7 +77,7 @@ async function isLeader(key) {
 // the loop ran out of page budget with (as far as we can tell) more data still further back —
 // silently truncating a long/busy date range was a real undercounting risk, now at least surfaced
 // rather than hidden.
-async function fetchAllArmoryNews(key, from, to) {
+async function fetchAllArmoryNews(key, from, to, cat = 'armoryAction') {
     const all = [];
     const seenIds = new Set();
     let cursor = to;
@@ -85,7 +85,7 @@ async function fetchAllArmoryNews(key, from, to) {
     const MAX_PAGES = 40;
     while (page < MAX_PAGES) {
         if (page > 0) await sleep(900);
-        const r = await tornFetch(`https://api.torn.com/v2/faction/news?striptags=false&limit=100&sort=DESC&to=${cursor}&from=${from}&cat=armoryAction&key=${encodeURIComponent(key)}`,
+        const r = await tornFetch(`https://api.torn.com/v2/faction/news?striptags=false&limit=100&sort=DESC&to=${cursor}&from=${from}${cat ? `&cat=${cat}` : ''}&key=${encodeURIComponent(key)}`,
             { headers: { accept: 'application/json' } });
         const data = await r.json();
         if (data.error) {
@@ -111,6 +111,20 @@ async function fetchAllArmoryNews(key, from, to) {
     }
     const hitPageCap = page >= MAX_PAGES; // loop only ends this way without having hit any natural break condition
     return { entries: all, pagesFetched: page, rateLimited, hitPageCap };
+}
+
+// Deposits ("Name deposited 1x Xanax") are not guaranteed to be in the same news category as the armory uses/loans, so the deposit readers
+// look in both: armoryAction and armoryDeposit (a category the API may not offer — then it is simply skipped). Entries are merged by id.
+async function fetchDepositEntries(key, from, to) {
+    const first = await fetchAllArmoryNews(key, from, to, 'armoryAction');
+    let entries = first.entries, rateLimited = first.rateLimited, hitPageCap = first.hitPageCap;
+    try {
+        const second = await fetchAllArmoryNews(key, from, to, 'armoryDeposit');
+        const seen = new Set(entries.map(e => String(e.id)));
+        for (const e of second.entries) if (!seen.has(String(e.id))) entries.push(e);
+        rateLimited = rateLimited || second.rateLimited; hitPageCap = hitPageCap || second.hitPageCap;
+    } catch (e) { /* that category is not available: the first one is all there is */ }
+    return { entries, rateLimited, hitPageCap };
 }
 
 module.exports = async function handler(req, res) {
@@ -168,6 +182,25 @@ module.exports = async function handler(req, res) {
             return res.status(200).json(result);
         }
 
+        // Diagnostic for "a deposit is not being read": shows the deposit lines of the last 3 days exactly as Torn sends them, and from which
+        // news category each one came, so the reader can be pointed at the right place. Changes nothing.
+        if (action === 'xanax-deposit-probe') {
+            const to = Math.floor(Date.now() / 1000), from = to - 3 * 86400;
+            const out = [];
+            for (const cat of ['armoryAction', 'armoryDeposit', '']) {
+                try {
+                    const r = await tornFetch(`https://api.torn.com/v2/faction/news?striptags=true&limit=100&sort=DESC&from=${from}&to=${to}${cat ? `&cat=${cat}` : ''}&key=${encodeURIComponent(key)}`, { headers: { accept: 'application/json' } });
+                    const d = await r.json();
+                    if (d.error) { out.push({ cat: cat || '(no category)', error: d.error.error || `Torn error ${d.error.code}` }); continue; }
+                    const list = Array.isArray(d.news) ? d.news : Object.values(d.news || {});
+                    const lines = list.map(e => String(e.text ?? e.news ?? '')).filter(t => /deposit/i.test(t));
+                    out.push({ cat: cat || '(no category)', read: list.length, deposits: lines.length, sample: lines.slice(0, 5) });
+                } catch (e) { out.push({ cat: cat || '(no category)', error: String(e.message || e).slice(0, 80) }); }
+                await sleep(900);
+            }
+            return res.status(200).json({ probe: out });
+        }
+
         // Xanax put BACK into the armory since `from` (a deposit line in the armory log: "Name deposited 1x Xanax"), per member — what the
         // evaluation counts against the Xanax someone still owes. It changes whenever someone deposits, so it is only kept for 15 minutes;
         // `cacheOnly` returns the kept answer (or null) without reading the log.
@@ -179,7 +212,7 @@ module.exports = async function handler(req, res) {
             if (kept && !req.body.force) return res.status(200).json({ ...JSON.parse(kept), cached: true });
             if (req.body.cacheOnly) return res.status(200).json({ none: true });
             const to = Math.floor(Date.now() / 1000);
-            const news = await fetchAllArmoryNews(key, from, to);
+            const news = await fetchDepositEntries(key, from, to);
             const deposited = {};
             for (const entry of news.entries) {
                 const p = parseArmoryNewsEntry(String(entry.id), entry);
@@ -402,7 +435,7 @@ module.exports.refreshXanaxOwed = async function refreshXanaxOwed(key, factionId
     if (!depRaw) return { skipped: 'deposits not read yet' };
     const dep = JSON.parse(depRaw);
     const now = Math.floor(Date.now() / 1000);
-    const news = await fetchAllArmoryNews(key, dep.to + 1, now);
+    const news = await fetchDepositEntries(key, dep.to + 1, now);
     if (!news.rateLimited && !news.hitPageCap) {
         for (const entry of news.entries) {
             const p = parseArmoryNewsEntry(String(entry.id), entry);
