@@ -184,16 +184,32 @@ async function getDiscordPoster(factionId, kind = 'default') {
     const s = all.channels?.[kind] || (kind === 'default' ? legacy : null) || all.channels?.default || legacy || {};
     if (s.webhookUrl) {
         if (!WEBHOOK_RE.test(s.webhookUrl)) return { error: 'The saved Discord webhook URL doesn\'t look valid — save it again in the Discord settings.' };
-        return { post: (content, users, embeds, components) => fetch(components ? `${s.webhookUrl}${s.webhookUrl.includes('?') ? '&' : '?'}with_components=true` : s.webhookUrl, {
-            method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ content, username: 'WWLabs', allowed_mentions: { parse: [], users }, ...(embeds ? { embeds } : {}), ...(components ? { components } : {}) }),
-        }) };
+        const u = (params) => { const q = Object.entries(params).filter(([, v]) => v).map(([k]) => `${k}=true`); return q.length ? `${s.webhookUrl}${s.webhookUrl.includes('?') ? '&' : '?'}${q.join('&')}` : s.webhookUrl; };
+        return {
+            // `wait` makes Discord answer with the posted message (so its id can be remembered and the message edited later)
+            post: (content, users, embeds, components, wait) => fetch(u({ with_components: !!components, wait: !!wait }), {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ content, username: 'WWLabs', allowed_mentions: { parse: [], users }, ...(embeds ? { embeds } : {}), ...(components ? { components } : {}) }),
+            }),
+            // edit a message this webhook posted earlier (components: [] removes the buttons)
+            edit: (messageId, content, components) => fetch(`${u({ with_components: !!(components && components.length) }).replace(s.webhookUrl, `${s.webhookUrl.split('?')[0]}/messages/${encodeURIComponent(messageId)}`)}`, {
+                method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ content, allowed_mentions: { parse: [] }, ...(components ? { components } : {}) }),
+            }),
+        };
     }
     if (s.channelId && isSharedServerFaction(factionId) && process.env.DISCORD_BOT_TOKEN) {
-        return { post: (content, users, embeds, components) => fetch(`https://discord.com/api/v10/channels/${encodeURIComponent(s.channelId)}/messages`, {
-            method: 'POST', headers: { Authorization: `Bot ${process.env.DISCORD_BOT_TOKEN}`, 'Content-Type': 'application/json' },
-            body: JSON.stringify({ content, allowed_mentions: { parse: [], users }, ...(embeds ? { embeds } : {}), ...(components ? { components } : {}) }),
-        }) };
+        const base = `https://discord.com/api/v10/channels/${encodeURIComponent(s.channelId)}/messages`, auth = { Authorization: `Bot ${process.env.DISCORD_BOT_TOKEN}`, 'Content-Type': 'application/json' };
+        return {
+            post: (content, users, embeds, components) => fetch(base, {
+                method: 'POST', headers: auth,
+                body: JSON.stringify({ content, allowed_mentions: { parse: [], users }, ...(embeds ? { embeds } : {}), ...(components ? { components } : {}) }),
+            }),
+            edit: (messageId, content, components) => fetch(`${base}/${encodeURIComponent(messageId)}`, {
+                method: 'PATCH', headers: auth,
+                body: JSON.stringify({ content, allowed_mentions: { parse: [] }, ...(components ? { components } : {}) }),
+            }),
+        };
     }
     return null;
 }
@@ -415,6 +431,21 @@ async function bankBalanceOf(factionId, playerId, opts = {}) {
         if (!Number.isFinite(money)) return { balance: null, error: 'Torn returned a balance in a form WWL does not recognise.' };
         return { balance: Math.max(0, Math.floor(money)) };
     } catch (e) { return { balance: null, error: `Could not read the faction balance: ${String(e.message || e).slice(0, 80)}` }; }
+}
+// Updates the Discord message of a bank request once it is claimed or cancelled: the buttons are removed or disabled and a line
+// says who claimed it, so nobody can press Claim again and pay it twice. Best effort — the claim itself is already exclusive on
+// the server (SET NX), this is the visible half of it.
+async function bankMarkDiscord(factionId, r, status, byName) {
+    if (!r.msgId) return;
+    try {
+        const poster = await getDiscordPoster(factionId, 'bank');
+        if (!poster || poster.error || !poster.edit) return;
+        const base = `💰 **${r.name}** requested **$${Number(r.amount).toLocaleString('en-US')}**`;
+        const content = status === 'claimed' ? `${base}\n✅ **Claimed by ${byName}**` : `${base}\n❌ **Cancelled** (by ${byName})`;
+        const comps = status === 'claimed' && r.claimUrl ? [{ type: 1, components: [{ type: 2, style: 5, label: `Claimed by ${byName}`, url: r.claimUrl, disabled: true }] }] : [];
+        const x = await poster.edit(r.msgId, content, comps);
+        if (!x.ok) await poster.edit(r.msgId, content, []); // a setup that will not show the disabled button: just drop the buttons
+    } catch (e) { /* the message stays as posted; the server-side claim still protects against double payouts */ }
 }
 // This member's open (unclaimed) request, if any
 async function bankOpenOf(factionId, playerId) {
@@ -730,9 +761,12 @@ module.exports = async function handler(req, res) {
                     // Claim / Cancel as link buttons (they open WWL, which needs the banker's own login); if this Discord setup
                     // cannot show buttons, the same two links are sent as plain text instead
                     const buttons = [{ type: 1, components: [{ type: 2, style: 5, label: 'Claim', url: claimUrl }, { type: 2, style: 5, label: 'Cancel', url: cancelUrl }] }];
-                    let r = await poster.post(content, [], undefined, buttons);
-                    if (!r.ok) r = await poster.post(`${content}\nClaim: ${claimUrl}\nCancel: ${cancelUrl}`, []);
+                    let r = await poster.post(content, [], undefined, buttons, true);
+                    if (!r.ok) r = await poster.post(`${content}\nClaim: ${claimUrl}\nCancel: ${cancelUrl}`, [], undefined, undefined, true);
                     request.posted = r.ok;
+                    // remember the Discord message so it can be edited when the request is claimed or cancelled (buttons disabled,
+                    // "Claimed by ..." added) — that is what stops a second banker from also paying it out
+                    if (r.ok) { try { request.msgId = (await r.json())?.id || null; } catch (e) { /* no id: the message just stays as posted */ } request.claimUrl = claimUrl; }
                 }
             } catch (e) { /* the request still shows on the Bank request page */ }
             await redis(['HSET', bankRequestsKey(factionId), id, JSON.stringify(request)]);
@@ -746,6 +780,7 @@ module.exports = async function handler(req, res) {
             if (r.playerId !== playerId && !(await isLeader(key))) return res.status(403).json({ error: 'Only the person who asked, or a banker, can cancel it.' });
             if (r.status === 'claimed') return res.status(400).json({ error: `Already claimed by ${r.claimedBy}.` });
             await redis(['HDEL', bankRequestsKey(factionId), id]);
+            await bankMarkDiscord(factionId, r, 'cancelled', playerName);
             return res.status(200).json({ ok: true, name: r.name });
         }
 
@@ -1103,6 +1138,7 @@ module.exports = async function handler(req, res) {
             } else {
                 r.status = 'claimed'; r.claimedBy = playerName; r.claimedAt = Date.now();
                 await redis(['HSET', bankRequestsKey(factionId), id, JSON.stringify(r)]);
+                await bankMarkDiscord(factionId, r, 'claimed', playerName);
             }
             return res.status(200).json({ ok: true, link, request: r, pay, lowered, liveBalance: live.balance });
         }

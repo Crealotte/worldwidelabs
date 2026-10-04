@@ -97,7 +97,7 @@ async function loadBankClaim() {
         if (r.error) throw new Error(r.error);
         out.innerHTML = `<p>✅ <b>${esc(r.request.name)}</b> asked for <b style="font-family:var(--mono);">${bankMoney(r.request.amount)}</b>. It is yours now. Taking you to Torn…</p>${r.lowered ? `<p style="color:var(--happy);font-weight:700;">⚠ Their balance is now only ${bankMoney(r.liveBalance)}, so the amount in the vault link was lowered to ${bankMoney(r.pay)}.</p>` : ""}
             <p style="font-size:13px;color:var(--muted);">Check the member and the amount in the vault screen, then confirm the payout there. If nothing happens: <a href="${esc(r.link)}">open the vault screen</a>.</p>`;
-        setTimeout(() => { window.location.href = r.link; }, 900);
+        setTimeout(() => { window.location.href = r.link; }, r.lowered ? 4000 : 0); // straight on to Torn, unless the amount was lowered and needs reading
     } catch (e) { out.innerHTML = `<p style="color:var(--danger);">${esc(e.message)}</p>`; }
 }
 
