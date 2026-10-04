@@ -289,8 +289,9 @@ function atShoppingItemsForCategory(report, cat) {
 function renderAtShoppingList(report) {
     const el = $('at-shop-body');
     const extraTotal = (report.shoppingExtras || []).reduce((s, e) => s + e.value, 0);
-    const grandTotal = report.grandTotal + extraTotal;
-    if (!report.categories.length && !report.shoppingExtras?.length) {
+    const pulled = atPulledLines(), pulledTotal = pulled.reduce((s, l) => s + l.amount, 0);
+    const grandTotal = report.grandTotal + extraTotal + pulledTotal;
+    if (!report.categories.length && !report.shoppingExtras?.length && !pulled.length) {
         el.innerHTML = '<p style="color:var(--muted);font-size:13px;">Nothing to restock for this range.</p>';
         return;
     }
@@ -325,6 +326,11 @@ function renderAtShoppingList(report) {
                 <tr><td colspan="3" style="padding:2px 8px;text-align:right;color:var(--muted);">Subtotal</td><td style="padding:2px 8px;font-family:var(--mono);font-weight:700;">$${Math.round(subtotal).toLocaleString()}</td></tr>
             </tbody>`;
             }).join('')}
+            ${pulled.length ? `<tbody>
+                <tr><td colspan="4" style="padding:8px 8px 2px;font-weight:700;">📜 From war payouts</td></tr>
+                ${pulled.map(l => `<tr style="border-top:1px solid var(--line);"><td style="padding:4px 8px;" colspan="3">${esc(l.label)}</td><td style="padding:4px 8px;font-family:var(--mono);">$${Math.round(l.amount).toLocaleString()}</td></tr>`).join('')}
+                <tr><td colspan="3" style="padding:2px 8px;text-align:right;color:var(--muted);">Subtotal</td><td style="padding:2px 8px;font-family:var(--mono);font-weight:700;">$${Math.round(pulledTotal).toLocaleString()}</td></tr>
+            </tbody>` : ''}
             <tfoot><tr><td colspan="3" style="padding:8px;font-weight:700;">Grand total</td><td style="padding:8px;font-weight:700;font-family:var(--mono);color:var(--reagent);">$${Math.round(grandTotal).toLocaleString()}</td></tr></tfoot>
         </table>
         <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;">
@@ -341,10 +347,10 @@ function renderAtShoppingList(report) {
         const text = 'Restock shopping list:\n' + report.categories.map(cat => {
             const items = atShoppingItemsForCategory(report, cat);
             return `\n${cat.category}:\n` + items.map(it => `  ${it.quantity}x ${it.item}${it.hasPrice ? ` — $${Math.round(it.value).toLocaleString()}` : ''}${restockedNote(it)}`).join('\n');
-        }).join('') + `\n\nGrand total: $${Math.round(grandTotal).toLocaleString()}`;
+        }).join('') + (pulled.length ? '\n\nFrom war payouts:\n' + pulled.map(l => `  ${l.label} — $${Math.round(l.amount).toLocaleString()}`).join('\n') : '') + `\n\nGrand total: $${Math.round(grandTotal).toLocaleString()}`;
         navigator.clipboard.writeText(text).then(() => toast('Shopping list copied'));
     });
-    $('at-shop-add-total').addEventListener('click', () => atAddCostToPayout('Armory restock', grandTotal));
+    $('at-shop-add-total').addEventListener('click', () => atAddCostToPayout('Armory restock', grandTotal - pulledTotal));
 }
 
 // ---- War Payout page integration: pull the same consumption report for a calendar date range,
@@ -432,4 +438,36 @@ $('at-wars-use').addEventListener('click', () => {
     $('at-report-to').value = atDay(toTs);
     note.textContent = `Period: ${atDay(fromTs)} → ${atDay(toTs)}${before ? ` (the day after the war vs ${before.opponent})` : ' (no earlier war known: 2 days before the first one)'}.`;
     $('at-report-calc').click();
+});
+
+// ---- Pull the costs of saved war payout reports into the shopping list ----
+// Loaded only when the button is pressed (it reads every saved report), then each ticked report's cost lines are added to the
+// shopping list and its grand total. Leaders only (the cost lines come with the leader view of the War reports).
+let atRepList = null; // saved reports with cost lines
+const atPulledIds = new Set();
+function atPulledLines() {
+    const sums = {};
+    for (const r of (atRepList || [])) {
+        if (!atPulledIds.has(r.id)) continue;
+        for (const c of r.costs) sums[c.label] = (sums[c.label] || 0) + c.amount;
+    }
+    return Object.entries(sums).map(([label, amount]) => ({ label, amount })).filter(l => l.amount);
+}
+function atRefreshShopping() { renderAtShoppingList(atReport || { categories: [], grandTotal: 0, shoppingExtras: [], meta: {} }); }
+$('at-pull-load').addEventListener('click', async () => {
+    const st = $('at-pull-status'), btn = $('at-pull-load');
+    btn.disabled = true; st.className = 'status ok'; st.textContent = 'Loading the war reports…';
+    try {
+        const res = await fetch('/api/war-payout', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key: apiKey, action: 'receipts-report' }) });
+        const r = await res.json();
+        if (r.error) throw new Error(r.error);
+        if (!r.leader) throw new Error('Only leaders can pull the costs of war reports.');
+        atRepList = r.reports.filter(x => x.summary && x.summary.costs && x.summary.costs.length).map(x => ({ id: x.id, opponent: x.opponent, warEnd: x.warEnd, isEvent: x.isEvent, costs: x.summary.costs, total: x.summary.costTotal }));
+        st.textContent = ''; st.className = 'status';
+        $('at-pull-list').innerHTML = atRepList.length ? atRepList.map(x => `<label style="display:flex;gap:6px;align-items:center;font-size:13px;cursor:pointer;" title="${esc(x.costs.map(c => `${c.label}: $${Math.round(c.amount).toLocaleString()}`).join('\n'))}"><input type="checkbox" class="at-pull-pick" value="${esc(x.id)}" style="width:auto;" ${atPulledIds.has(x.id) ? 'checked' : ''}> ${x.isEvent ? '⛓ ' : 'War vs '}${esc(x.opponent)} <span style="color:var(--muted);font-size:11px;">${new Date(x.warEnd * 1000).toLocaleDateString(undefined, { day: 'numeric', month: 'short', timeZone: 'UTC' })} · costs $${Math.round(x.total).toLocaleString()}</span></label>`).join('') : '<span style="color:var(--muted);font-size:13px;">No saved war reports with costs yet.</span>';
+        $('at-pull-list').querySelectorAll('.at-pull-pick').forEach(c => c.addEventListener('change', () => {
+            if (c.checked) atPulledIds.add(c.value); else atPulledIds.delete(c.value);
+            atRefreshShopping();
+        }));
+    } catch (e) { st.className = 'status err'; st.textContent = e.message; } finally { btn.disabled = false; }
 });

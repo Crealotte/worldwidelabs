@@ -2273,6 +2273,11 @@
                 <div class="panel" id="at-shopping-panel">
                     <h3>Restock shopping list</h3>
                     <p style="color:var(--muted);font-size:12px;margin:0 0 10px;">Same period as the report above — just the totals you need to go buy back.</p>
+                    <div style="margin-bottom:12px;">
+                        <button class="ghost small" id="at-pull-load" type="button">Pull costs from war payouts…</button>
+                        <span id="at-pull-status" class="status" style="margin-left:8px;"></span>
+                        <div id="at-pull-list" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:4px 14px;margin-top:8px;"></div>
+                    </div>
                     <div id="at-shop-body"></div>
                 </div>
             </div>
