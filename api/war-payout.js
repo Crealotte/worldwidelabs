@@ -1271,11 +1271,13 @@ Cancel: ${cancelUrl}`, [], embeds, undefined, true);
 
             return res.status(200).json({ items });
         }
+        // Names for the "who" lists only leaders see (reporters, "I have this too", thumbs): one roster read (cached), best effort.
+        const bugNames = async () => { const o = {}; try { for (const m of await getRoster(key)) o[m.id] = m.name; } catch (e) { /* ids are shown instead */ } return o; };
         // Suggestions — everyone can read, add and vote; only leaders set a status or delete.
         if (action.startsWith('sug-')) {
             const leader = ['sug-list', 'sug-status', 'sug-delete'].includes(action) ? await isLeader(key) : false;
             if (['sug-status', 'sug-delete'].includes(action) && !leader) return res.status(403).json({ error: 'Leaders only' });
-            return res.status(200).json(await suggestHandle(action, req.body, { redis, playerId, name: playerName, isLeader: leader }));
+            return res.status(200).json(await suggestHandle(action, req.body, { redis, playerId, name: playerName, isLeader: leader, names: leader && action === 'sug-list' ? await bugNames() : {} }));
         }
         // Mentoring Platform — everyone reads their own status/checklist/chat; only leaders run the program itself,
         // and a leader can look in on any pair for oversight. See lib/mentoring.js. `leaderLazy` only actually
@@ -1289,7 +1291,8 @@ Cancel: ${cancelUrl}`, [], embeds, undefined, true);
         // Known bugs list — anyone can read it and press "I have this too"; only leaders change the list.
         if (action.startsWith('bugs-')) {
             if (!['bugs-list', 'bugs-metoo', 'bugs-shot'].includes(action) && !(await isLeader(key))) return res.status(403).json({ error: 'Leaders only' });
-            return res.status(200).json(await bugsHandle(action, req.body, { redis, playerId, leader: action === 'bugs-list' ? await isLeader(key) : false }));
+            const bugLeader = action === 'bugs-list' ? await isLeader(key) : false;
+            return res.status(200).json(await bugsHandle(action, req.body, { redis, playerId, leader: bugLeader, names: bugLeader ? await bugNames() : {} }));
         }
 
         // ---- Labs funds ------------------------------------------------------------------------

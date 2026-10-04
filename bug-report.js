@@ -110,6 +110,7 @@ function kbRow(b, leader) {
             ? `<div style="white-space:pre-wrap;font-size:13px;margin-top:4px;">${esc(b.detail)}${b.by ? ` <span style="color:var(--muted);">— ${esc(b.by)}</span>` : ''}</div>`
             : `<div style="white-space:pre-wrap;font-size:13px;margin-top:4px;">${esc(b.detail.slice(0, 300).replace(/\s+\S*$/, ''))}…</div><details style="margin-top:4px;"><summary class="av-sum"><span style="font-size:12px;color:var(--reagent);">Read the rest${b.by ? ` (sent by ${esc(b.by)})` : ''}</span></summary><div style="white-space:pre-wrap;font-size:13px;margin-top:4px;">${esc(b.detail)}</div></details>`) : ''}
         ${b.hasShot ? `<div style="margin-top:6px;"><button class="ghost small kb-shot" data-id="${esc(b.id)}">📷 View screenshot</button><div class="kb-shot-box" data-id="${esc(b.id)}" style="display:none;margin-top:6px;"></div></div>` : ''}
+        ${leader ? `<div style="margin-top:4px;font-size:12px;color:var(--muted);">${b.by ? `Reported by <b style="color:var(--text);">${esc(b.by)}</b> · ` : ''}${b.who && b.who.length ? `Have this too (${b.who.length}): ${esc(b.who.join(', '))}` : 'Nobody has pressed "I have this too" yet'}</div>` : ''}
         ${leader ? `<div style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap;align-items:center;font-size:12px;color:var(--muted);">${b.count} reported ·
             ${['review', 'known', 'fixing', 'fixed'].filter(s => s !== b.status).map(s => `<button class="ghost small kb-status" data-id="${esc(b.id)}" data-status="${s}">Mark ${KB_STATUS[s][0].toLowerCase()}</button>`).join('')}
             <button class="ghost small kb-del" data-id="${esc(b.id)}">Delete</button></div>` : ''}
@@ -184,7 +185,8 @@ function sgRow(s, leader) {
                 <button class="ghost small sg-vote" data-id="${esc(s.id)}" data-vote="-1" style="${s.mine === -1 ? 'border-color:var(--danger);color:var(--danger);' : ''}">👎 ${s.down}</button>
             </span>
         </div>
-        ${leader ? `<div style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap;align-items:center;font-size:12px;color:var(--muted);">${s.by ? `by ${esc(s.by)} ·` : ''}
+        ${leader ? `<div style="margin-top:4px;font-size:12px;color:var(--muted);">${s.by ? `Suggested by <b style="color:var(--text);">${esc(s.by)}</b>` : ''}${s.upBy && s.upBy.length ? ` · 👍 ${esc(s.upBy.join(', '))}` : ''}${s.downBy && s.downBy.length ? ` · 👎 ${esc(s.downBy.join(', '))}` : ''}</div>` : ''}
+        ${leader ? `<div style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap;align-items:center;font-size:12px;color:var(--muted);">
             ${Object.keys(SG_STATUS).filter(k => k !== s.status).map(k => `<button class="ghost small sg-status" data-id="${esc(s.id)}" data-status="${k}">Mark ${SG_STATUS[k][0].toLowerCase()}</button>`).join('')}
             <button class="ghost small sg-del" data-id="${esc(s.id)}">Delete</button></div>` : ''}
     </div>`;
@@ -219,7 +221,7 @@ $('br-clear-video').addEventListener('click', brClearVideo);
 function bsExportText() {
     const fmtDate = ms => (ms ? new Date(ms).toISOString().slice(0, 10) : '?');
     const bugs = kbBugs.map(b => [`[${(KB_STATUS[b.status] || KB_STATUS.known)[0]}] ${b.title}`,
-        `  ${b.count} member${b.count === 1 ? '' : 's'} have this · reported ${fmtDate(b.createdAt)}${b.by ? ` by ${b.by}` : ''}${b.hasShot ? ' · has a screenshot' : ''}`,
+        `  ${b.count} member${b.count === 1 ? '' : 's'} have this · reported ${fmtDate(b.createdAt)}${b.by ? ` by ${b.by}` : ''}${b.hasShot ? ' · has a screenshot' : ''}${b.who && b.who.length ? ` · have this too: ${b.who.join(', ')}` : ''}`,
         b.note ? `  Note: ${b.note}` : '', b.detail ? `  Full report: ${b.detail.replace(/\n/g, '\n    ')}` : ''].filter(Boolean).join('\n'));
     const sugs = sgList.map(s => [`[${(SG_STATUS[s.status] || SG_STATUS.open)[0]}] 👍${s.up} 👎${s.down} — ${fmtDate(s.createdAt)}${s.by ? ` — by ${s.by}` : ''}`, `  ${s.text.replace(/\n/g, '\n  ')}`].join('\n'));
     return `WWL bugs & suggestions — exported ${new Date().toISOString().slice(0, 16).replace('T', ' ')} UTC\n\n=== KNOWN BUGS (${bugs.length}) ===\n${bugs.join('\n\n') || '(none)'}\n\n=== SUGGESTIONS (${sugs.length}) ===\n${sugs.join('\n\n') || '(none)'}\n`;
