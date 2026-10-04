@@ -64,6 +64,7 @@ async function loadEvaluation() {
         evEnergy = en.error ? null : en;
         if (lg.error) throw new Error(lg.error);
         evLog = lg.log || {};
+        await evXanLoadCached();
         st.textContent = '';
         renderEvaluation();
     } catch (e) {
@@ -89,16 +90,18 @@ function evRows() {
         const warBelow = r.light === 'red';
         const history = (evLog[evKey(r.name)] || []).slice().sort((a, b) => b.date.localeCompare(a.date));
         const warned = history.some(h => h.kind === 'warning' || h.kind === 'probation');
-        const fails = (warBelow ? 1 : 0) + (trainBelow ? 1 : 0);
+        const xanax = evXanFor(r);
+        const xanBelow = xanax.known && xanax.outstanding > 0; // took more Xanax than the hits covered, and has not put it back
+        const fails = (warBelow ? 1 : 0) + (trainBelow ? 1 : 0) + (xanBelow ? 1 : 0);
         // New: has only been around for a few wars (up to the number the rule asks for), so they get a softer approach.
         const fresh = r.counted <= moData.settings.needWars || partial;
         let status = 'ok';
         if (r.light === 'grey' && pct === null) status = 'nodata';
         else if (fails && fresh) status = 'new';
         else if (fails === 1) status = 'improve';
-        else if (fails === 2) status = 'risk';
+        else if (fails >= 2) status = 'risk';
         const severity = { ok: 0, nodata: 1, new: 1.5, improve: 2, risk: 3 }[status] + (fails && warned ? 0.5 : 0);
-        return { ...r, fresh, partial, tierEff: tier, energyNeed: need, trained, pct, trainBelow, warBelow, history, warned, fails, status, severity, weekly: trained === null ? null : trained / presentWeeks };
+        return { ...r, xanax, xanBelow, fresh, partial, tierEff: tier, energyNeed: need, trained, pct, trainBelow, warBelow, history, warned, fails, status, severity, weekly: trained === null ? null : trained / presentWeeks };
     });
 }
 
@@ -126,6 +129,15 @@ function evMessage(r) {
     lines.push('');
     if (r.pct === null) lines.push(r.tierEff ? 'Training: I could not read your trained energy for this period.' : 'Training: your energy tier is not known yet.');
     else lines.push(`Training: you trained ${evNum(r.trained)} E in this period; your target is ${evNum(r.energyNeed)} E${r.partial ? ` (it only counts the time you have been with us this period, about ${r.daysInFaction} days)` : ""} (${Math.round(r.pct * 100)}%).${r.trainBelow ? (soft ? ' You are still settling in, so this is just so you know what we are aiming for.' : ' That is below what we ask.') : ' That is fine.'}`);
+    // Xanax (only the wars of this period): taken from the armory beyond what the hits covered
+    if (r.xanax.known && r.xanax.owed > 0) {
+        lines.push('');
+        lines.push(`Xanax: every Xanax taken from the faction armory should be backed by 10 hits. ${soft ? 'No worries, but in' : 'In'} this period's wars you took more than your hits covered:`);
+        for (const w of r.xanax.rows.filter(x => x.owed > 0)) lines.push(`- War vs ${w.opponent}: took ${w.taken}, made ${w.hits} hits (covers ${w.covered}) — ${w.owed} too many`);
+        lines.push(r.xanax.outstanding > 0
+            ? `${r.xanax.returned ? `You have already put back ${r.xanax.returned}. ` : ''}Please put ${r.xanax.outstanding} Xanax back in the faction armory.`
+            : 'You have already put them all back — thank you!');
+    }
     // earlier
     const prev = r.history.find(h => h.kind === 'warning' || h.kind === 'probation' || h.kind === 'excused');
     if (prev) lines.push('', `Earlier: on ${evDate(prev.date)} this was noted for you — ${prev.verdict || EV_KIND_LABEL[prev.kind]}${prev.note && prev.source === 'manual' ? ` (${prev.note})` : ''}.`);
@@ -154,6 +166,16 @@ function renderEvaluation() {
         <div><div style="color:var(--muted);font-size:11px;">New, settling in</div><div style="font-weight:700;color:${EV_STATUS.new[1]};">${count('new')}</div></div>
         <div><div style="color:var(--muted);font-size:11px;">At risk</div><div style="font-weight:700;color:${EV_STATUS.risk[1]};">${count('risk')}</div></div>
         <div><div style="color:var(--muted);font-size:11px;">Below AND warned before</div><div style="font-weight:700;">${rows.filter(r => r.fails && r.warned).length}</div></div>`;
+    // the Xanax bar above the table: what is loaded for this period's wars, and the button that loads / refreshes it
+    if (!evXan.busy) {
+        const wars = evXan.wars, loaded = wars.filter(w => evXan.byWar[w.id]).length, all = loaded === wars.length;
+        $('ev-xan-bar').innerHTML = !wars.length
+            ? '<span style="color:var(--muted);">Xanax: no war ended in this period.</span>'
+            : `<span>🧪 Xanax (wars of this period: ${wars.map(w => esc(w.opponent)).join(', ')}): <b>${loaded} of ${wars.length}</b> checked${evXan.deposits !== null ? ', deposits read' : ', deposits not read yet'}.</span>
+               <button class="small" id="ev-xan-load" type="button">${all && evXan.deposits !== null ? 'Re-check deposits' : 'Load Xanax data'}</button>
+               ${evXan.note ? `<span style="color:var(--danger);">${esc(evXan.note)}</span>` : ''}`;
+        $('ev-xan-load')?.addEventListener('click', () => { evXan.note = ''; evXanLoadAll(all && evXan.deposits !== null); });
+    }
     const notes = [];
     if (!evEnergy?.snapshots) notes.push('No training snapshots cover this period yet, so training shows as unknown.');
     else if (evEnergy.partial && evEnergy.sinceDay) notes.push(`Energy trained is only counted since ${moFmt(evEnergy.sinceDay * 86400)} — that is when counting started.`);
@@ -172,6 +194,7 @@ function renderEvaluation() {
         name: r => r.name.toLowerCase(),
         war: r => (r.counted ? r.okWars / r.counted : -1),
         train: r => (r.pct === null ? -1 : r.pct),
+        xan: r => (r.xanax.known ? r.xanax.outstanding : -1),
         status: r => r.severity,
         prev: r => r.history[0]?.date || '',
     };
@@ -185,6 +208,7 @@ function renderEvaluation() {
                 <th data-sort="war" style="padding:4px 8px;">War rule</th>
                 <th style="padding:4px 8px;">Last wars (war + chain hits)</th>
                 <th data-sort="train" style="padding:4px 8px;">Training</th>
+                <th data-sort="xan" style="padding:4px 8px;">Xanax</th>
                 <th data-sort="status" style="padding:4px 8px;">Suggested</th>
                 <th data-sort="prev" style="padding:4px 8px;">Earlier</th>
             </tr></thead>
@@ -200,10 +224,11 @@ function renderEvaluation() {
                     <td style="padding:6px 8px;white-space:nowrap;font-family:var(--mono);color:${MO_LIGHT[r.light]};">${dot(MO_LIGHT[r.light])}${r.counted ? `${r.okWars}/${r.counted} (need ${r.need})` : 'new'}</td>
                     <td style="padding:6px 8px;white-space:nowrap;font-family:var(--mono);">${perWar}</td>
                     <td style="padding:6px 8px;white-space:nowrap;font-family:var(--mono);color:${r.pct === null ? 'var(--muted)' : r.trainBelow ? MO_LIGHT.red : MO_LIGHT.green};">${r.pct === null ? (r.tierEff ? '…' : 'no tier') : `${evNum(r.trained)} / ${evNum(r.energyNeed)} (${Math.round(r.pct * 100)}%)`}</td>
+                    <td style="padding:6px 8px;white-space:nowrap;font-family:var(--mono);">${r.xanax.known ? (r.xanax.outstanding > 0 ? `<span style="color:${MO_LIGHT.red};font-weight:700;" title="Took more Xanax than the hits covered and has not put it back">${r.xanax.outstanding} to return</span>` : r.xanax.owed > 0 ? `<span style="color:${MO_LIGHT.green};" title="Put it all back">✓ returned</span>` : `<span style="color:${MO_LIGHT.green};">✓</span>`) : `<span style="color:var(--muted);" title="Press Load Xanax data above the table">…</span>`}${r.xanax.known && !r.xanax.depKnown && r.xanax.owed > 0 ? ' <span style="color:var(--muted);" title="Deposits not checked yet">?</span>' : ''}</td>
                     <td style="padding:6px 8px;white-space:nowrap;color:${stColor};font-weight:600;">${stLabel}${r.fails && r.warned ? ' <span title="Below requirement and has an earlier warning/probation" style="color:var(--danger);">· repeat</span>' : ''}</td>
                     <td style="padding:6px 8px;white-space:nowrap;">${last ? `<span style="color:${EV_KIND_COLOR[last.kind]};">${esc(EV_KIND_LABEL[last.kind])}</span> <span style="color:var(--muted);">${esc(evDate(last.date))}${r.history.length > 1 ? ` · ${r.history.length} entries` : ''}</span>` : '<span style="color:var(--muted);">—</span>'}</td>
                 </tr>
-                ${open ? `<tr class="ev-detail" data-id="${esc(r.id)}"><td colspan="6" style="padding:10px 12px;background:var(--bench-2);white-space:normal;">${evDetailHtml(r)}</td></tr>` : ''}`;
+                ${open ? `<tr class="ev-detail" data-id="${esc(r.id)}"><td colspan="7" style="padding:10px 12px;background:var(--bench-2);white-space:normal;">${evDetailHtml(r)}</td></tr>` : ''}`;
             }).join('')}</tbody>
         </table>`;
     wireSort($('ev-table'), evSort, shown, accessors, renderEvaluation);
@@ -224,6 +249,11 @@ function renderEvaluation() {
 }
 
 function evDetailHtml(r) {
+    const x = r.xanax;
+    const xanHtml = !x.rows.length
+        ? `<div style="color:var(--muted);font-size:12px;">${evXan.wars.length ? 'Not loaded yet — press Load Xanax data above the table.' : 'No war ended in this period.'}</div>`
+        : x.rows.map(w => `<div style="font-size:12px;margin-bottom:3px;"><b>War vs ${esc(w.opponent)}:</b> took ${w.taken}, ${w.hits} hits (covers ${w.covered})${w.owed ? ` — <span style="color:${MO_LIGHT.red};font-weight:700;">${w.owed} to put back</span>${w.returned ? `, ${w.returned} returned` : ''}` : ' — ✓'}</div>`).join('')
+            + (x.depKnown ? '' : '<div style="color:var(--muted);font-size:11px;">What has been put back is not checked yet.</div>');
     const hist = r.history.length ? r.history.map(h => `
         <div style="display:flex;gap:8px;align-items:baseline;margin-bottom:4px;font-size:12px;">
             <span style="color:${EV_KIND_COLOR[h.kind]};min-width:70px;font-weight:600;">${esc(EV_KIND_LABEL[h.kind])}</span>
@@ -242,6 +272,9 @@ function evDetailHtml(r) {
                 </div>
             </div>
             <div>
+                <div style="color:var(--muted);font-size:11px;margin-bottom:4px;">Xanax per war (wars of this period)</div>
+                ${xanHtml}
+                <div style="height:10px;"></div>
                 <div style="color:var(--muted);font-size:11px;margin-bottom:4px;">Earlier evaluations and what was said</div>
                 ${hist}
                 <div style="margin-top:10px;border-top:1px solid var(--line);padding-top:8px;">
@@ -288,6 +321,7 @@ $('ev-period').addEventListener('change', async () => {
     $('ev-status').className = 'status ok'; $('ev-status').textContent = 'Reading the training for that period…';
     const en = await moFetch({ action: 'mo-energy', from: p.start, to: p.end });
     evEnergy = en.error ? null : en;
+    await evXanLoadCached(); // the Xanax of that period's wars (saved answers only)
     $('ev-status').textContent = '';
     renderEvaluation();
 });
@@ -367,3 +401,72 @@ $('ev-xan-copy').addEventListener('click', () => {
     const text = `Xanax to put back in the armory (war vs ${war ? war.opponent : evXanLast.warId}) — every Xanax covers 10 hits:\n` + evXanRows(evXanLast).filter(x => x.back > 0).map(x => `${x.name}: took ${x.taken}, made ${x.hits} hits → put back ${x.back}`).join('\n');
     navigator.clipboard.writeText(text).then(() => toast('Copied'));
 });
+
+// ---- Xanax in the evaluation ----
+// Only wars that ended inside the picked period are judged for Xanax (the war rule still looks at the last 5). Per war: Xanax taken from the
+// armory from 48 h before the start until 24 h after the end (api/armory-tracker.js 'xanax-war-scan', kept per finished war) against the hits
+// made in that war (Member Overview's stored war + chain hits); each Xanax covers 10 hits, rounded up. Xanax put back since the first of these
+// wars (deposit lines in the armory log) is allocated to the oldest war first, so one deposit is never counted against two wars.
+const EV_XAN_LEAD = 48;
+let evXan = { wars: [], byWar: {}, deposits: null, busy: false, note: '' };
+function evPeriodWars() {
+    const p = evPeriod();
+    return moWarsInPeriod().filter(w => !w.event && w.end >= p.start && (p.id === 'now' || w.end < p.end)).sort((a, b) => a.end - b.end);
+}
+const evXanMatch = (map, m) => (map && (map[m.id] || Object.values(map).find(v => String(v.name).toLowerCase() === m.name.toLowerCase()))) || null;
+async function evXanLoadCached() {
+    evXan.wars = evPeriodWars();
+    evXan.byWar = {}; evXan.deposits = null;
+    if (!evXan.wars.length) return;
+    try {
+        const g = await evXanFetch({ action: 'xanax-war-get', warIds: evXan.wars.map(w => w.id), leadHours: EV_XAN_LEAD });
+        evXan.byWar = g.error ? {} : (g.wars || {});
+        const from = Math.min(...evXan.wars.map(w => w.start)) - EV_XAN_LEAD * 3600;
+        const d = await evXanFetch({ action: 'xanax-deposits', from, cacheOnly: true });
+        evXan.deposits = d.error || d.none ? null : (d.deposited || {});
+    } catch (e) { /* the Xanax column just shows it has not been loaded */ }
+}
+// One member's Xanax picture for this period (known = every war of the period has been checked)
+function evXanFor(m) {
+    const wars = evXan.wars;
+    const known = wars.length > 0 && wars.every(w => evXan.byWar[w.id]);
+    const rows = [];
+    for (const w of wars) {
+        const res = evXan.byWar[w.id];
+        if (!res) continue;
+        const taken = (evXanMatch(res.taken, m) || { n: 0 }).n;
+        const h = (moData.hits[w.id] || {})[m.id] || {};
+        const hits = (h.war || 0) + (h.chain || 0);
+        const covered = Math.ceil(hits / 10);
+        rows.push({ warId: w.id, opponent: w.opponent, taken, hits, covered, owed: Math.max(0, taken - covered), returned: 0, outstanding: 0 });
+    }
+    const depKnown = evXan.deposits !== null;
+    let rem = depKnown ? (evXanMatch(evXan.deposits, m) || { n: 0 }).n : 0;
+    for (const r of rows) { r.returned = Math.min(r.owed, rem); rem -= r.returned; r.outstanding = r.owed - r.returned; }
+    return { known, depKnown, rows, owed: rows.reduce((s, r) => s + r.owed, 0), returned: rows.reduce((s, r) => s + r.returned, 0), outstanding: rows.reduce((s, r) => s + r.outstanding, 0) };
+}
+// The "Load Xanax data" button: checks every war of the period that has no saved answer yet (one at a time — each reads the armory log), then
+// the deposits since the first of them, and redraws the evaluation.
+async function evXanLoadAll(forceDep) {
+    if (evXan.busy) return;
+    evXan.busy = true;
+    const bar = $('ev-xan-bar');
+    try {
+        const todo = evXan.wars.filter(w => !evXan.byWar[w.id]);
+        for (let i = 0; i < todo.length; i++) {
+            bar.textContent = `Xanax: reading the armory log for the war vs ${todo[i].opponent} (${i + 1} of ${todo.length})… this can take up to a minute each`;
+            const r = await evXanFetch({ action: 'xanax-war-scan', warId: todo[i].id, leadHours: EV_XAN_LEAD });
+            if (r.error) throw new Error(`War vs ${todo[i].opponent}: ${r.error}`);
+            if (r.rateLimited || r.hitPageCap) evXan.note = 'The armory log could not be read completely for some war — press the button again in a minute.';
+            evXan.byWar[todo[i].id] = r;
+        }
+        bar.textContent = 'Xanax: reading what has been put back…';
+        const from = Math.min(...evXan.wars.map(w => w.start)) - EV_XAN_LEAD * 3600;
+        const d = await evXanFetch({ action: 'xanax-deposits', from, force: !!forceDep });
+        if (d.error) throw new Error(d.error);
+        evXan.deposits = d.deposited || {};
+        if (d.rateLimited || d.hitPageCap) evXan.note = 'The deposits could not be read completely — press the button again in a minute.';
+    } catch (e) { evXan.note = e.message; }
+    evXan.busy = false;
+    renderEvaluation();
+}

@@ -164,6 +164,31 @@ module.exports = async function handler(req, res) {
             return res.status(200).json(result);
         }
 
+        // Xanax put BACK into the armory since `from` (a deposit line in the armory log: "Name deposited 1x Xanax"), per member — what the
+        // evaluation counts against the Xanax someone still owes. It changes whenever someone deposits, so it is only kept for 15 minutes;
+        // `cacheOnly` returns the kept answer (or null) without reading the log.
+        if (action === 'xanax-deposits') {
+            const from = Math.floor(Number(req.body.from));
+            if (!(from > 0)) return res.status(400).json({ error: 'Missing start time.' });
+            const ck = `wwl:xanax-dep:${factionId}:${Math.floor(from / 3600)}`;
+            const kept = await redis(['GET', ck]);
+            if (kept && !req.body.force) return res.status(200).json({ ...JSON.parse(kept), cached: true });
+            if (req.body.cacheOnly) return res.status(200).json({ none: true });
+            const to = Math.floor(Date.now() / 1000);
+            const news = await fetchAllArmoryNews(key, from, to);
+            const deposited = {};
+            for (const entry of news.entries) {
+                const p = parseArmoryNewsEntry(String(entry.id), entry);
+                if (p.unparsed || p.action !== 'deposited' || String(p.item).toLowerCase() !== 'xanax') continue;
+                const id = p.actorId || p.actor;
+                const d = deposited[id] || (deposited[id] = { name: p.actor, n: 0 });
+                d.n += p.quantity || 1;
+            }
+            const result = { from, to, deposited, entries: news.entries.length, rateLimited: news.rateLimited, hitPageCap: news.hitPageCap, at: Date.now() };
+            if (!news.rateLimited && !news.hitPageCap) await redis(['SET', ck, JSON.stringify(result), 'EX', '900']);
+            return res.status(200).json(result);
+        }
+
         if (action === 'consumption-report') {
             const { from, to } = req.body;
             if (!from || !to) return res.status(400).json({ error: 'Pick a date range first.' });
