@@ -128,7 +128,7 @@ module.exports = async function handler(req, res) {
         // (wwl:xanax-war:<faction>:<war>:<lead>) so the evaluation can use it later without reading the armory log again.
         // Pairs with the hits of that war (Member Overview already stores them per war) to see who took more than they hit for.
         if (action === 'xanax-war-scan' || action === 'xanax-war-get') {
-            const leadHours = [0, 6, 12, 24, 48].includes(Number(req.body.leadHours)) ? Number(req.body.leadHours) : 12;
+            const leadHours = [0, 6, 12, 24, 48].includes(Number(req.body.leadHours)) ? Number(req.body.leadHours) : 48; // 48 h = the faction's Xanax stacking window
             const cacheKey = (warId) => `wwl:xanax-war:${factionId}:${warId}:${leadHours}`;
             if (action === 'xanax-war-get') { // cached answers only, no Torn calls
                 const ids = (Array.isArray(req.body.warIds) ? req.body.warIds : []).map(String).filter(x => /^\d+$/.test(x)).slice(0, 10);
