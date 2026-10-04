@@ -40,6 +40,7 @@ const { nightlyHandle, nightlyRun, getVaultKey } = require('../lib/nightly');
 const { usageFor } = require('../lib/tornFetch');
 const { targetsHandle } = require('../lib/targets');
 const { mentoringHandle } = require('../lib/mentoring');
+const { ohHandle } = require('../lib/onlineHours');
 const { labsIsOwner, labsHasOwners, labsHandle, labsRecordReceipt } = require('../lib/labsLedger');
 
 const REDIS_URL = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL;
@@ -1273,6 +1274,11 @@ Cancel: ${cancelUrl}`, [], embeds, undefined, true);
         }
         // Names for the "who" lists only leaders see (reporters, "I have this too", thumbs): one roster read (cached), best effort.
         const bugNames = async () => { const o = {}; try { for (const m of await getRoster(key)) o[m.id] = m.name; } catch (e) { /* ids are shown instead */ } return o; };
+        // Usual online hours (TCT): a member reads and sets their own; only leaders read everyone's, for pairing mentors and pupils.
+        if (action.startsWith('oh-')) {
+            if (action === 'oh-all' && !(await isLeader(key))) return res.status(403).json({ error: 'Leaders only' });
+            return res.status(200).json(await ohHandle(action, req.body, { redis, factionId, playerId }));
+        }
         // Suggestions — everyone can read, add and vote; only leaders set a status or delete.
         if (action.startsWith('sug-')) {
             const leader = ['sug-list', 'sug-status', 'sug-delete'].includes(action) ? await isLeader(key) : false;

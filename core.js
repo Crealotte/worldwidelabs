@@ -424,7 +424,7 @@
             $('feedback-editor').style.display = canEditLeaderOnly ? 'block' : 'none';
             if (canEditLeaderOnly) loadFeedbackEditor();
         }
-        if (page === 'dashboard') { startCooldownTicker(); if (typeof loadScriptCard === 'function') loadScriptCard(); if (typeof loadMyTodos === 'function') loadMyTodos(); loadAnnouncement(); loadPolls(); loadRespectGoalPanel(); loadDashboardWarBadges(); loadMyStanding(); if (typeof loadLeaderTodos === 'function' && isLeaderCached) setTimeout(loadLeaderTodos, 1500); setTimeout(() => { if (typeof loadSteadfastCard === 'function') loadSteadfastCard(); }, 8000); } else { stopCooldownTicker(); }
+        if (page === 'dashboard') { startCooldownTicker(); if (typeof loadScriptCard === 'function') loadScriptCard(); if (typeof loadMyTodos === 'function') loadMyTodos(); if (typeof loadOnlineHours === 'function') loadOnlineHours(); loadAnnouncement(); loadPolls(); loadRespectGoalPanel(); loadDashboardWarBadges(); loadMyStanding(); if (typeof loadLeaderTodos === 'function' && isLeaderCached) setTimeout(loadLeaderTodos, 1500); setTimeout(() => { if (typeof loadSteadfastCard === 'function') loadSteadfastCard(); }, 8000); } else { stopCooldownTicker(); }
         if (page === 'announce-edit') {
             $('announce-locked').style.display = canEditLeaderOnly ? 'none' : 'block';
             $('announce-editor').style.display = canEditLeaderOnly ? 'block' : 'none';

@@ -657,6 +657,20 @@
                 <div id="dash-script-body"></div>
             </div>
 
+            <div class="panel" id="dash-oh-panel" style="display:none;">
+                <h3 style="margin-top:0;">🕐 When are you usually online?</h3>
+                <p style="color:var(--muted);font-size:12px;margin:0 0 8px;">Tick the hours of a normal day you are usually around. It helps leaders pair you with a mentor or pupil who is online at the same time. Hours are saved as TCT; the switch only shows them in your own time zone.</p>
+                <label style="display:flex;gap:6px;align-items:center;font-size:13px;margin-bottom:8px;cursor:pointer;"><input type="checkbox" id="oh-tz" style="width:auto;"> Show in my own time zone</label>
+                <div style="font-size:12px;color:var(--muted);margin-bottom:6px;">Hours shown in <b id="oh-zone" style="color:var(--text);">TCT</b> <span id="oh-tz-note"></span></div>
+                <div id="oh-grid" style="display:grid;grid-template-columns:repeat(12,1fr);gap:4px;max-width:520px;"></div>
+                <div style="margin-top:10px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+                    <button id="oh-save" type="button" class="small">Save</button>
+                    <button id="oh-clear" type="button" class="ghost small">Clear all</button>
+                    <span id="oh-count" style="font-size:12px;color:var(--muted);"></span>
+                    <span id="oh-status" class="status"></span>
+                </div>
+            </div>
+
             <div class="panel" id="dash-mytodo-panel" style="display:none;">
                 <h3 style="margin-top:0;">📝 My own reminders</h3>
                 <p style="color:var(--muted);font-size:12px;margin:0 0 8px;">Add anything you want to be reminded of, once or every day, and tick it off — it shows in your script To do list too. Leaders can see what people add here, to find reminders worth building for everyone.</p>
@@ -1061,6 +1075,7 @@
             </div>
             <div id="mta-body" style="display:none;">
                 <div class="status" id="mta-status"></div>
+                <div id="mta-oh-bar" style="margin:6px 0 10px;font-size:13px;color:var(--muted);"></div>
 
                 <div class="panel">
                     <h3 style="margin-top:0;">Mentors</h3>
@@ -2554,6 +2569,7 @@
 <script src="oc-requests.js"></script>
 <script src="bank.js"></script>
 <script src="my-todos.js"></script>
+<script src="online-hours.js"></script>
 <script src="crimes-guide.js"></script>
 <script src="war-payout-tracker.js"></script>
 <script src="war-badges-tracker.js"></script>

@@ -131,7 +131,7 @@ const mtMyId = () => String((typeof profile !== 'undefined' && profile?.player_i
 // ==================================  LEADER: Mentoring admin  ===============================
 // ============================================================================================
 
-let mtaProgram = null, mtaTodos = [], mtaRoster = [];
+let mtaProgram = null, mtaTodos = [], mtaRoster = [], mtaHours = {}; // mtaHours: playerId -> usual online hours (TCT), see online-hours.js
 
 async function loadMentoringAdmin() {
     // Leader/Co-leader only end to end (see AUDIT.md).
@@ -142,7 +142,8 @@ async function loadMentoringAdmin() {
     const st = $('mta-status');
     st.className = 'status ok'; st.textContent = 'Loading…';
     try {
-        const [r, rosterData] = await Promise.all([mtFetch({ action: 'mentor-program-get' }), tornV2('/faction/members?striptags=true')]);
+        const [r, rosterData, oh] = await Promise.all([mtFetch({ action: 'mentor-program-get' }), tornV2('/faction/members?striptags=true'), mtFetch({ action: 'oh-all' })]);
+        mtaHours = (oh && oh.all) || {};
         if (r.error) throw new Error(r.error);
         mtaProgram = r.program; mtaTodos = r.todos.map(t => ({ ...t }));
         mtaRoster = (rosterData?.members || []).slice().sort((a, b) => a.name.localeCompare(b.name));
@@ -165,13 +166,16 @@ const mtaMentorAccessors = { name: ([id, m]) => (m.name || `#${id}`).toLowerCase
 let mtaPupilSort = { key: null, dir: 'asc' };
 const mtaPupilAccessors = { name: ([id, p]) => (p.name || `#${id}`).toLowerCase(), mentor: ([, p]) => (mtaProgram.mentors[p.mentorId]?.name || '').toLowerCase() };
 function renderMta() {
+    $('mta-oh-bar').innerHTML = `<label style="display:inline-flex;gap:6px;align-items:center;cursor:pointer;"><input type="checkbox" id="mta-oh-tz" style="width:auto;" ${ohLocal && ohOffsetOk() ? 'checked' : ''} ${ohOffsetOk() ? '' : 'disabled'}> Show online hours in my own time zone</label> <span>— hours are members\x27 own, set on their dashboard (${Object.keys(mtaHours).length} of ${mtaRoster.length} have set them). Shown in ${ohZone()}.</span>`;
+    $('mta-oh-tz').addEventListener('change', () => { ohLocal = $('mta-oh-tz').checked; try { localStorage.setItem(OH_TZ_KEY, ohLocal ? '1' : '0'); } catch (e) { /* not critical */ } renderMta(); });
     const mentors = sortRows(Object.entries(mtaProgram.mentors), mtaMentorSort, mtaMentorAccessors);
     $('mta-mentors').innerHTML = mentors.length ? `
         <table style="width:100%;font-size:13px;border-collapse:collapse;">
-            <thead><tr style="color:var(--muted);text-align:left;"><th data-sort="name" style="padding:4px 8px;">Name</th><th data-sort="pupils" style="padding:4px 8px;">Pupils</th><th style="padding:4px 8px;">Note</th><th style="padding:4px 8px;"></th></tr></thead>
+            <thead><tr style="color:var(--muted);text-align:left;"><th data-sort="name" style="padding:4px 8px;">Name</th><th data-sort="pupils" style="padding:4px 8px;">Pupils</th><th style="padding:4px 8px;">Usually online <span style="font-weight:400;">(${ohZone()})</span></th><th style="padding:4px 8px;">Note</th><th style="padding:4px 8px;"></th></tr></thead>
             <tbody>${mentors.map(([id, m]) => `<tr style="border-top:1px solid var(--line);">
                 <td style="padding:5px 8px;">${esc(m.name || `#${id}`)} <span style="color:var(--muted);font-size:11px;">[${id}]</span></td>
                 <td style="padding:5px 8px;">${mtaPupilCount(id)} / <select class="mta-cap" data-id="${id}" style="width:auto;display:inline-block;padding:2px 6px;"><option value="0" ${m.capacity === 0 ? 'selected' : ''}>0</option><option value="1" ${m.capacity === 1 ? 'selected' : ''}>1</option><option value="2" ${m.capacity === 2 ? 'selected' : ''}>2</option><option value="3" ${m.capacity === 3 ? 'selected' : ''}>3</option></select></td>
+                <td style="padding:5px 8px;">${ohStrip(mtaHours[id])}</td>
                 <td style="padding:5px 8px;color:var(--muted);">${esc(m.note || '')}</td>
                 <td style="padding:5px 8px;"><button class="ghost small mta-m-del" data-id="${id}" style="color:var(--danger);">Remove</button></td>
             </tr>`).join('')}</tbody>
@@ -181,10 +185,13 @@ function renderMta() {
     const pupils = sortRows(Object.entries(mtaProgram.pupils), mtaPupilSort, mtaPupilAccessors);
     $('mta-pupils').innerHTML = pupils.length ? `
         <table style="width:100%;font-size:13px;border-collapse:collapse;">
-            <thead><tr style="color:var(--muted);text-align:left;"><th data-sort="name" style="padding:4px 8px;">Name</th><th data-sort="mentor" style="padding:4px 8px;">Mentor</th><th style="padding:4px 8px;">Note</th><th style="padding:4px 8px;"></th></tr></thead>
+            <thead><tr style="color:var(--muted);text-align:left;"><th data-sort="name" style="padding:4px 8px;">Name</th><th data-sort="mentor" style="padding:4px 8px;">Mentor</th><th style="padding:4px 8px;">Usually online <span style="font-weight:400;">(${ohZone()})</span></th><th style="padding:4px 8px;">Note</th><th style="padding:4px 8px;"></th></tr></thead>
             <tbody>${pupils.map(([id, p]) => {
+                // the mentors with room, the ones online at the same hours as this pupil first
+                const together = mid => ohOverlap(mtaHours[id], mtaHours[mid]);
+                const ranked = roomyMentors.slice().sort((a, b) => (together(b[0]) ?? -1) - (together(a[0]) ?? -1));
                 const options = ['<option value="">— unassigned —</option>']
-                    .concat(roomyMentors.map(([mid, m]) => `<option value="${mid}" ${String(p.mentorId) === mid ? 'selected' : ''}>${esc(m.name || `#${mid}`)} (${mtaPupilCount(mid)}/${m.capacity})</option>`));
+                    .concat(ranked.map(([mid, m]) => `<option value="${mid}" ${String(p.mentorId) === mid ? 'selected' : ''}>${esc(m.name || `#${mid}`)} (${mtaPupilCount(mid)}/${m.capacity})${together(mid) != null ? ` · ${together(mid)}h online together` : ''}</option>`));
                 if (p.mentorId && !roomyMentors.some(([mid]) => mid === String(p.mentorId))) { // keep their current (full) mentor selectable, so re-saving doesn't silently unassign them
                     const cur = mtaProgram.mentors[p.mentorId];
                     options.push(`<option value="${p.mentorId}" selected>${esc(cur?.name || `#${p.mentorId}`)} (full)</option>`);
@@ -192,6 +199,7 @@ function renderMta() {
                 return `<tr style="border-top:1px solid var(--line);">
                     <td style="padding:5px 8px;">${esc(p.name || `#${id}`)} <span style="color:var(--muted);font-size:11px;">[${id}]</span></td>
                     <td style="padding:5px 8px;"><select class="mta-assign" data-id="${id}" style="width:auto;">${options.join('')}</select></td>
+                    <td style="padding:5px 8px;">${ohStrip(mtaHours[id])}</td>
                     <td style="padding:5px 8px;color:var(--muted);">${esc(p.note || '')}</td>
                     <td style="padding:5px 8px;"><button class="ghost small mta-p-del" data-id="${id}" style="color:var(--danger);">Remove</button></td>
                 </tr>`;
