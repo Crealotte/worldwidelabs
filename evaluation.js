@@ -146,8 +146,8 @@ function evMessage(r) {
     if (soft) lines.push('There is no pressure — you are new, so you have some time to find your feet. But please do ask us for help if you need anything: tips on training or war hits, someone to show you the ropes, or a schedule that works for you. And feel free to tell us your plans and how it is going so far.');
     else if (belowMin) lines.push('Could you let me know what your plans are, and whether you expect this to improve next month? If something is going on (offline, ill, busy, a different play style) just say so and we will take it into account.', '', 'And is there anything we can do to help you improve? Tips on training or the war, a different schedule, a mentor — just tell us what would make it easier for you.');
     else if (r.light === 'grey' && r.pct === null) lines.push('Welcome to the faction! We do not have enough data to judge yet — if you need anything at all, just ask us.');
-    else if (r.xanBelow) lines.push('You are meeting the war and training requirements — thank you! The Xanax above is the only thing left to sort out.');
-    else lines.push('You are meeting both of the requirements — thank you, keep it up!');
+    else if (r.xanBelow) lines.push('You are doing amazing on both the war and your training — you are a real asset to the faction and we are so happy to have you! Please keep up that great effort, it really shows. Just the Xanax above left to sort out.');
+    else lines.push('You are doing amazing — you are meeting both the war and the training requirements, and that effort really shows! You are a real asset to the faction, so please keep up the great work, we are proud of you!');
     lines.push('', 'Thanks!', 'Lots of Love', 'Crea <3');
     return lines.join('\n');
 }
