@@ -13,6 +13,27 @@
         return localStorage.getItem(EG_DONATOR_KEY) === '1';
     }
 
+    // ---- Xanax at its market value (shared with the Gym Planner through sessionStorage, refreshed every 6 hours) ----
+    let egXanPrice = null, egXanTried = false;
+    function egXanFromCache() {
+        try { const c = JSON.parse(sessionStorage.getItem('wwl_xan_price') || 'null'); if (c && Date.now() - c.at < 6 * 3600e3 && c.p) return c.p; } catch (e) { /* fetch fresh */ }
+        return null;
+    }
+    function egEnsureXanPrice() { // called by the renders; loads once, then repaints
+        if (egXanPrice == null) egXanPrice = egXanFromCache();
+        if (egXanPrice != null || egXanTried || typeof apiKey === 'undefined' || !apiKey) return;
+        egXanTried = true;
+        fetch(`https://api.torn.com/torn/?selections=items&key=${encodeURIComponent(apiKey)}`).then(r => r.json()).then(d => {
+            const x = Object.values(d.items || {}).find(it => it.name === 'Xanax');
+            if (!x || !x.market_value) return;
+            egXanPrice = x.market_value;
+            try { sessionStorage.setItem('wwl_xan_price', JSON.stringify({ at: Date.now(), p: egXanPrice })); } catch (e) { /* not critical */ }
+            if (egGroup) renderEgPlan();
+            renderHappyJumps();
+        }).catch(() => { /* no price shown */ });
+    }
+    const egMoney = n => `$${Math.round(n).toLocaleString()}`;
+
     function planForGroupA(isDonator) {
         const fillSize = isDonator ? 150 : 100;
         const dayTotal = fillSize * 3 + 250 * 2 + fillSize; // 3 natural fills + 2 Xanax + 1 refill
@@ -105,6 +126,7 @@
     }
 
     function renderEgPlan() {
+        egEnsureXanPrice();
         const plan = getEgPlan(egGroup);
         if (!plan) return;
         $('eg-panel').style.display = 'block';
@@ -119,7 +141,7 @@
                 const checked = checks[it.key] ? 'checked' : '';
                 return `<label style="display:flex;align-items:center;gap:8px;padding:6px 0;cursor:pointer;">
                     <input type="checkbox" class="eg-check" id="${it.key}" data-value="${it.value}" style="width:auto;" ${checked}>
-                    ${esc(it.label)}
+                    ${esc(it.label)}${/^Xanax/.test(it.label) && egXanPrice != null ? `<span style="color:var(--muted);font-size:12px;">· ${egMoney(egXanPrice)}</span>` : ''}
                 </label>`;
             }).join('');
             blocksHtml += `
@@ -130,7 +152,7 @@
                 </div>`;
         });
         $('eg-days').innerHTML = blocksHtml;
-        $('eg-extra').innerHTML = '';
+
 
         document.querySelectorAll('.eg-check').forEach(cb => {
             cb.addEventListener('change', () => {
@@ -151,6 +173,12 @@
         const pct = Math.min(100, (done / plan.target) * 100);
         $('eg-progress-fill').style.width = pct + '%';
         $('eg-progress-text').textContent = `${fmtN(done)} / ${fmtN(plan.target)} E`;
+        // Xanax at market value: how many this plan uses, and what is already taken
+        const xanEls = [...document.querySelectorAll('.eg-check')].filter(cb => /^Xanax/.test(cb.parentElement.textContent.trim()));
+        const xanAll = xanEls.length, xanDone = xanEls.filter(cb => cb.checked).length;
+        $('eg-extra').innerHTML = xanAll ? (egXanPrice != null
+            ? `<div style="font-size:13px;color:var(--muted);">💊 Xanax this week: <b style="color:var(--text);">${xanAll}</b> × ${egMoney(egXanPrice)} (market value) = <b style="color:var(--reagent);font-family:var(--mono);">${egMoney(xanAll * egXanPrice)}</b> · taken so far: ${xanDone} (${egMoney(xanDone * egXanPrice)})</div>`
+            : `<div style="font-size:13px;color:var(--muted);">💊 Xanax this week: <b style="color:var(--text);">${xanAll}</b> (market value not loaded yet)</div>`) : '';
     }
 
     // ================= HAPPY JUMPING GUIDE =================
@@ -289,7 +317,13 @@
     function hjLoadChecks() { try { return JSON.parse(localStorage.getItem(HJ_CHECK_KEY)) || {}; } catch { return {}; } }
     function hjSaveChecks(c) { localStorage.setItem(HJ_CHECK_KEY, JSON.stringify(c)); }
 
+    function hjXanLine(j) { // "4x Xanax" in the items → what that costs at market value
+        const n = (j.items.map(b => /^(\d+)x Xanax/i.exec(b)).find(Boolean) || [])[1];
+        if (!n || egXanPrice == null) return '';
+        return `<div style="font-size:12px;color:var(--muted);margin:-4px 0 8px;">💊 Xanax at market value: ${n} × ${egMoney(egXanPrice)} = <b style="color:var(--text);">${egMoney(n * egXanPrice)}</b></div>`;
+    }
     function renderHappyJumps() {
+        egEnsureXanPrice();
         $('eg-jump-intro').innerHTML = HAPPY_JUMP_INTRO.map(b => `<li>${esc(b)}</li>`).join('');
         const checks = hjLoadChecks();
         $('eg-jumps').innerHTML = HAPPY_JUMPS.map((j, ji) => `
@@ -303,7 +337,7 @@
                     <div class="crimes-subhead" style="margin-top:0;">🏠 Property needed</div>
                     <p style="margin:0 0 10px;">${esc(j.property)}</p>
                     <div class="crimes-subhead">🎒 Items needed</div>
-                    <ul class="crimes-bullets">${j.items.map(b => `<li>${esc(b)}</li>`).join('')}</ul>
+                    <ul class="crimes-bullets">${j.items.map(b => `<li>${esc(b)}</li>`).join('')}</ul>${hjXanLine(j)}
                     <div class="crimes-subhead">📋 Steps</div>
                     <div style="margin:6px 0 10px;">${j.steps.map((s, si) => {
                         if (s.wait) return `<div style="padding:3px 0 3px 4px;color:var(--muted);font-size:13px;">→ Wait ${esc(s.wait)}</div>`;

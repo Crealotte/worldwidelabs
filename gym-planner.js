@@ -156,6 +156,7 @@ function gpWeek(m, inp, prices, xanPerDay) {
         const canE = inp.can ? inp.can.energy * nat.canCount : 0;
         rest = 4 * (nat.bars * inp.fill + nat.xan * 250 + nat.refill * inp.fill + canE);
         if (inp.can && nat.canCount) { if (inp.can.price == null) canPriced = false; else canCost = 4 * nat.canCount * inp.can.price; }
+        if (nat.xan) { const xp = prices[GP_ITEMS.xanax]; if (xp == null) canPriced = false; else canCost += 4 * nat.xan * xp; } // the day's Xanax at market value, 4 training days
     } else if ((m.perDay || 1) > 1) {
         rest = 0;
     } else if ((m.items?.xanax || 0) > 1) {
