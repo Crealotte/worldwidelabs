@@ -15,6 +15,7 @@
 let avConfig = null; // { startDate, days } from the backend, or null if no tracker is active
 let avMine = {}; // my own slots: "day-hour" (TCT) -> true
 let avMineWatch = {}; // my hours marked with the blue ring (Chain saver / War guard)
+let avArchivedPicked = false; // true once an archived plan was picked on purpose from the leaders' list in THIS visit
 let avHintsShown = 0; // how many click hints have been shown this visit
 let avWatchMode = false; // the switch: clicking a box adds or removes the ring instead of cycling the colour
 let avWatchTaken = {}; // hour -> how many of the two places (primary + backup) are taken
@@ -95,6 +96,13 @@ async function loadAvailability() {
         avArchivedPlans = result.archivedPlans || [];
         avViewingArchived = !!result.viewingArchived;
         avPlanId = result.planId || null;
+        // An archived plan is only ever shown when it was picked on purpose in this visit. A remembered one from an earlier
+        // visit (archived since) used to keep the page on it with the plan picker hidden and no way back — so go to the usual plan.
+        if (avViewingArchived && !avArchivedPicked) {
+            avPlanId = null; avViewingArchived = false;
+            try { localStorage.removeItem(AV_PLAN_KEY); } catch (e) { /* not critical */ }
+            return loadAvailability();
+        }
         try { if (avPlanId) localStorage.setItem(AV_PLAN_KEY, avPlanId); } catch (e) { /* not critical */ }
         avConfig = result.config;
         avMine = result.mine || {};
@@ -385,7 +393,7 @@ function renderAvPlanBar() {
 $('av-archived-select-l').addEventListener('change', () => {
     const id = $('av-archived-select-l').value;
     if (!id) return;
-    avPlanId = id;
+    avPlanId = id; avArchivedPicked = true;
     try { localStorage.setItem(AV_PLAN_KEY, avPlanId); } catch (e) { /* not critical */ }
     avSelected = null;
     loadAvailability();
