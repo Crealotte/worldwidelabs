@@ -852,7 +852,7 @@ module.exports = async function handler(req, res) {
                     {
                         const oc = known ? d[known] : null;
                         const inOC = Array.isArray(oc) ? oc.length > 0 : !!(oc && typeof oc === 'object' && Object.keys(oc).length > 0);
-                        if (!inOC) items.push({ id: 'oc', text: "You're not in an Organized Crime right now. Nothing that suits you? Ask for one on WWL (Crimes, OC requests).", cta: 'Join an OC', url: 'https://www.torn.com/factions.php?step=your#/tab=crimes' });
+                        if (!inOC) { const reqRaw = await redis(['HGET', ocRequestsKey(factionId), playerId]); items.push({ id: 'oc', text: "You're not in an Organized Crime right now. Nothing that suits you? Ask for one on WWL (Crimes, OC requests).", cta: 'Join an OC', url: 'https://www.torn.com/factions.php?step=your#/tab=crimes', request: reqRaw ? JSON.parse(reqRaw) : null }); } // request: the member's open OC request, if any, so the script can show it
                     }
                 }
             } catch (e) { /* skip this check on failure, don't fail the others */ }
