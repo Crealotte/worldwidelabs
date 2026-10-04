@@ -2,7 +2,7 @@
 // @name         World Wide Labs
 // @namespace    https://worldwidelabs.vercel.app
 // @author       CreaLotte
-// @version      1.38.5
+// @version      1.38.6
 // @updateURL    __WWL_BASE__/worldwidelabs.user.js
 // @downloadURL  __WWL_BASE__/worldwidelabs.user.js
 // @description  Shows your WorldWideLabs weekly energy plan (the checklist from the Energy planner) inside Torn, a To do tab with small personal reminders (revive setting, feedback, timezone map, availability, Discord/Intel/CAT), your My Targets list, a simplified energy/war standing strip, and — if you are in the Mentoring Platform — your mentoring checklist too. Also shows faction banners at the top of every Torn page. A small ⚙ in the header shows the installed version, flags when a newer one is out, lets you set/replace your API key, and — for a leader — add or remove your faction's banners right from Torn. On a computer it is a small window you can drag around and close; in TornPDA it is a menu. Ticks are shared with the WWL site.
@@ -26,7 +26,7 @@
     const KEY_NAME = 'wwl_api_key', POS_NAME = 'wwl_plan_pos', STATE_NAME = 'wwl_plan_state';
     // GM_info gives the version Tampermonkey actually has installed right now — falls back to a
     // hardcoded copy (kept in sync with @version above) for TornPDA, which doesn't grant GM_info.
-    const SCRIPT_VERSION = (typeof GM_info !== 'undefined' && GM_info.script?.version) || '1.38.5';
+    const SCRIPT_VERSION = (typeof GM_info !== 'undefined' && GM_info.script?.version) || '1.38.6';
     const versionGreater = (a, b) => {
         const pa = String(a).split('.').map(Number), pb = String(b).split('.').map(Number);
         for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
@@ -151,7 +151,7 @@
         <div id="wwl-body" style="overflow:auto;padding:8px 12px 12px;"></div>`;
     root.appendChild(win);
     const body = win.querySelector('#wwl-body'), prog2 = win.querySelector('#wwl-prog2'), head = win.querySelector('#wwl-head');
-    let plan = null, mtPairs = null, mtTodos = [], mtIsPupil = false, welMine = null, welPupils = {}, todoItems = null, tab = 'todo', lastTab = 'todo'; // tab: 'energy' | 'mentoring' | 'todo' | 'settings' | 'targets' — the mentoring tab only appears once we know there's something to show there
+    let plan = null, mtPairs = null, mtTodos = [], mtIsPupil = false, welMine = null, welPupils = {}, welOpen = {}, todoItems = null, tab = 'todo', lastTab = 'todo'; // tab: 'energy' | 'mentoring' | 'todo' | 'settings' | 'targets' — the mentoring tab only appears once we know there's something to show there
     let settingsData = null, updateAvailable = null; // settingsData: { banners, leader, owner } once the Settings tab has been opened
     let standing = null; // from 'mo-me' — the same numbers the site's "Your standing" dashboard card shows
     let myTargets = null, targetStatus = {}; // My Targets list + live status, fetched separately (status can lag behind the list)
@@ -353,15 +353,14 @@
             ${r.allDone ? '<div style="color:#35d99b;">You finished everything. Well done! 🎉</div>' : `<div style="font-weight:700;margin:6px 0 2px;">${r.current + 1}. ${esc(c.title)}</div><div style="color:#9aa4b5;font-size:12px;white-space:pre-wrap;margin-bottom:4px;">${weRich(c.intro)}</div>${c.tasks.map(t => weTask(t, 'wwl-w-check', '')).join('')}`}
         </div>`;
     }
+    // the mentor sees every chapter in full with what is ticked (the pupil only gets the chapter they are on)
     function renderWelcomePupil(pupilId) {
         const r = welPupils[pupilId];
         if (!r || r.error) return '';
-        if (r.allDone) return '<div style="color:#35d99b;margin-bottom:8px;">👋 Finished all welcome chapters 🎉</div>';
-        const c = r.chapters[r.current];
         const total = r.chapters.reduce((s, x) => s + x.total, 0), done = r.chapters.reduce((s, x) => s + x.doneCount, 0);
-        return `<div style="margin:6px 0 10px;"><div style="font-size:12px;font-weight:700;">👋 Their welcome chapters: ${r.current + 1} of ${r.chapters.length}, ${done} of ${total} steps</div>
-            <div style="display:flex;gap:5px;flex-wrap:wrap;margin:4px 0;">${r.chapters.map((x, i) => `<span style="font-size:11px;border:1px solid ${i === r.current ? '#35d99b' : '#3a4352'};border-radius:10px;padding:1px 7px;color:${x.complete ? '#35d99b' : x.locked ? '#9aa4b5' : '#e8ecf3'};">${x.complete ? '✓' : x.locked ? '🔒' : ''} ${i + 1}. ${esc(x.title)} ${x.doneCount}/${x.total}</span>`).join('')}</div>
-            <div style="color:#9aa4b5;font-size:12px;">Now: ${esc(c.title)}. Tick a step for them if they showed you it is done.</div>${c.tasks.map(t => weTask(t, 'wwl-w-mtick', `data-pupil="${esc(pupilId)}"`)).join('')}</div>`;
+        return `<div style="margin:6px 0 10px;"><div style="font-size:12px;font-weight:700;">${r.allDone ? '👋 Finished all welcome chapters 🎉' : `👋 Their welcome chapters: ${r.current + 1} of ${r.chapters.length}, ${done} of ${total} steps`}</div>
+            <div style="color:#9aa4b5;font-size:12px;margin-bottom:4px;">Tick a step for them if they showed you it is done.</div>
+            ${r.chapters.map((x, i) => { const k = `${pupilId}:${i}`; return `<details class="wwl-w-det" data-k="${esc(k)}" ${(welOpen[k] ?? (i === r.current && !r.allDone)) ? 'open' : ''} style="margin:3px 0;border:1px solid #3a4352;border-radius:6px;padding:3px 8px;"><summary style="cursor:pointer;color:${x.complete ? '#35d99b' : '#e8ecf3'};">${x.complete ? '✓' : x.locked ? '🔒' : '○'} ${i + 1}. ${esc(x.title)} <span style="color:#9aa4b5;font-size:11px;">${x.doneCount}/${x.total}${x.locked ? ' · not open for them yet' : ''}</span></summary>${x.tasks.map(t => weTask(t, 'wwl-w-mtick', `data-pupil="${esc(pupilId)}"`)).join('')}</details>`; }).join('')}</div>`;
     }
     // The mentoring to-dos: one section per pairing (a mentor with several pupils gets one each), each ticked
     // separately — same shared checklist the WWL page itself shows, just without the chat (open the site for that).
@@ -475,7 +474,7 @@
                 ${t.mine ? `<input type="checkbox" class="wwl-mt-check" data-id="${esc(t.myId)}" ${t.done ? 'checked' : ''} style="width:auto;">` : ''}
                 <span style="flex:1;${t.mine && t.done ? 'text-decoration:line-through;color:#9aa4b5;' : ''}">${esc(t.text)}</span>
                 ${t.mine ? `<span style="font-size:10px;color:#9aa4b5;border:1px solid #3a4352;border-radius:8px;padding:0 6px;">${t.repeat === 'daily' ? 'daily' : 'once'}</span>` : ''}
-                ${t.url ? `<a href="${esc(t.url)}" target="_blank" rel="noopener" style="color:#35d99b;white-space:nowrap;text-decoration:none;border:1px solid #35d99b;border-radius:6px;padding:4px 8px;font-size:12px;">${esc(t.cta)}</a>` : ''}
+                ${t.scriptTab ? `<button type="button" class="wwl-t-go" data-tab="${esc(t.scriptTab)}" style="color:#35d99b;white-space:nowrap;background:transparent;border:1px solid #35d99b;border-radius:6px;padding:4px 8px;font-size:12px;cursor:pointer;">${esc(t.cta)}</button>` : t.url ? `<a href="${esc(t.url)}" target="_blank" rel="noopener" style="color:#35d99b;white-space:nowrap;text-decoration:none;border:1px solid #35d99b;border-radius:6px;padding:4px 8px;font-size:12px;">${esc(t.cta)}</a>` : ''}
             </div>${t.id === 'oc' ? ocRequestHtml(t) : ''}`).join('');
         return daily + rest;
     }
@@ -616,6 +615,8 @@
             if (cb.checked) p.done = [...new Set([...p.done, cb.dataset.id])]; else p.done = p.done.filter(id => id !== cb.dataset.id);
             try { await api({ action: 'mentor-todo-toggle', mentorId, pupilId, todoId: cb.dataset.id, checked: cb.checked }); } catch (e) { /* shown on next load */ }
         }));
+        body.querySelectorAll('.wwl-w-det').forEach(d => d.addEventListener('toggle', () => { welOpen[d.dataset.k] = d.open; }));
+        body.querySelectorAll('.wwl-t-go').forEach(b => b.addEventListener('click', () => { tab = lastTab = b.dataset.tab; render(); }));
         body.querySelectorAll('.wwl-w-check').forEach(cb => cb.addEventListener('change', async () => {
             try { await api({ action: 'wel-done', id: cb.dataset.id, done: cb.checked }); welMine = await api({ action: 'wel-my' }); } catch (e) { /* shown on next load */ }
             render();

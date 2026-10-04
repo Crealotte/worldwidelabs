@@ -16,7 +16,7 @@ Queue changes below instead of releasing each one. Nothing here is live for memb
 
 ### Queued for the next release
 - Own reminders: a checkbox on each (once = stays ticked, daily = unticks itself every day), ticked ones not counted in the To do number, and the add box + delete marks moved into the script's ⚙ Settings to keep the To do tab short (work file 1.38.3, not released). The server side and the dashboard panel are already live.
-- Mentoring tab for pupils in the program (even before they have a mentor): the welcome chapters (only the open chapter in detail, the others locked), ticking manual steps; and for a mentor, how far each pupil is with ticking steps for them (DEV 1.38.5; the old shared pair checklist is gone from the tab too). The To do lines for this are server-side and already live.
+- Mentoring tab for pupils in the program (even before they have a mentor): the welcome chapters (only the open chapter in detail, the others locked), ticking manual steps; and for a mentor, how far each pupil is with ticking steps for them (DEV 1.38.6; the mentor sees every chapter of their pupil with the ticks, the To do lines open this tab; the old shared pair checklist is gone from the tab too). The To do lines for this are server-side and already live.
 
 ## Releasing (when the list is done and tested)
 1. Copy the work file over the release file: `cp userscripts/energy-plan.dev.user.js userscripts/energy-plan.user.js`.
