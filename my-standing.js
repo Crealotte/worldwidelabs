@@ -48,6 +48,18 @@ async function loadMyStanding() {
                     : 'Not calculated yet — it appears after a leader has opened Member Overview.'}</div>
             </div>`;
 
+        // --- Xanax from the armory this period (what a leader has loaded on the evaluation page; nothing is guessed here) ---
+        const xan = r.xanax;
+        const xanaxTile = !xan ? '' : `
+            <div class="stat" style="margin-bottom:14px;">
+                <div class="k">💊 Xanax from the armory (wars of this period)</div>
+                ${!xan.known
+                    ? `<div class="s">Not checked yet — a leader checks the Xanax once per period${xan.wars.length ? ` (${xan.wars.length} of ${xan.total} wars so far)` : ''}.</div>`
+                    : `<div class="v" style="font-size:26px;color:${xan.outstanding > 0 ? 'var(--danger)' : 'var(--reagent)'};">${xan.outstanding > 0 ? `${xan.outstanding} to put back` : '✓ nothing to put back'}</div>
+                       <div class="s">${xan.wars.map(w => `War vs ${esc(w.opponent)}: took ${w.taken}, ${w.hits} hits (covers ${w.covered})${w.owed ? ` — <b style="color:var(--danger);">${w.owed} too many</b>${w.returned ? `, ${w.returned} put back` : ''}` : ' ✓'}`).join('<br>')}
+                       <br>Every Xanax you take from the armory should be backed by 10 hits.${xan.owed > 0 && !xan.depositsAt ? ' What you put back afterwards has not been read yet.' : ''}</div>`}
+            </div>`;
+
         // --- the smaller tiles: each with the number big and the place under it ---
         const small = [['bloodwithdrawn', '🩸 Blood bags filled'], ['candyused', '🍬 Candy'], ['alcoholused', '🍺 Alcohol'],
             ['war', '⚔ War hits (this period)'], ['chain', '⛓ Chain hits (this period)']].map(([k, label]) => {
@@ -62,6 +74,7 @@ async function loadMyStanding() {
 
         $('dash-standing-body').innerHTML = `
             <div class="grid2" style="margin-bottom:14px;">${energyTile}${warTile}</div>
+            ${xanaxTile}
             <div style="color:var(--muted);font-size:12px;margin-bottom:8px;">Your numbers and place this month (${msFmt(r.period.start)} → ${msFmt(r.period.end)}${r.period.running ? ', so far' : ''}) — war and chain hits here only count a war or chain event that ended in this period, so nothing wins the competition twice.</div>
             <div class="grid3">${small}</div>`;
         panel.style.display = 'block';

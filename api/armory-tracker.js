@@ -185,7 +185,10 @@ module.exports = async function handler(req, res) {
                 d.n += p.quantity || 1;
             }
             const result = { from, to, deposited, entries: news.entries.length, rateLimited: news.rateLimited, hitPageCap: news.hitPageCap, at: Date.now() };
-            if (!news.rateLimited && !news.hitPageCap) await redis(['SET', ck, JSON.stringify(result), 'EX', '900']);
+            if (!news.rateLimited && !news.hitPageCap) {
+                await redis(['SET', ck, JSON.stringify(result), 'EX', '900']);
+                await redis(['SET', `wwl:xanax-dep-last:${factionId}`, JSON.stringify(result)]); // no expiry: members' own Xanax card reads this (it says when it was read)
+            }
             return res.status(200).json(result);
         }
 
