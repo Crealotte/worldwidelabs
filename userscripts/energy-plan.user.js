@@ -2,7 +2,7 @@
 // @name         World Wide Labs
 // @namespace    https://worldwidelabs.vercel.app
 // @author       CreaLotte
-// @version      1.38
+// @version      1.38.1
 // @updateURL    __WWL_BASE__/worldwidelabs.user.js
 // @downloadURL  __WWL_BASE__/worldwidelabs.user.js
 // @description  Shows your WorldWideLabs weekly energy plan (the checklist from the Energy planner) inside Torn, a To do tab with small personal reminders (revive setting, feedback, timezone map, availability, Discord/Intel/CAT), your My Targets list, a simplified energy/war standing strip, and — if you are in the Mentoring Platform — your mentoring checklist too. Also shows faction banners at the top of every Torn page. A small ⚙ in the header shows the installed version, flags when a newer one is out, lets you set/replace your API key, and — for a leader — add or remove your faction's banners right from Torn. On a computer it is a small window you can drag around and close; in TornPDA it is a menu. Ticks are shared with the WWL site.
@@ -26,7 +26,7 @@
     const KEY_NAME = 'wwl_api_key', POS_NAME = 'wwl_plan_pos', STATE_NAME = 'wwl_plan_state';
     // GM_info gives the version Tampermonkey actually has installed right now — falls back to a
     // hardcoded copy (kept in sync with @version above) for TornPDA, which doesn't grant GM_info.
-    const SCRIPT_VERSION = (typeof GM_info !== 'undefined' && GM_info.script?.version) || '1.38';
+    const SCRIPT_VERSION = (typeof GM_info !== 'undefined' && GM_info.script?.version) || '1.38.1';
     const versionGreater = (a, b) => {
         const pa = String(a).split('.').map(Number), pb = String(b).split('.').map(Number);
         for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
@@ -165,7 +165,7 @@
         try { const d = JSON.parse(store.get(DAILY_CHECK_NAME) || 'null'); return !!(d && d.date === todayStr() && d.checked); } catch (e) { return false; }
     }
     function setDailyChecked(v) { store.set(DAILY_CHECK_NAME, JSON.stringify({ date: todayStr(), checked: v })); }
-    function todoCount() { return (todoItems ? todoItems.length : 0) + (getDailyChecked() ? 0 : 1); }
+    function todoCount() { return (todoItems ? todoItems.filter(t => !t.notice).length : 0) + (getDailyChecked() ? 0 : 1); } // a notice (like the Xanax stacking reminder) is not something to do, so it is not counted
 
     // position (PC): remembered, and always kept inside the screen
     const place = (x, y) => {
@@ -366,6 +366,20 @@
                 <button type="button" id="wwl-oc-send" style="padding:5px 10px;border-radius:6px;border:1px solid #35d99b;background:transparent;color:#35d99b;cursor:pointer;">Request</button>
             </div></div>`;
     }
+    // The member's own reminders: add one (Enter or the button) or delete one; the list is re-read from the server afterwards.
+    function wireMyTodo() {
+        const input = body.querySelector('#wwl-mt-input'), add = body.querySelector('#wwl-mt-add');
+        const submit = async () => {
+            if (!input || !input.value.trim()) return;
+            add.disabled = true;
+            try { await api({ action: 'mytodo-add', text: input.value }); await refreshTodoItems(true); } catch (e) { add.disabled = false; add.textContent = 'Failed'; }
+        };
+        add?.addEventListener('click', submit);
+        input?.addEventListener('keydown', e => { if (e.key === 'Enter') submit(); });
+        body.querySelectorAll('.wwl-mt-del').forEach(x => x.addEventListener('click', async () => {
+            try { await api({ action: 'mytodo-delete', id: x.dataset.id }); await refreshTodoItems(true); } catch (e) { /* stays */ }
+        }));
+    }
     function wireOcRequest() {
         const send = body.querySelector('#wwl-oc-send'), cancel = body.querySelector('#wwl-oc-cancel');
         const item = () => todoItems && todoItems.find(t => t.id === 'oc');
@@ -427,11 +441,16 @@
         </label>`;
         const rest = todoItems === null ? '<div style="padding:6px 0;color:#9aa4b5;">Loading…</div>'
             : !todoItems.length ? ''
-            : todoItems.map(t => `<div style="display:flex;gap:8px;align-items:center;padding:${IS_PDA ? 10 : 7}px 0;border-bottom:1px solid #3a4352;">
+            : todoItems.map(t => t.notice
+                // a notice is just a reminder: a full-width amber box with the text, no button, not part of the count
+                ? `<div style="padding:8px 10px;margin:6px 0;border:1px solid #f0b432;border-radius:6px;background:#f0b43218;color:#f0b432;font-weight:600;line-height:1.4;">${esc(t.text)}</div>`
+                : `<div style="display:flex;gap:8px;align-items:center;padding:${IS_PDA ? 10 : 7}px 0;border-bottom:1px solid #3a4352;">
                 <span style="flex:1;">${esc(t.text)}</span>
+                ${t.mine ? `<span class="wwl-mt-del" data-id="${esc(t.myId)}" title="Delete this reminder" style="cursor:pointer;color:#e05555;">✕</span>` : ''}
                 ${t.url ? `<a href="${esc(t.url)}" target="_blank" rel="noopener" style="color:#35d99b;white-space:nowrap;text-decoration:none;border:1px solid #35d99b;border-radius:6px;padding:4px 8px;font-size:12px;">${esc(t.cta)}</a>` : ''}
             </div>${t.id === 'oc' ? ocRequestHtml(t) : ''}`).join('');
-        return daily + rest;
+        const addRow = `<div style="display:flex;gap:6px;margin-top:10px;"><input id="wwl-mt-input" maxlength="100" placeholder="Add a reminder of your own…" style="flex:1;min-width:0;background:#12161c;color:#e6e9ef;border:1px solid #3a4352;border-radius:6px;padding:6px;"><button type="button" id="wwl-mt-add" style="padding:6px 10px;border-radius:6px;border:1px solid #35d99b;background:transparent;color:#35d99b;cursor:pointer;">Add</button></div><div style="color:#9aa4b5;font-size:11px;margin-top:4px;">Leaders can see what people add, to find reminders worth building for everyone.</div>`;
+        return daily + rest + addRow;
     }
     // The ⚙ view: version + update flag + API key, and — for a leader — the faction's own banners
     // (add/delete), reusing the exact same banners-get/save/delete actions Leader settings on the
@@ -545,6 +564,7 @@
         showProgress();
         wireTabs();
         wireOcRequest();
+        wireMyTodo();
         wireBankTab();
         body.querySelector('#wwl-targets-refresh')?.addEventListener('click', refreshTargetStatus);
         body.querySelector('#wwl-daily-check')?.addEventListener('change', e => { setDailyChecked(e.target.checked); render(); });

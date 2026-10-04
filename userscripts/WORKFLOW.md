@@ -15,8 +15,7 @@ Members get `energy-plan.user.js` (the **release** file). Every change from now 
 Queue changes below instead of releasing each one. Nothing here is live for members until a release.
 
 ### Queued for the next release
-- Own reminders in the script To do: an add box at the end of the list and a delete mark on the member's own reminders (work file 1.38.1, not released). The server side and the dashboard panel are already live, and own reminders already show in the To do list.
-- Notices in the To do list (the Xanax stacking reminder): a full-width amber box, not counted in the To do number (work file 1.38.2, not released). The server side is live: the reminder already has no button.
+- (nothing yet — last release: 1.38.1, 2026-10-04: add your own reminders in the To do, notices not counted)
 
 ## Releasing (when the list is done and tested)
 1. Copy the work file over the release file: `cp userscripts/energy-plan.dev.user.js userscripts/energy-plan.user.js`.
