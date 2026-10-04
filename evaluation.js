@@ -207,6 +207,7 @@ function renderEvaluation() {
             }).join('')}</tbody>
         </table>`;
     wireSort($('ev-table'), evSort, shown, accessors, renderEvaluation);
+    renderXanaxPanel();
     const rowById = Object.fromEntries(rows.map(r => [r.id, r]));
     $('ev-table').querySelectorAll('tr.ev-row').forEach(tr => tr.addEventListener('click', () => {
         const id = tr.dataset.id;
@@ -306,3 +307,63 @@ $('ev-import-btn').addEventListener('click', async () => {
     } catch (e) { out.className = 'status err'; out.textContent = e.message; } finally { btn.disabled = false; }
 });
 $('ev-refresh').addEventListener('click', () => { moData = null; loadEvaluation(); });
+
+// ---- Xanax check: taken from the armory vs hits made, per war (a test panel — it does not change any status or message yet) ----
+// Xanax counts come from the armory log (api/armory-tracker.js 'xanax-war-scan', kept for finished wars); the hits are the ones Member
+// Overview already stored for that war (war hits + chain hits). Each Xanax covers 10 hits, rounded up: 4 taken, 25 hits = 3 covered, 1 to put back.
+let evXanLast = null;
+async function evXanFetch(body) {
+    const res = await fetch('/api/armory-tracker', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key: apiKey, ...body }) });
+    return res.json();
+}
+function renderXanaxPanel() {
+    const sel = $('ev-xan-war');
+    if (!sel || !moData) return;
+    const wars = moWarsInPeriod().filter(w => !w.event).slice().reverse(); // newest first
+    const keep = sel.value;
+    sel.innerHTML = wars.map(w => `<option value="${esc(w.id)}">War vs ${esc(w.opponent)} — ended ${moFmt(w.end)}</option>`).join('') || '<option value="">No wars</option>';
+    if (keep && wars.some(w => w.id === keep)) sel.value = keep;
+}
+function evXanRows(r) {
+    const hits = (moData.hits || {})[r.warId] || {};
+    return Object.entries(r.taken || {}).map(([id, t]) => {
+        const m = moData.members.find(x => x.id === id || x.name.toLowerCase() === String(t.name).toLowerCase());
+        const h = hits[m ? m.id : id] || {};
+        const nHits = (h.war || 0) + (h.chain || 0);
+        const covered = Math.ceil(nHits / 10);
+        return { name: m ? m.name : t.name, taken: t.n, hits: nHits, covered, back: Math.max(0, t.n - covered) };
+    }).sort((a, b) => b.back - a.back || b.taken - a.taken);
+}
+function evXanRender() {
+    const r = evXanLast;
+    if (!r) return;
+    const rows = evXanRows(r);
+    const back = rows.filter(x => x.back > 0);
+    const lead = r.leadHours;
+    const notes = [];
+    if (r.cached) notes.push('from the saved answer for this war');
+    if (r.rateLimited || r.hitPageCap) notes.push('<span style="color:var(--danger);">the armory log could not be read completely — some Xanax may be missing; try again in a minute</span>');
+    if (r.unparsed) notes.push(`${r.unparsed} armory lines were not recognised`);
+    $('ev-xan-status').className = 'status ok';
+    $('ev-xan-status').innerHTML = `${rows.length} member${rows.length === 1 ? '' : 's'} took Xanax from ${lead ? `${lead} h before the war start` : 'the war start'} until 24 h after it; <b>${back.length}</b> should put some back (${back.reduce((s, x) => s + x.back, 0)} Xanax in total).${notes.length ? ` (${notes.join(' · ')})` : ''}`;
+    $('ev-xan-table').innerHTML = rows.length ? `<table style="width:100%;font-size:13px;border-collapse:collapse;"><thead><tr style="color:var(--muted);text-align:left;"><th style="padding:4px 8px;">Member</th><th style="padding:4px 8px;">Xanax taken</th><th style="padding:4px 8px;">Hits (war + chain)</th><th style="padding:4px 8px;">Xanax covered</th><th style="padding:4px 8px;">To put back</th></tr></thead>
+        <tbody>${rows.map(x => `<tr style="border-top:1px solid var(--line);"><td style="padding:4px 8px;">${esc(x.name)}</td><td style="padding:4px 8px;font-family:var(--mono);">${x.taken}</td><td style="padding:4px 8px;font-family:var(--mono);">${x.hits}</td><td style="padding:4px 8px;font-family:var(--mono);">${x.covered}</td><td style="padding:4px 8px;font-family:var(--mono);font-weight:700;color:${x.back ? MO_LIGHT.red : MO_LIGHT.green};">${x.back || '✓'}</td></tr>`).join('')}</tbody></table>` : '<p style="color:var(--muted);">Nobody took Xanax from the armory in that window.</p>';
+    $('ev-xan-copy').style.display = back.length ? '' : 'none';
+}
+$('ev-xan-run').addEventListener('click', async () => {
+    const btn = $('ev-xan-run'), st = $('ev-xan-status'), warId = $('ev-xan-war').value;
+    if (!warId) return;
+    btn.disabled = true; st.className = 'status ok'; st.textContent = 'Reading the armory log for that war… (this can take up to a minute)';
+    try {
+        const r = await evXanFetch({ action: 'xanax-war-scan', warId, leadHours: Number($('ev-xan-lead').value) });
+        if (r.error) throw new Error(r.error);
+        evXanLast = r;
+        evXanRender();
+    } catch (e) { st.className = 'status err'; st.textContent = e.message; } finally { btn.disabled = false; }
+});
+$('ev-xan-copy').addEventListener('click', () => {
+    if (!evXanLast) return;
+    const war = moWarsInPeriod().find(w => w.id === evXanLast.warId);
+    const text = `Xanax to put back in the armory (war vs ${war ? war.opponent : evXanLast.warId}) — every Xanax covers 10 hits:\n` + evXanRows(evXanLast).filter(x => x.back > 0).map(x => `${x.name}: took ${x.taken}, made ${x.hits} hits → put back ${x.back}`).join('\n');
+    navigator.clipboard.writeText(text).then(() => toast('Copied'));
+});

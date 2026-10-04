@@ -1752,6 +1752,18 @@
                     <div class="table-scroll" style="overflow:auto;max-height:75vh;"><div id="ev-table"></div></div>
                 </div>
                 <div class="panel">
+                    <h3 style="margin:0 0 4px;">Xanax check <span style="font-weight:400;font-size:12px;color:var(--muted);">— taken from the armory vs hits, per war (a test, not part of the evaluation yet)</span></h3>
+                    <p style="color:var(--muted);font-size:12px;margin:0 0 10px;">Counts the Xanax each member <b>used from the armory</b> during a war, against the hits they made in that war (war hits + chain hits). Every Xanax is worth 10 hits, rounded up, so 4 taken and 25 hits = 3 covered, <b>1 to put back</b>. Xanax you gave out as prizes is not counted.</p>
+                    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:10px;">
+                        <select id="ev-xan-war" style="width:auto;max-width:100%;font-size:13px;"></select>
+                        <label style="font-size:13px;">count Xanax from <select id="ev-xan-lead" style="width:auto;font-size:13px;"><option value="0">the war start</option><option value="6">6 h before</option><option value="12" selected>12 h before</option><option value="24">24 h before</option><option value="48">48 h before</option></select> until 24 h after the war</label>
+                        <button class="small" id="ev-xan-run" type="button">Check</button>
+                        <button class="ghost small" id="ev-xan-copy" type="button" style="display:none;">Copy who should put back</button>
+                    </div>
+                    <div class="status" id="ev-xan-status"></div>
+                    <div class="table-scroll" style="overflow:auto;max-height:60vh;"><div id="ev-xan-table"></div></div>
+                </div>
+                <div class="panel">
                     <details>
                         <summary style="cursor:pointer;font-weight:600;">Import an earlier evaluation report</summary>
                         <p style="color:var(--muted);font-size:12px;">Paste a report that lists each member with a "Verdict:" line (like the one from 6 September) and the date it was made. Each verdict is added to that member's log (matched by name), so you can see who already got a warning. Importing the same report again replaces its own entries instead of doubling them. Members who have since left keep their history too.</p>

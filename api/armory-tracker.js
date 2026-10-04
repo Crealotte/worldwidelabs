@@ -41,6 +41,16 @@ const { parseArmoryNewsEntry } = require('../lib/armoryNewsParser');
 const { fetchWarHits } = require('../lib/warHits');
 const { TRACKED_ITEMS, BLOOD_BAG_RE } = require('../lib/trackedItems');
 
+const REDIS_URL = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL;
+const REDIS_TOKEN = process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN;
+async function redis(command) {
+    if (!REDIS_URL || !REDIS_TOKEN) throw new Error('Database not connected.');
+    const res = await fetch(REDIS_URL, { method: 'POST', headers: { Authorization: `Bearer ${REDIS_TOKEN}`, 'Content-Type': 'application/json' }, body: JSON.stringify(command) });
+    const data = await res.json();
+    if (data.error) throw new Error(data.error);
+    return data.result;
+}
+
 function sleep(ms) { return new Promise(resolve => setTimeout(resolve, ms)); }
 function isRateLimited(data) {
     return data?.error?.code === 5 || /too many requests/i.test(data?.error?.error || '');
@@ -111,6 +121,48 @@ module.exports = async function handler(req, res) {
         const factionId = await getFactionId(key);
         if (!factionId) return res.status(403).json({ error: 'Could not determine your faction from this key' });
         if (!(await isLeader(key))) return res.status(403).json({ error: 'Leaders only' });
+
+        // Xanax taken out of the armory during one war's window (from `leadHours` before the war starts until 24h after it ends — the
+        // same end as the war's hit count). It counts what each member USED straight from the armory ("used one of the faction's
+        // Xanax items"); Xanax GIVEN to a member (competition prizes) is deliberately not counted. A finished war's answer is kept
+        // (wwl:xanax-war:<faction>:<war>:<lead>) so the evaluation can use it later without reading the armory log again.
+        // Pairs with the hits of that war (Member Overview already stores them per war) to see who took more than they hit for.
+        if (action === 'xanax-war-scan' || action === 'xanax-war-get') {
+            const leadHours = [0, 6, 12, 24, 48].includes(Number(req.body.leadHours)) ? Number(req.body.leadHours) : 12;
+            const cacheKey = (warId) => `wwl:xanax-war:${factionId}:${warId}:${leadHours}`;
+            if (action === 'xanax-war-get') { // cached answers only, no Torn calls
+                const ids = (Array.isArray(req.body.warIds) ? req.body.warIds : []).map(String).filter(x => /^\d+$/.test(x)).slice(0, 10);
+                const raws = ids.length ? await redis(['MGET', ...ids.map(cacheKey)]) : [];
+                const out = {};
+                ids.forEach((id, i) => { if (raws[i]) out[id] = JSON.parse(raws[i]); });
+                return res.status(200).json({ leadHours, wars: out });
+            }
+            const warId = String(req.body.warId || '').replace(/\D/g, '');
+            if (!warId) return res.status(400).json({ error: 'Pick a war first.' });
+            if (!req.body.force) { const c = await redis(['GET', cacheKey(warId)]); if (c) return res.status(200).json({ ...JSON.parse(c), cached: true }); }
+            const wr = await tornFetch(`https://api.torn.com/v2/faction?selections=rankedwars&key=${encodeURIComponent(key)}`, { headers: { accept: 'application/json' } });
+            const wd = await wr.json();
+            if (wd.error) return res.status(403).json({ error: wd.error.error || 'Torn could not list the wars.' });
+            const war = Object.values(wd.rankedwars || {}).find(w => String(w.id) === warId);
+            if (!war || !war.start || !war.end) return res.status(400).json({ error: 'That war was not found or has not finished yet.' });
+            const now = Math.floor(Date.now() / 1000);
+            const from = war.start - leadHours * 3600, to = Math.min(war.end + 86400, now);
+            const news = await fetchAllArmoryNews(key, from, to);
+            const taken = {};
+            let unparsed = 0;
+            for (const entry of news.entries) {
+                const p = parseArmoryNewsEntry(String(entry.id), entry);
+                if (p.unparsed) { unparsed++; continue; }
+                if (p.action !== 'used' || String(p.item).toLowerCase() !== 'xanax') continue;
+                const id = p.actorId || p.actor;
+                const t = taken[id] || (taken[id] = { name: p.actor, n: 0 });
+                t.n += p.quantity || 1;
+            }
+            const result = { warId, leadHours, from, to, taken, entries: news.entries.length, rateLimited: news.rateLimited, hitPageCap: news.hitPageCap, unparsed, at: Date.now() };
+            // only keep it when the window is closed and the whole log was read (a partial answer must not stick)
+            if (now > war.end + 86400 && !news.rateLimited && !news.hitPageCap) await redis(['SET', cacheKey(warId), JSON.stringify(result)]);
+            return res.status(200).json(result);
+        }
 
         if (action === 'consumption-report') {
             const { from, to } = req.body;
