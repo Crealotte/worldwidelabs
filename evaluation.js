@@ -477,7 +477,9 @@ async function evXanLoadAll(forceDep) {
 // (for a plain box) and as HTML with real paragraphs and <br> line breaks (for a rich editor, which otherwise tends to swallow the plain
 // text's blank lines). Falls back to plain text where the browser cannot write HTML to the clipboard.
 async function evCopyMessage(text, okMsg) {
-    const html = text.split(/\n{2,}/).map(par => `<p>${par.split('\n').map(l => esc(l)).join('<br>')}</p>`).join('');
+    // Same markup as the newsletter's formatted copy (which pastes into Torn properly): plain <div> paragraphs with inline styles and <br>
+    // for the line breaks, inside one container — not <p> tags, which the editor may flatten.
+    const html = `<div style="font-family:Arial,Helvetica,sans-serif;">${text.split(/\n{2,}/).map(par => `<div style="font-size:14px;margin:0 0 12px;line-height:1.5;">${par.split('\n').map(l => esc(l)).join('<br>')}</div>`).join('')}</div>`;
     try {
         await navigator.clipboard.write([new ClipboardItem({ 'text/html': new Blob([html], { type: 'text/html' }), 'text/plain': new Blob([text], { type: 'text/plain' }) })]);
     } catch (e) {
