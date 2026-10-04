@@ -395,6 +395,48 @@ async function loadFbMissing() {
            <div style="display:flex;flex-wrap:wrap;gap:6px;">${r.missing.map(m => `<span class="chip" style="cursor:default;">${esc(m.name)}</span>`).join('')}</div>`
         : `<div style="color:var(--reagent);font-size:13px;">✅ Everyone (${r.total}) has answered.</div>`;
 }
+// Two ways to read the answers: BY QUESTION (default) — under each question, who chose which option, and for the open
+// questions a plain list "member: answer" — or BY MEMBER, the earlier view with every member's whole form together.
+let fbRespView = 'question';
+function fbRenderResponses() {
+    const r = fbResponses;
+    if (!r) return;
+    const when = ts => new Date(ts).toLocaleString();
+    if (!r.rows.length) { $('fb-responses-body').innerHTML = '<p style="color:var(--muted);font-size:13px;margin:0;">No responses yet.</p>'; return; }
+    const toggle = `<div style="display:flex;gap:8px;align-items:center;margin-bottom:12px;flex-wrap:wrap;">
+        <span style="color:var(--muted);font-size:13px;">${r.rows.length} response${r.rows.length === 1 ? '' : 's'} — show:</span>
+        <button class="small fb-view${fbRespView === 'question' ? '' : ' ghost'}" data-v="question">By question</button>
+        <button class="small fb-view${fbRespView === 'member' ? '' : ' ghost'}" data-v="member">By member</button></div>`;
+    const vals = v => (Array.isArray(v) ? v : [v]).filter(x => x !== '' && x !== null && x !== undefined);
+    let body;
+    if (fbRespView === 'member') {
+        const mentioned = Object.entries(r.listFreq || {}).filter(([, list]) => list.length);
+        body = (mentioned.length ? `<div style="margin-bottom:14px;">${mentioned.map(([qid, list]) => {
+            const q = r.form.questions.find(x => x.id === qid);
+            return `<div style="margin-bottom:8px;"><b style="font-size:13px;">Most mentioned — ${esc(q?.text || '')}</b><div style="font-size:13px;color:var(--muted);margin-top:2px;">${list.map(e => `${esc(e.label)} (${e.n}×)`).join(' · ')}</div></div>`;
+        }).join('')}</div>` : '') + r.rows.map(row => `<div style="border-top:1px solid var(--line);padding:8px 0;">
+            <div style="font-weight:700;font-size:13px;margin-bottom:4px;">${esc(row.name)} <span style="color:var(--muted);font-weight:400;font-size:11px;">— ${esc(when(row.submittedAt))}</span></div>
+            ${r.form.questions.map(q => row.answers[q.id] !== undefined ? `<div style="font-size:13px;margin:2px 0 2px 8px;"><span style="color:var(--muted);">${esc(q.text)}:</span> ${esc(fbFmtAnswer(row.answers[q.id]))}</div>` : '').join('')}
+        </div>`).join('');
+    } else {
+        body = r.form.questions.map(q => {
+            const answered = r.rows.filter(row => vals(row.answers[q.id]).length);
+            const head = `<div style="font-weight:700;font-size:14px;margin-bottom:6px;">${esc(q.text)} <span style="color:var(--muted);font-weight:400;font-size:12px;">— ${answered.length} answered</span></div>`;
+            let inner;
+            if (q.type === 'choice' || q.type === 'checkbox') {
+                const rowsFor = o => answered.filter(row => vals(row.answers[q.id]).includes(o)).map(row => row.name);
+                inner = q.options.map(o => { const names = rowsFor(o); return `<div style="font-size:13px;margin:3px 0;"><b>${esc(o)}</b> <span style="color:var(--muted);">(${names.length})</span>${names.length ? `: ${names.map(esc).join(', ')}` : ''}</div>`; }).join('');
+                const others = answered.flatMap(row => vals(row.answers[q.id]).filter(isFbOther).map(x => `${esc(row.name)}: ${esc(x.other)}`));
+                if (others.length) inner += `<div style="font-size:13px;margin:3px 0;"><b>Other</b> <span style="color:var(--muted);">(${others.length})</span></div>${others.map(o => `<div style="font-size:13px;margin:1px 0 1px 12px;">${o}</div>`).join('')}`;
+            } else { // text, paragraph, list: "member: answer"
+                inner = answered.length ? answered.map(row => `<div style="font-size:13px;margin:3px 0;"><b>${esc(row.name)}:</b> ${esc(fbFmtAnswer(row.answers[q.id]))}</div>`).join('') : '<div style="color:var(--muted);font-size:13px;">No answers.</div>';
+            }
+            return `<div style="border-top:1px solid var(--line);padding:10px 0;">${head}${inner}</div>`;
+        }).join('');
+    }
+    $('fb-responses-body').innerHTML = toggle + body;
+    $('fb-responses-body').querySelectorAll('.fb-view').forEach(b => b.addEventListener('click', () => { fbRespView = b.dataset.v; fbRenderResponses(); }));
+}
 async function loadFbResponses(isNative) {
     if (!isNative) { $('fb-responses-panel').style.display = 'none'; return; }
     const r = await fbFetch({ action: 'responses' });
@@ -402,18 +444,7 @@ async function loadFbResponses(isNative) {
     fbResponses = r;
     $('fb-responses-panel').style.display = 'block';
     loadFbMissing();
-    const when = ts => new Date(ts).toLocaleString();
-    const mentioned = Object.entries(r.listFreq || {}).filter(([, list]) => list.length);
-    $('fb-responses-body').innerHTML = (mentioned.length ? `<div style="margin-bottom:14px;">${mentioned.map(([qid, list]) => {
-            const q = r.form.questions.find(x => x.id === qid);
-            return `<div style="margin-bottom:8px;"><b style="font-size:13px;">Most mentioned — ${esc(q?.text || '')}</b><div style="font-size:13px;color:var(--muted);margin-top:2px;">${list.map(e => `${esc(e.label)} (${e.n}×)`).join(' · ')}</div></div>`;
-        }).join('')}</div>` : '') +
-        (r.rows.length ? `
-        <p style="color:var(--muted);font-size:13px;margin:0 0 10px;">${r.rows.length} response${r.rows.length === 1 ? '' : 's'}.</p>
-        ${r.rows.map(row => `<div style="border-top:1px solid var(--line);padding:8px 0;">
-            <div style="font-weight:700;font-size:13px;margin-bottom:4px;">${esc(row.name)} <span style="color:var(--muted);font-weight:400;font-size:11px;">— ${esc(when(row.submittedAt))}</span></div>
-            ${r.form.questions.map(q => row.answers[q.id] !== undefined ? `<div style="font-size:13px;margin:2px 0 2px 8px;"><span style="color:var(--muted);">${esc(q.text)}:</span> ${esc(fbFmtAnswer(row.answers[q.id]))}</div>` : '').join('')}
-        </div>`).join('')}` : '<p style="color:var(--muted);font-size:13px;margin:0;">No responses yet.</p>');
+    fbRenderResponses();
 }
 $('fb-responses-copy').addEventListener('click', async () => {
     if (!fbResponses?.rows?.length) { toast('No responses to copy yet.'); return; }
