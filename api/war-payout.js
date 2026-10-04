@@ -60,6 +60,7 @@ const restockedKey = (factionId) => `wwl:restocked-wars:${factionId}`;
 const manualVerifyKey = (factionId) => `wwl:manual-verify:${factionId}`; // hash: playerId -> { intel, cat, updatedAt } — Torn Intel / CAT have no API to check, so a leader ticks it by hand
 const userscriptSeenKey = (factionId) => `wwl:userscript-seen:${factionId}`; // hash: playerId -> last-seen epoch ms, stamped by the userscript itself (see 'script-checkin') for Who's on board
 const userscriptInfoKey = (factionId) => `wwl:userscript-info:${factionId}`; // hash: playerId -> "version|pda" (or "version|pc"), sent by the script's own check-in
+const ocRequestsKey = (factionId) => `wwl:oc-requests:${factionId}`; // hash: playerId -> { id, name, level, note, at, pinged, pingedLevel }
 // Availability "plans": several trackers can exist at once (this weekend AND next weekend), each
 // with its own grid, entries and linked war, picked from a dropdown. 'main' is the original
 // single-tracker key from before plans existed, so an existing tracker keeps working untouched;
@@ -170,7 +171,7 @@ function isSharedServerFaction(factionId) {
 // DISCORD_KINDS: the named destinations a faction can point at different channels. 'default' is the
 // original single destination (availability pings); 'feedback' and 'whatsnew' are separate so a leader
 // can, say, keep availability pings in a war channel but feedback nudges somewhere quieter.
-const DISCORD_KINDS = ['default', 'feedback', 'whatsnew'];
+const DISCORD_KINDS = ['default', 'feedback', 'whatsnew', 'oc'];
 // Resolves to { post(content, users, embeds?) } for this faction and kind, { error }, or null if
 // nothing is set up for it. Newer saves live under `channels`, one destination per kind; a kind with
 // no destination of its own falls back to 'default', and 'default' itself still understands the old
@@ -347,6 +348,14 @@ async function leaderTodos(key, factionId) {
             const missing = roster.filter(m => !respondedIds.has(m.id));
             if (missing.length) add('feedback', `${missing.length} of ${roster.length} members have not filled in ${form.title ? `"${form.title}"` : 'the feedback form'} yet.`, 'See who and ping them', 'feedback-edit', 'fb-responses-panel');
         }
+    } catch (e) { /* skip */ }
+
+    // 5b. members who asked for an OC at some level (see ocreq-submit)
+    try {
+        const flat = (await redis(['HGETALL', ocRequestsKey(factionId)])) || [];
+        const reqs = [];
+        for (let i = 0; i < flat.length; i += 2) { try { reqs.push(JSON.parse(flat[i + 1])); } catch (e) { /* skip */ } }
+        if (reqs.length) add('oc-requests', `${reqs.length} member${reqs.length === 1 ? ' has' : 's have'} asked for an OC to be spawned: ${reqs.slice(0, 6).map(r => `${r.name} (level ${r.level})`).join(', ')}${reqs.length > 6 ? ` and ${reqs.length - 6} more` : ''}.`, 'See the requests', 'oc-requests', null);
     } catch (e) { /* skip */ }
 
     // 6. Steadfast: every stat has reached its challenge
@@ -608,6 +617,38 @@ module.exports = async function handler(req, res) {
         if (action === 'mo-me') return res.status(200).json(await moMe({ redis, key, factionId, playerId, daysInFaction }));
         // Competition page — the full standings, open to every member (built from stored data only).
         if (action === 'mo-standings') return res.status(200).json(await moStandings({ redis, factionId }));
+        // OC requests — a member who sees no OC that suits them asks for one at a level, instead of everyone spawning crimes.
+        // The request lands in the leaders' To do list and, if a Discord channel is set for it, is posted there once. One open
+        // request per member (a new one replaces the old). Members only ever see their own; leaders list and close them below.
+        if (action === 'ocreq-my') {
+            const raw = await redis(['HGET', ocRequestsKey(factionId), playerId]);
+            return res.status(200).json({ request: raw ? JSON.parse(raw) : null });
+        }
+        if (action === 'ocreq-submit') {
+            const level = Math.round(Number(req.body.level));
+            if (!(level >= 1 && level <= 10)) return res.status(400).json({ error: 'Pick a level from 1 to 10.' });
+            const note = String(req.body.note || '').trim().slice(0, 140);
+            const oldRaw = await redis(['HGET', ocRequestsKey(factionId), playerId]);
+            const old = oldRaw ? JSON.parse(oldRaw) : null;
+            const request = { id: playerId, name: playerName, level, note, at: Date.now(), pinged: old?.pinged || 0, pingedLevel: old?.pingedLevel || 0 };
+            // Discord: once per member per level per 6 hours, so re-saving or flipping levels cannot spam the channel
+            if (!(request.pingedLevel === level && Date.now() - request.pinged < 6 * 3600000)) {
+                try {
+                    const poster = await getDiscordPoster(factionId, 'oc');
+                    if (poster && !poster.error) {
+                        await poster.post(`🧩 **${playerName}** would like to join a **level ${level}** Organized Crime and cannot find one that suits them.${note ? `\n> ${note}` : ''}\nCan someone spawn one?`, []);
+                        request.pinged = Date.now(); request.pingedLevel = level;
+                    }
+                } catch (e) { /* the request is saved either way; it still shows in the leaders' To do */ }
+            }
+            await redis(['HSET', ocRequestsKey(factionId), playerId, JSON.stringify(request)]);
+            return res.status(200).json({ ok: true, request });
+        }
+        if (action === 'ocreq-cancel') {
+            await redis(['HDEL', ocRequestsKey(factionId), playerId]);
+            return res.status(200).json({ ok: true });
+        }
+
 
         // Gym stats page (history graph + goals) — open to every member, only ever about the caller. See lib/gymStats.js.
         if (action.startsWith('gym-')) return res.status(200).json(await gymHandle(action, req.body, { redis, key, playerId }));
@@ -811,7 +852,7 @@ module.exports = async function handler(req, res) {
                     {
                         const oc = known ? d[known] : null;
                         const inOC = Array.isArray(oc) ? oc.length > 0 : !!(oc && typeof oc === 'object' && Object.keys(oc).length > 0);
-                        if (!inOC) items.push({ id: 'oc', text: "You're not in an Organized Crime right now.", cta: 'Join an OC', url: 'https://www.torn.com/factions.php?step=your#/tab=crimes' });
+                        if (!inOC) items.push({ id: 'oc', text: "You're not in an Organized Crime right now. Nothing that suits you? Ask for one on WWL (Crimes, OC requests).", cta: 'Join an OC', url: 'https://www.torn.com/factions.php?step=your#/tab=crimes' });
                     }
                 }
             } catch (e) { /* skip this check on failure, don't fail the others */ }
@@ -915,6 +956,19 @@ module.exports = async function handler(req, res) {
         // Member Overview (who follows the rules / needs a push) — logic in lib/memberOverview.js.
         if (action.startsWith('mo-')) return res.status(200).json(await moHandle(action, req.body, { redis, key, factionId }));
         if (action.startsWith('ev-')) return res.status(200).json(await evHandle(action, req.body, { redis, factionId }));
+        // OC requests, the leaders' side: the open requests (oldest first) and closing one — spawned, or dismissed.
+        if (action === 'ocreq-list') {
+            const flat = (await redis(['HGETALL', ocRequestsKey(factionId)])) || [];
+            const list = [];
+            for (let i = 0; i < flat.length; i += 2) { try { list.push(JSON.parse(flat[i + 1])); } catch (e) { /* skip a broken entry */ } }
+            return res.status(200).json({ requests: list.sort((a, b) => a.at - b.at) });
+        }
+        if (action === 'ocreq-done') {
+            const id = String(req.body.id || '').replace(/\D/g, '');
+            if (!id) return res.status(400).json({ error: 'Missing member' });
+            await redis(['HDEL', ocRequestsKey(factionId), id]);
+            return res.status(200).json({ ok: true });
+        }
 
         // The leader's side of manual verification (see 'verify-mine' above): the whole faction's Intel/CAT
         // status, and ticking one member's for either tool.

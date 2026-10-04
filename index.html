@@ -562,6 +562,7 @@
             <div class="nav-group-items" data-group-items="crimes">
                 <a class="nav-item" data-page="crimes-guide" href="/crimes-guide">Crimes Guide</a>
                 <a class="nav-item" data-page="ocfit" href="/ocfit">OC Fit Tracker</a>
+                <a class="nav-item" data-page="oc-requests" href="/oc-requests">OC requests</a>
             </div>
         </div>
 
@@ -1771,6 +1772,27 @@
             <div id="cp-body" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:14px;"></div>
         </section>
 
+        <section class="page" id="page-oc-requests">
+            <div class="lab-label">WWL·33 / crimes</div>
+            <h2>OC requests</h2>
+            <p class="pagedesc">Can't find an Organized Crime that suits you? Ask for one at the level you want. Leadership gets it in their To do list (and a Discord ping if that is set up) and spawns it. Please look through the open crimes first.</p>
+            <div class="status" id="ocr-status"></div>
+            <div class="panel">
+                <h3>Request an OC</h3>
+                <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:10px;">
+                    <label for="ocr-level" style="font-size:13px;">Level</label>
+                    <select id="ocr-level" style="width:auto;"><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option><option value="5">5</option><option value="6">6</option><option value="7">7</option><option value="8">8</option><option value="9">9</option><option value="10">10</option></select>
+                    <input id="ocr-note" maxlength="140" placeholder="Optional note (a role you want, times you can do…)" style="flex:1;min-width:220px;">
+                    <button id="ocr-send">Send request</button>
+                </div>
+                <div id="ocr-mine"></div>
+            </div>
+            <div class="panel" id="ocr-leader-panel" style="display:none;">
+                <h3>Open requests <span style="font-weight:400;font-size:12px;color:var(--muted);">(leaders and council) — press Done once the OC is spawned</span></h3>
+                <div id="ocr-list"></div>
+            </div>
+        </section>
+
         <section class="page" id="page-newsletter">
             <div class="lab-label">WWL·25 / leaders &amp; council</div>
             <h2>Newsletter</h2>
@@ -1803,6 +1825,7 @@
                     <button type="button" class="ghost small dc-kind-btn" data-kind="default">Availability pings</button>
                     <button type="button" class="ghost small dc-kind-btn" data-kind="feedback">Feedback reminders</button>
                     <button type="button" class="ghost small dc-kind-btn" data-kind="whatsnew">What's new posts</button>
+                    <button type="button" class="ghost small dc-kind-btn" data-kind="oc">OC requests</button>
                 </div>
                 <div id="av-discord-body"></div>
                 </details>
@@ -2449,6 +2472,7 @@
 <script src="evaluation.js"></script>
 <script src="competition.js"></script>
 <script src="script-card.js"></script>
+<script src="oc-requests.js"></script>
 <script src="crimes-guide.js"></script>
 <script src="war-payout-tracker.js"></script>
 <script src="war-badges-tracker.js"></script>

@@ -393,6 +393,7 @@
         if (page === 'effort-calc') loadEffortCalc();
         if (page === 'evaluation') loadEvaluation();
         if (page === 'competition') loadCompetition();
+        if (page === 'oc-requests') loadOcRequests();
         if (page === 'war-badges') loadWarBadges();
         if (page === 'availability' || page === 'availability-leaders') loadAvailability();
         if (page === 'energy') loadGymPlanner();
