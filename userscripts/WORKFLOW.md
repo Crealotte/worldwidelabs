@@ -15,7 +15,7 @@ Members get `energy-plan.user.js` (the **release** file). Every change from now 
 Queue changes below instead of releasing each one. Nothing here is live for members until a release.
 
 ### Queued for the next release
-- (nothing yet — last release: 1.38, 2026-10-04: draggable button, OC request control, Bank tab)
+- Own reminders in the script To do: an add box at the end of the list and a delete mark on the member's own reminders (work file 1.38.1, not released). The server side and the dashboard panel are already live, and own reminders already show in the To do list.
 
 ## Releasing (when the list is done and tested)
 1. Copy the work file over the release file: `cp userscripts/energy-plan.dev.user.js userscripts/energy-plan.user.js`.

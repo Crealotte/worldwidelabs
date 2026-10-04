@@ -832,6 +832,28 @@ module.exports = async function handler(req, res) {
         if (action === 'mo-me') return res.status(200).json(await moMe({ redis, key, factionId, playerId, daysInFaction }));
         // Competition page — the full standings, open to every member (built from stored data only).
         if (action === 'mo-standings') return res.status(200).json(await moStandings({ redis, factionId }));
+        // Members' own reminders: each member keeps a short personal list (shown in the script To do and managed on the dashboard), and
+        // every addition is also written to an ideas log that survives deleting, so leaders can see which reminders keep coming up
+        // ('todo-ideas', leaders only) and decide to build them for everyone. Max 15 items of 100 characters each.
+        if (action === 'mytodo-list' || action === 'mytodo-add' || action === 'mytodo-delete') {
+            const k = `wwl:my-todos:${factionId}`;
+            const raw = await redis(['HGET', k, playerId]);
+            let list = raw ? JSON.parse(raw) : [];
+            if (action === 'mytodo-add') {
+                const text = String(req.body.text || '').replace(/\s+/g, ' ').trim().slice(0, 100);
+                if (!text) return res.status(400).json({ error: 'Write what you want to be reminded of.' });
+                if (list.length >= 15) return res.status(400).json({ error: 'You can keep up to 15 reminders — delete one first.' });
+                list.push({ id: require('crypto').randomBytes(4).toString('hex'), text, at: Date.now() });
+                await redis(['HSET', k, playerId, JSON.stringify(list)]);
+                await redis(['LPUSH', `wwl:todo-ideas:${factionId}`, JSON.stringify({ t: Date.now(), pid: playerId, name: playerName, text })]);
+                await redis(['LTRIM', `wwl:todo-ideas:${factionId}`, '0', '999']);
+            } else if (action === 'mytodo-delete') {
+                list = list.filter(x => x.id !== String(req.body.id || ''));
+                if (list.length) await redis(['HSET', k, playerId, JSON.stringify(list)]); else await redis(['HDEL', k, playerId]);
+            }
+            return res.status(200).json({ items: list });
+        }
+
         // OC requests — a member who sees no OC that suits them asks for one at a level, instead of everyone spawning crimes.
         // The request lands in the leaders' To do list and, if a Discord channel is set for it, is posted there once. One open
         // request per member (a new one replaces the old). Members only ever see their own; leaders list and close them below.
@@ -1149,6 +1171,12 @@ Cancel: ${cancelUrl}`, [], embeds, undefined, true);
                 });
             } catch (e) { /* skip */ }
 
+            // The member's own reminders (added on the dashboard) — shown at the end of their list.
+            try {
+                const mine = await redis(['HGET', `wwl:my-todos:${factionId}`, playerId]);
+                if (mine) for (const x of JSON.parse(mine)) items.push({ id: `my-${x.id}`, text: `📝 ${x.text}`, mine: true, myId: x.id });
+            } catch (e) { /* skip */ }
+
             // Xanax stacking warning: whenever a war is coming up (an availability plan linked to a war that has not started yet), everyone
             // is told clearly to stack Xanax from 48 hours before the start. Worked out here from the stored plans, so it shows in the
             // script's To do straight away and needs no script update.
@@ -1281,6 +1309,24 @@ Cancel: ${cancelUrl}`, [], embeds, undefined, true);
         // Member Overview (who follows the rules / needs a push) — logic in lib/memberOverview.js.
         if (action.startsWith('mo-')) return res.status(200).json(await moHandle(action, req.body, { redis, key, factionId }));
         if (action.startsWith('ev-')) return res.status(200).json(await evHandle(action, req.body, { redis, factionId, name: playerName }));
+        // The leaders' view of what members add to their own to-do: the ideas log grouped by meaning (same words in any order, small filler
+        // words ignored), most asked first, with who asked.
+        if (action === 'todo-ideas') {
+            const raw = (await redis(['LRANGE', `wwl:todo-ideas:${factionId}`, '0', '999'])) || [];
+            const stop = new Set(['a', 'an', 'the', 'to', 'my', 'i', 'and', 'for', 'of', 'in', 'on', 'up', 'at', 'is', 'me', 'it', 'do', 'remember', 'remind']);
+            const groups = new Map();
+            for (const s of raw) {
+                let e; try { e = JSON.parse(s); } catch (x) { continue; }
+                const words = String(e.text).toLowerCase().replace(/[^a-z0-9\s]/g, ' ').split(/\s+/).filter(w => w && !stop.has(w));
+                const key = [...new Set(words)].sort().join(' ') || String(e.text).toLowerCase();
+                const g = groups.get(key) || { text: e.text, count: 0, people: new Map(), last: 0, variants: new Set() };
+                g.count++; g.people.set(e.pid, e.name); g.last = Math.max(g.last, e.t); g.variants.add(e.text);
+                groups.set(key, g);
+            }
+            const ideas = [...groups.values()].map(g => ({ text: g.text, variants: [...g.variants].slice(0, 5), count: g.count, people: [...g.people.values()], last: g.last }))
+                .sort((a, b) => b.people.length - a.people.length || b.count - a.count || b.last - a.last);
+            return res.status(200).json({ ideas, total: raw.length });
+        }
         // OC requests, the leaders' side: the open requests (oldest first) and closing one — spawned, or dismissed.
         if (action === 'ocreq-list') {
             const flat = (await redis(['HGETALL', ocRequestsKey(factionId)])) || [];
