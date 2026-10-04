@@ -15,6 +15,7 @@
 let avConfig = null; // { startDate, days } from the backend, or null if no tracker is active
 let avMine = {}; // my own slots: "day-hour" (TCT) -> true
 let avMineWatch = {}; // my hours marked with the blue ring (Chain saver / War guard)
+let avHintsShown = 0; // how many click hints have been shown this visit
 let avWatchMode = false; // the switch: clicking a box adds or removes the ring instead of cycling the colour
 let avWatchTaken = {}; // hour -> how many of the two places (primary + backup) are taken
 let avMineRole = {}; // hour -> 'primary' or 'backup' for the hours I hold
@@ -747,6 +748,12 @@ async function toggleAvCell(day, hour, cellEl) {
     const next = !prev ? true : prev === true ? 'maybe' : undefined;
     if (next) avMine[key] = next; else { delete avMine[key]; delete avMineWatch[key]; cellEl.classList.remove('av-cell-watch'); }
     avApplyCell(cellEl, next);
+    // The first few clicks of a visit say what a click just did and what the next one does (it cycles off -> green -> yellow
+    // -> off, so clearing a green box takes two more clicks, which people took for "cannot undo").
+    if (avHintsShown < 4) {
+        avHintsShown++;
+        toast(next === true ? 'Green: available. Click again for yellow (maybe), a third click clears it.' : next === 'maybe' ? 'Yellow: maybe. Click once more to clear it.' : 'Cleared.');
+    }
     try {
         const result = await avFetch({ action: 'availability-set', day, hour, state: next === true ? 'yes' : next === 'maybe' ? 'maybe' : '' });
         if (result.error) throw new Error(result.error);
@@ -945,6 +952,10 @@ const avRoleShort = () => (avIsWarPlan() ? 'War guard' : 'Chain saver');
 function renderAvWatchBar() {
     $('av-watch-label').textContent = `🔵 Mark the hours I can ${avRoleName()}`;
     $('av-watch-toggle').checked = avWatchMode;
+    // With the switch on, a click only adds/removes the blue ring and leaves the colour alone — easy to leave on by accident and
+    // then wonder why a box "cannot be undone", so it is made very visible while it is on.
+    $('av-watch-bar').style.background = avWatchMode ? 'rgba(77,163,255,.18)' : '';
+    $('av-watch-warn').style.display = avWatchMode ? 'block' : 'none';
     $('av-watch-hint').textContent = avIsWarPlan()
         ? 'This is a war plan. A War guard is online and active, keeping an eye out for when things go wrong: making the calls, changing plans, keeping the chat clear and motivating people. Each hour has room for one, plus one backup. With the switch on, click an hour to add or remove your blue ring (a solid ring is the first place, a dashed ring the backup). An hour you had not ticked becomes green.'
         : 'This is a chain plan. A Chain saver is online and active, keeping an eye on the chain and stepping in when it is about to drop. Each hour has room for one, plus one backup. With the switch on, click an hour to add or remove your blue ring (a solid ring is the first place, a dashed ring the backup). An hour you had not ticked becomes green.';
