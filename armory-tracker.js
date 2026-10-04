@@ -67,15 +67,27 @@ function renderAtStock(result) {
 // Cross-tool integration: push a cost line straight into the War Payout Calculator (its wpCosts
 // array / renderWpCosts, both globals from war-payout-tracker.js) rather than leaving the leader
 // to copy numbers by hand between tools.
-function atAddCostToPayout(label, amount) {
+function atAddCostToPayout(label, amount, items) {
     if (typeof wpCosts === 'undefined' || typeof renderWpCosts !== 'function') {
         toast('Open War Payout at least once this session first.');
         return;
     }
-    wpCosts.push({ label, amount: Math.round(amount) });
+    wpCosts.push({ label, amount: Math.round(amount), ...(items && items.length ? { items } : {}) }); // items = what was bought, kept with the saved report
     renderWpCosts();
     if (typeof wpCalcResult !== 'undefined' && wpCalcResult) renderWpPayout();
     toast(`Added "${label}" ($${Math.round(amount).toLocaleString()}) to War Payout costs`);
+}
+
+// The items behind a cost (category, item, quantity, value), saved with the payout so the shopping list can show them later.
+// `cat` limits it to one category; `extras` also includes the derived extras (e.g. Empty Blood Bag) that the shopping list adds.
+function atCostItems(report, cat, extras) {
+    const rows = [];
+    for (const c of report.categories) {
+        if (cat && c.category !== cat) continue;
+        for (const it of c.items) rows.push({ category: c.category, item: it.item, quantity: it.quantity, value: Math.round(it.value) });
+    }
+    if (extras) for (const e of (report.shoppingExtras || [])) rows.push({ category: e.category, item: e.item, quantity: e.quantity, value: Math.round(e.value) });
+    return rows;
 }
 
 // ---- Consumption report: the main event. One date range, grouped category -> item -> player,
@@ -328,7 +340,7 @@ function renderAtShoppingList(report) {
             }).join('')}
             ${pulled.length ? `<tbody>
                 <tr><td colspan="4" style="padding:8px 8px 2px;font-weight:700;">📜 From war payouts</td></tr>
-                ${pulled.map(l => `<tr style="border-top:1px solid var(--line);"><td style="padding:4px 8px;" colspan="3">${esc(l.label)}</td><td style="padding:4px 8px;font-family:var(--mono);">$${Math.round(l.amount).toLocaleString()}</td></tr>`).join('')}
+                ${atPulledGroups(pulled).map(g => `<tr><td colspan="4" style="padding:6px 8px 0;color:var(--muted);font-size:12px;">${esc(g.group)}</td></tr>${g.lines.map(l => `<tr style="border-top:1px solid var(--line);"><td style="padding:4px 8px;">${esc(l.label)}</td><td style="padding:4px 8px;font-family:var(--mono);">${l.quantity != null ? `${l.quantity.toLocaleString()}x` : '—'}</td><td style="padding:4px 8px;"></td><td style="padding:4px 8px;font-family:var(--mono);">$${Math.round(l.amount).toLocaleString()}</td></tr>`).join('')}`).join('')}
                 <tr><td colspan="3" style="padding:2px 8px;text-align:right;color:var(--muted);">Subtotal</td><td style="padding:2px 8px;font-family:var(--mono);font-weight:700;">$${Math.round(pulledTotal).toLocaleString()}</td></tr>
             </tbody>` : ''}
             <tfoot><tr><td colspan="3" style="padding:8px;font-weight:700;">Grand total</td><td style="padding:8px;font-weight:700;font-family:var(--mono);color:var(--reagent);">$${Math.round(grandTotal).toLocaleString()}</td></tr></tfoot>
@@ -347,10 +359,10 @@ function renderAtShoppingList(report) {
         const text = 'Restock shopping list:\n' + report.categories.map(cat => {
             const items = atShoppingItemsForCategory(report, cat);
             return `\n${cat.category}:\n` + items.map(it => `  ${it.quantity}x ${it.item}${it.hasPrice ? ` — $${Math.round(it.value).toLocaleString()}` : ''}${restockedNote(it)}`).join('\n');
-        }).join('') + (pulled.length ? '\n\nFrom war payouts:\n' + pulled.map(l => `  ${l.label} — $${Math.round(l.amount).toLocaleString()}`).join('\n') : '') + `\n\nGrand total: $${Math.round(grandTotal).toLocaleString()}`;
+        }).join('') + (pulled.length ? '\n\nFrom war payouts:' + atPulledGroups(pulled).map(g => '\n' + g.group + ':\n' + g.lines.map(l => `  ${l.quantity != null ? l.quantity + 'x ' : ''}${l.label} — $${Math.round(l.amount).toLocaleString()}`).join('\n')).join('') : '') + `\n\nGrand total: $${Math.round(grandTotal).toLocaleString()}`;
         navigator.clipboard.writeText(text).then(() => toast('Shopping list copied'));
     });
-    $('at-shop-add-total').addEventListener('click', () => atAddCostToPayout('Armory restock', grandTotal - pulledTotal));
+    $('at-shop-add-total').addEventListener('click', () => atAddCostToPayout('Armory restock', grandTotal - pulledTotal, atCostItems(report, null, true)));
 }
 
 // ---- War Payout page integration: pull the same consumption report for a calendar date range,
@@ -404,9 +416,9 @@ function renderWpArmoryBody(report) {
         </div>`).join('')
         + `<div style="display:flex;justify-content:flex-end;margin-top:8px;"><button class="ghost small" id="wp-armory-add-total">+ Add all ($${Math.round(report.grandTotal).toLocaleString()})</button></div>`;
     el.querySelectorAll('[data-wp-armory-cat]').forEach(btn => {
-        btn.addEventListener('click', () => atAddCostToPayout(btn.dataset.wpArmoryCat, Number(btn.dataset.wpArmoryValue)));
+        btn.addEventListener('click', () => atAddCostToPayout(btn.dataset.wpArmoryCat, Number(btn.dataset.wpArmoryValue), atCostItems(report, btn.dataset.wpArmoryCat)));
     });
-    $('wp-armory-add-total').addEventListener('click', () => atAddCostToPayout('Armory costs', report.grandTotal));
+    $('wp-armory-add-total').addEventListener('click', () => atAddCostToPayout('Armory costs', report.grandTotal, atCostItems(report)));
 }
 
 // ---- By war: tick the wars to restock for and the period fills itself in ----
@@ -445,13 +457,29 @@ $('at-wars-use').addEventListener('click', () => {
 // shopping list and its grand total. Leaders only (the cost lines come with the leader view of the War reports).
 let atRepList = null; // saved reports with cost lines
 const atPulledIds = new Set();
+// One line per item (with its quantity) for costs that were saved with their items; costs saved as a plain total (older reports) stay a
+// single line under "No item detail saved". Same item in several ticked reports is added together.
+const AT_NO_DETAIL = 'No item detail saved (older reports only kept the total)';
 function atPulledLines() {
     const sums = {};
     for (const r of (atRepList || [])) {
         if (!atPulledIds.has(r.id)) continue;
-        for (const c of r.costs) sums[c.label] = (sums[c.label] || 0) + c.amount;
+        for (const c of r.costs) {
+            const lines = (c.items && c.items.length) ? c.items.map(i => ({ group: i.category || c.label, label: i.item, quantity: i.quantity, amount: i.value })) : [{ group: AT_NO_DETAIL, label: c.label, quantity: null, amount: c.amount }];
+            for (const l of lines) {
+                const k = `${l.group}|${l.label}`;
+                const m = sums[k] || (sums[k] = { group: l.group, label: l.label, quantity: l.quantity == null ? null : 0, amount: 0 });
+                if (l.quantity != null) m.quantity = (m.quantity || 0) + l.quantity;
+                m.amount += Number(l.amount) || 0;
+            }
+        }
     }
-    return Object.entries(sums).map(([label, amount]) => ({ label, amount })).filter(l => l.amount);
+    return Object.values(sums).filter(l => l.amount || l.quantity);
+}
+function atPulledGroups(lines) {
+    const groups = {};
+    for (const l of lines) (groups[l.group] || (groups[l.group] = { group: l.group, lines: [] })).lines.push(l);
+    return Object.values(groups).sort((a, b) => (a.group === AT_NO_DETAIL) - (b.group === AT_NO_DETAIL)).map(g => ({ ...g, lines: g.lines.sort((a, b) => b.amount - a.amount) }));
 }
 function atRefreshShopping() { renderAtShoppingList(atReport || { categories: [], grandTotal: 0, shoppingExtras: [], meta: {} }); }
 $('at-pull-load').addEventListener('click', async () => {
