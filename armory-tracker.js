@@ -404,8 +404,7 @@ function renderWpArmoryBody(report) {
 }
 
 // ---- By war: tick the wars to restock for and the period fills itself in ----
-// Period = from the day after the war BEFORE the first ticked war ended, to the end of the last ticked war + 24 h (the same end the Xanax and hit
-// counts use), never past today. With no earlier war known, it starts 2 days before the first ticked war began.
+// Period = from the day after the war BEFORE the first ticked war ended, to the end date of the last ticked war (same as the war payout page), never past today. With no earlier war known, it starts 2 days before the first ticked war began.
 let atWars = null;
 async function loadAtWars() {
     const list = $('at-wars-list');
@@ -428,7 +427,7 @@ $('at-wars-use').addEventListener('click', () => {
     const first = picked[0], last = picked[picked.length - 1];
     const before = atWars.filter(w => w.end < first.start).sort((a, b) => b.end - a.end)[0]; // the war right before the first ticked one
     const fromTs = before ? before.end + 86400 : first.start - 2 * 86400;
-    const toTs = Math.min(last.end + 86400, Math.floor(Date.now() / 1000));
+    const toTs = Math.min(last.end, Math.floor(Date.now() / 1000)); // ends on the last war's end date, like the war payout page
     $('at-report-from').value = atDay(fromTs);
     $('at-report-to').value = atDay(toTs);
     note.textContent = `Period: ${atDay(fromTs)} → ${atDay(toTs)}${before ? ` (the day after the war vs ${before.opponent})` : ' (no earlier war known: 2 days before the first one)'}.`;
