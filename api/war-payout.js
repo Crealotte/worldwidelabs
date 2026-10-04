@@ -371,12 +371,40 @@ async function leaderTodos(key, factionId) {
 
 // ---- Bank requests (see 'bank-info' / 'bank-submit' in the handler) ----
 const bankRequestsKey = (factionId) => `wwl:bank-requests:${factionId}`; // hash: requestId -> { id, playerId, name, amount, balance, at, status, claimedBy }
-// A member's own faction-vault balance. Only a leader key can read balances, so this uses the key kept for the nightly saving.
-async function bankBalanceOf(factionId, playerId) {
-    const lk = await getVaultKey(redis, factionId);
-    if (!lk) return { balance: null, error: 'Bank requests are not set up yet: a leader has to switch on "nightly saving" (Leader settings) so WWL can read balances.' };
+// Digs the faction-vault amount out of a /user money answer, wherever it sits: a number or { money | balance } under a key
+// that starts with "faction" (faction, faction_balance, factionMoney ...) at any depth. null when there is none.
+function findFactionMoney(d, depth = 0) {
+    if (!d || typeof d !== 'object' || depth > 4) return null;
+    for (const [k, v] of Object.entries(d)) {
+        if (/^faction/i.test(k)) {
+            if (typeof v === 'number') return v;
+            if (v && typeof v === 'object') { const m = v.money ?? v.balance ?? v.cash; if (typeof m === 'number') return m; }
+        }
+    }
+    for (const v of Object.values(d)) { const m = findFactionMoney(v, depth + 1); if (m !== null) return m; }
+    return null;
+}
+// A member's faction-vault balance, live (never from the 10-minute cache). First choice: the member's OWN key (opts.ownKey) —
+// no leader needed. Otherwise a leader key can read everyone's balance: the one passed in (opts.leaderKey, e.g. the banker
+// claiming a request) or the one kept for nightly saving.
+async function bankBalanceOf(factionId, playerId, opts = {}) {
+    let hint = '';
+    if (opts.ownKey) {
+        try {
+            const r = await fetch(`https://api.torn.com/v2/user/money?key=${encodeURIComponent(opts.ownKey)}`, { headers: { accept: 'application/json' } });
+            const d = await r.json();
+            if (!d.error) {
+                const m = findFactionMoney(d);
+                if (m !== null) return { balance: Math.max(0, Math.floor(m)), source: 'own key' };
+                hint = ` (your key's money answer had: ${Object.keys(d.money || d).join(', ').slice(0, 120)})`;
+            }
+        } catch (e) { /* fall through to the leader key */ }
+    }
+    const lk = opts.leaderKey || await getVaultKey(redis, factionId);
+    if (!lk) return { balance: null, error: `Could not read your balance with your own key${hint}, and no leader key is available either — a leader has to switch on "nightly saving" (Leader settings).` };
     try {
-        const r = await tornFetch(`https://api.torn.com/v2/faction/balance?key=${encodeURIComponent(lk)}`, { headers: { accept: 'application/json' } });
+        // plain fetch, NOT tornFetch: that caches the faction balance for 10 minutes, and a bank request needs the real number now
+        const r = await fetch(`https://api.torn.com/v2/faction/balance?key=${encodeURIComponent(lk)}`, { headers: { accept: 'application/json' } });
         const d = await r.json();
         if (d.error) return { balance: null, error: `Could not read the faction balance: ${d.error.error || d.error.code}` };
         const b = d.balance || d;
@@ -680,13 +708,13 @@ module.exports = async function handler(req, res) {
         // member's own balance, which is read with the leader key kept for nightly saving (a member key cannot see balances).
         // Nothing is paid by WWL: the banker still confirms the payout in Torn, and a claim is exclusive (SET NX).
         if (action === 'bank-info') {
-            const [raw, open] = await Promise.all([bankBalanceOf(factionId, playerId), bankOpenOf(factionId, playerId)]);
+            const [raw, open] = await Promise.all([bankBalanceOf(factionId, playerId, { ownKey: key }), bankOpenOf(factionId, playerId)]);
             return res.status(200).json({ balance: raw.balance, balanceError: raw.error || null, request: open });
         }
         if (action === 'bank-submit') {
             const amount = Math.floor(Number(String(req.body.amount || '').replace(/[,\s$]/g, '')));
             if (!(amount >= 1)) return res.status(400).json({ error: 'Enter an amount of at least 1.' });
-            const bal = await bankBalanceOf(factionId, playerId);
+            const bal = await bankBalanceOf(factionId, playerId, { ownKey: key });
             if (bal.balance === null) return res.status(400).json({ error: bal.error || 'Could not read your balance right now.' });
             if (amount > bal.balance) return res.status(400).json({ error: `You can only ask for up to your own balance ($${bal.balance.toLocaleString('en-US')}).` });
             const old = await bankOpenOf(factionId, playerId);
@@ -977,6 +1005,19 @@ module.exports = async function handler(req, res) {
                 }
             } catch (e) { /* skip */ }
 
+            // For leaders and council only: the open requests (OC and bank), so they show in the script's To do too. Worked out
+            // here on the server and only displayed by the script — no script update needed. The leader check is the usual
+            // cached one, so members cost almost nothing extra.
+            try {
+                if (await isLeader(key)) {
+                    const flat = async k => { const f = (await redis(['HGETALL', k])) || []; const out = []; for (let i = 0; i < f.length; i += 2) { try { out.push(JSON.parse(f[i + 1])); } catch (e) { /* skip */ } } return out; };
+                    const [ocs, banks] = await Promise.all([flat(ocRequestsKey(factionId)), flat(bankRequestsKey(factionId))]);
+                    if (ocs.length) items.push({ id: 'oc-requests', text: `${ocs.length} OC request${ocs.length === 1 ? '' : 's'}: ${ocs.slice(0, 4).map(r => `${r.name} (level ${r.level})`).join(', ')}${ocs.length > 4 ? ` +${ocs.length - 4} more` : ''}.`, cta: 'See requests', url: `${site}/oc-requests` });
+                    const openBanks = banks.filter(r => r.status === 'open');
+                    if (openBanks.length) items.push({ id: 'bank-requests', text: `${openBanks.length} bank request${openBanks.length === 1 ? '' : 's'}: ${openBanks.slice(0, 4).map(r => `${r.name} ($${Number(r.amount).toLocaleString('en-US')})`).join(', ')}${openBanks.length > 4 ? ` +${openBanks.length - 4} more` : ''}.`, cta: 'Open bank requests', url: `${site}/bank` });
+                }
+            } catch (e) { /* skip */ }
+
             return res.status(200).json({ items });
         }
         // Suggestions — everyone can read, add and vote; only leaders set a status or delete.
@@ -1047,7 +1088,13 @@ module.exports = async function handler(req, res) {
             const raw = id && await redis(['HGET', bankRequestsKey(factionId), id]);
             if (!raw) return res.status(404).json({ error: 'That request was cancelled or no longer exists.' });
             const r = JSON.parse(raw);
-            const link = `https://www.torn.com/factions.php?step=your#/tab=controls&giveMoneyTo=${encodeURIComponent(r.playerId)}&money=${encodeURIComponent(r.amount)}`;
+            // The balance may have changed since the request: re-read it NOW and never send a banker to a payout larger than what
+            // the member has — the amount is lowered to the balance and the banker is told.
+            const live = await bankBalanceOf(factionId, r.playerId, { leaderKey: key });
+            let pay = r.amount, lowered = false;
+            if (live.balance !== null && live.balance < r.amount) { pay = live.balance; lowered = true; }
+            if (pay < 1) return res.status(400).json({ error: `${r.name}'s balance is now $0, so there is nothing to pay out.` });
+            const link = `https://www.torn.com/factions.php?step=your#/tab=controls&giveMoneyTo=${encodeURIComponent(r.playerId)}&money=${encodeURIComponent(pay)}`;
             // SET NX: only one banker can claim; the same banker opening it again just gets the link again
             const got = await redis(['SET', `wwl:bank-claim:${factionId}:${id}`, playerId, 'NX', 'EX', String(7 * 86400)]);
             if (!got) {
@@ -1057,7 +1104,7 @@ module.exports = async function handler(req, res) {
                 r.status = 'claimed'; r.claimedBy = playerName; r.claimedAt = Date.now();
                 await redis(['HSET', bankRequestsKey(factionId), id, JSON.stringify(r)]);
             }
-            return res.status(200).json({ ok: true, link, request: r });
+            return res.status(200).json({ ok: true, link, request: r, pay, lowered, liveBalance: live.balance });
         }
         if (action === 'bank-list') {
             const flat = (await redis(['HGETALL', bankRequestsKey(factionId)])) || [];

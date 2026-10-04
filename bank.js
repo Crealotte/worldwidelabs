@@ -18,7 +18,7 @@ async function loadBank() {
     try {
         const r = await bankFetch({ action: 'bank-info' });
         if (r.error) throw new Error(r.error);
-        bankBalance = r.balance;
+        bankBalance = r.balance; bankLoadedAt = Date.now();
         $('bank-balance').innerHTML = r.balance !== null
             ? `Your faction balance: <b style="font-family:var(--mono);">${bankMoney(r.balance)}</b>`
             : `<span style="color:var(--danger);">${esc(r.balanceError || 'Your balance could not be read.')}</span>`;
@@ -95,8 +95,17 @@ async function loadBankClaim() {
         }
         const r = await bankFetch({ action: 'bank-claim', id });
         if (r.error) throw new Error(r.error);
-        out.innerHTML = `<p>✅ <b>${esc(r.request.name)}</b> asked for <b style="font-family:var(--mono);">${bankMoney(r.request.amount)}</b>. It is yours now. Taking you to Torn…</p>
+        out.innerHTML = `<p>✅ <b>${esc(r.request.name)}</b> asked for <b style="font-family:var(--mono);">${bankMoney(r.request.amount)}</b>. It is yours now. Taking you to Torn…</p>${r.lowered ? `<p style="color:var(--happy);font-weight:700;">⚠ Their balance is now only ${bankMoney(r.liveBalance)}, so the amount in the vault link was lowered to ${bankMoney(r.pay)}.</p>` : ""}
             <p style="font-size:13px;color:var(--muted);">Check the member and the amount in the vault screen, then confirm the payout there. If nothing happens: <a href="${esc(r.link)}">open the vault screen</a>.</p>`;
         setTimeout(() => { window.location.href = r.link; }, 900);
     } catch (e) { out.innerHTML = `<p style="color:var(--danger);">${esc(e.message)}</p>`; }
 }
+
+// The balance is read live from Torn each time (never from a cache). It is re-read when you press Refresh and whenever you come back
+// to this tab (at most every 15 seconds) — not on a timer, which would cost the database a request for every open page.
+let bankLoadedAt = 0;
+$('bank-refresh').addEventListener('click', () => loadBank());
+document.addEventListener('visibilitychange', () => {
+    if (document.hidden || !$('page-bank').classList.contains('visible') || Date.now() - bankLoadedAt < 15000) return;
+    loadBank();
+});
