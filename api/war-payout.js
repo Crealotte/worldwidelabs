@@ -452,26 +452,36 @@ function bankCookieParse(header) {
     try { const d = JSON.parse(Buffer.from(p, 'base64url').toString()); return Date.now() - d.t < 30 * 86400000 ? d : null; } catch (e) { return null; }
 }
 // The look of a bank request in Discord (an embed, like other banking bots): who, the amount, when — never the member's balance.
-// state: 'open' | 'claimed' (a banker is on it) | 'cancelled'.
+// state: 'open' | 'claimed' (a banker is on it) | 'completed' (paid out) | 'cancelled'.
 function bankEmbed(r, state, by) {
     const when = new Date(r.at).toISOString();
     const line = `[${r.name}](https://www.torn.com/profiles.php?XID=${r.playerId}) (${r.playerId}) — **$${Number(r.amount).toLocaleString('en-US')}** requested on ${when.slice(0, 10)} at ${when.slice(11, 16)} TCT`;
-    const extra = state === 'claimed' ? `\n⏳ **${by}** is on it…` : state === 'cancelled' ? `\n❌ **This request has been cancelled by ${by}**` : '';
-    return { description: line + extra, color: state === 'cancelled' ? 0xE05555 : 0xF0B432 };
+    const extra = state === 'claimed' ? `\n⏳ **${by}** is on it…`
+        : state === 'completed' ? `\n✅ **Completed** — paid out by **${by}**`
+        : state === 'cancelled' ? `\n❌ **This request has been cancelled by ${by}**` : '';
+    return { description: line + extra, color: state === 'cancelled' ? 0xE05555 : state === 'completed' ? 0x35d99b : 0xF0B432 };
 }
-// Updates the Discord message of a bank request once it is claimed or cancelled: the Claim button is greyed out ("Claimed") or all
-// buttons are removed (cancelled), and the text says who did it, so nobody can press Claim again and pay it twice. Best effort —
-// the claim itself is already exclusive on the server (SET NX), this is the visible half of it.
+// Updates the Discord message of a bank request as it moves along: claimed (Claim greyed out + a "Mark paid" button), completed
+// (buttons gone, "Completed — paid out by ..."), or cancelled (buttons gone, "cancelled by ..."), so nobody can press Claim again
+// and pay it twice. Best effort — the claim itself is already exclusive on the server (SET NX), this is the visible half of it.
 async function bankMarkDiscord(factionId, r, status, byName) {
     if (!r.msgId) return;
     try {
         const poster = await getDiscordPoster(factionId, 'bank');
         if (!poster || poster.error || !poster.edit) return;
         const embeds = [bankEmbed(r, status, byName)];
-        const comps = status === 'claimed' && r.claimUrl ? [{ type: 1, components: [{ type: 2, style: 5, label: '⏳ Claimed', url: r.claimUrl, disabled: true }] }] : [];
+        const comps = status === 'claimed' && r.claimUrl
+            ? [{ type: 1, components: [{ type: 2, style: 5, label: '⏳ Claimed', url: r.claimUrl, disabled: true }, ...(r.doneUrl ? [{ type: 2, style: 5, label: '✅ Mark paid', url: r.doneUrl }] : [])] }]
+            : [];
         const x = await poster.edit(r.msgId, '', comps, embeds);
-        if (!x.ok) await poster.edit(r.msgId, '', [], embeds); // a setup that will not show the disabled button: just drop the buttons
+        if (!x.ok) await poster.edit(r.msgId, '', [], embeds); // a setup that will not show the buttons: just drop them
     } catch (e) { /* the message stays as posted; the server-side claim still protects against double payouts */ }
+}
+// Marks a claimed request as paid out: stored, and the Discord message turned into "Completed".
+async function bankComplete(factionId, r, byName, how) {
+    r.status = 'completed'; r.completedBy = byName; r.completedAt = Date.now(); r.completedHow = how;
+    await redis(['HSET', bankRequestsKey(factionId), r.id, JSON.stringify(r)]);
+    await bankMarkDiscord(factionId, r, 'completed', byName);
 }
 // This member's open (unclaimed) request, if any
 async function bankOpenOf(factionId, playerId) {
@@ -533,21 +543,28 @@ module.exports = async function handler(req, res) {
             const page = (status, msg) => res.status(status).setHeader('Content-Type', 'text/html; charset=utf-8').send(`<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><body style="font-family:system-ui,sans-serif;background:#0e1116;color:#e6ebf0;padding:32px;max-width:560px;margin:auto"><h2>Bank request</h2><p>${msg}</p>`);
             const who = bankCookieParse(req.headers.cookie);
             if (!id) return page(400, 'This link is missing its request id.');
-            if (!who) return res.status(302).setHeader('Location', `/bank-claim?id=${id}`).end();
+            if (!who) return res.status(302).setHeader('Location', `/bank-claim?id=${id}${req.query.done ? '&done=1' : ''}`).end();
             const raw = await redis(['HGET', bankRequestsKey(who.f), id]);
             if (!raw) return page(404, 'That request was cancelled or no longer exists.');
             const r = JSON.parse(raw);
+            if (req.query.done) { // the "Mark paid" button on the Discord message
+                if (r.status === 'completed') return page(200, '✅ This request is already marked as paid.');
+                if (r.status !== 'claimed') return page(400, 'Claim it first — only a claimed request can be marked as paid.');
+                await bankComplete(who.f, r, who.n, 'marked');
+                return page(200, `✅ Marked as paid — thank you, ${String(who.n).replace(/[<>&]/g, '')}.`);
+            }
+            if (r.status === 'completed') return page(409, 'This request has already been paid out.');
             const got = await redis(['SET', `wwl:bank-claim:${who.f}:${id}`, who.i, 'NX', 'EX', String(7 * 86400)]);
             if (!got) {
                 const by = await redis(['GET', `wwl:bank-claim:${who.f}:${id}`]);
                 if (by !== who.i) return page(409, `Already claimed by <b>${String(r.claimedBy || 'another banker').replace(/[<>&]/g, '')}</b>. Nothing to do here.`);
             }
             // never send a banker to a payout larger than the member's balance right now (best effort: needs a readable balance)
-            let pay = r.amount;
-            try { const lk = await getVaultKey(redis, who.f); if (lk) { const live = await bankBalanceOf(who.f, r.playerId, { leaderKey: lk }); if (live.balance !== null && live.balance < pay) pay = live.balance; } } catch (e) { /* keep the requested amount */ }
+            let pay = r.amount, before = null;
+            try { const lk = await getVaultKey(redis, who.f); if (lk) { const live = await bankBalanceOf(who.f, r.playerId, { leaderKey: lk }); before = live.balance; if (live.balance !== null && live.balance < pay) pay = live.balance; } } catch (e) { /* keep the requested amount */ }
             if (pay < 1) return page(400, `${String(r.name).replace(/[<>&]/g, '')}'s balance is now $0, so there is nothing to pay out.`);
             if (got) {
-                r.status = 'claimed'; r.claimedBy = who.n; r.claimedAt = Date.now();
+                r.status = 'claimed'; r.claimedBy = who.n; r.claimedAt = Date.now(); r.pay = pay; r.balanceBefore = before;
                 await redis(['HSET', bankRequestsKey(who.f), id, JSON.stringify(r)]);
                 await bankMarkDiscord(who.f, r, 'claimed', who.n);
             }
@@ -823,7 +840,7 @@ Cancel: ${cancelUrl}`, [], embeds, undefined, true);
                     request.posted = r.ok;
                     // remember the Discord message so it can be edited when the request is claimed or cancelled (buttons disabled,
                     // "Claimed by ..." added) — that is what stops a second banker from also paying it out
-                    if (r.ok) { try { request.msgId = (await r.json())?.id || null; } catch (e) { /* no id: the message just stays as posted */ } request.claimUrl = claimUrl; }
+                    if (r.ok) { try { request.msgId = (await r.json())?.id || null; } catch (e) { /* no id: the message just stays as posted */ } request.claimUrl = claimUrl; request.doneUrl = `https://${host}/bank-go?id=${id}&done=1`; }
                 }
             } catch (e) { /* the request still shows on the Bank request page */ }
             await redis(['HSET', bankRequestsKey(factionId), id, JSON.stringify(request)]);
@@ -835,7 +852,7 @@ Cancel: ${cancelUrl}`, [], embeds, undefined, true);
             if (!raw) return res.status(404).json({ error: 'That request no longer exists.' });
             const r = JSON.parse(raw);
             if (r.playerId !== playerId && !(await isLeader(key))) return res.status(403).json({ error: 'Only the person who asked, or a banker, can cancel it.' });
-            if (r.status === 'claimed') return res.status(400).json({ error: `Already claimed by ${r.claimedBy}.` });
+            if (r.status === 'claimed' || r.status === 'completed') return res.status(400).json({ error: r.status === 'completed' ? 'Already paid out.' : `Already claimed by ${r.claimedBy}.` });
             await redis(['HDEL', bankRequestsKey(factionId), id]);
             await bankMarkDiscord(factionId, r, 'cancelled', playerName);
             return res.status(200).json({ ok: true, name: r.name });
@@ -1185,6 +1202,7 @@ Cancel: ${cancelUrl}`, [], embeds, undefined, true);
             const raw = id && await redis(['HGET', bankRequestsKey(factionId), id]);
             if (!raw) return res.status(404).json({ error: 'That request was cancelled or no longer exists.' });
             const r = JSON.parse(raw);
+            if (r.status === 'completed') return res.status(409).json({ error: 'This request has already been paid out.' });
             // The balance may have changed since the request: re-read it NOW and never send a banker to a payout larger than what
             // the member has — the amount is lowered to the balance and the banker is told.
             const live = await bankBalanceOf(factionId, r.playerId, { leaderKey: key });
@@ -1198,18 +1216,40 @@ Cancel: ${cancelUrl}`, [], embeds, undefined, true);
                 const by = await redis(['GET', `wwl:bank-claim:${factionId}:${id}`]);
                 if (by !== playerId) return res.status(409).json({ error: `Already claimed by ${r.claimedBy || 'another banker'}.`, claimedBy: r.claimedBy || null });
             } else {
-                r.status = 'claimed'; r.claimedBy = playerName; r.claimedAt = Date.now();
+                r.status = 'claimed'; r.claimedBy = playerName; r.claimedAt = Date.now(); r.pay = pay; r.balanceBefore = live.balance;
                 await redis(['HSET', bankRequestsKey(factionId), id, JSON.stringify(r)]);
                 await bankMarkDiscord(factionId, r, 'claimed', playerName);
             }
             return res.status(200).json({ ok: true, link, request: r, pay, lowered, liveBalance: live.balance });
         }
+        // "Mark paid": the banker confirms the payout was made (the Discord message turns into "Completed"). Anyone with banker
+        // access can do it — it is usually the person who claimed it.
+        if (action === 'bank-done') {
+            const id = String(req.body.id || '').replace(/[^0-9a-f]/g, '');
+            const raw = id && await redis(['HGET', bankRequestsKey(factionId), id]);
+            if (!raw) return res.status(404).json({ error: 'That request no longer exists.' });
+            const r = JSON.parse(raw);
+            if (r.status === 'completed') return res.status(200).json({ ok: true, already: true, request: r });
+            if (r.status !== 'claimed') return res.status(400).json({ error: 'Claim it first — only a claimed request can be marked as paid.' });
+            await bankComplete(factionId, r, playerName, 'marked');
+            return res.status(200).json({ ok: true, request: r });
+        }
         if (action === 'bank-list') {
             const flat = (await redis(['HGETALL', bankRequestsKey(factionId)])) || [];
             const list = [];
             for (let i = 0; i < flat.length; i += 2) { try { list.push(JSON.parse(flat[i + 1])); } catch (e) { /* skip */ } }
-            // claimed ones stay visible for a day (so two bankers do not both pay), then drop out
-            return res.status(200).json({ requests: list.filter(r => r.status === 'open' || Date.now() - (r.claimedAt || 0) < 86400000).sort((a, b) => a.at - b.at) });
+            // Payouts show up in the member's balance: a claimed request whose balance has dropped by what was meant to be paid
+            // is marked completed here (the viewer's own leader key reads the balance; a few members at most, claimed ones only).
+            for (const r of list) {
+                if (r.status !== 'claimed' || r.balanceBefore == null || !r.pay) continue;
+                try {
+                    const now = await bankBalanceOf(factionId, r.playerId, { leaderKey: key });
+                    if (now.balance !== null && now.balance <= r.balanceBefore - r.pay) await bankComplete(factionId, r, r.claimedBy || 'a banker', 'detected');
+                } catch (e) { /* stays claimed; it can still be marked paid by hand */ }
+            }
+            // claimed and completed ones stay visible for a day (so two bankers do not both pay), then drop out
+            const day = 86400000, newest = r => r.completedAt || r.claimedAt || 0;
+            return res.status(200).json({ requests: list.filter(r => r.status === 'open' || Date.now() - newest(r) < day).sort((a, b) => a.at - b.at) });
         }
 
         // The leader's side of manual verification (see 'verify-mine' above): the whole faction's Intel/CAT

@@ -57,9 +57,15 @@ function renderBankList(list) {
                <td style="padding:4px 8px;font-family:var(--mono);font-weight:700;">${bankMoney(r.amount)}</td>
                <td style="padding:4px 8px;font-family:var(--mono);color:var(--muted);">${bankMoney(r.balance)}</td>
                <td style="padding:4px 8px;color:var(--muted);">${bankAgo(r.at)}</td>
-               <td style="padding:4px 8px;">${r.status === 'claimed' ? `<span style="color:var(--happy);">claimed by ${esc(r.claimedBy || '?')}</span>` : 'open'}</td>
-               <td style="padding:4px 8px;text-align:right;white-space:nowrap;">${r.status === 'open' ? `<a href="/bank-claim?id=${esc(r.id)}" target="_blank" rel="noopener"><button class="small" type="button">Claim</button></a> <button class="ghost small bank-cancel-row" data-id="${esc(r.id)}">Cancel</button>` : ''}</td></tr>`).join('')}</tbody></table>`
+               <td style="padding:4px 8px;">${r.status === 'completed' ? `<span style="color:var(--reagent);">✅ paid out by ${esc(r.completedBy || '?')}</span>` : r.status === 'claimed' ? `<span style="color:var(--happy);">⏳ claimed by ${esc(r.claimedBy || '?')}</span>` : 'open'}</td>
+               <td style="padding:4px 8px;text-align:right;white-space:nowrap;">${r.status === 'open' ? `<a href="/bank-claim?id=${esc(r.id)}" target="_blank" rel="noopener"><button class="small" type="button">Claim</button></a> <button class="ghost small bank-cancel-row" data-id="${esc(r.id)}">Cancel</button>` : r.status === 'claimed' ? `<button class="small bank-done-row" data-id="${esc(r.id)}" type="button">Mark paid</button>` : ''}</td></tr>`).join('')}</tbody></table>`
         : '<p style="color:var(--muted);margin:0;">No open requests.</p>';
+    $('bank-list').querySelectorAll('.bank-done-row').forEach(b => b.addEventListener('click', async () => {
+        b.disabled = true;
+        const r = await bankFetch({ action: 'bank-done', id: b.dataset.id });
+        if (r.error) { toast(r.error); b.disabled = false; return; }
+        loadBank();
+    }));
     $('bank-list').querySelectorAll('.bank-cancel-row').forEach(b => b.addEventListener('click', async () => {
         if (!confirm('Cancel this request?')) return;
         const r = await bankFetch({ action: 'bank-cancel', id: b.dataset.id });
@@ -89,6 +95,12 @@ async function loadBankClaim() {
     if (!id) { out.innerHTML = '<p>This page needs a request link from the Discord message, or open it from <b>Faction, Bank request</b>.</p>'; return; }
     out.innerHTML = '<p style="color:var(--muted);">Working on it…</p>';
     try {
+        if (bankParams.get('done')) { // the "Mark paid" button on the Discord message, for someone without the banker cookie yet
+            const r = await bankFetch({ action: 'bank-done', id });
+            if (r.error) throw new Error(r.error);
+            out.innerHTML = `<p>✅ ${r.already ? 'This request was already marked as paid.' : 'Marked as paid.'} Thank you!</p>`;
+            return;
+        }
         if (bankParams.get('cancel')) {
             const r = await bankFetch({ action: 'bank-cancel', id });
             if (r.error) throw new Error(r.error);
