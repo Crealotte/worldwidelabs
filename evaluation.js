@@ -272,6 +272,7 @@ function evDetailHtml(r) {
                 <textarea class="ev-msg" rows="12" style="width:100%;font-size:12px;font-family:var(--mono);">${esc(evMessage(r))}</textarea>
                 <div style="margin-top:6px;display:flex;gap:8px;flex-wrap:wrap;">
                     <button class="small ev-copy">Copy message</button>
+                    <button class="ghost small ev-copy-plain" type="button" title="Plain text only, no formatting">Copy plain text</button>
                     <button class="ghost small ev-mail" type="button" data-xid="${esc(r.id)}">Open Torn mail</button>
                 </div>
             </div>
@@ -299,6 +300,7 @@ function wireEvDetail(tr, r) {
     tr.addEventListener('click', e => e.stopPropagation()); // clicks inside the panel must not close it
     tr.querySelector('.ev-mail').addEventListener('click', e => window.open(`https://www.torn.com/messages.php#/p=compose&XID=${e.currentTarget.dataset.xid}`, '_blank', 'noopener'));
     tr.querySelector('.ev-copy').addEventListener('click', () => evCopyMessage(tr.querySelector('.ev-msg').value, 'Message copied'));
+    tr.querySelector('.ev-copy-plain').addEventListener('click', () => navigator.clipboard.writeText(tr.querySelector('.ev-msg').value).then(() => toast('Plain text copied')));
     tr.querySelector('.ev-save').addEventListener('click', async () => {
         const btn = tr.querySelector('.ev-save');
         btn.disabled = true;
@@ -480,13 +482,25 @@ async function evXanLoadAll(forceDep) {
     renderEvaluation();
 }
 
-// Copies a message so the line breaks survive a paste into Torn's mail editor: the same text goes onto the clipboard twice, as plain text
-// (for a plain box) and as HTML with real paragraphs and <br> line breaks (for a rich editor, which otherwise tends to swallow the plain
-// text's blank lines). Falls back to plain text where the browser cannot write HTML to the clipboard.
-async function evCopyMessage(text, okMsg) {
-    // Same markup as the newsletter's formatted copy (which pastes into Torn properly): plain <div> paragraphs with inline styles and <br>
-    // for the line breaks, inside one container — not <p> tags, which the editor may flatten.
-    const html = `<div style="font-family:Arial,Helvetica,sans-serif;">${text.split(/\n{2,}/).map(par => `<div style="font-size:14px;margin:0 0 12px;line-height:1.5;">${par.split('\n').map(l => esc(l)).join('<br>')}</div>`).join('')}</div>`;
+
+// Copies a message in the same look as the newsletter card (dark card, green accent, a panel per topic) as HTML, and as plain text for a
+// plain box. The topic paragraphs (War participation, Training, Xanax, Earlier) become panels with a bold label; the greeting, the questions
+// and the sign-off stay as plain paragraphs. Falls back to plain text where the browser cannot write HTML to the clipboard.
+async function evCopyMessage(text, okMsg, title) {
+    const c = typeof NL_CSS !== 'undefined' ? NL_CSS : { bg: '#161a20', panel: '#1d232b', line: '#2b333d', text: '#e6ebf0', muted: '#8f9aa6', green: '#35d99b' };
+    const one = (par, i) => {
+        const lines = par.split('\n').map(l => esc(l));
+        const m = /^(War participation|Training|Xanax|Earlier):\s*(.*)$/.exec(par.split('\n')[0]);
+        if (m) {
+            const rest = [esc(m[2]), ...lines.slice(1)].join('<br>');
+            return `<div style="background:${c.panel};border:1px solid ${c.line};border-left:3px solid ${c.green};padding:12px 14px;margin-bottom:12px;font-size:13px;line-height:1.5;"><div style="font-size:12px;font-weight:bold;letter-spacing:1px;color:${c.green};margin-bottom:6px;">${esc(m[1].toUpperCase())}</div>${rest}</div>`;
+        }
+        return `<div style="font-size:14px;margin:0 0 12px;line-height:1.5;">${lines.join('<br>')}</div>`;
+    };
+    const html = `<div style="background:${c.bg};color:${c.text};font-family:Arial,Helvetica,sans-serif;border:1px solid ${c.line};border-top:3px solid ${c.green};padding:18px 20px;max-width:640px;">
+        <div style="font-size:20px;font-weight:bold;letter-spacing:1px;margin-bottom:2px;">${esc((title || 'Monthly check-in').toUpperCase())}</div>
+        <div style="font-size:12px;color:${c.muted};margin-bottom:14px;">World Wide Labs</div>
+        ${text.split(/\n{2,}/).map(one).join('')}</div>`;
     try {
         await navigator.clipboard.write([new ClipboardItem({ 'text/html': new Blob([html], { type: 'text/html' }), 'text/plain': new Blob([text], { type: 'text/plain' }) })]);
     } catch (e) {
