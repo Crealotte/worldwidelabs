@@ -394,6 +394,7 @@
         if (page === 'evaluation') loadEvaluation();
         if (page === 'competition') loadCompetition();
         if (page === 'oc-requests') loadOcRequests();
+        if (page === 'oc-claim') loadOcClaim();
         if (page === 'bank') loadBank();
         if (page === 'bank-claim') loadBankClaim();
         if (page === 'war-badges') loadWarBadges();

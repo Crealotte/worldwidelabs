@@ -17,6 +17,7 @@
     { "source": "/wwl-energy-planner.user.js", "destination": "/api/war-payout?script=1" },
     { "source": "/worldwidelabs-dev.user.js", "destination": "/api/war-payout?script=1&dev=1" },
     { "source": "/bank-go", "destination": "/api/war-payout?bankgo=1" },
+    { "source": "/oc-go", "destination": "/api/war-payout" },
     { "source": "/steadfast/:code.png", "destination": "/api/war-payout?steadfast=:code" },
     { "source": "/((?!api/|.*\\.[\\w]+$).*)", "destination": "/index.html" }
   ]

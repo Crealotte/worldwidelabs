@@ -370,7 +370,7 @@ async function leaderTodos(key, factionId) {
     try {
         const flat = (await redis(['HGETALL', ocRequestsKey(factionId)])) || [];
         const reqs = [];
-        for (let i = 0; i < flat.length; i += 2) { try { reqs.push(JSON.parse(flat[i + 1])); } catch (e) { /* skip */ } }
+        for (let i = 0; i < flat.length; i += 2) { try { const q = JSON.parse(flat[i + 1]); if (q.status !== 'claimed') reqs.push(q); } catch (e) { /* skip */ } } // a claimed one is already being handled
         if (reqs.length) add('oc-requests', `${reqs.length} member${reqs.length === 1 ? ' has' : 's have'} asked for an OC to be spawned: ${reqs.slice(0, 6).map(r => `${r.name} (level ${r.level})`).join(', ')}${reqs.length > 6 ? ` and ${reqs.length - 6} more` : ''}.`, 'See the requests', 'oc-requests', null);
     } catch (e) { /* skip */ }
 
@@ -384,6 +384,35 @@ async function leaderTodos(key, factionId) {
 }
 
 
+
+// ---- OC requests in Discord (see 'ocreq-submit' and GET /oc-go) ----
+const OC_CRIMES_URL = 'https://www.torn.com/factions.php?step=your&type=12#/tab=crimes';
+// state: 'open' | 'claimed' (a leader is spawning it) | 'completed' (it is up) | 'cancelled'
+function ocEmbed(r, state, by) {
+    const when = new Date(r.at).toISOString();
+    const line = `[${r.name}](https://www.torn.com/profiles.php?XID=${r.id}) (${r.id}) would like to join a **level ${r.level}** Organized Crime and cannot find one that suits them — requested on ${when.slice(0, 10)} at ${when.slice(11, 16)} TCT${r.note ? `\n> ${r.note}` : ''}`;
+    const extra = state === 'claimed' ? `\n⏳ **${by}** is on it…` : state === 'completed' ? `\n✅ **Spawned** by **${by}**` : state === 'cancelled' ? `\n❌ **This request has been cancelled by ${by}**` : '';
+    return { description: line + extra, color: state === 'cancelled' ? 0xE05555 : state === 'completed' ? 0x35d99b : 0xF0B432 };
+}
+async function ocMarkDiscord(factionId, r, status, byName) {
+    if (!r.msgId) return;
+    try {
+        const poster = await getDiscordPoster(factionId, 'oc');
+        if (!poster || poster.error || !poster.edit) return;
+        const embeds = [ocEmbed(r, status, byName)];
+        const comps = status === 'claimed' && r.claimUrl
+            ? [{ type: 1, components: [{ type: 2, style: 5, label: '⏳ Claimed', url: r.claimUrl, disabled: true }, ...(r.doneUrl ? [{ type: 2, style: 5, label: '✅ Mark spawned', url: r.doneUrl }] : [])] }]
+            : [];
+        const x = await poster.edit(r.msgId, '', comps, embeds);
+        if (!x.ok) await poster.edit(r.msgId, '', [], embeds);
+    } catch (e) { /* the message stays as posted */ }
+}
+// Finds an OC request by its random id (the hash is keyed by member, and a member only has one)
+async function ocFindByRid(factionId, rid) {
+    const flat = (await redis(['HGETALL', ocRequestsKey(factionId)])) || [];
+    for (let i = 0; i < flat.length; i += 2) { try { const r = JSON.parse(flat[i + 1]); if (r.rid === rid) return r; } catch (e) { /* skip */ } }
+    return null;
+}
 
 // ---- Bank requests (see 'bank-info' / 'bank-submit' in the handler) ----
 const bankRequestsKey = (factionId) => `wwl:bank-requests:${factionId}`; // hash: requestId -> { id, playerId, name, amount, balance, at, status, claimedBy }
@@ -534,6 +563,34 @@ module.exports = async function handler(req, res) {
         if (!REDIS_URL || !REDIS_TOKEN) {
             return res.status(500).json({ error: 'Database not connected. In Vercel: Storage -> Create Database -> Upstash Redis, and connect it to this project.' });
         }
+        // The Discord "Claim" button for an OC request: GET /oc-go?rid=...  Same idea as /bank-go — a leader with the signed cookie
+        // claims it on the spot (the Discord message turns into "X is on it…") and is sent straight to Torn's crimes page;
+        // &done=1 is the "Mark spawned" button. Without the cookie it goes to the WWL claim page once (which sets the cookie).
+        if (req.method === 'GET' && req.query?.rid) {
+            const rid = String(req.query.rid || '').replace(/[^0-9a-f]/g, '');
+            const page = (status, msg) => res.status(status).setHeader('Content-Type', 'text/html; charset=utf-8').send(`<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><body style="font-family:system-ui,sans-serif;background:#0e1116;color:#e6ebf0;padding:32px;max-width:560px;margin:auto"><h2>OC request</h2><p>${msg}</p>`);
+            const who = bankCookieParse(req.headers.cookie);
+            if (!rid) return page(400, 'This link is missing its request id.');
+            if (!who) return res.status(302).setHeader('Location', `/oc-claim?rid=${rid}${req.query.done ? '&done=1' : ''}`).end();
+            const r = await ocFindByRid(who.f, rid);
+            if (!r) return page(404, 'That request was cancelled or is already done.');
+            if (req.query.done) {
+                await redis(['HDEL', ocRequestsKey(who.f), r.id]);
+                await ocMarkDiscord(who.f, r, 'completed', who.n);
+                return page(200, `✅ Marked as spawned — thank you, ${String(who.n).replace(/[<>&]/g, '')}.`);
+            }
+            const got = await redis(['SET', `wwl:oc-claim:${who.f}:${rid}`, who.i, 'NX', 'EX', String(7 * 86400)]);
+            if (!got) {
+                const by = await redis(['GET', `wwl:oc-claim:${who.f}:${rid}`]);
+                if (by !== who.i) return page(409, `Already claimed by <b>${String(r.claimedBy || 'another leader').replace(/[<>&]/g, '')}</b>. Nothing to do here.`);
+            } else {
+                r.status = 'claimed'; r.claimedBy = who.n; r.claimedAt = Date.now();
+                await redis(['HSET', ocRequestsKey(who.f), r.id, JSON.stringify(r)]);
+                await ocMarkDiscord(who.f, r, 'claimed', who.n);
+            }
+            return res.status(302).setHeader('Location', OC_CRIMES_URL).end();
+        }
+
         // The Discord "Claim" button for a bank request: GET /bank-go?id=...  A banker who has opened WWL before carries a signed
         // cookie (set by 'bank-token'), so this claims the request on the spot, edits the Discord message ("Claimed by ..."),
         // and answers with a plain redirect straight to Torn's vault screen with the member and amount filled in — no WWL page
@@ -788,14 +845,26 @@ module.exports = async function handler(req, res) {
             const note = String(req.body.note || '').trim().slice(0, 140);
             const oldRaw = await redis(['HGET', ocRequestsKey(factionId), playerId]);
             const old = oldRaw ? JSON.parse(oldRaw) : null;
-            const request = { id: playerId, name: playerName, level, note, at: Date.now(), pinged: old?.pinged || 0, pingedLevel: old?.pingedLevel || 0 };
-            // Discord: once per member per level per 6 hours, so re-saving or flipping levels cannot spam the channel
+            const rid = require('crypto').randomBytes(5).toString('hex');
+            const request = { id: playerId, rid, name: playerName, level, note, at: Date.now(), status: 'open', pinged: old?.pinged || 0, pingedLevel: old?.pingedLevel || 0 };
+            // Discord: once per member per level per 6 hours, so re-saving or flipping levels cannot spam the channel. The message
+            // is a card with a Claim button that sends a leader straight to Torn's crimes page (see GET /oc-go) and is updated when
+            // it is claimed / done, like the bank requests.
             if (!(request.pingedLevel === level && Date.now() - request.pinged < 6 * 3600000)) {
                 try {
                     const poster = await getDiscordPoster(factionId, 'oc');
                     if (poster && !poster.error) {
-                        await poster.post(`🧩 **${playerName}** would like to join a **level ${level}** Organized Crime and cannot find one that suits them.${note ? `\n> ${note}` : ''}\nCan someone spawn one?`, []);
-                        request.pinged = Date.now(); request.pingedLevel = level;
+                        const host = String(req.headers['x-forwarded-host'] || req.headers.host || '').replace(/[^\w.:-]/g, '');
+                        const claimUrl = `https://${host}/oc-go?rid=${rid}`;
+                        const embeds = [ocEmbed(request, 'open')];
+                        const buttons = [{ type: 1, components: [{ type: 2, style: 5, label: 'Claim', url: claimUrl }] }];
+                        let r = await poster.post('', [], embeds, buttons, true);
+                        if (!r.ok) r = await poster.post(`Claim: ${claimUrl}`, [], embeds, undefined, true);
+                        if (r.ok) {
+                            try { request.msgId = (await r.json())?.id || null; } catch (e) { /* no id: the message just stays as posted */ }
+                            request.claimUrl = claimUrl; request.doneUrl = `https://${host}/oc-go?rid=${rid}&done=1`;
+                            request.pinged = Date.now(); request.pingedLevel = level;
+                        }
                     }
                 } catch (e) { /* the request is saved either way; it still shows in the leaders' To do */ }
             }
@@ -803,7 +872,9 @@ module.exports = async function handler(req, res) {
             return res.status(200).json({ ok: true, request });
         }
         if (action === 'ocreq-cancel') {
+            const raw = await redis(['HGET', ocRequestsKey(factionId), playerId]);
             await redis(['HDEL', ocRequestsKey(factionId), playerId]);
+            if (raw) await ocMarkDiscord(factionId, JSON.parse(raw), 'cancelled', playerName);
             return res.status(200).json({ ok: true });
         }
 
@@ -1121,7 +1192,7 @@ Cancel: ${cancelUrl}`, [], embeds, undefined, true);
                 if (await isLeader(key)) {
                     const flat = async k => { const f = (await redis(['HGETALL', k])) || []; const out = []; for (let i = 0; i < f.length; i += 2) { try { out.push(JSON.parse(f[i + 1])); } catch (e) { /* skip */ } } return out; };
                     const [ocs, banks] = await Promise.all([flat(ocRequestsKey(factionId)), flat(bankRequestsKey(factionId))]);
-                    if (ocs.length) items.push({ id: 'oc-requests', text: `${ocs.length} OC request${ocs.length === 1 ? '' : 's'}: ${ocs.slice(0, 4).map(r => `${r.name} (level ${r.level})`).join(', ')}${ocs.length > 4 ? ` +${ocs.length - 4} more` : ''}.`, cta: 'See requests', url: `${site}/oc-requests` });
+                    const ocsOpen = ocs.filter(q => q.status !== 'claimed'); if (ocsOpen.length) items.push({ id: 'oc-requests', text: `${ocsOpen.length} OC request${ocsOpen.length === 1 ? '' : 's'}: ${ocsOpen.slice(0, 4).map(r => `${r.name} (level ${r.level})`).join(', ')}${ocsOpen.length > 4 ? ` +${ocsOpen.length - 4} more` : ''}.`, cta: 'See requests', url: `${site}/oc-requests` });
                     const openBanks = banks.filter(r => r.status === 'open');
                     if (openBanks.length) items.push({ id: 'bank-requests', text: `${openBanks.length} bank request${openBanks.length === 1 ? '' : 's'}: ${openBanks.slice(0, 4).map(r => `${r.name} ($${Number(r.amount).toLocaleString('en-US')})`).join(', ')}${openBanks.length > 4 ? ` +${openBanks.length - 4} more` : ''}.`, cta: 'Open bank requests', url: `${site}/bank` });
                 }
@@ -1188,8 +1259,26 @@ Cancel: ${cancelUrl}`, [], embeds, undefined, true);
         if (action === 'ocreq-done') {
             const id = String(req.body.id || '').replace(/\D/g, '');
             if (!id) return res.status(400).json({ error: 'Missing member' });
+            const raw = await redis(['HGET', ocRequestsKey(factionId), id]);
             await redis(['HDEL', ocRequestsKey(factionId), id]);
+            if (raw) await ocMarkDiscord(factionId, JSON.parse(raw), 'completed', playerName); // the Discord message turns into "Spawned by ..."
             return res.status(200).json({ ok: true });
+        }
+        // Claim from the WWL page (a leader without the cookie yet, or the Claim button on the OC requests page) — exclusive, like /oc-go.
+        if (action === 'ocreq-claim') {
+            const rid = String(req.body.rid || '').replace(/[^0-9a-f]/g, '');
+            const r = rid && await ocFindByRid(factionId, rid);
+            if (!r) return res.status(404).json({ error: 'That request was cancelled or is already done.' });
+            const got = await redis(['SET', `wwl:oc-claim:${factionId}:${rid}`, playerId, 'NX', 'EX', String(7 * 86400)]);
+            if (!got) {
+                const by = await redis(['GET', `wwl:oc-claim:${factionId}:${rid}`]);
+                if (by !== playerId) return res.status(409).json({ error: `Already claimed by ${r.claimedBy || 'another leader'}.` });
+            } else {
+                r.status = 'claimed'; r.claimedBy = playerName; r.claimedAt = Date.now();
+                await redis(['HSET', ocRequestsKey(factionId), r.id, JSON.stringify(r)]);
+                await ocMarkDiscord(factionId, r, 'claimed', playerName);
+            }
+            return res.status(200).json({ ok: true, link: OC_CRIMES_URL, request: r });
         }
         // Hands a banker (anyone with faction API access) the signed cookie that lets the Discord Claim button redirect straight to Torn.
         if (action === 'bank-token') {

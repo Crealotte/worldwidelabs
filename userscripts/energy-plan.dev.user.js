@@ -2,7 +2,7 @@
 // @name         World Wide Labs
 // @namespace    https://worldwidelabs.vercel.app
 // @author       CreaLotte
-// @version      1.37.3
+// @version      1.37.4
 // @updateURL    __WWL_BASE__/worldwidelabs.user.js
 // @downloadURL  __WWL_BASE__/worldwidelabs.user.js
 // @description  Shows your WorldWideLabs weekly energy plan (the checklist from the Energy planner) inside Torn, a To do tab with small personal reminders (revive setting, feedback, timezone map, availability, Discord/Intel/CAT), your My Targets list, a simplified energy/war standing strip, and — if you are in the Mentoring Platform — your mentoring checklist too. Also shows faction banners at the top of every Torn page. A small ⚙ in the header shows the installed version, flags when a newer one is out, lets you set/replace your API key, and — for a leader — add or remove your faction's banners right from Torn. On a computer it is a small window you can drag around and close; in TornPDA it is a menu. Ticks are shared with the WWL site.
@@ -26,7 +26,7 @@
     const KEY_NAME = 'wwl_api_key', POS_NAME = 'wwl_plan_pos', STATE_NAME = 'wwl_plan_state';
     // GM_info gives the version Tampermonkey actually has installed right now — falls back to a
     // hardcoded copy (kept in sync with @version above) for TornPDA, which doesn't grant GM_info.
-    const SCRIPT_VERSION = (typeof GM_info !== 'undefined' && GM_info.script?.version) || '1.37.3';
+    const SCRIPT_VERSION = (typeof GM_info !== 'undefined' && GM_info.script?.version) || '1.37.4';
     const versionGreater = (a, b) => {
         const pa = String(a).split('.').map(Number), pb = String(b).split('.').map(Number);
         for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
@@ -257,6 +257,7 @@
         const n = todoCount();
         const tabs = [['todo', `✅ To do${n ? ` (${n})` : ''}`], ['energy', '⚡ Energy'], ['targets', '🎯 Targets']];
         if (mtPairs && mtPairs.length) tabs.push(['mentoring', '🎓 Mentoring']);
+        tabs.push(['bank', '💰 Bank']);
         if (tabs.length < 2) return '';
         return `<div style="display:flex;gap:6px;margin-bottom:10px;">${tabs.map(([id, label]) =>
             `<button type="button" class="wwl-tab" data-tab="${id}" style="flex:1;padding:6px;border-radius:6px;border:1px solid #3a4352;cursor:pointer;background:${tab === id ? '#2a2f3a' : 'transparent'};color:#e6e9ef;">${label}</button>`
@@ -267,6 +268,7 @@
             tab = lastTab = b.dataset.tab; render();
             if (tab === 'todo') refreshTodoItems();
             if (tab === 'targets') loadTargets();
+            if (tab === 'bank') loadBankInfo();
         }));
     }
     function renderEnergyTab() {
@@ -377,6 +379,45 @@
         });
         cancel?.addEventListener('click', async () => {
             try { await api({ action: 'ocreq-cancel' }); if (item()) item().request = null; render(); } catch (e) { /* stays as it was */ }
+        });
+    }
+    // ---- Bank tab: ask for money out of your OWN faction balance (never more than it); a banker claims it from Discord ----
+    let bankInfo = null, bankMsg = '';
+    async function loadBankInfo() {
+        try { bankInfo = await api({ action: 'bank-info' }); bankMsg = ''; } catch (e) { bankInfo = { balance: null, balanceError: e.message }; }
+        if (tab === 'bank') render();
+    }
+    const bankMoney = n => `$${Math.round(n).toLocaleString('en-US')}`;
+    function renderBankTab() {
+        if (bankInfo === null) return '<div style="padding:6px 0;color:#9aa4b5;">Loading your balance…</div>';
+        const bal = bankInfo.balance === null || bankInfo.balance === undefined
+            ? `<div style="color:#e05555;padding:4px 0;">${esc(bankInfo.balanceError || 'Your balance could not be read.')}</div>`
+            : `<div style="padding:4px 0;">Your faction balance: <b style="font-family:monospace;">${bankMoney(bankInfo.balance)}</b></div>`;
+        const req = bankInfo.request
+            ? `<div style="padding:8px 0;border-top:1px solid #3a4352;margin-top:8px;">✅ Open request: <b style="font-family:monospace;">${bankMoney(bankInfo.request.amount)}</b> — a banker has been told. <span id="wwl-bank-cancel" style="color:#e05555;cursor:pointer;text-decoration:underline;">cancel</span></div>` : '';
+        const can = bankInfo.balance !== null && bankInfo.balance !== undefined;
+        return `${bal}
+            <div style="display:flex;gap:6px;align-items:center;margin-top:6px;flex-wrap:wrap;">
+                <input id="wwl-bank-amount" type="number" min="1" step="1" placeholder="Amount" ${can ? '' : 'disabled'} style="flex:1;min-width:110px;background:#12161c;color:#e6e9ef;border:1px solid #3a4352;border-radius:6px;padding:6px;">
+                <button type="button" id="wwl-bank-all" ${can ? '' : 'disabled'} style="padding:6px 8px;border-radius:6px;border:1px solid #3a4352;background:transparent;color:#e6e9ef;cursor:pointer;">All</button>
+                <button type="button" id="wwl-bank-send" ${can ? '' : 'disabled'} style="padding:6px 10px;border-radius:6px;border:1px solid #35d99b;background:transparent;color:#35d99b;cursor:pointer;">Request</button>
+            </div>
+            ${bankMsg ? `<div style="color:#e05555;font-size:12px;margin-top:6px;">${esc(bankMsg)}</div>` : ''}
+            ${req}
+            <div style="margin-top:8px;color:#9aa4b5;font-size:12px;">You can only ask for up to your own balance. A banker confirms the payout in Torn.</div>`;
+    }
+    function wireBankTab() {
+        const send = body.querySelector('#wwl-bank-send'), all = body.querySelector('#wwl-bank-all'), cancel = body.querySelector('#wwl-bank-cancel');
+        all?.addEventListener('click', () => { if (bankInfo && bankInfo.balance != null) body.querySelector('#wwl-bank-amount').value = bankInfo.balance; });
+        send?.addEventListener('click', async () => {
+            send.disabled = true;
+            try { const r = await api({ action: 'bank-submit', amount: body.querySelector('#wwl-bank-amount').value }); bankInfo.request = r.request; bankMsg = ''; }
+            catch (e) { bankMsg = e.message; }
+            render();
+        });
+        cancel?.addEventListener('click', async () => {
+            try { await api({ action: 'bank-cancel', id: bankInfo.request.id }); bankInfo.request = null; } catch (e) { bankMsg = e.message; }
+            render();
         });
     }
     function renderTodoTab() {
@@ -499,11 +540,12 @@
     }
     function render() {
         if (tab === 'settings') { body.innerHTML = renderSettingsTab(); wireSettingsTab(); try { checkForUpdate(true); } catch (e) { /* the script is still starting up - the passive check will run */ } return; }
-        const tabContent = tab === 'mentoring' ? renderMentoringTab() : tab === 'targets' ? renderTargetsTab() : tab === 'todo' ? renderTodoTab() : renderEnergyTab();
+        const tabContent = tab === 'mentoring' ? renderMentoringTab() : tab === 'bank' ? renderBankTab() : tab === 'targets' ? renderTargetsTab() : tab === 'todo' ? renderTodoTab() : renderEnergyTab();
         body.innerHTML = updateBanner() + renderStandingStrip() + tabBar() + tabContent;
         showProgress();
         wireTabs();
         wireOcRequest();
+        wireBankTab();
         body.querySelector('#wwl-targets-refresh')?.addEventListener('click', refreshTargetStatus);
         body.querySelector('#wwl-daily-check')?.addEventListener('change', e => { setDailyChecked(e.target.checked); render(); });
         body.querySelectorAll('.wwl-e-check').forEach(cb => cb.addEventListener('change', async () => {

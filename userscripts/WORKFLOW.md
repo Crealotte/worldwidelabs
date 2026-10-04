@@ -17,6 +17,7 @@ Queue changes below instead of releasing each one. Nothing here is live for memb
 ### Queued for the next release
 - Draggable WWL button: the closed button can be dragged anywhere on a computer and on TornPDA, position remembered (work file 1.37.2, not released).
 - OC request inside the script: under the "not in an Organized Crime" to-do, a level picker + optional note + Request button (and the open request with a cancel link) - work file 1.37.3, not released. The server side (ocreq-*, the request shown on the to-do item) is already live.
+- Bank tab inside the script: a 💰 Bank tab with your live faction balance, an amount box (All / Request) and your open request with a cancel link - work file 1.37.4, not released. The server side (bank-info / bank-submit / bank-cancel) is already live.
 
 ## Releasing (when the list is done and tested)
 1. Copy the work file over the release file: `cp userscripts/energy-plan.dev.user.js userscripts/energy-plan.user.js`.
