@@ -12,6 +12,10 @@ async function loadScriptCard() {
     if (!panel) return;
     const btn = (label, ghost) => `<a href="${SC_FILE}" target="_blank" rel="noopener" style="text-decoration:none;"><button type="button"${ghost ? ' class="ghost small"' : ''}>${label}</button></a>`;
     const howTo = '<p style="color:var(--muted);font-size:12px;margin:10px 0 0;">On a computer you need <b>Tampermonkey</b> (or a similar script manager) in your browser first. On TornPDA, add it as a script in the app. Not sure? Ask a leader.</p>';
+    // For the case where tapping the button does not offer to install (opened inside the WWL app or an in-app browser, or no
+    // script manager yet): the plain link, to paste into the script manager or open in a normal browser.
+    const linkLine = '<p style="color:var(--muted);font-size:12px;margin:8px 0 0;">If the button just opens a page instead of offering to install: <a href="#" id="sc-copy">copy the script link</a>, then paste it into your script manager (Tampermonkey: Utilities, Install from URL; TornPDA: add a script from a link) or open it in your normal browser instead of inside the WWL app.</p>';
+    const wireCopy = () => $('sc-copy')?.addEventListener('click', e => { e.preventDefault(); navigator.clipboard.writeText(`${location.origin}${SC_FILE}`).then(() => toast('Script link copied')).catch(() => toast(`Copy this link: ${location.origin}${SC_FILE}`)); });
     panel.style.display = 'block';
     let r = null;
     try {
@@ -20,7 +24,7 @@ async function loadScriptCard() {
         if (r.error) r = null;
     } catch (e) { r = null; }
     if (!r) { // could not tell — still offer the button
-        $('dash-script-body').innerHTML = `<p style="margin:0 0 10px;">Get your weekly plan, to-dos and targets right inside Torn.</p>${btn('Install or update the script')}${howTo}`;
+        $('dash-script-body').innerHTML = `<p style="margin:0 0 10px;">Get your weekly plan, to-dos and targets right inside Torn.</p>${btn('Install or update the script')}${howTo}${linkLine}`; wireCopy();
         return;
     }
     const ageDays = r.seen ? (Date.now() - r.seen) / 86400000 : null;
@@ -32,6 +36,7 @@ async function loadScriptCard() {
         return;
     }
     $('dash-script-body').innerHTML = outdated
-        ? `<p style="margin:0 0 10px;">A newer version of the WWL script is available${r.latest ? ` (v${esc(r.latest)})` : ''}${r.version ? ` — you have v${esc(r.version)}` : ''}. Press the button; your script manager asks you to confirm, and your key and settings stay as they are.</p>${btn('Update the script')}`
-        : `<p style="margin:0 0 10px;">${r.seen ? 'Your WWL script has not been seen for a while.' : 'Get your weekly plan, to-dos and targets right inside Torn.'} Press the button and your script manager asks you to confirm the install. Then open the small <b>WWL</b> button in Torn, press ⚙ and paste your API key.</p>${btn('Install the script')}${howTo}`;
+        ? `<p style="margin:0 0 10px;">A newer version of the WWL script is available${r.latest ? ` (v${esc(r.latest)})` : ''}${r.version ? ` — you have v${esc(r.version)}` : ''}. Press the button; your script manager asks you to confirm, and your key and settings stay as they are.</p>${btn('Update the script')}${linkLine}`
+        : `<p style="margin:0 0 10px;">${r.seen ? 'Your WWL script has not been seen for a while.' : 'Get your weekly plan, to-dos and targets right inside Torn.'} Press the button and your script manager asks you to confirm the install. Then open the small <b>WWL</b> button in Torn, press ⚙ and paste your API key.</p>${btn('Install the script')}${howTo}${linkLine}`;
+    wireCopy();
 }
