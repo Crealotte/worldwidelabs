@@ -2,7 +2,7 @@
 // @name         World Wide Labs
 // @namespace    https://worldwidelabs.vercel.app
 // @author       CreaLotte
-// @version      1.38.8
+// @version      1.38.9
 // @updateURL    __WWL_BASE__/worldwidelabs.user.js
 // @downloadURL  __WWL_BASE__/worldwidelabs.user.js
 // @description  Shows your WorldWideLabs weekly energy plan (the checklist from the Energy planner) inside Torn, a To do tab with small personal reminders (revive setting, feedback, timezone map, availability, Discord/Intel/CAT), your My Targets list, a simplified energy/war standing strip, and — if you are in the Mentoring Platform — your mentoring checklist too. Also shows faction banners at the top of every Torn page. A small ⚙ in the header shows the installed version, flags when a newer one is out, lets you set/replace your API key, and — for a leader — add or remove your faction's banners right from Torn. On a computer it is a small window you can drag around and close; in TornPDA it is a menu. Ticks are shared with the WWL site.
@@ -26,7 +26,7 @@
     const KEY_NAME = 'wwl_api_key', POS_NAME = 'wwl_plan_pos', STATE_NAME = 'wwl_plan_state';
     // GM_info gives the version Tampermonkey actually has installed right now — falls back to a
     // hardcoded copy (kept in sync with @version above) for TornPDA, which doesn't grant GM_info.
-    const SCRIPT_VERSION = (typeof GM_info !== 'undefined' && GM_info.script?.version) || '1.38.8';
+    const SCRIPT_VERSION = (typeof GM_info !== 'undefined' && GM_info.script?.version) || '1.38.9';
     const versionGreater = (a, b) => {
         const pa = String(a).split('.').map(Number), pb = String(b).split('.').map(Number);
         for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
@@ -349,7 +349,7 @@
         const mark = ok => ok === true ? '<span style="color:#35d99b;">✓</span>' : ok === false ? '<span style="color:#9aa4b5;">○</span>' : '<span style="color:#9aa4b5;">?</span>';
         const chips = role.steps.map((s, i) => `<span style="font-size:11px;border:1px solid ${i === role.current ? '#35d99b' : '#3a4352'};border-radius:10px;padding:1px 7px;color:${i <= role.current ? '#e8ecf3' : '#9aa4b5'};">${i < role.current ? '✓ ' : ''}${esc(s.name)}</span>`).join(' → ');
         const next = role.next != null ? role.steps[role.next] : null;
-        return `<div style="margin:4px 0 8px;"><div style="font-size:11px;color:#9aa4b5;">Role path</div><div style="display:flex;gap:3px;flex-wrap:wrap;align-items:center;">${chips}</div>${next ? `<div style="margin-top:4px;">Next: <b>${esc(next.name)}</b>${next.gives ? ` <span style="color:#9aa4b5;">(${esc(next.gives)})</span>` : ''}${next.reqs.map(r => `<div style="padding-left:8px;">${mark(r.ok)} ${esc(r.text)}${r.detail ? ` <span style="color:#9aa4b5;font-size:11px;">(${esc(r.detail)})</span>` : ''}</div>`).join('')}</div>` : '<div style="color:#35d99b;margin-top:4px;">You are at the top of the ladder 🎉</div>'}</div>`;
+        return `<div style="margin:4px 0 8px;"><div style="font-size:11px;color:#9aa4b5;">Role path</div><div style="display:flex;gap:3px;flex-wrap:wrap;align-items:center;">${chips}</div>${next ? `<div style="margin-top:4px;">Next: <b>${esc(next.name)}</b>${next.gives ? ` <span style="color:#9aa4b5;">(${esc(next.gives)})</span>` : ''}${next.reqs.map(r => `<div style="padding-left:8px;">${mark(r.ok)} ${esc(r.text)}${r.detail ? ` <span style="color:#9aa4b5;font-size:11px;">(${esc(r.detail)})</span>` : ''}</div>`).join('')}</div>` : `<div style="color:#35d99b;margin-top:4px;">You are at the top of the ladder 🎉</div>${role.keep ? `<div style="margin-top:3px;">${role.keep.ok === false ? '<span style="color:#e05555;">⚠</span>' : mark(role.keep.ok)} ${esc(role.keep.text)}${role.keep.detail ? ` <span style="color:#9aa4b5;font-size:11px;">(${esc(role.keep.detail)})</span>` : ''}</div>` : ''}`}</div>`;
     }
     function renderWelcomeMine() {
         const r = welMine;

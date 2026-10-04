@@ -423,7 +423,9 @@ async function leaderTodos(key, factionId) {
     // by lib/welcome.js and kept for 30 minutes, so this costs one cheap lookup most of the time. A leader promotes them in Torn.
     try {
         const ready = await welPromotions(welDeps(key, factionId), false);
-        if (ready.length) add('promotions', `${ready.length} member${ready.length === 1 ? ' is' : 's are'} ready for promotion: ${ready.slice(0, 5).map(r => `${r.name} (${r.to})`).join(', ')}${ready.length > 5 ? ` +${ready.length - 5} more` : ''}.`, 'See who', 'welcome-admin', 'wa-promo');
+        const up = ready.filter(r => r.kind !== 'demote'), down = ready.filter(r => r.kind === 'demote');
+        if (up.length) add('promotions', `${up.length} member${up.length === 1 ? ' is' : 's are'} ready for promotion: ${up.slice(0, 5).map(r => `${r.name} (${r.to})`).join(', ')}${up.length > 5 ? ` +${up.length - 5} more` : ''}.`, 'See who', 'welcome-admin', 'wa-promo');
+        if (down.length) add('demotions', `${down.length} Chemist${down.length === 1 ? '' : 's'} no longer meet${down.length === 1 ? 's' : ''} the war rule and can move back down: ${down.slice(0, 5).map(r => `${r.name} (${r.to})`).join(', ')}${down.length > 5 ? ` +${down.length - 5} more` : ''}.`, 'See who', 'welcome-admin', 'wa-promo');
     } catch (e) { /* skip */ }
 
     return { todos };
