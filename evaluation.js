@@ -135,6 +135,8 @@ function evMessage(r) {
         lines.push('');
         lines.push(`Xanax: every Xanax taken from the faction armory should be backed by 10 hits. ${r.fresh ? 'No worries, but in' : 'In'} this period's wars you took more than your hits covered:`);
         for (const w of r.xanax.rows.filter(x => x.owed > 0)) lines.push(`- War vs ${w.opponent}: took ${w.taken}, made ${w.hits} hits (covers ${w.covered}) — ${w.owed} too many`);
+        const balanced = r.xanax.rows.reduce((s, x) => s + x.offset, 0);
+        if (balanced > 0) lines.push(`(You already balanced out ${balanced} Xanax by hitting more than you took in another war — thank you!)`);
         lines.push(r.xanax.outstanding > 0
             ? `${r.xanax.returned ? `You have already put back ${r.xanax.returned}. ` : ''}Please put ${r.xanax.outstanding} Xanax back in the faction armory.`
             : 'You have already put them all back — thank you!');
@@ -254,7 +256,7 @@ function evDetailHtml(r) {
     const x = r.xanax;
     const xanHtml = !x.rows.length
         ? `<div style="color:var(--muted);font-size:12px;">${evXan.wars.length ? 'Not loaded yet — press Load Xanax data above the table.' : 'No war ended in this period.'}</div>`
-        : x.rows.map(w => `<div style="font-size:12px;margin-bottom:3px;"><b>War vs ${esc(w.opponent)}:</b> took ${w.taken}, ${w.hits} hits (covers ${w.covered})${w.owed ? ` — <span style="color:${MO_LIGHT.red};font-weight:700;">${w.owed} to put back</span>${w.returned ? `, ${w.returned} returned` : ''}` : ' — ✓'}</div>`).join('')
+        : x.rows.map(w => `<div style="font-size:12px;margin-bottom:3px;"><b>War vs ${esc(w.opponent)}:</b> took ${w.taken}, ${w.hits} hits (covers ${w.covered})${w.owed ? ` — <span style="color:${MO_LIGHT.red};font-weight:700;">${w.owed} to put back</span>${w.returned ? `, ${w.returned} returned` : ''}` : (w.over ? ` — <span style="color:${MO_LIGHT.green};">✓ ${w.over} over, balanced out by your other war</span>` : ' — ✓')}</div>`).join('')
             + (x.depKnown ? '' : '<div style="color:var(--muted);font-size:11px;">What has been put back is not checked yet.</div>');
     const hist = r.history.length ? r.history.map(h => `
         <div style="display:flex;gap:8px;align-items:baseline;margin-bottom:4px;font-size:12px;">
@@ -440,8 +442,13 @@ function evXanFor(m) {
         const h = (moData.hits[w.id] || {})[m.id] || {};
         const hits = (h.war || 0) + (h.chain || 0);
         const covered = Math.ceil(hits / 10);
-        rows.push({ warId: w.id, opponent: w.opponent, taken, hits, covered, owed: Math.max(0, taken - covered), returned: 0, outstanding: 0 });
+        rows.push({ warId: w.id, opponent: w.opponent, taken, hits, covered, returned: 0, outstanding: 0 });
     }
+    // Hits above what the Xanax taken needed in one war (a surplus) balance out a shortfall in another war of the period — e.g. someone who
+    // took one too many in the first war and made up for it by hitting enough for it in the next. Surplus is used against the oldest
+    // shortfall first; what is left after that is what has to be put back.
+    let pool = rows.reduce((s, r) => s + Math.max(0, r.covered - r.taken), 0);
+    for (const r of rows) { r.over = Math.max(0, r.taken - r.covered); r.offset = Math.min(r.over, pool); pool -= r.offset; r.owed = r.over - r.offset; }
     const depKnown = evXan.deposits !== null;
     let rem = depKnown ? (evXanMatch(evXan.deposits, m) || { n: 0 }).n : 0;
     for (const r of rows) { r.returned = Math.min(r.owed, rem); rem -= r.returned; r.outstanding = r.owed - r.returned; }

@@ -56,7 +56,7 @@ async function loadMyStanding() {
                 ${!xan.known
                     ? `<div class="s">Not checked yet — a leader checks the Xanax once per period${xan.wars.length ? ` (${xan.wars.length} of ${xan.total} wars so far)` : ''}.</div>`
                     : `<div class="v" style="font-size:26px;color:${xan.outstanding > 0 ? 'var(--danger)' : 'var(--reagent)'};">${xan.outstanding > 0 ? `${xan.outstanding} to put back` : '✓ nothing to put back'}</div>
-                       <div class="s">${xan.wars.map(w => `War vs ${esc(w.opponent)}: took ${w.taken}, ${w.hits} hits (covers ${w.covered})${w.owed ? ` — <b style="color:var(--danger);">${w.owed} too many</b>${w.returned ? `, ${w.returned} put back` : ''}` : ' ✓'}`).join('<br>')}
+                       <div class="s">${xan.wars.map(w => `War vs ${esc(w.opponent)}: took ${w.taken}, ${w.hits} hits (covers ${w.covered})${w.owed ? ` — <b style="color:var(--danger);">${w.owed} too many</b>${w.returned ? `, ${w.returned} put back` : ''}` : (w.over ? ' ✓ (balanced out by your other war)' : ' ✓')}`).join('<br>')}
                        <br>Every Xanax you take from the armory should be backed by 10 hits.${xan.owed > 0 && !xan.depositsAt ? ' What you put back afterwards has not been read yet.' : ''}</div>`}
             </div>`;
 
