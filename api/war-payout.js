@@ -835,23 +835,34 @@ module.exports = async function handler(req, res) {
         // Members' own reminders: each member keeps a short personal list (shown in the script To do and managed on the dashboard), and
         // every addition is also written to an ideas log that survives deleting, so leaders can see which reminders keep coming up
         // ('todo-ideas', leaders only) and decide to build them for everyone. Max 15 items of 100 characters each.
-        if (action === 'mytodo-list' || action === 'mytodo-add' || action === 'mytodo-delete') {
+        if (action === 'mytodo-list' || action === 'mytodo-add' || action === 'mytodo-delete' || action === 'mytodo-check') {
             const k = `wwl:my-todos:${factionId}`;
             const raw = await redis(['HGET', k, playerId]);
             let list = raw ? JSON.parse(raw) : [];
+            const today = new Date().toISOString().slice(0, 10); // TCT day: a daily reminder is unchecked again every new day
+            let changed = false;
             if (action === 'mytodo-add') {
                 const text = String(req.body.text || '').replace(/\s+/g, ' ').trim().slice(0, 100);
                 if (!text) return res.status(400).json({ error: 'Write what you want to be reminded of.' });
                 if (list.length >= 15) return res.status(400).json({ error: 'You can keep up to 15 reminders — delete one first.' });
-                list.push({ id: require('crypto').randomBytes(4).toString('hex'), text, at: Date.now() });
-                await redis(['HSET', k, playerId, JSON.stringify(list)]);
-                await redis(['LPUSH', `wwl:todo-ideas:${factionId}`, JSON.stringify({ t: Date.now(), pid: playerId, name: playerName, text })]);
+                const repeat = req.body.repeat === 'daily' ? 'daily' : 'once';
+                list.push({ id: require('crypto').randomBytes(4).toString('hex'), text, repeat, at: Date.now() });
+                changed = true;
+                await redis(['LPUSH', `wwl:todo-ideas:${factionId}`, JSON.stringify({ t: Date.now(), pid: playerId, name: playerName, text, repeat })]);
                 await redis(['LTRIM', `wwl:todo-ideas:${factionId}`, '0', '999']);
             } else if (action === 'mytodo-delete') {
                 list = list.filter(x => x.id !== String(req.body.id || ''));
-                if (list.length) await redis(['HSET', k, playerId, JSON.stringify(list)]); else await redis(['HDEL', k, playerId]);
+                changed = true;
+            } else if (action === 'mytodo-check') {
+                const it = list.find(x => x.id === String(req.body.id || ''));
+                if (it) {
+                    if (req.body.done) { it.done = true; it.doneDay = today; } else { it.done = false; it.doneDay = null; }
+                    changed = true;
+                }
             }
-            return res.status(200).json({ items: list });
+            if (changed) { if (list.length) await redis(['HSET', k, playerId, JSON.stringify(list)]); else await redis(['HDEL', k, playerId]); }
+            // done for a one-time reminder = checked for good; done for a daily one = checked TODAY (it comes back unchecked tomorrow)
+            return res.status(200).json({ items: list.map(x => ({ id: x.id, text: x.text, repeat: x.repeat || 'once', done: x.repeat === 'daily' ? x.doneDay === today : !!x.done })) });
         }
 
         // OC requests — a member who sees no OC that suits them asks for one at a level, instead of everyone spawning crimes.
@@ -1174,7 +1185,7 @@ Cancel: ${cancelUrl}`, [], embeds, undefined, true);
             // The member's own reminders (added on the dashboard) — shown at the end of their list.
             try {
                 const mine = await redis(['HGET', `wwl:my-todos:${factionId}`, playerId]);
-                if (mine) for (const x of JSON.parse(mine)) items.push({ id: `my-${x.id}`, text: `📝 ${x.text}`, mine: true, myId: x.id });
+                if (mine) { const today = new Date().toISOString().slice(0, 10); for (const x of JSON.parse(mine)) items.push({ id: `my-${x.id}`, text: x.text, mine: true, myId: x.id, repeat: x.repeat || 'once', done: x.repeat === 'daily' ? x.doneDay === today : !!x.done }); }
             } catch (e) { /* skip */ }
 
             // Xanax stacking warning: whenever a war is coming up (an availability plan linked to a war that has not started yet), everyone

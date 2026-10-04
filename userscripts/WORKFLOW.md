@@ -15,7 +15,7 @@ Members get `energy-plan.user.js` (the **release** file). Every change from now 
 Queue changes below instead of releasing each one. Nothing here is live for members until a release.
 
 ### Queued for the next release
-- (nothing yet — last release: 1.38.1, 2026-10-04: add your own reminders in the To do, notices not counted)
+- Own reminders: a checkbox on each (once = stays ticked, daily = unticks itself every day), a Once/Daily choice in the add row, and ticked ones not counted in the To do number (work file 1.38.2, not released). The server side and the dashboard panel are already live.
 
 ## Releasing (when the list is done and tested)
 1. Copy the work file over the release file: `cp userscripts/energy-plan.dev.user.js userscripts/energy-plan.user.js`.

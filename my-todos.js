@@ -9,12 +9,22 @@ async function mtFetch(body) {
 }
 
 // ---- dashboard panel (every member) ----
+// Each reminder has a checkbox. A "once" reminder stays checked once ticked; a "daily" one is unchecked again every new day (TCT).
 function renderMyTodos(items) {
     $('mt-list').innerHTML = items.length
-        ? items.map(x => `<div style="display:flex;gap:8px;align-items:center;padding:5px 0;border-top:1px solid var(--line);font-size:13px;"><span style="flex:1;">${esc(x.text)}</span><button class="ghost small mt-del" data-id="${esc(x.id)}" title="Delete">✕</button></div>`).join('')
+        ? items.map(x => `<div style="display:flex;gap:8px;align-items:center;padding:5px 0;border-top:1px solid var(--line);font-size:13px;">
+              <input type="checkbox" class="mt-check" data-id="${esc(x.id)}" ${x.done ? 'checked' : ''} style="width:auto;">
+              <span style="flex:1;${x.done ? 'text-decoration:line-through;color:var(--muted);' : ''}">${esc(x.text)}</span>
+              <span style="font-size:11px;color:${x.repeat === 'daily' ? 'var(--reagent)' : 'var(--muted)'};border:1px solid var(--line);border-radius:10px;padding:1px 7px;">${x.repeat === 'daily' ? 'daily' : 'one time'}</span>
+              <button class="ghost small mt-del" data-id="${esc(x.id)}" title="Delete">✕</button></div>`).join('')
         : '<div style="color:var(--muted);font-size:13px;">You have no reminders of your own yet.</div>';
     $('mt-list').querySelectorAll('.mt-del').forEach(b => b.addEventListener('click', async () => {
         const r = await mtFetch({ action: 'mytodo-delete', id: b.dataset.id });
+        if (r.error) { toast(r.error); return; }
+        renderMyTodos(r.items);
+    }));
+    $('mt-list').querySelectorAll('.mt-check').forEach(c => c.addEventListener('change', async () => {
+        const r = await mtFetch({ action: 'mytodo-check', id: c.dataset.id, done: c.checked });
         if (r.error) { toast(r.error); return; }
         renderMyTodos(r.items);
     }));
@@ -34,7 +44,7 @@ async function addMyTodo() {
     if (!inp.value.trim()) return;
     $('mt-add').disabled = true;
     try {
-        const r = await mtFetch({ action: 'mytodo-add', text: inp.value });
+        const r = await mtFetch({ action: 'mytodo-add', text: inp.value, repeat: $('mt-repeat').value });
         if (r.error) throw new Error(r.error);
         inp.value = '';
         renderMyTodos(r.items);
