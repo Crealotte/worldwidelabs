@@ -1137,6 +1137,26 @@ Cancel: ${cancelUrl}`, [], embeds, undefined, true);
                 }
             } catch (e) { /* skip this check on failure, don't fail the others */ }
 
+            // Xanax stacking warning: whenever a war is coming up (an availability plan linked to a war that has not started yet), everyone
+            // is told clearly to stack Xanax from 48 hours before the start. Worked out here from the stored plans, so it shows in the
+            // script's To do straight away and needs no script update.
+            try {
+                const nowS = Math.floor(Date.now() / 1000);
+                const starts = (await loadPlanIndex(factionId)).filter(p => !p.archived && p.war?.start && Number(p.war.start) > nowS).map(p => ({ start: Number(p.war.start), opponent: p.war.opponent || '' }));
+                if (starts.length) {
+                    const next = starts.sort((a, b) => a.start - b.start)[0];
+                    const tct = ts => { const d = new Date(ts * 1000); return `${d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' })} ${d.toISOString().slice(11, 16)} TCT`; };
+                    const stackFrom = next.start - 48 * 3600, hoursLeft = Math.max(0, Math.round((next.start - nowS) / 3600));
+                    items.unshift({ // first in the list: it is the most urgent thing there
+                        id: 'xanax-stack',
+                        text: nowS >= stackFrom
+                            ? `⚠️ STACK XANAX NOW! The war${next.opponent ? ` vs ${next.opponent}` : ''} starts in ${hoursLeft} h (${tct(next.start)}). Xanax stacking should have started 48 hours before the start (${tct(stackFrom)}) — do it now so your energy is ready for the war.`
+                            : `⚠️ WAR COMING${next.opponent ? ` vs ${next.opponent}` : ''}: it starts ${tct(next.start)}. Start STACKING XANAX 48 HOURS BEFORE the start, from ${tct(stackFrom)}.`,
+                        cta: 'War availability', url: `${site}/availability`,
+                    });
+                }
+            } catch (e) { /* skip */ }
+
             try {
                 // Shows as soon as there is a live plan you haven't responded to yet — even a war that hasn't
                 // been matched yet, so a plan made well ahead of time (a placeholder start date) still reminds
