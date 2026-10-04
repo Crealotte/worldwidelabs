@@ -451,9 +451,6 @@ function bankCookieParse(header) {
     if (sig.length !== good.length || !crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(good))) return null;
     try { const d = JSON.parse(Buffer.from(p, 'base64url').toString()); return Date.now() - d.t < 30 * 86400000 ? d : null; } catch (e) { return null; }
 }
-// Updates the Discord message of a bank request once it is claimed or cancelled: the buttons are removed or disabled and a line
-// says who claimed it, so nobody can press Claim again and pay it twice. Best effort — the claim itself is already exclusive on
-// the server (SET NX), this is the visible half of it.
 // The look of a bank request in Discord (an embed, like other banking bots): who, the amount, when — never the member's balance.
 // state: 'open' | 'claimed' (a banker is on it) | 'cancelled'.
 function bankEmbed(r, state, by) {
