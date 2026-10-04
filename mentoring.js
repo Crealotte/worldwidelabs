@@ -47,14 +47,11 @@ async function loadMentoring() {
 }
 
 // Leader oversight: every OTHER pairing (their own, if any, already shows above via renderMentoringPairs), read
-// only — the checklist shows as plain done/not-done, and the chat has no box to type in.
+// only — the chat has no box to type in.
 function renderMentoringOversight() {
     $('mt-oversight').innerHTML = mtData.allPairs.map(p => `
         <div class="panel" style="margin-bottom:16px;" data-pair="${esc(p.pairId)}">
             <h3 style="margin-top:0;">${esc(p.mentorName)} ↔ ${esc(p.pupilName)}</h3>
-            ${mtData.todos.length ? `<div style="margin-bottom:16px;">
-                ${mtData.todos.map(t => `<div style="padding:3px 0;color:${p.done.includes(t.id) ? 'var(--reagent)' : 'var(--muted)'};">${p.done.includes(t.id) ? '✓' : '○'} ${esc(t.text)}</div>`).join('')}
-            </div>` : ''}
             <div style="border-top:1px solid var(--line);padding-top:12px;">
                 <div class="mt-chat" style="max-height:200px;overflow-y:auto;display:flex;flex-direction:column;gap:6px;"></div>
             </div>
@@ -66,15 +63,10 @@ function mtPairKey(p) { const [mentorId, pupilId] = p.pairId.split(':'); return 
 
 function renderMentoringPairs() {
     $('mt-pairs').innerHTML = mtData.pairs.map(p => {
-        const items = mtData.todos.filter(t => t.role === 'both' || t.role === p.role);
         return `
         <div class="panel" style="margin-bottom:16px;" data-pair="${esc(p.pairId)}">
             <h3 style="margin-top:0;">${p.role === 'mentor' ? `You are mentoring ${esc(p.otherName)}` : `Your mentor is ${esc(p.otherName)}`}</h3>
             ${p.role === 'mentor' ? `<div class="mt-welcome" data-pupil="${esc(p.otherId)}"></div>` : ''}
-            ${items.length ? `<div class="mt-todos" style="margin-bottom:16px;">
-                ${items.map(t => `<label style="display:flex;gap:8px;align-items:center;padding:4px 0;cursor:pointer;">
-                    <input type="checkbox" style="width:auto;" class="mt-todo" data-id="${esc(t.id)}" ${p.done.includes(t.id) ? 'checked' : ''}> ${esc(t.text)}</label>`).join('')}
-            </div>` : '<p style="color:var(--muted);font-size:13px;margin:0 0 16px;">No checklist yet — a leader can add one in Mentoring admin.</p>'}
             <div style="border-top:1px solid var(--line);padding-top:12px;">
                 <div class="mt-chat" style="max-height:260px;overflow-y:auto;display:flex;flex-direction:column;gap:6px;margin-bottom:8px;"></div>
                 <div style="display:flex;gap:8px;">
@@ -89,12 +81,6 @@ function renderMentoringPairs() {
         const pairId = card.dataset.pair;
         const wel = card.querySelector('.mt-welcome'); // a mentor sees the welcome steps their pupil is getting (while the pupil is a recruit)
         if (wel && typeof weLoadPupil === 'function') weLoadPupil(wel.dataset.pupil, wel);
-        card.querySelectorAll('.mt-todo').forEach(cb => cb.addEventListener('change', async () => {
-            const { mentorId, pupilId } = mtPairKey({ pairId });
-            const r = await mtFetch({ action: 'mentor-todo-toggle', mentorId, pupilId, todoId: cb.dataset.id, checked: cb.checked });
-            if (r.error) { toast(r.error); cb.checked = !cb.checked; }
-            else { const p = mtData.pairs.find(x => x.pairId === pairId); if (cb.checked) p.done = [...new Set([...p.done, cb.dataset.id])]; else p.done = p.done.filter(id => id !== cb.dataset.id); }
-        }));
         const send = async () => {
             const input = card.querySelector('.mt-chat-input');
             const text = input.value.trim();
@@ -237,33 +223,9 @@ function renderMta() {
         mtaProgram = r.program; renderMta();
     }));
 
-    renderMtaTodos();
     renderMtaSelects();
 }
 
-function renderMtaTodos() {
-    $('mta-todos').innerHTML = mtaTodos.length ? mtaTodos.map((t, i) => `
-        <div style="display:flex;gap:8px;align-items:center;margin-bottom:6px;">
-            <input class="mta-todo-text" data-i="${i}" value="${esc(t.text)}" placeholder="Checklist item" style="flex:1;max-width:420px;" maxlength="200">
-            <select class="mta-todo-role" data-i="${i}" style="width:auto;">
-                <option value="both" ${t.role === 'both' ? 'selected' : ''}>Both</option>
-                <option value="mentor" ${t.role === 'mentor' ? 'selected' : ''}>Mentor only</option>
-                <option value="pupil" ${t.role === 'pupil' ? 'selected' : ''}>Pupil only</option>
-            </select>
-            <button class="ghost small mta-todo-del" data-i="${i}">✕</button>
-        </div>`).join('') : '<p style="color:var(--muted);font-size:13px;margin:0 0 8px;">No checklist items yet.</p>';
-    document.querySelectorAll('.mta-todo-text').forEach(inp => inp.addEventListener('input', e => { mtaTodos[Number(e.target.dataset.i)].text = e.target.value; }));
-    document.querySelectorAll('.mta-todo-role').forEach(sel => sel.addEventListener('change', e => { mtaTodos[Number(e.target.dataset.i)].role = e.target.value; }));
-    document.querySelectorAll('.mta-todo-del').forEach(btn => btn.addEventListener('click', () => { mtaTodos.splice(Number(btn.dataset.i), 1); renderMtaTodos(); }));
-}
-$('mta-todo-add').addEventListener('click', () => { mtaTodos.push({ id: '', text: '', role: 'both' }); renderMtaTodos(); });
-$('mta-todo-save').addEventListener('click', async () => {
-    const r = await mtFetch({ action: 'mentor-todos-save', items: mtaTodos });
-    if (r.error) { toast(r.error); return; }
-    mtaTodos = r.todos.map(t => ({ ...t }));
-    toast('Checklist saved');
-    renderMtaTodos();
-});
 
 $('mta-m-add').addEventListener('click', async () => {
     const sel = $('mta-m-select');
