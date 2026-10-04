@@ -1192,7 +1192,7 @@ Cancel: ${cancelUrl}`, [], embeds, undefined, true);
                         text: nowS >= stackFrom
                             ? `⚠️ STACK XANAX NOW! The war${next.opponent ? ` vs ${next.opponent}` : ''} starts in ${hoursLeft} h (${tct(next.start)}). Xanax stacking should have started 48 hours before the start (${tct(stackFrom)}) — do it now so your energy is ready for the war.`
                             : `⚠️ WAR COMING${next.opponent ? ` vs ${next.opponent}` : ''}: it starts ${tct(next.start)}. Start STACKING XANAX 48 HOURS BEFORE the start, from ${tct(stackFrom)}.`,
-                        cta: 'War availability', url: `${site}/availability`,
+                        notice: true, // a reminder only: no button, and the script does not count it in the To do number
                     });
                 }
             } catch (e) { /* skip */ }
