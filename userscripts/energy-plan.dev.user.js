@@ -2,7 +2,7 @@
 // @name         World Wide Labs
 // @namespace    https://worldwidelabs.vercel.app
 // @author       CreaLotte
-// @version      1.38.2
+// @version      1.38.3
 // @updateURL    __WWL_BASE__/worldwidelabs.user.js
 // @downloadURL  __WWL_BASE__/worldwidelabs.user.js
 // @description  Shows your WorldWideLabs weekly energy plan (the checklist from the Energy planner) inside Torn, a To do tab with small personal reminders (revive setting, feedback, timezone map, availability, Discord/Intel/CAT), your My Targets list, a simplified energy/war standing strip, and — if you are in the Mentoring Platform — your mentoring checklist too. Also shows faction banners at the top of every Torn page. A small ⚙ in the header shows the installed version, flags when a newer one is out, lets you set/replace your API key, and — for a leader — add or remove your faction's banners right from Torn. On a computer it is a small window you can drag around and close; in TornPDA it is a menu. Ticks are shared with the WWL site.
@@ -26,7 +26,7 @@
     const KEY_NAME = 'wwl_api_key', POS_NAME = 'wwl_plan_pos', STATE_NAME = 'wwl_plan_state';
     // GM_info gives the version Tampermonkey actually has installed right now — falls back to a
     // hardcoded copy (kept in sync with @version above) for TornPDA, which doesn't grant GM_info.
-    const SCRIPT_VERSION = (typeof GM_info !== 'undefined' && GM_info.script?.version) || '1.38.2';
+    const SCRIPT_VERSION = (typeof GM_info !== 'undefined' && GM_info.script?.version) || '1.38.3';
     const versionGreater = (a, b) => {
         const pa = String(a).split('.').map(Number), pb = String(b).split('.').map(Number);
         for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
@@ -201,7 +201,7 @@
     async function refreshTodoItems(force = false) {
         if (win.style.display === 'none' || (!force && Date.now() - lastTodoFetch < 30000)) return;
         lastTodoFetch = Date.now();
-        try { const r = await api({ action: 'member-todo' }); todoItems = r.items || []; if (tab === 'todo') render(); }
+        try { const r = await api({ action: 'member-todo' }); todoItems = r.items || []; if (tab === 'todo' || tab === 'settings') render(); }
         catch (e) { /* keep showing what we already had */ }
     }
     document.addEventListener('visibilitychange', () => { if (!document.hidden) refreshTodoItems(); });
@@ -451,11 +451,9 @@
                 ${t.mine ? `<input type="checkbox" class="wwl-mt-check" data-id="${esc(t.myId)}" ${t.done ? 'checked' : ''} style="width:auto;">` : ''}
                 <span style="flex:1;${t.mine && t.done ? 'text-decoration:line-through;color:#9aa4b5;' : ''}">${esc(t.text)}</span>
                 ${t.mine ? `<span style="font-size:10px;color:#9aa4b5;border:1px solid #3a4352;border-radius:8px;padding:0 6px;">${t.repeat === 'daily' ? 'daily' : 'once'}</span>` : ''}
-                ${t.mine ? `<span class="wwl-mt-del" data-id="${esc(t.myId)}" title="Delete this reminder" style="cursor:pointer;color:#e05555;">✕</span>` : ''}
                 ${t.url ? `<a href="${esc(t.url)}" target="_blank" rel="noopener" style="color:#35d99b;white-space:nowrap;text-decoration:none;border:1px solid #35d99b;border-radius:6px;padding:4px 8px;font-size:12px;">${esc(t.cta)}</a>` : ''}
             </div>${t.id === 'oc' ? ocRequestHtml(t) : ''}`).join('');
-        const addRow = `<div style="display:flex;gap:6px;margin-top:10px;"><input id="wwl-mt-input" maxlength="100" placeholder="Add a reminder of your own…" style="flex:1;min-width:0;background:#12161c;color:#e6e9ef;border:1px solid #3a4352;border-radius:6px;padding:6px;"><select id="wwl-mt-repeat" style="background:#12161c;color:#e6e9ef;border:1px solid #3a4352;border-radius:6px;padding:4px;"><option value="once">Once</option><option value="daily">Daily</option></select><button type="button" id="wwl-mt-add" style="padding:6px 10px;border-radius:6px;border:1px solid #35d99b;background:transparent;color:#35d99b;cursor:pointer;">Add</button></div><div style="color:#9aa4b5;font-size:11px;margin-top:4px;">Leaders can see what people add, to find reminders worth building for everyone.</div>`;
-        return daily + rest + addRow;
+        return daily + rest;
     }
     // The ⚙ view: version + update flag + API key, and — for a leader — the faction's own banners
     // (add/delete), reusing the exact same banners-get/save/delete actions Leader settings on the
@@ -470,6 +468,15 @@
             <span class="wwl-ban-del" data-id="${esc(b.id)}" title="Delete" style="cursor:pointer;color:#e05555;">✕</span>
         </div>`).join('');
     }
+    // "My own reminders" lives in ⚙ Settings (to keep the To do tab short): the list with a delete mark each, and the add row. The reminders
+    // themselves show in the To do tab with a checkbox.
+    function myRemindersBlock() {
+        const mine = (todoItems || []).filter(t => t.mine);
+        const addRow = `<div style="display:flex;gap:6px;margin-top:8px;"><input id="wwl-mt-input" maxlength="100" placeholder="Add a reminder of your own…" style="flex:1;min-width:0;background:#12161c;color:#e6e9ef;border:1px solid #3a4352;border-radius:6px;padding:6px;"><select id="wwl-mt-repeat" style="background:#12161c;color:#e6e9ef;border:1px solid #3a4352;border-radius:6px;padding:4px;"><option value="once">Once</option><option value="daily">Daily</option></select><button type="button" id="wwl-mt-add" style="padding:6px 10px;border-radius:6px;border:1px solid #35d99b;background:transparent;color:#35d99b;cursor:pointer;">Add</button></div><div style="color:#9aa4b5;font-size:11px;margin-top:4px;">Leaders can see what people add, to find reminders worth building for everyone.</div>`;
+        return `<div style="margin-top:14px;padding-top:10px;border-top:1px solid #3a4352;"><div style="font-weight:700;margin-bottom:4px;">My own reminders</div>
+            ${mine.length ? mine.map(t => `<div style="display:flex;gap:8px;align-items:center;padding:4px 0;font-size:12px;"><span style="flex:1;">${esc(t.text)}</span><span style="font-size:10px;color:#9aa4b5;border:1px solid #3a4352;border-radius:8px;padding:0 6px;">${t.repeat === 'daily' ? 'daily' : 'once'}</span><span class="wwl-mt-del" data-id="${esc(t.myId)}" title="Delete this reminder" style="cursor:pointer;color:#e05555;">✕</span></div>`).join('') : '<div style="color:#9aa4b5;font-size:12px;">None yet. They show in the To do tab with a checkbox.</div>'}
+            ${addRow}</div>`;
+    }
     function renderSettingsTab() {
         const updateHtml = updateAvailable ? `<div style="color:#f0b432;margin:6px 0;">⬆ Update available: v${esc(updateAvailable)} — <a href="${WWL}/worldwidelabs.user.js" target="_blank" rel="noopener" style="color:#f0b432;">open the install link</a> and Tampermonkey will offer to update.</div>` : '';
         // Closing a banner's × dismisses it in this browser forever (see renderTornBanner) — a leader
@@ -482,6 +489,7 @@
             ${updateHtml}
             <button type="button" id="wwl-change-key" style="margin-top:4px;padding:6px 12px;border-radius:6px;border:1px solid #3a4352;background:transparent;color:#e6e9ef;cursor:pointer;">Change API key</button>
             ${undismissHtml}`;
+        html += myRemindersBlock();
         if (settingsData === null) {
             html += '<div style="padding:10px 0;color:#9aa4b5;">Loading…</div>';
         } else if (settingsData.leader) {
@@ -563,7 +571,7 @@
         </div>`;
     }
     function render() {
-        if (tab === 'settings') { body.innerHTML = renderSettingsTab(); wireSettingsTab(); try { checkForUpdate(true); } catch (e) { /* the script is still starting up - the passive check will run */ } return; }
+        if (tab === 'settings') { body.innerHTML = renderSettingsTab(); wireSettingsTab(); wireMyTodo(); try { checkForUpdate(true); } catch (e) { /* the script is still starting up - the passive check will run */ } return; }
         const tabContent = tab === 'mentoring' ? renderMentoringTab() : tab === 'bank' ? renderBankTab() : tab === 'targets' ? renderTargetsTab() : tab === 'todo' ? renderTodoTab() : renderEnergyTab();
         body.innerHTML = updateBanner() + renderStandingStrip() + tabBar() + tabContent;
         showProgress();
