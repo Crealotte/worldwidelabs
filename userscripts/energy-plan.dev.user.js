@@ -2,7 +2,7 @@
 // @name         World Wide Labs
 // @namespace    https://worldwidelabs.vercel.app
 // @author       CreaLotte
-// @version      1.37.1
+// @version      1.37.2
 // @updateURL    __WWL_BASE__/worldwidelabs.user.js
 // @downloadURL  __WWL_BASE__/worldwidelabs.user.js
 // @description  Shows your WorldWideLabs weekly energy plan (the checklist from the Energy planner) inside Torn, a To do tab with small personal reminders (revive setting, feedback, timezone map, availability, Discord/Intel/CAT), your My Targets list, a simplified energy/war standing strip, and — if you are in the Mentoring Platform — your mentoring checklist too. Also shows faction banners at the top of every Torn page. A small ⚙ in the header shows the installed version, flags when a newer one is out, lets you set/replace your API key, and — for a leader — add or remove your faction's banners right from Torn. On a computer it is a small window you can drag around and close; in TornPDA it is a menu. Ticks are shared with the WWL site.
@@ -26,7 +26,7 @@
     const KEY_NAME = 'wwl_api_key', POS_NAME = 'wwl_plan_pos', STATE_NAME = 'wwl_plan_state';
     // GM_info gives the version Tampermonkey actually has installed right now — falls back to a
     // hardcoded copy (kept in sync with @version above) for TornPDA, which doesn't grant GM_info.
-    const SCRIPT_VERSION = (typeof GM_info !== 'undefined' && GM_info.script?.version) || '1.37.1';
+    const SCRIPT_VERSION = (typeof GM_info !== 'undefined' && GM_info.script?.version) || '1.37.2';
     const versionGreater = (a, b) => {
         const pa = String(a).split('.').map(Number), pb = String(b).split('.').map(Number);
         for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
@@ -104,6 +104,38 @@
     pillDot.title = 'Update available';
     pillDot.style.cssText = 'display:none;position:absolute;top:-4px;right:-4px;width:11px;height:11px;border-radius:50%;background:#f0b432;border:2px solid #1b2029;';
     pill.appendChild(pillDot);
+    // The closed button can be dragged anywhere (computer and TornPDA) and the spot is remembered — for people it sits on top of
+    // something in the game. A press that barely moves still counts as a click and opens the window.
+    const PILL_POS_NAME = 'wwl_pill_pos';
+    let pillDragged = false;
+    const placePill = (x, y) => {
+        const w = pill.offsetWidth || 40, h = pill.offsetHeight || 34;
+        pill.style.left = `${Math.max(0, Math.min(window.innerWidth - w, x))}px`;
+        pill.style.top = `${Math.max(0, Math.min(window.innerHeight - h, y))}px`;
+        pill.style.right = 'auto'; pill.style.bottom = 'auto';
+    };
+    pill.style.touchAction = 'none'; // so a finger drag moves the button instead of scrolling the page
+    try { const p = JSON.parse(store.get(PILL_POS_NAME) || 'null'); if (p && Number.isFinite(p.x) && Number.isFinite(p.y)) placePill(p.x, p.y); } catch (e) { /* default spot */ }
+    {
+        let drag = null;
+        pill.addEventListener('pointerdown', e => {
+            const r = pill.getBoundingClientRect();
+            drag = { sx: e.clientX, sy: e.clientY, dx: e.clientX - r.left, dy: e.clientY - r.top, moved: false };
+            try { pill.setPointerCapture(e.pointerId); } catch (err) { /* fine without capture */ }
+        });
+        pill.addEventListener('pointermove', e => {
+            if (!drag) return;
+            if (!drag.moved && Math.hypot(e.clientX - drag.sx, e.clientY - drag.sy) < 6) return; // still a click
+            drag.moved = true;
+            placePill(e.clientX - drag.dx, e.clientY - drag.dy);
+        });
+        pill.addEventListener('pointerup', () => {
+            if (drag && drag.moved) { pillDragged = true; setTimeout(() => { pillDragged = false; }, 60); store.set(PILL_POS_NAME, JSON.stringify({ x: pill.offsetLeft, y: pill.offsetTop })); }
+            drag = null;
+        });
+        pill.addEventListener('pointercancel', () => { drag = null; });
+        window.addEventListener('resize', () => { if (pill.style.left) placePill(pill.offsetLeft, pill.offsetTop); });
+    }
 
     const win = document.createElement('div');
     if (IS_PDA) { // TornPDA: a menu that slides up from the bottom, big enough to tap
@@ -183,7 +215,7 @@
             try { checkForUpdate(true); } catch (e) { /* still starting up - the passive check covers it */ }
         }
     }
-    pill.addEventListener('click', () => setOpen(true));
+    pill.addEventListener('click', () => { if (pillDragged) { pillDragged = false; return; } setOpen(true); }); // a drag is not a click
     win.querySelector('#wwl-close').addEventListener('click', () => setOpen(false));
     win.querySelector('#wwl-settings').addEventListener('click', () => {
         tab = 'settings';
