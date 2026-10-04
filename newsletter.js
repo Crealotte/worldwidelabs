@@ -23,7 +23,7 @@ async function loadNewsletter() {
         const list = moPeriods().filter(p => p.id === 'now' || p.id.startsWith('p'));
         $('nl-period').innerHTML = list.map(p => `<option value="${p.id}">${esc(p.id === 'now' ? `Current period (so far) — ${moFmt(p.start)} → ${moFmt(p.end)}` : `${moFmt(p.start)} → ${moFmt(p.end)}`)}</option>`).join('');
         if (keep && list.some(p => p.id === keep)) $('nl-period').value = keep;
-        else { const first = list.find(p => p.id === 'now') || list.find(p => p.id.startsWith('p')); if (first) $('nl-period').value = first.id; }
+        else { const first = list.find(p => p.id === 'now' && p.end > p.start) || list.find(p => p.id.startsWith('p')) || list[0]; if (first) $('nl-period').value = first.id; } // a period that only started today is listed, but the finished one is what is sent
     }
 }
 

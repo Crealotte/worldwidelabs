@@ -61,7 +61,7 @@ function moPeriods() {
         if (t <= now) dates.push(t);
     }
     const out = [];
-    if (todayStart > dates[0]) out.push({ id: 'now', start: dates[0], end: todayStart, label: `Running now — ${moFmt(dates[0])} → ${moFmt(todayStart)} (up to today)` });
+    if (todayStart >= dates[0]) out.push({ id: 'now', start: dates[0], end: todayStart, label: `Running now — ${moFmt(dates[0])} → ${moFmt(todayStart)} (so far${todayStart === dates[0] ? ', just started' : ''})` }); // the new period is there from 00:00 on the first Sunday itself
     for (let i = 0; i < dates.length - 1; i++) {
         const weeks = Math.round((dates[i] - dates[i + 1]) / (7 * MO_DAY));
         out.push({ id: `p${dates[i]}`, start: dates[i + 1], end: dates[i], label: `Newsletter ${moFmt(dates[i])} — ${moFmt(dates[i + 1])} → ${moFmt(dates[i])} (${weeks} weeks)` });
@@ -79,7 +79,7 @@ function moPeriods() {
 }
 function moPeriod() {
     const list = moPeriods();
-    return list.find(p => p.id === moPeriodId) || list.find(p => p.id === 'now') || list.find(p => p.id !== 'custom') || list[0]; // opens on the period still running; the last finished one only when none is running
+    return list.find(p => p.id === moPeriodId) || list.find(p => p.id === 'now' && p.end > p.start) || list.find(p => p.id.startsWith('p')) || list.find(p => p.id !== 'custom') || list[0]; // opens on the period still running; the last finished one only when none is running
 }
 const moWeeksIn = p => Math.max(1 / 7, (p.end - p.start) / (7 * MO_DAY)); // exact, so odd date ranges average correctly
 const moDaysIn = p => Math.round((p.end - p.start) / MO_DAY);

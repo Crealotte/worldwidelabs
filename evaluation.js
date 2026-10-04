@@ -29,7 +29,7 @@ function evPeriods() {
 }
 function evPeriod() {
     const list = evPeriods();
-    return list.find(p => p.id === evPeriodId) || list.find(p => p.id === 'now') || list[0];
+    return list.find(p => p.id === evPeriodId) || list.find(p => p.id === 'now' && p.end > p.start) || list.find(p => p.id.startsWith('p')) || list[0]; // a period that only started today has nothing in it yet: open on the last finished one
 }
 
 async function loadEvaluation() {
@@ -162,7 +162,7 @@ function renderEvaluation() {
     if (!moData) return;
     const p = evPeriod();
     const list = evPeriods();
-    $('ev-period').innerHTML = list.map(x => `<option value="${x.id}" ${x.id === p.id ? 'selected' : ''}>${esc(x.id === 'now' ? `Running now — ${moFmt(x.start)} → ${moFmt(x.end)} (up to today)` : `${moFmt(x.start)} → ${moFmt(x.end)}`)}</option>`).join('');
+    $('ev-period').innerHTML = list.map(x => `<option value="${x.id}" ${x.id === p.id ? 'selected' : ''}>${esc(x.id === 'now' ? `Running now — ${moFmt(x.start)} → ${moFmt(x.end)} (so far)` : `${moFmt(x.start)} → ${moFmt(x.end)}`)}</option>`).join('');
     const rows = evRows();
     const below = rows.filter(r => r.fails);
     const count = k => rows.filter(r => r.status === k).length;
