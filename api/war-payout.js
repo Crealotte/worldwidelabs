@@ -431,6 +431,25 @@ async function bankBalanceOf(factionId, playerId, opts = {}) {
         if (!Number.isFinite(money)) return { balance: null, error: 'Torn returned a balance in a form WWL does not recognise.' };
         return { balance: Math.max(0, Math.floor(money)) };
     } catch (e) { return { balance: null, error: `Could not read the faction balance: ${String(e.message || e).slice(0, 80)}` }; }
+
+// The banker cookie for the instant Claim button (see GET ?bankgo): a signed { player id, name, faction } that only 'bank-token'
+// (leader-gated) hands out. It says WHO is clicking so the Discord message can name them; the signature stops anyone from forging it.
+const bankCookieSecret = () => require('crypto').createHash('sha256').update(`${REDIS_TOKEN || ''}|wwl-bank-cookie`).digest();
+function bankCookieValue(playerId, name, factionId) {
+    const crypto = require('crypto');
+    const p = Buffer.from(JSON.stringify({ i: String(playerId), n: String(name), f: String(factionId), t: Date.now() })).toString('base64url');
+    return `${p}.${crypto.createHmac('sha256', bankCookieSecret()).update(p).digest('base64url')}`;
+}
+function bankCookieParse(header) {
+    const crypto = require('crypto');
+    const m = /(?:^|;\s*)wwl_banker=([^;]+)/.exec(String(header || ''));
+    if (!m) return null;
+    const [p, sig] = m[1].split('.');
+    if (!p || !sig) return null;
+    const good = crypto.createHmac('sha256', bankCookieSecret()).update(p).digest('base64url');
+    if (sig.length !== good.length || !crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(good))) return null;
+    try { const d = JSON.parse(Buffer.from(p, 'base64url').toString()); return Date.now() - d.t < 30 * 86400000 ? d : null; } catch (e) { return null; }
+}
 }
 // Updates the Discord message of a bank request once it is claimed or cancelled: the buttons are removed or disabled and a line
 // says who claimed it, so nobody can press Claim again and pay it twice. Best effort — the claim itself is already exclusive on
@@ -498,6 +517,36 @@ module.exports = async function handler(req, res) {
         if (!REDIS_URL || !REDIS_TOKEN) {
             return res.status(500).json({ error: 'Database not connected. In Vercel: Storage -> Create Database -> Upstash Redis, and connect it to this project.' });
         }
+        // The Discord "Claim" button for a bank request: GET /bank-go?id=...  A banker who has opened WWL before carries a signed
+        // cookie (set by 'bank-token'), so this claims the request on the spot, edits the Discord message ("Claimed by ..."),
+        // and answers with a plain redirect straight to Torn's vault screen with the member and amount filled in — no WWL page
+        // in between. Without the cookie it sends the banker to the normal WWL claim page once (which sets the cookie).
+        if (req.method === 'GET' && req.query?.bankgo) {
+            const id = String(req.query.id || '').replace(/[^0-9a-f]/g, '');
+            const page = (status, msg) => res.status(status).setHeader('Content-Type', 'text/html; charset=utf-8').send(`<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><body style="font-family:system-ui,sans-serif;background:#0e1116;color:#e6ebf0;padding:32px;max-width:560px;margin:auto"><h2>Bank request</h2><p>${msg}</p>`);
+            const who = bankCookieParse(req.headers.cookie);
+            if (!id) return page(400, 'This link is missing its request id.');
+            if (!who) return res.status(302).setHeader('Location', `/bank-claim?id=${id}`).end();
+            const raw = await redis(['HGET', bankRequestsKey(who.f), id]);
+            if (!raw) return page(404, 'That request was cancelled or no longer exists.');
+            const r = JSON.parse(raw);
+            const got = await redis(['SET', `wwl:bank-claim:${who.f}:${id}`, who.i, 'NX', 'EX', String(7 * 86400)]);
+            if (!got) {
+                const by = await redis(['GET', `wwl:bank-claim:${who.f}:${id}`]);
+                if (by !== who.i) return page(409, `Already claimed by <b>${String(r.claimedBy || 'another banker').replace(/[<>&]/g, '')}</b>. Nothing to do here.`);
+            }
+            // never send a banker to a payout larger than the member's balance right now (best effort: needs a readable balance)
+            let pay = r.amount;
+            try { const lk = await getVaultKey(redis, who.f); if (lk) { const live = await bankBalanceOf(who.f, r.playerId, { leaderKey: lk }); if (live.balance !== null && live.balance < pay) pay = live.balance; } } catch (e) { /* keep the requested amount */ }
+            if (pay < 1) return page(400, `${String(r.name).replace(/[<>&]/g, '')}'s balance is now $0, so there is nothing to pay out.`);
+            if (got) {
+                r.status = 'claimed'; r.claimedBy = who.n; r.claimedAt = Date.now();
+                await redis(['HSET', bankRequestsKey(who.f), id, JSON.stringify(r)]);
+                await bankMarkDiscord(who.f, r, 'claimed', who.n);
+            }
+            return res.status(302).setHeader('Location', `https://www.torn.com/factions.php?step=your#/tab=controls&giveMoneyTo=${encodeURIComponent(r.playerId)}&money=${encodeURIComponent(pay)}`).end();
+        }
+
         // The daily snapshot (Vercel Cron, see vercel.json): saves the faction's gym counters and upgrade levels once a day
         // without anyone having to log in. It uses the API key(s) in the WWL_SNAPSHOT_KEYS environment variable — one
         // key per faction, of a leader with faction API access, separated by commas. Harmless to call by hand: it only
@@ -756,7 +805,7 @@ module.exports = async function handler(req, res) {
             try {
                 const poster = await getDiscordPoster(factionId, 'bank');
                 if (poster && !poster.error) {
-                    const claimUrl = `https://${host}/bank-claim?id=${id}`, cancelUrl = `https://${host}/bank-claim?id=${id}&cancel=1`;
+                    const claimUrl = `https://${host}/bank-go?id=${id}`, cancelUrl = `https://${host}/bank-claim?id=${id}&cancel=1`;
                     const content = `💰 **${playerName}** requests **$${amount.toLocaleString('en-US')}** from their faction balance ($${bal.balance.toLocaleString('en-US')} available).`;
                     // Claim / Cancel as link buttons (they open WWL, which needs the banker's own login); if this Discord setup
                     // cannot show buttons, the same two links are sent as plain text instead
@@ -1115,6 +1164,11 @@ module.exports = async function handler(req, res) {
             const id = String(req.body.id || '').replace(/\D/g, '');
             if (!id) return res.status(400).json({ error: 'Missing member' });
             await redis(['HDEL', ocRequestsKey(factionId), id]);
+            return res.status(200).json({ ok: true });
+        }
+        // Hands a banker (anyone with faction API access) the signed cookie that lets the Discord Claim button redirect straight to Torn.
+        if (action === 'bank-token') {
+            res.setHeader('Set-Cookie', `wwl_banker=${bankCookieValue(playerId, playerName, factionId)}; Path=/; Max-Age=${30 * 86400}; HttpOnly; Secure; SameSite=Lax`);
             return res.status(200).json({ ok: true });
         }
         // Bank requests, the bankers' side: claim one (exclusive — whoever gets it first), and list the open ones.

@@ -29,6 +29,7 @@ async function loadBank() {
         const leader = typeof isLeaderCached !== 'undefined' && isLeaderCached && !(typeof memberView !== 'undefined' && memberView);
         $('bank-leader-panel').style.display = leader ? 'block' : 'none';
         if (leader) {
+            bankEnsureCookie();
             const l = await bankFetch({ action: 'bank-list' });
             if (l.error) throw new Error(l.error);
             renderBankList(l.requests);
@@ -84,6 +85,7 @@ $('bank-send').addEventListener('click', async () => {
 // the member and amount filled in; /bank-claim?id=...&cancel=1 cancels it. Needs the person's own WWL login (the banker's).
 async function loadBankClaim() {
     const out = $('bc-body'), id = bankParams.get('id');
+    await bankEnsureCookie(); // so the next Claim click goes straight to Torn
     if (!id) { out.innerHTML = '<p>This page needs a request link from the Discord message, or open it from <b>Faction, Bank request</b>.</p>'; return; }
     out.innerHTML = '<p style="color:var(--muted);">Working on it…</p>';
     try {
@@ -109,3 +111,13 @@ document.addEventListener('visibilitychange', () => {
     if (document.hidden || !$('page-bank').classList.contains('visible') || Date.now() - bankLoadedAt < 15000) return;
     loadBank();
 });
+
+// Bankers get a signed cookie (once per browser session is enough, it lasts 30 days) so the Discord Claim button can send them
+// straight to Torn's vault screen with no WWL page in between. Only people with faction API access are given one.
+async function bankEnsureCookie() {
+    try {
+        if (sessionStorage.getItem('wwl_bank_cookie')) return;
+        const r = await bankFetch({ action: 'bank-token' });
+        if (r.ok) sessionStorage.setItem('wwl_bank_cookie', '1');
+    } catch (e) { /* not a banker, or offline: the Claim button just goes through the WWL page */ }
+}

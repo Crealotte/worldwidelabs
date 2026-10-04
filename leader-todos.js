@@ -9,6 +9,7 @@ async function loadLeaderTodos() {
         const res = await fetch('/api/war-payout', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key: apiKey, action: 'leader-todos' }) });
         const r = await res.json();
         renderLeaderTodos(r.error ? [] : r.todos || []);
+        if (!r.error && typeof bankEnsureCookie === 'function') bankEnsureCookie(); // bankers: the cookie that makes the Discord Claim button go straight to Torn
     } catch (e) { renderLeaderTodos([]); }
 }
 
