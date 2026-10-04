@@ -118,10 +118,12 @@ async function atCalculateReport(from, to, onProgress) {
 
         for (const cat of result.categories) {
             for (const it of cat.items) {
-                const m = byItem[it.item] || (byItem[it.item] = { item: it.item, category: it.category, quantity: 0, value: 0, hasPrice: false, deposited: 0, players: {} });
+                const m = byItem[it.item] || (byItem[it.item] = { item: it.item, category: it.category, quantity: 0, value: 0, hasPrice: false, deposited: 0, given: 0, givenTo: {}, players: {} });
                 m.quantity += it.quantity;
                 m.value += it.value;
                 m.deposited += it.deposited || 0;
+                m.given += it.given || 0;
+                for (const g of (it.givenTo || [])) m.givenTo[g.name] = (m.givenTo[g.name] || 0) + g.quantity;
                 if (it.hasPrice) m.hasPrice = true;
                 for (const p of it.players) {
                     const mp = m.players[p.name] || (m.players[p.name] = { name: p.name, quantity: 0, value: 0, hits: 0 });
@@ -162,7 +164,7 @@ async function atCalculateReport(from, to, onProgress) {
         const cat = categoriesMap[it.category] || (categoriesMap[it.category] = { category: it.category, quantity: 0, value: 0, items: [] });
         cat.quantity += it.quantity;
         cat.value += it.value;
-        cat.items.push({ ...it, players: Object.values(it.players).sort((a, b) => b.quantity - a.quantity) });
+        cat.items.push({ ...it, players: Object.values(it.players).sort((a, b) => b.quantity - a.quantity), givenTo: Object.entries(it.givenTo).map(([name, quantity]) => ({ name, quantity })).sort((a, b) => b.quantity - a.quantity) });
     }
     const categories = Object.values(categoriesMap);
     for (const c of categories) c.items.sort((a, b) => b.value - a.value);
@@ -256,6 +258,7 @@ function renderAtReportDetail(report) {
                         <span style="font-family:var(--mono);${it.hasPrice ? '' : 'color:var(--muted);'}">${it.hasPrice ? `$${Math.round(it.value).toLocaleString()}` : 'no price data'}</span>
                         <button class="ghost small at-players-toggle" data-cat="${ci}" data-item="${ii}">Players ▾ (${it.players.length})</button>
                     </div>
+                    ${it.given ? `<div style="font-size:12px;color:var(--muted);margin-top:4px;padding-left:12px;">🎁 ${it.given.toLocaleString()}x given out (competition prizes etc.) — a faction expense, not counted as anyone's own use: ${it.givenTo.map(g => `${esc(g.name)} ${g.quantity}x`).join(', ')}</div>` : ''}
                     <div class="at-players-list" data-cat="${ci}" data-item="${ii}" hidden style="margin-top:6px;padding-left:12px;font-size:12px;color:var(--muted);">
                         ${it.players.map(p => atPlayerLine(p, it.hasPrice)).join('')}
                     </div>

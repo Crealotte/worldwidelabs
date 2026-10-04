@@ -131,7 +131,7 @@ module.exports = async function handler(req, res) {
             const byItem = {}; // item name -> { item, category, quantity, value, hasPrice, deposited, players: { name -> {quantity, value} } }
             const ensureItem = (name, category) => byItem[name] || (byItem[name] = {
                 item: name, category, quantity: 0, value: 0,
-                hasPrice: (catalog[name.toLowerCase()]?.price ?? null) != null, deposited: 0, players: {},
+                hasPrice: (catalog[name.toLowerCase()]?.price ?? null) != null, deposited: 0, given: 0, givenTo: {}, players: {},
             });
             let emptyBloodBagDeposited = 0; // "Empty Blood Bag" itself isn't a tracked item (see below), so it isn't in byItem at all
             for (const entry of newsResult.entries) {
@@ -171,8 +171,17 @@ module.exports = async function handler(req, res) {
                 const item = ensureItem(parsed.item, category);
                 item.quantity += parsed.quantity;
                 if (price != null) item.value += price * parsed.quantity;
+                // Something GIVEN out (the competition prizes) is a faction expense — it counts in the item's quantity, value and
+                // the totals above — but it is not the member's own consumption, so it is kept apart from `players` (which also
+                // drives the 10-hits-per-Xanax check) and listed under `givenTo` instead.
+                if (isConsumingGive) {
+                    item.given += parsed.quantity;
+                    const to = parsed.otherParty || parsed.actor;
+                    item.givenTo[to] = (item.givenTo[to] || 0) + parsed.quantity;
+                    continue;
+                }
                 // a loan is attributed to whoever it was loaned TO (the sentence's actor is the leader handing it out)
-                const who = (isConsumingLoan || isConsumingGive) && parsed.otherParty ? parsed.otherParty : parsed.actor;
+                const who = isConsumingLoan && parsed.otherParty ? parsed.otherParty : parsed.actor;
                 const p = item.players[who] || (item.players[who] = { name: who, quantity: 0, value: 0 });
                 p.quantity += parsed.quantity;
                 if (price != null) p.value += price * parsed.quantity;
@@ -183,7 +192,7 @@ module.exports = async function handler(req, res) {
             // hunt down, per the leader's own feedback that Jimidy's tool shows it this way.
             const xanaxItem = Object.values(byItem).find(it => /^xanax$/i.test(it.item));
             let warHitsMeta = null;
-            if (xanaxItem) {
+            if (xanaxItem && Object.keys(xanaxItem.players).length) { // only prizes given out: nobody to check hits for
                 const warHitsResult = await fetchWarHits(key, factionId, from, to);
                 warHitsMeta = { scanned: warHitsResult.scanned, matched: warHitsResult.ownAttacks };
                 const hitsByName = {};
@@ -216,11 +225,13 @@ module.exports = async function handler(req, res) {
             // its own top-level category, per the leader's preference.
             const bloodBagEntries = Object.values(byItem).filter(it => BLOOD_BAG_RE.test(it.item));
             if (bloodBagEntries.length) {
-                const merged = { item: 'Blood Bag', category: 'Medical', quantity: 0, value: 0, hasPrice: false, deposited: 0, players: {} };
+                const merged = { item: 'Blood Bag', category: 'Medical', quantity: 0, value: 0, hasPrice: false, deposited: 0, given: 0, givenTo: {}, players: {} };
                 for (const it of bloodBagEntries) {
                     merged.quantity += it.quantity;
                     merged.value += it.value;
                     merged.deposited += it.deposited;
+                    merged.given += it.given;
+                    for (const [n, q] of Object.entries(it.givenTo)) merged.givenTo[n] = (merged.givenTo[n] || 0) + q;
                     if (it.hasPrice) merged.hasPrice = true;
                     delete byItem[it.item];
                     for (const p of Object.values(it.players)) {
@@ -237,7 +248,7 @@ module.exports = async function handler(req, res) {
                 const cat = categoriesMap[it.category] || (categoriesMap[it.category] = { category: it.category, quantity: 0, value: 0, items: [] });
                 cat.quantity += it.quantity;
                 cat.value += it.value;
-                cat.items.push({ ...it, players: Object.values(it.players).sort((a, b) => b.quantity - a.quantity) });
+                cat.items.push({ ...it, players: Object.values(it.players).sort((a, b) => b.quantity - a.quantity), givenTo: Object.entries(it.givenTo).map(([name, quantity]) => ({ name, quantity })).sort((a, b) => b.quantity - a.quantity) });
             }
             const categories = Object.values(categoriesMap);
             for (const c of categories) c.items.sort((a, b) => b.value - a.value);
