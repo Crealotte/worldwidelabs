@@ -33,6 +33,7 @@ async function loadBank() {
             const l = await bankFetch({ action: 'bank-list' });
             if (l.error) throw new Error(l.error);
             renderBankList(l.requests);
+            $('bank-history-panel').style.display = 'block'; loadRequestLog('bank', 'bank-hist');
         }
         st.textContent = ''; st.className = 'status';
     } catch (e) { st.className = 'status err'; st.textContent = e.message; }

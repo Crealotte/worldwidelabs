@@ -431,6 +431,25 @@ async function leaderTodos(key, factionId) {
 
 
 
+// ---- History of bank and OC requests: every request stays in here with who did what and when (requested, claimed, paid / spawned, cancelled,
+// replaced), so a mistake — a wrong payout, a request that vanished, one that was claimed but never finished — can be traced afterwards. Nothing
+// is removed from this list except the oldest entries past 400. Kept per faction and kind in one JSON list, newest first.
+const reqLogKey = (kind, factionId) => `wwl:req-log:${kind}:${factionId}`;
+async function reqLog(kind, factionId, r, status, by) {
+    try {
+        const id = String(kind === 'oc' ? (r.rid || r.id) : r.id);
+        const raw = await redis(['GET', reqLogKey(kind, factionId)]);
+        const list = raw ? JSON.parse(raw) : [];
+        let e = list.find(x => x.id === id);
+        if (!e) { e = { id, kind, at: r.at || Date.now(), events: [] }; list.unshift(e); }
+        e.playerId = String(kind === 'oc' ? r.id : r.playerId); e.name = r.name;
+        if (kind === 'oc') { e.level = r.level; e.note = r.note || ''; } else { e.amount = r.amount; e.pay = r.pay ?? null; }
+        const last = e.events[e.events.length - 1];
+        if (!(last && last.s === status && last.by === String(by || ''))) e.events.push({ t: Date.now(), s: status, by: String(by || ''), how: r.completedHow || undefined });
+        e.status = status;
+        await redis(['SET', reqLogKey(kind, factionId), JSON.stringify(list.slice(0, 400))]);
+    } catch (err) { /* the log must never block a request */ }
+}
 // ---- OC requests in Discord (see 'ocreq-submit' and GET /oc-go) ----
 const OC_CRIMES_URL = 'https://www.torn.com/factions.php?step=your&type=12#/tab=crimes';
 // state: 'open' | 'claimed' (a leader is spawning it) | 'completed' (it is up) | 'cancelled'
@@ -441,6 +460,7 @@ function ocEmbed(r, state, by) {
     return { description: line + extra, color: state === 'cancelled' ? 0xE05555 : state === 'completed' ? 0x35d99b : 0xF0B432 };
 }
 async function ocMarkDiscord(factionId, r, status, byName) {
+    await reqLog('oc', factionId, r, status, byName);
     if (!r.msgId) return;
     try {
         const poster = await getDiscordPoster(factionId, 'oc');
@@ -540,6 +560,7 @@ function bankEmbed(r, state, by) {
 // (buttons gone, "Completed — paid out by ..."), or cancelled (buttons gone, "cancelled by ..."), so nobody can press Claim again
 // and pay it twice. Best effort — the claim itself is already exclusive on the server (SET NX), this is the visible half of it.
 async function bankMarkDiscord(factionId, r, status, byName) {
+    await reqLog('bank', factionId, r, status, byName);
     if (!r.msgId) return;
     try {
         const poster = await getDiscordPoster(factionId, 'bank');
@@ -948,6 +969,8 @@ module.exports = async function handler(req, res) {
                 } catch (e) { /* the request is saved either way; it still shows in the leaders' To do */ }
             }
             await redis(['HSET', ocRequestsKey(factionId), playerId, JSON.stringify(request)]);
+            await reqLog('oc', factionId, request, 'open', playerName);
+            if (old && old.rid && old.rid !== rid) await reqLog('oc', factionId, old, 'replaced', playerName);
             return res.status(200).json({ ok: true, request });
         }
         if (action === 'ocreq-cancel') {
@@ -994,6 +1017,8 @@ Cancel: ${cancelUrl}`, [], embeds, undefined, true);
                 }
             } catch (e) { /* the request still shows on the Bank request page */ }
             await redis(['HSET', bankRequestsKey(factionId), id, JSON.stringify(request)]);
+            await reqLog('bank', factionId, request, 'open', playerName);
+            if (old) await reqLog('bank', factionId, old, 'replaced', playerName);
             return res.status(200).json({ ok: true, request });
         }
         if (action === 'bank-cancel') {
@@ -1413,6 +1438,12 @@ Cancel: ${cancelUrl}`, [], embeds, undefined, true);
             const ideas = [...groups.values()].map(g => ({ key: g.key, text: g.text, variants: [...g.variants].slice(0, 5), count: g.count, repeats: g.repeats, people: [...g.people.values()], last: g.last }))
                 .sort((a, b) => b.people.length - a.people.length || b.count - a.count || b.last - a.last);
             return res.status(200).json({ ideas, total: raw.length });
+        }
+        // The history of bank / OC requests (see reqLog): everything that was ever asked, with who claimed, paid, cancelled or replaced it.
+        if (action === 'req-log') {
+            const kind = req.body.kind === 'bank' ? 'bank' : 'oc';
+            const raw = await redis(['GET', reqLogKey(kind, factionId)]);
+            return res.status(200).json({ log: raw ? JSON.parse(raw) : [] });
         }
         // OC requests, the leaders' side: the open requests (oldest first) and closing one — spawned, or dismissed.
         if (action === 'ocreq-list') {

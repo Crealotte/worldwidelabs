@@ -22,6 +22,7 @@ async function loadOcRequests() {
             const l = await ocFetch({ action: 'ocreq-list' });
             if (l.error) throw new Error(l.error);
             renderOcList(l.requests);
+            $('ocr-history-panel').style.display = 'block'; loadRequestLog('oc', 'ocr-hist');
         }
         st.textContent = ''; st.className = 'status';
     } catch (e) { st.className = 'status err'; st.textContent = e.message; }
