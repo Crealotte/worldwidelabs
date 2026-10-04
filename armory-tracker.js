@@ -402,3 +402,35 @@ function renderWpArmoryBody(report) {
     });
     $('wp-armory-add-total').addEventListener('click', () => atAddCostToPayout('Armory costs', report.grandTotal));
 }
+
+// ---- By war: tick the wars to restock for and the period fills itself in ----
+// Period = from the day after the war BEFORE the first ticked war ended, to the end of the last ticked war + 24 h (the same end the Xanax and hit
+// counts use), never past today. With no earlier war known, it starts 2 days before the first ticked war began.
+let atWars = null;
+async function loadAtWars() {
+    const list = $('at-wars-list');
+    if (!list || atWars) return;
+    list.innerHTML = '<span style="color:var(--muted);font-size:13px;">Loading the wars…</span>';
+    try {
+        const r = await atFetch({ action: 'armory-wars' });
+        if (r.error) throw new Error(r.error);
+        atWars = r.wars; // newest first
+        // the oldest one is only there as the "war before" for the one above it, so it is not offered
+        const offered = atWars.slice(0, Math.max(0, atWars.length - 1));
+        list.innerHTML = offered.length ? offered.map(w => `<label style="display:flex;gap:6px;align-items:center;font-size:13px;cursor:pointer;"><input type="checkbox" class="at-war-pick" value="${w.id}" style="width:auto;"> War vs ${esc(w.opponent)} <span style="color:var(--muted);font-size:11px;">ended ${new Date(w.end * 1000).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}</span></label>`).join('') : '<span style="color:var(--muted);font-size:13px;">No finished wars found.</span>';
+    } catch (e) { list.innerHTML = `<span style="color:var(--danger);font-size:13px;">${esc(e.message)}</span>`; }
+}
+const atDay = ts => new Date(ts * 1000).toISOString().slice(0, 10);
+$('at-wars-use').addEventListener('click', () => {
+    const note = $('at-wars-note');
+    const picked = [...document.querySelectorAll('.at-war-pick:checked')].map(c => atWars.find(w => w.id === c.value)).filter(Boolean).sort((a, b) => a.end - b.end);
+    if (!picked.length) { note.textContent = 'Tick at least one war.'; return; }
+    const first = picked[0], last = picked[picked.length - 1];
+    const before = atWars.filter(w => w.end < first.start).sort((a, b) => b.end - a.end)[0]; // the war right before the first ticked one
+    const fromTs = before ? before.end + 86400 : first.start - 2 * 86400;
+    const toTs = Math.min(last.end + 86400, Math.floor(Date.now() / 1000));
+    $('at-report-from').value = atDay(fromTs);
+    $('at-report-to').value = atDay(toTs);
+    note.textContent = `Period: ${atDay(fromTs)} → ${atDay(toTs)}${before ? ` (the day after the war vs ${before.opponent})` : ' (no earlier war known: 2 days before the first one)'}.`;
+    $('at-report-calc').click();
+});

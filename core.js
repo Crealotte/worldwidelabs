@@ -416,7 +416,7 @@
         if (page === 'labs-funds') loadLabsFunds();
         if (page === 'members-overview') loadMemberOverview();
         if (page === 'whats-new') renderWhatsNew();
-        if (page === 'armory-tracker') loadArmoryTracker();
+        if (page === 'armory-tracker') { loadArmoryTracker(); if (typeof loadAtWars === 'function') loadAtWars(); }
         if (page === 'foreign-stock' && !foreignStockLoaded) { foreignStockLoaded = true; loadForeignStock(); }
         if (page === 'crimes-guide' && !crimesGuideLoaded) { crimesGuideLoaded = true; loadCrimesGuide(); }
         if (page === 'feedback-edit') {

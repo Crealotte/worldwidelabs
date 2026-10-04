@@ -227,6 +227,18 @@ module.exports = async function handler(req, res) {
             return res.status(200).json(result);
         }
 
+        // The finished wars, newest first — for the consumption tracker's "By war" picker (up to 16, so there is also a war before the oldest
+        // one that can be ticked, which the period rule needs).
+        if (action === 'armory-wars') {
+            const wr = await tornFetch(`https://api.torn.com/v2/faction?selections=rankedwars&key=${encodeURIComponent(key)}`, { headers: { accept: 'application/json' } });
+            const wd = await wr.json();
+            if (wd.error) return res.status(403).json({ error: wd.error.error || 'Torn could not list the wars.' });
+            const wars = Object.values(wd.rankedwars || {}).filter(w => w.start && w.end)
+                .sort((a, b) => b.end - a.end).slice(0, 16)
+                .map(w => ({ id: String(w.id), start: w.start, end: w.end, opponent: ((w.factions || []).find(f => String(f.id) !== String(factionId)) || {}).name || 'Unknown' }));
+            return res.status(200).json({ wars });
+        }
+
         if (action === 'consumption-report') {
             const { from, to } = req.body;
             if (!from || !to) return res.status(400).json({ error: 'Pick a date range first.' });
