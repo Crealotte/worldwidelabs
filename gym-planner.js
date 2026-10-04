@@ -166,12 +166,12 @@ function gpWeek(m, inp, prices, xanPerDay) {
     }
     const r = gpSession(S, inp.base, rest, inp);
     gain += r.gain; energyUsed += r.trains * inp.E;
-    let cost = canCost, priced = canPriced;
+    let cost = canCost, priced = canPriced, perJump = 0;
     for (const [k, qty] of Object.entries(m.items)) {
         const p = prices[GP_ITEMS[k]];
-        if (p == null) priced = false; else cost += p * qty * m.sessions;
+        if (p == null) priced = false; else { cost += p * qty * m.sessions; perJump += p * qty; }
     }
-    return { gain, cost, priced, energyUsed, perSession, restEnergy: r.trains * inp.E };
+    return { gain, cost, priced, perJump, jumps: m.kind === 'natural' ? 0 : m.sessions, energyUsed, perSession, restEnergy: r.trains * inp.E };
 }
 
 // ---- energy group: worked out from the member's own total battle stats. It changes ONE thing: the
@@ -432,6 +432,7 @@ function renderGymPlanner() {
             <div class="s">${esc(m.sub)}</div>
             ${m.property ? `<div class="s" style="color:var(--muted);">🏠 Needs: ${esc(m.property)}</div>` : ''}
             <div class="n"><span style="color:var(--reagent);">+${gpN(w.gain)} ${esc(inp.stat)}</span> · ${w.priced ? gpMoney(w.cost) : '$?'} / week</div>
+            ${w.jumps ? `<div class="s" style="color:var(--muted);">${w.priced ? gpMoney(w.perJump) : '$?'} per jump × ${w.jumps} jump${w.jumps === 1 ? '' : 's'} a week</div>` : ''}
         </button>`).join('');
     $('gp-methods').querySelectorAll('.gp-method').forEach(b => b.addEventListener('click', () => {
         try { localStorage.setItem(GP_METHOD_KEY, b.dataset.id); } catch (e) { /* not critical */ }
@@ -478,6 +479,7 @@ function renderGymPlanner() {
                 <div style="flex:1;background:var(--bench-2);border-radius:4px;height:14px;"><div style="width:${w.priced ? (w.cost / maxCost * 100).toFixed(1) : 0}%;background:#f0b432;height:14px;border-radius:4px;"></div></div>
                 <div style="width:110px;text-align:right;font-family:var(--mono);font-size:12px;">${w.priced ? gpMoney(w.cost) : '?'}</div>
             </div>
+            ${w.jumps ? `<div style="font-size:11px;color:var(--muted);margin:2px 0 0 78px;">${w.priced ? gpMoney(w.perJump) : "$?"} per jump × ${w.jumps} jump${w.jumps === 1 ? "" : "s"} a week${(m.items?.xanax || 0) > 1 ? " (stacking Xanax takes several days of cooldowns, so fewer jumps fit in a week)" : ""}</div>` : ""}
             ${m.kind !== 'natural' ? (w.gain - rows[0].w.gain > 0 ? `<div style="font-size:11px;color:var(--muted);margin-top:2px;">+${gpN(w.gain - rows[0].w.gain)} stat points more than soft natural${w.priced && w.cost > 0 ? ` — about ${gpMoney(w.cost / (w.gain - rows[0].w.gain))} per extra point` : ''}</div>` : '<div style="font-size:11px;color:var(--muted);margin-top:2px;">No gain over soft natural with these numbers</div>') : ''}
         </div>`).join('');
 
@@ -657,7 +659,7 @@ function renderGymPlanner() {
     });
     const gap = inp.weekly - w.energyUsed;
     const reqNote = gap > 0 ? `<div style="color:var(--danger);font-size:13px;margin-top:4px;">That is ${gpN(gap)} E short of your minimum of ${gpN(inp.weekly)} E a week — add a bar, a Xanax, a refill or an energy can.</div>` : `<div style="color:var(--reagent);font-size:13px;margin-top:4px;">Meets your minimum of ${gpN(inp.weekly)} E a week.</div>`;
-    $('gp-summary').innerHTML = `<b>${esc(chosen.name)}</b> for a week: about <b style="color:var(--reagent);">+${gpN(w.gain)} ${inp.stat}</b> from ${gpN(w.energyUsed)} energy${w.priced ? `, items ≈ <b>${gpMoney(w.cost)}</b>` : ''}.${reqNote}`;
+    $('gp-summary').innerHTML = `<b>${esc(chosen.name)}</b> for a week: about <b style="color:var(--reagent);">+${gpN(w.gain)} ${inp.stat}</b> from ${gpN(w.energyUsed)} energy${w.priced ? `, items ≈ <b>${gpMoney(w.cost)}</b>${w.jumps ? ` (${gpMoney(w.perJump)} per jump × ${w.jumps} jump${w.jumps === 1 ? "" : "s"})` : ""}` : ''}.${reqNote}`;
 }
 
 // Steps for a jump that fits in a single day — 0 or 1 Xanax only. A method with MORE than 1 Xanax builds
