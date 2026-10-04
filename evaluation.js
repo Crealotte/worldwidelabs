@@ -245,7 +245,7 @@ function renderEvaluation() {
     $('ev-copy-all').onclick = () => {
         if (!below.length) { toast('Nobody is below requirement'); return; }
         const text = below.map(r => `===== ${r.name} =====\n${evMessage(r)}`).join('\n\n');
-        navigator.clipboard.writeText(text).then(() => toast(`${below.length} message${below.length === 1 ? '' : 's'} copied`));
+        evCopyMessage(text, `${below.length} message${below.length === 1 ? '' : 's'} copied`);
     };
     $('ev-copy-all').textContent = `Copy all messages (${below.length} below requirement)`;
 }
@@ -296,7 +296,7 @@ function wireEvDetail(tr, r) {
     if (!r) return;
     tr.addEventListener('click', e => e.stopPropagation()); // clicks inside the panel must not close it
     tr.querySelector('.ev-mail').addEventListener('click', e => window.open(`https://www.torn.com/messages.php#/p=compose&XID=${e.currentTarget.dataset.xid}`, '_blank', 'noopener'));
-    tr.querySelector('.ev-copy').addEventListener('click', () => navigator.clipboard.writeText(tr.querySelector('.ev-msg').value).then(() => toast('Message copied')));
+    tr.querySelector('.ev-copy').addEventListener('click', () => evCopyMessage(tr.querySelector('.ev-msg').value, 'Message copied'));
     tr.querySelector('.ev-save').addEventListener('click', async () => {
         const btn = tr.querySelector('.ev-save');
         btn.disabled = true;
@@ -471,4 +471,17 @@ async function evXanLoadAll(forceDep) {
     } catch (e) { evXan.note = e.message; }
     evXan.busy = false;
     renderEvaluation();
+}
+
+// Copies a message so the line breaks survive a paste into Torn's mail editor: the same text goes onto the clipboard twice, as plain text
+// (for a plain box) and as HTML with real paragraphs and <br> line breaks (for a rich editor, which otherwise tends to swallow the plain
+// text's blank lines). Falls back to plain text where the browser cannot write HTML to the clipboard.
+async function evCopyMessage(text, okMsg) {
+    const html = text.split(/\n{2,}/).map(par => `<p>${par.split('\n').map(l => esc(l)).join('<br>')}</p>`).join('');
+    try {
+        await navigator.clipboard.write([new ClipboardItem({ 'text/html': new Blob([html], { type: 'text/html' }), 'text/plain': new Blob([text], { type: 'text/plain' }) })]);
+    } catch (e) {
+        await navigator.clipboard.writeText(text);
+    }
+    toast(okMsg);
 }
