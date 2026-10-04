@@ -2,7 +2,7 @@
 // @name         World Wide Labs
 // @namespace    https://worldwidelabs.vercel.app
 // @author       CreaLotte
-// @version      1.37
+// @version      1.38
 // @updateURL    __WWL_BASE__/worldwidelabs.user.js
 // @downloadURL  __WWL_BASE__/worldwidelabs.user.js
 // @description  Shows your WorldWideLabs weekly energy plan (the checklist from the Energy planner) inside Torn, a To do tab with small personal reminders (revive setting, feedback, timezone map, availability, Discord/Intel/CAT), your My Targets list, a simplified energy/war standing strip, and — if you are in the Mentoring Platform — your mentoring checklist too. Also shows faction banners at the top of every Torn page. A small ⚙ in the header shows the installed version, flags when a newer one is out, lets you set/replace your API key, and — for a leader — add or remove your faction's banners right from Torn. On a computer it is a small window you can drag around and close; in TornPDA it is a menu. Ticks are shared with the WWL site.
@@ -26,7 +26,7 @@
     const KEY_NAME = 'wwl_api_key', POS_NAME = 'wwl_plan_pos', STATE_NAME = 'wwl_plan_state';
     // GM_info gives the version Tampermonkey actually has installed right now — falls back to a
     // hardcoded copy (kept in sync with @version above) for TornPDA, which doesn't grant GM_info.
-    const SCRIPT_VERSION = (typeof GM_info !== 'undefined' && GM_info.script?.version) || '1.37';
+    const SCRIPT_VERSION = (typeof GM_info !== 'undefined' && GM_info.script?.version) || '1.38';
     const versionGreater = (a, b) => {
         const pa = String(a).split('.').map(Number), pb = String(b).split('.').map(Number);
         for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
@@ -104,6 +104,38 @@
     pillDot.title = 'Update available';
     pillDot.style.cssText = 'display:none;position:absolute;top:-4px;right:-4px;width:11px;height:11px;border-radius:50%;background:#f0b432;border:2px solid #1b2029;';
     pill.appendChild(pillDot);
+    // The closed button can be dragged anywhere (computer and TornPDA) and the spot is remembered — for people it sits on top of
+    // something in the game. A press that barely moves still counts as a click and opens the window.
+    const PILL_POS_NAME = 'wwl_pill_pos';
+    let pillDragged = false;
+    const placePill = (x, y) => {
+        const w = pill.offsetWidth || 40, h = pill.offsetHeight || 34;
+        pill.style.left = `${Math.max(0, Math.min(window.innerWidth - w, x))}px`;
+        pill.style.top = `${Math.max(0, Math.min(window.innerHeight - h, y))}px`;
+        pill.style.right = 'auto'; pill.style.bottom = 'auto';
+    };
+    pill.style.touchAction = 'none'; // so a finger drag moves the button instead of scrolling the page
+    try { const p = JSON.parse(store.get(PILL_POS_NAME) || 'null'); if (p && Number.isFinite(p.x) && Number.isFinite(p.y)) placePill(p.x, p.y); } catch (e) { /* default spot */ }
+    {
+        let drag = null;
+        pill.addEventListener('pointerdown', e => {
+            const r = pill.getBoundingClientRect();
+            drag = { sx: e.clientX, sy: e.clientY, dx: e.clientX - r.left, dy: e.clientY - r.top, moved: false };
+            try { pill.setPointerCapture(e.pointerId); } catch (err) { /* fine without capture */ }
+        });
+        pill.addEventListener('pointermove', e => {
+            if (!drag) return;
+            if (!drag.moved && Math.hypot(e.clientX - drag.sx, e.clientY - drag.sy) < 6) return; // still a click
+            drag.moved = true;
+            placePill(e.clientX - drag.dx, e.clientY - drag.dy);
+        });
+        pill.addEventListener('pointerup', () => {
+            if (drag && drag.moved) { pillDragged = true; setTimeout(() => { pillDragged = false; }, 60); store.set(PILL_POS_NAME, JSON.stringify({ x: pill.offsetLeft, y: pill.offsetTop })); }
+            drag = null;
+        });
+        pill.addEventListener('pointercancel', () => { drag = null; });
+        window.addEventListener('resize', () => { if (pill.style.left) placePill(pill.offsetLeft, pill.offsetTop); });
+    }
 
     const win = document.createElement('div');
     if (IS_PDA) { // TornPDA: a menu that slides up from the bottom, big enough to tap
@@ -183,7 +215,7 @@
             try { checkForUpdate(true); } catch (e) { /* still starting up - the passive check covers it */ }
         }
     }
-    pill.addEventListener('click', () => setOpen(true));
+    pill.addEventListener('click', () => { if (pillDragged) { pillDragged = false; return; } setOpen(true); }); // a drag is not a click
     win.querySelector('#wwl-close').addEventListener('click', () => setOpen(false));
     win.querySelector('#wwl-settings').addEventListener('click', () => {
         tab = 'settings';
@@ -225,6 +257,7 @@
         const n = todoCount();
         const tabs = [['todo', `✅ To do${n ? ` (${n})` : ''}`], ['energy', '⚡ Energy'], ['targets', '🎯 Targets']];
         if (mtPairs && mtPairs.length) tabs.push(['mentoring', '🎓 Mentoring']);
+        tabs.push(['bank', '💰 Bank']);
         if (tabs.length < 2) return '';
         return `<div style="display:flex;gap:6px;margin-bottom:10px;">${tabs.map(([id, label]) =>
             `<button type="button" class="wwl-tab" data-tab="${id}" style="flex:1;padding:6px;border-radius:6px;border:1px solid #3a4352;cursor:pointer;background:${tab === id ? '#2a2f3a' : 'transparent'};color:#e6e9ef;">${label}</button>`
@@ -235,6 +268,7 @@
             tab = lastTab = b.dataset.tab; render();
             if (tab === 'todo') refreshTodoItems();
             if (tab === 'targets') loadTargets();
+            if (tab === 'bank') loadBankInfo();
         }));
     }
     function renderEnergyTab() {
@@ -320,6 +354,72 @@
     // Small personal reminders — revive setting, feedback, timezone map — from api/war-payout.js's
     // 'member-todo' action. Each has an optional link (some open WWL in a new tab, the revive one
     // opens Torn's own Preferences page directly).
+    // "Request an OC": shown under the "not in an Organized Crime" reminder, so a member who cannot find a crime that suits them
+    // can ask leadership for one at a level (the server keeps one open request per member and tells leadership).
+    function ocRequestHtml(t) {
+        const box = 'padding:6px 0 10px;border-bottom:1px solid #3a4352;font-size:12px;color:#9aa4b5;';
+        if (t.request) return `<div style="${box}">✅ You asked for a level ${esc(t.request.level)} OC — leadership has been told. <span id="wwl-oc-cancel" style="color:#e05555;cursor:pointer;text-decoration:underline;">cancel</span></div>`;
+        return `<div style="${box}">Nothing that suits you? Ask for one:
+            <div style="display:flex;gap:6px;align-items:center;margin-top:6px;flex-wrap:wrap;">
+                <select id="wwl-oc-level" style="background:#12161c;color:#e6e9ef;border:1px solid #3a4352;border-radius:6px;padding:4px;">${[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(n => `<option value="${n}">Level ${n}</option>`).join('')}</select>
+                <input id="wwl-oc-note" maxlength="140" placeholder="note (optional)" style="flex:1;min-width:90px;background:#12161c;color:#e6e9ef;border:1px solid #3a4352;border-radius:6px;padding:5px;">
+                <button type="button" id="wwl-oc-send" style="padding:5px 10px;border-radius:6px;border:1px solid #35d99b;background:transparent;color:#35d99b;cursor:pointer;">Request</button>
+            </div></div>`;
+    }
+    function wireOcRequest() {
+        const send = body.querySelector('#wwl-oc-send'), cancel = body.querySelector('#wwl-oc-cancel');
+        const item = () => todoItems && todoItems.find(t => t.id === 'oc');
+        send?.addEventListener('click', async () => {
+            send.disabled = true;
+            try {
+                const r = await api({ action: 'ocreq-submit', level: body.querySelector('#wwl-oc-level').value, note: body.querySelector('#wwl-oc-note').value });
+                if (item()) item().request = r.request;
+                render();
+            } catch (e) { send.disabled = false; send.textContent = 'Failed — try again'; }
+        });
+        cancel?.addEventListener('click', async () => {
+            try { await api({ action: 'ocreq-cancel' }); if (item()) item().request = null; render(); } catch (e) { /* stays as it was */ }
+        });
+    }
+    // ---- Bank tab: ask for money out of your OWN faction balance (never more than it); a banker claims it from Discord ----
+    let bankInfo = null, bankMsg = '';
+    async function loadBankInfo() {
+        try { bankInfo = await api({ action: 'bank-info' }); bankMsg = ''; } catch (e) { bankInfo = { balance: null, balanceError: e.message }; }
+        if (tab === 'bank') render();
+    }
+    const bankMoney = n => `$${Math.round(n).toLocaleString('en-US')}`;
+    function renderBankTab() {
+        if (bankInfo === null) return '<div style="padding:6px 0;color:#9aa4b5;">Loading your balance…</div>';
+        const bal = bankInfo.balance === null || bankInfo.balance === undefined
+            ? `<div style="color:#e05555;padding:4px 0;">${esc(bankInfo.balanceError || 'Your balance could not be read.')}</div>`
+            : `<div style="padding:4px 0;">Your faction balance: <b style="font-family:monospace;">${bankMoney(bankInfo.balance)}</b></div>`;
+        const req = bankInfo.request
+            ? `<div style="padding:8px 0;border-top:1px solid #3a4352;margin-top:8px;">✅ Open request: <b style="font-family:monospace;">${bankMoney(bankInfo.request.amount)}</b> — a banker has been told. <span id="wwl-bank-cancel" style="color:#e05555;cursor:pointer;text-decoration:underline;">cancel</span></div>` : '';
+        const can = bankInfo.balance !== null && bankInfo.balance !== undefined;
+        return `${bal}
+            <div style="display:flex;gap:6px;align-items:center;margin-top:6px;flex-wrap:wrap;">
+                <input id="wwl-bank-amount" type="number" min="1" step="1" placeholder="Amount" ${can ? '' : 'disabled'} style="flex:1;min-width:110px;background:#12161c;color:#e6e9ef;border:1px solid #3a4352;border-radius:6px;padding:6px;">
+                <button type="button" id="wwl-bank-all" ${can ? '' : 'disabled'} style="padding:6px 8px;border-radius:6px;border:1px solid #3a4352;background:transparent;color:#e6e9ef;cursor:pointer;">All</button>
+                <button type="button" id="wwl-bank-send" ${can ? '' : 'disabled'} style="padding:6px 10px;border-radius:6px;border:1px solid #35d99b;background:transparent;color:#35d99b;cursor:pointer;">Request</button>
+            </div>
+            ${bankMsg ? `<div style="color:#e05555;font-size:12px;margin-top:6px;">${esc(bankMsg)}</div>` : ''}
+            ${req}
+            <div style="margin-top:8px;color:#9aa4b5;font-size:12px;">You can only ask for up to your own balance. A banker confirms the payout in Torn.</div>`;
+    }
+    function wireBankTab() {
+        const send = body.querySelector('#wwl-bank-send'), all = body.querySelector('#wwl-bank-all'), cancel = body.querySelector('#wwl-bank-cancel');
+        all?.addEventListener('click', () => { if (bankInfo && bankInfo.balance != null) body.querySelector('#wwl-bank-amount').value = bankInfo.balance; });
+        send?.addEventListener('click', async () => {
+            send.disabled = true;
+            try { const r = await api({ action: 'bank-submit', amount: body.querySelector('#wwl-bank-amount').value }); bankInfo.request = r.request; bankMsg = ''; }
+            catch (e) { bankMsg = e.message; }
+            render();
+        });
+        cancel?.addEventListener('click', async () => {
+            try { await api({ action: 'bank-cancel', id: bankInfo.request.id }); bankInfo.request = null; } catch (e) { bankMsg = e.message; }
+            render();
+        });
+    }
     function renderTodoTab() {
         const daily = `<label style="display:flex;gap:8px;align-items:center;padding:${IS_PDA ? 10 : 7}px 0;border-bottom:1px solid #3a4352;cursor:pointer;">
             <input type="checkbox" id="wwl-daily-check" ${getDailyChecked() ? 'checked' : ''} style="width:auto;">
@@ -330,7 +430,7 @@
             : todoItems.map(t => `<div style="display:flex;gap:8px;align-items:center;padding:${IS_PDA ? 10 : 7}px 0;border-bottom:1px solid #3a4352;">
                 <span style="flex:1;">${esc(t.text)}</span>
                 ${t.url ? `<a href="${esc(t.url)}" target="_blank" rel="noopener" style="color:#35d99b;white-space:nowrap;text-decoration:none;border:1px solid #35d99b;border-radius:6px;padding:4px 8px;font-size:12px;">${esc(t.cta)}</a>` : ''}
-            </div>`).join('');
+            </div>${t.id === 'oc' ? ocRequestHtml(t) : ''}`).join('');
         return daily + rest;
     }
     // The ⚙ view: version + update flag + API key, and — for a leader — the faction's own banners
@@ -440,10 +540,12 @@
     }
     function render() {
         if (tab === 'settings') { body.innerHTML = renderSettingsTab(); wireSettingsTab(); try { checkForUpdate(true); } catch (e) { /* the script is still starting up - the passive check will run */ } return; }
-        const tabContent = tab === 'mentoring' ? renderMentoringTab() : tab === 'targets' ? renderTargetsTab() : tab === 'todo' ? renderTodoTab() : renderEnergyTab();
+        const tabContent = tab === 'mentoring' ? renderMentoringTab() : tab === 'bank' ? renderBankTab() : tab === 'targets' ? renderTargetsTab() : tab === 'todo' ? renderTodoTab() : renderEnergyTab();
         body.innerHTML = updateBanner() + renderStandingStrip() + tabBar() + tabContent;
         showProgress();
         wireTabs();
+        wireOcRequest();
+        wireBankTab();
         body.querySelector('#wwl-targets-refresh')?.addEventListener('click', refreshTargetStatus);
         body.querySelector('#wwl-daily-check')?.addEventListener('change', e => { setDailyChecked(e.target.checked); render(); });
         body.querySelectorAll('.wwl-e-check').forEach(cb => cb.addEventListener('change', async () => {
