@@ -7,6 +7,11 @@
   "crons": [
     { "path": "/api/war-payout?cron=1", "schedule": "5 0 * * *" }
   ],
+  "redirects": [
+    { "source": "/worldwidelabs.user.js(.+)", "destination": "/worldwidelabs.user.js", "permanent": false },
+    { "source": "/WorldWideLabs.user.js(.*)", "destination": "/worldwidelabs.user.js", "permanent": false },
+    { "source": "/worldwidelabs-dev.user.js(.+)", "destination": "/worldwidelabs-dev.user.js", "permanent": false }
+  ],
   "rewrites": [
     { "source": "/worldwidelabs.user.js", "destination": "/api/war-payout?script=1" },
     { "source": "/wwl-energy-planner.user.js", "destination": "/api/war-payout?script=1" },
