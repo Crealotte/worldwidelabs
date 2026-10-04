@@ -113,18 +113,15 @@ async function fetchAllArmoryNews(key, from, to, cat = 'armoryAction') {
     return { entries: all, pagesFetched: page, rateLimited, hitPageCap };
 }
 
-// Deposits ("Name deposited 1x Xanax") are not guaranteed to be in the same news category as the armory uses/loans, so the deposit readers
-// look in both: armoryAction and armoryDeposit (a category the API may not offer — then it is simply skipped). Entries are merged by id.
+// Deposits ("Name deposited 1x Xanax") live in their OWN news category, armoryDeposit — confirmed with the deposit-log check on the
+// evaluation page (2026-10-04: 11 deposit lines there, none in armoryAction). That log is small, so a whole month is a page or two. Only if
+// the API refuses that category does this fall back to the busy armoryAction log, which can run past the page limit on a long period.
 async function fetchDepositEntries(key, from, to) {
-    const first = await fetchAllArmoryNews(key, from, to, 'armoryAction');
-    let entries = first.entries, rateLimited = first.rateLimited, hitPageCap = first.hitPageCap;
     try {
-        const second = await fetchAllArmoryNews(key, from, to, 'armoryDeposit');
-        const seen = new Set(entries.map(e => String(e.id)));
-        for (const e of second.entries) if (!seen.has(String(e.id))) entries.push(e);
-        rateLimited = rateLimited || second.rateLimited; hitPageCap = hitPageCap || second.hitPageCap;
-    } catch (e) { /* that category is not available: the first one is all there is */ }
-    return { entries, rateLimited, hitPageCap };
+        return await fetchAllArmoryNews(key, from, to, 'armoryDeposit');
+    } catch (e) {
+        return await fetchAllArmoryNews(key, from, to, 'armoryAction');
+    }
 }
 
 module.exports = async function handler(req, res) {
