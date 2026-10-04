@@ -179,7 +179,7 @@ function renderEvaluation() {
         const wars = evXan.wars, loaded = wars.filter(w => evXan.byWar[w.id]).length, all = loaded === wars.length;
         $('ev-xan-bar').innerHTML = !wars.length
             ? '<span style="color:var(--muted);">Xanax: no war ended in this period.</span>'
-            : `<span>🧪 Xanax (wars of this period: ${wars.map(w => esc(w.opponent)).join(', ')}): <b>${loaded} of ${wars.length}</b> checked${evXan.deposits !== null ? ', deposits read' : ', deposits not read yet'}.</span>
+            : `<span>🧪 Xanax (wars of this period: ${wars.map(w => esc(w.opponent)).join(', ')}): <b>${loaded} of ${wars.length}</b> checked${evXan.deposits !== null ? `, deposits read${evXan.depInfo ? ` (${evXan.depInfo.xanax} Xanax from ${evXan.depInfo.members} member${evXan.depInfo.members === 1 ? '' : 's'}, since ${new Date(evXan.depInfo.from * 1000).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}${evXan.depInfo.cached ? ', saved answer' : ''})` : ''}` : ', deposits not read yet'}.</span>
                <button class="small" id="ev-xan-load" type="button">${all && evXan.deposits !== null ? 'Re-check deposits' : 'Load Xanax data'}</button>
                <button class="ghost small" id="ev-xan-probe" type="button" title="Shows the deposit lines Torn sends for the last 3 days">Check deposit log</button>
                <div id="ev-xan-probe-out" style="width:100%;font-size:12px;color:var(--muted);white-space:pre-wrap;"></div>
@@ -273,7 +273,7 @@ function evDetailHtml(r) {
     const xanHtml = !x.rows.length
         ? `<div style="color:var(--muted);font-size:12px;">${evXan.wars.length ? 'Not loaded yet — press Load Xanax data above the table.' : 'No war ended in this period.'}</div>`
         : x.rows.map(w => `<div style="font-size:12px;margin-bottom:3px;"><b>War vs ${esc(w.opponent)}:</b> took ${w.taken}, ${w.hits} hits (covers ${w.covered})${w.owed ? ` — <span style="color:${MO_LIGHT.red};font-weight:700;">${w.owed} to put back</span>${w.returned ? `, ${w.returned} returned` : ''}` : (w.over ? ` — <span style="color:${MO_LIGHT.green};">✓ ${w.over} over, balanced out by your other war</span>` : ' — ✓')}</div>`).join('')
-            + (x.depKnown ? '' : '<div style="color:var(--muted);font-size:11px;">What has been put back is not checked yet.</div>');
+            + (x.depKnown ? `<div style="color:var(--muted);font-size:11px;">Put back in the armory since the first of these wars: <b>${x.depositedTotal}</b></div>` : '<div style="color:var(--muted);font-size:11px;">What has been put back is not checked yet.</div>');
     const hist = r.history.length ? r.history.map(h => `
         <div style="display:flex;gap:8px;align-items:baseline;margin-bottom:4px;font-size:12px;">
             <span style="color:${EV_KIND_COLOR[h.kind]};min-width:70px;font-weight:600;">${esc(EV_KIND_LABEL[h.kind])}</span>
@@ -448,7 +448,7 @@ $('ev-xan-copy').addEventListener('click', () => {
 // made in that war (Member Overview's stored war + chain hits); each Xanax covers 10 hits, rounded up. Xanax put back since the first of these
 // wars (deposit lines in the armory log) is allocated to the oldest war first, so one deposit is never counted against two wars.
 const EV_XAN_LEAD = 48;
-let evXan = { wars: [], byWar: {}, deposits: null, busy: false, note: '' };
+let evXan = { wars: [], byWar: {}, deposits: null, depInfo: null, busy: false, note: '' };
 function evPeriodWars() {
     const p = evPeriod();
     return moWarsInPeriod().filter(w => !w.event && w.end >= p.start && (p.id === 'now' || w.end < p.end)).sort((a, b) => a.end - b.end);
@@ -487,8 +487,9 @@ function evXanFor(m) {
     for (const r of rows) { r.over = Math.max(0, r.taken - r.covered); r.offset = Math.min(r.over, pool); pool -= r.offset; r.owed = r.over - r.offset; }
     const depKnown = evXan.deposits !== null;
     let rem = depKnown ? (evXanMatch(evXan.deposits, m) || { n: 0 }).n : 0;
+    const depositedTotal = rem;
     for (const r of rows) { r.returned = Math.min(r.owed, rem); rem -= r.returned; r.outstanding = r.owed - r.returned; }
-    return { known, depKnown, rows, owed: rows.reduce((s, r) => s + r.owed, 0), returned: rows.reduce((s, r) => s + r.returned, 0), outstanding: rows.reduce((s, r) => s + r.outstanding, 0) };
+    return { known, depKnown, depositedTotal, rows, owed: rows.reduce((s, r) => s + r.owed, 0), returned: rows.reduce((s, r) => s + r.returned, 0), outstanding: rows.reduce((s, r) => s + r.outstanding, 0) };
 }
 // The "Load Xanax data" button: checks every war of the period that has no saved answer yet (one at a time — each reads the armory log), then
 // the deposits since the first of them, and redraws the evaluation.
@@ -510,6 +511,7 @@ async function evXanLoadAll(forceDep) {
         const d = await evXanFetch({ action: 'xanax-deposits', from, force: !!forceDep });
         if (d.error) throw new Error(d.error);
         evXan.deposits = d.deposited || {};
+        evXan.depInfo = { entries: d.entries ?? null, members: Object.keys(evXan.deposits).length, xanax: Object.values(evXan.deposits).reduce((s, v) => s + (v.n || 0), 0), from: d.from, cached: !!d.cached };
         if (d.rateLimited || d.hitPageCap) evXan.note = 'The deposits could not be read completely — press the button again in a minute.';
     } catch (e) { evXan.note = e.message; }
     evXan.busy = false;
