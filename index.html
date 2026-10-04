@@ -502,7 +502,7 @@
         </div>
         <a class="nav-item active" data-page="dashboard" href="/dashboard">Dashboard</a>
         <a class="nav-item" data-page="profile" href="/profile">Player profile</a>
-        <a class="nav-item" data-page="mentoring" href="/mentoring" id="nav-mentoring">🎓 Mentoring</a>
+        <a class="nav-item" data-page="mentoring" href="/mentoring" id="nav-mentoring" style="display:none;">🎓 Mentoring</a>
 
         <div class="nav-group">
             <div class="nav-group-header" data-group="training">
@@ -656,12 +656,6 @@
             <div class="panel" id="dash-script-panel" style="display:none;border-color:#f0b432;">
                 <h3 style="margin-top:0;">🧪 WWL script for Torn</h3>
                 <div id="dash-script-body"></div>
-            </div>
-
-            <div class="panel" id="dash-welcome-panel" style="display:none;">
-                <h3 style="margin-top:0;">👋 Welcome: your first days</h3>
-                <p style="color:var(--muted);font-size:12px;margin:0 0 4px;">A few things to get you settled, one step at a time. Tick each one when you have done it, and ask your mentor or any leader if anything is unclear. No rush!</p>
-                <div id="we-list"></div>
             </div>
 
             <div class="panel" id="announcement-panel" style="display:none;">
@@ -1060,8 +1054,16 @@
                     <span id="oh-status" class="status"></span>
                 </div>
             </div>
+            <div class="panel" id="mt-welcome-panel" style="display:none;margin-bottom:16px;">
+                <h3 style="margin-top:0;">👋 Your welcome missions</h3>
+                <p style="color:var(--muted);font-size:12px;margin:0 0 8px;">Go through them at your own pace, one chapter at a time, or all in one go if you feel like it. Finishing every step of a chapter opens the next one. Questions? Ask your mentor.</p>
+                <div style="height:8px;background:var(--bench-2);border-radius:4px;overflow:hidden;"><div id="we-bar" style="height:100%;width:0;background:var(--reagent);"></div></div>
+                <div id="we-count" style="font-size:12px;color:var(--muted);margin:4px 0 10px;"></div>
+                <div id="we-tabs" style="display:flex;gap:6px;flex-wrap:wrap;"></div>
+                <div id="we-body"></div>
+            </div>
             <div class="panel" id="mt-empty" style="display:none;">
-                <p style="color:var(--muted);margin:0;">You are not in a mentoring pair right now — ask a leader if you would like to mentor someone, or get a mentor yourself.</p>
+                <p style="color:var(--muted);margin:0;">No pairing yet. If you are waiting for a mentor, set your usual online hours above: a leader matches you with someone who is online at the same time. Would you like to mentor someone, or get a mentor? Ask a leader.</p>
             </div>
             <div id="mt-pairs" class="wrap-text"></div>
             <div id="mt-oversight-wrap" style="display:none;">
@@ -1872,19 +1874,16 @@
 
         <section class="page" id="page-welcome-admin">
             <div class="lab-label">WWL·29 / leaders</div>
-            <h2>👋 Welcome steps</h2>
-            <p class="pagedesc">The messages a new recruit gets in their first days, one step at a time (like a series of welcome mails). They show on the recruit's dashboard and in the script's To do list, and their mentor sees them on the Mentoring page. A step with "From day 0" shows straight away, "day 1" from the second day, and so on.</p>
+            <h2>👋 Welcome chapters</h2>
+            <p class="pagedesc">The welcome missions for pupils in the mentoring program: chapters with a checklist each. A pupil only sees the chapter they are on, and finishing every step opens the next one. A step can tick itself when WWL can check it (script installed, online hours set, in an Organized Crime, a role...), or be ticked by hand by the pupil or their mentor. "From faction day" keeps a step waiting until they have been in the faction that long (Organized Crimes open on day 3) without holding up the next chapter.</p>
             <div class="status" id="wa-status"></div>
             <div class="panel">
-                <div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;margin-bottom:10px;">
-                    <div class="field" style="margin:0;width:200px;"><label for="wa-window">Recruit for how many days</label><input type="number" id="wa-window" min="1" max="14" value="14"></div>
-                    <span id="wa-note" style="font-size:12px;color:var(--muted);"></span>
-                </div>
+                <span id="wa-note" style="font-size:12px;color:var(--muted);display:block;margin-bottom:8px;"></span>
                 <div id="wa-steps"></div>
-                <button class="ghost small" id="wa-add">+ Add step</button>
-                <button id="wa-save" style="margin-left:8px;">Save steps</button>
+                <button class="ghost small" id="wa-add">+ Add chapter</button>
+                <button id="wa-save" style="margin-left:8px;">Save chapters</button>
             </div>
-            <div class="panel"><h3 style="margin-top:0;">Who is in their first days</h3><div id="wa-recruits"></div></div>
+            <div class="panel"><h3 style="margin-top:0;">Where the pupils are</h3><div id="wa-recruits"></div></div>
         </section>
 
         <section class="page" id="page-todo-ideas">

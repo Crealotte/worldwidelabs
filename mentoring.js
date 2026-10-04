@@ -20,6 +20,7 @@ let mtPollTimer = null;
 
 async function loadMentoring() {
     if (typeof loadOnlineHours === 'function') loadOnlineHours(); // the usual-online-hours panel at the top of this page
+    if (typeof loadWelcomeMine === 'function') loadWelcomeMine(); // a pupil's welcome chapters
     if (mtPollTimer) { clearInterval(mtPollTimer); mtPollTimer = null; }
     const st = $('mt-status');
     st.className = 'status ok'; st.textContent = 'Loading…';
@@ -29,7 +30,7 @@ async function loadMentoring() {
         mtData = r;
         st.textContent = ''; st.className = 'status';
         // showing up in the menu at all already means you're in a pair (or a leader) — kept as a safety net for a direct link
-        $('nav-mentoring').style.display = ''; // everyone sees it: it is also where members set their usual online hours
+        $('nav-mentoring').style.display = (r.isMentor || r.isPupil || r.allPairs !== undefined) ? '' : 'none';
         $('mt-empty').style.display = (r.pairs.length || r.allPairs?.length) ? 'none' : 'block';
         renderMentoringPairs();
         $('mt-oversight-wrap').style.display = r.allPairs !== undefined ? 'block' : 'none';
@@ -295,6 +296,6 @@ async function checkMentoringAccess() {
         const nav = document.getElementById('nav-mentoring');
         // `allPairs` only ever comes back for a leader (see lib/mentoring.js) — so a leader gets the menu item
         // too, purely to look in on the program, even with no pairing of their own.
-        if (nav) nav.style.display = ''; // shown to everyone (the online-hours panel lives on this page)
+        if (nav) nav.style.display = (!r.error && (r.isMentor || r.isPupil || r.allPairs !== undefined)) ? '' : 'none';
     } catch (e) { /* nav item just stays hidden */ }
 }

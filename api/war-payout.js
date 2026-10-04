@@ -257,12 +257,24 @@ async function fetchOverdosed(id, key, timestamp) {
     return Number.isFinite(Number(v)) && v !== undefined && v !== null ? Number(v) : null;
 }
 
+// The member's own revive setting and whether they are in an Organized Crime — read live (not cached), only for the welcome steps that tick on these.
+async function getUserSnap(key) {
+    try {
+        const r = await fetch(`https://api.torn.com/v2/user/?selections=profile,organizedcrime&key=${encodeURIComponent(key)}`, { headers: { accept: 'application/json' } });
+        const d = await r.json();
+        if (d.error || !d.profile) return null;
+        const known = ['organizedCrime', 'organizedcrime', 'organized_crime'].find(k => k in d);
+        const oc = known ? d[known] : null;
+        const inOC = Array.isArray(oc) ? oc.length > 0 : !!(oc && typeof oc === 'object' && Object.keys(oc).length > 0);
+        return { revivable: typeof d.profile.revivable === 'boolean' ? d.profile.revivable : null, inOC };
+    } catch (e) { return null; }
+}
 async function getRosterDays(key) { // everyone with the days they have been in the faction (cached like the other roster reads)
     const r = await tornFetch(`https://api.torn.com/v2/faction/members?striptags=true&key=${encodeURIComponent(key)}`,
         { headers: { accept: 'application/json' } });
     const d = await r.json();
     if (d.error) throw new Error(d.error.error);
-    return (d.members || []).map(m => ({ id: String(m.id), name: m.name, days: m.days_in_faction ?? null }));
+    return (d.members || []).map(m => ({ id: String(m.id), name: m.name, days: m.days_in_faction ?? null, position: m.position || '' }));
 }
 async function getRoster(key) {
     const r = await tornFetch(`https://api.torn.com/v2/faction/members?striptags=true&key=${encodeURIComponent(key)}`,
@@ -1147,6 +1159,7 @@ Cancel: ${cancelUrl}`, [], embeds, undefined, true);
             const host = String(req.headers['x-forwarded-host'] || req.headers.host || '').replace(/[^\w.:-]/g, '');
             const site = host ? `https://${host}` : '';
             const items = [];
+            let welcomeSnap = null; // this member's own revive setting + OC status, from the profile call below (used by the welcome steps)
 
             try {
                 // lib/tornFetch.js caches any /user/?selections=profile& call for 10 minutes — great for the
@@ -1159,6 +1172,7 @@ Cancel: ${cancelUrl}`, [], embeds, undefined, true);
                 // member's own key, so no faction-level API access is needed to see their own OC membership.
                 const r = await fetch(`https://api.torn.com/v2/user/?selections=profile,organizedcrime&key=${encodeURIComponent(key)}`, { headers: { accept: 'application/json' } });
                 const d = await r.json();
+                if (!d.error && d.profile) { const k = ['organizedCrime', 'organizedcrime', 'organized_crime'].find(x => x in d); const oc = k ? d[k] : null; welcomeSnap = { revivable: typeof d.profile.revivable === 'boolean' ? d.profile.revivable : null, inOC: Array.isArray(oc) ? oc.length > 0 : !!(oc && typeof oc === 'object' && Object.keys(oc).length > 0) }; }
                 // v2's response nests everything under "profile" (confirmed against a real reference
                 // userscript's own code, `data.profile.revivable`) — reading `d.revivable` directly
                 // was always undefined regardless of the real setting.
@@ -1192,7 +1206,7 @@ Cancel: ${cancelUrl}`, [], embeds, undefined, true);
             } catch (e) { /* skip */ }
 
             // Welcome steps while this member is a recruit (the first days in the faction), from the leaders' Welcome steps page.
-            try { items.push(...await welcomeTodoItems(redis, factionId, playerId, daysInFaction, site)); } catch (e) { /* skip */ }
+            try { items.push(...await welcomeTodoItems(redis, factionId, playerId, { site, snap: welcomeSnap, roster: () => getRosterDays(key) })); } catch (e) { /* skip */ }
 
             // The member's own reminders (added on the dashboard) — shown at the end of their list.
             try {
@@ -1290,16 +1304,15 @@ Cancel: ${cancelUrl}`, [], embeds, undefined, true);
             if (action === 'oh-all' && !(await isLeader(key))) return res.status(403).json({ error: 'Leaders only' });
             return res.status(200).json(await ohHandle(action, req.body, { redis, factionId, playerId }));
         }
-        // Welcome steps for recruits: a member reads and ticks their own; a mentor looks at their pupil's; only leaders edit the steps.
+        // Welcome chapters (mentoring program): a pupil reads and ticks their own, a mentor looks at their pupil's, only leaders edit the chapters.
         if (action.startsWith('wel-')) {
             if (['wel-config-get', 'wel-config-save'].includes(action) && !(await isLeader(key))) return res.status(403).json({ error: 'Leaders only' });
-            let rosterCache = null;
+            let rosterCache = null, snapCache;
             const rosterDays = async () => rosterCache || (rosterCache = await getRosterDays(key));
             return res.status(200).json(await welHandle(action, req.body, {
-                redis, factionId, playerId, daysInFaction, leader: () => isLeader(key),
+                redis, factionId, playerId, leader: () => isLeader(key), roster: rosterDays,
                 mentorOf: async pupilId => { const prog = await mentoringLoadProgram(redis, factionId); return String(prog.pupils?.[pupilId]?.mentorId || '') === String(playerId); },
-                daysOfMember: async id => { const m = (await rosterDays()).find(x => x.id === String(id)); return m ? m.days : null; },
-                recruits: async () => (await rosterDays()).filter(m => m.days != null),
+                userSnap: async () => { if (snapCache === undefined) snapCache = await getUserSnap(key); return snapCache; },
             }));
         }
         // Suggestions — everyone can read, add and vote; only leaders set a status or delete.
