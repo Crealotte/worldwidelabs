@@ -463,7 +463,8 @@ async function evXanLoadCached() {
         evXan.byWar = g.error ? {} : (g.wars || {});
         const from = Math.min(...evXan.wars.map(w => w.start)) - EV_XAN_LEAD * 3600;
         const d = await evXanFetch({ action: 'xanax-deposits', from, cacheOnly: true });
-        evXan.deposits = d.error || d.none ? null : (d.deposited || {});
+        evXan.deposits = d.error || d.none || d.v !== 2 ? null : (d.deposited || {}); // an answer saved in the old form (no deposit times) is treated as not read
+        if (evXan.deposits !== null) evXan.depInfo = { timed: true, entries: d.entries ?? null, members: Object.keys(evXan.deposits).length, xanax: Object.values(evXan.deposits).reduce((s, v) => s + (v.n || 0), 0), from: d.from, cached: true };
     } catch (e) { /* the Xanax column just shows it has not been loaded */ }
 }
 // One member's Xanax picture for this period (known = every war of the period has been checked)
@@ -485,10 +486,17 @@ function evXanFor(m) {
     // shortfall first; what is left after that is what has to be put back.
     let pool = rows.reduce((s, r) => s + Math.max(0, r.covered - r.taken), 0);
     for (const r of rows) { r.over = Math.max(0, r.taken - r.covered); r.offset = Math.min(r.over, pool); pool -= r.offset; r.owed = r.over - r.offset; }
-    const depKnown = evXan.deposits !== null;
-    let rem = depKnown ? (evXanMatch(evXan.deposits, m) || { n: 0 }).n : 0;
-    const depositedTotal = rem;
-    for (const r of rows) { r.returned = Math.min(r.owed, rem); rem -= r.returned; r.outstanding = r.owed - r.returned; }
+    const depKnown = evXan.deposits !== null && evXan.deposits !== undefined && evXan.depInfo?.timed !== false;
+    // A deposit only counts for a war if it was made AFTER that war ended (Xanax put back, not stocked up before or during it); each deposit
+    // is used once, oldest war first. Deposits that arrive without their times (saved in the old form) are not used until re-read.
+    const mine = depKnown ? evXanMatch(evXan.deposits, m) : null;
+    const evs = ((mine && mine.events) || []).map(([t, n]) => ({ t, n })).sort((a, b) => a.t - b.t);
+    const depositedTotal = rows.length ? evs.filter(e => e.t >= rows[0].end).reduce((s, e) => s + e.n, 0) : 0;
+    for (const r of rows) {
+        let need = r.owed;
+        for (const e of evs) { if (need <= 0) break; if (e.n <= 0 || e.t < r.end) continue; const use = Math.min(need, e.n); e.n -= use; need -= use; }
+        r.returned = r.owed - need; r.outstanding = need;
+    }
     return { known, depKnown, depositedTotal, rows, owed: rows.reduce((s, r) => s + r.owed, 0), returned: rows.reduce((s, r) => s + r.returned, 0), outstanding: rows.reduce((s, r) => s + r.outstanding, 0) };
 }
 // The "Load Xanax data" button: checks every war of the period that has no saved answer yet (one at a time — each reads the armory log), then
@@ -511,7 +519,7 @@ async function evXanLoadAll(forceDep) {
         const d = await evXanFetch({ action: 'xanax-deposits', from, force: !!forceDep });
         if (d.error) throw new Error(d.error);
         evXan.deposits = d.deposited || {};
-        evXan.depInfo = { entries: d.entries ?? null, members: Object.keys(evXan.deposits).length, xanax: Object.values(evXan.deposits).reduce((s, v) => s + (v.n || 0), 0), from: d.from, cached: !!d.cached };
+        evXan.depInfo = { timed: d.v === 2, entries: d.entries ?? null, members: Object.keys(evXan.deposits).length, xanax: Object.values(evXan.deposits).reduce((s, v) => s + (v.n || 0), 0), from: d.from, cached: !!d.cached };
         if (d.rateLimited || d.hitPageCap) evXan.note = 'The deposits could not be read completely — press the button again in a minute.';
     } catch (e) { evXan.note = e.message; }
     evXan.busy = false;

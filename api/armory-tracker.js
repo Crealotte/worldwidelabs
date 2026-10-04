@@ -215,10 +215,10 @@ module.exports = async function handler(req, res) {
                 const p = parseArmoryNewsEntry(String(entry.id), entry);
                 if (p.unparsed || p.action !== 'deposited' || String(p.item).toLowerCase() !== 'xanax') continue;
                 const id = p.actorId || p.actor;
-                const d = deposited[id] || (deposited[id] = { name: p.actor, n: 0 });
-                d.n += p.quantity || 1;
+                const d = deposited[id] || (deposited[id] = { name: p.actor, n: 0, events: [] });
+                d.n += p.quantity || 1; (d.events || (d.events = [])).push([entry.timestamp, p.quantity || 1]);
             }
-            const result = { from, to, deposited, entries: news.entries.length, rateLimited: news.rateLimited, hitPageCap: news.hitPageCap, at: Date.now() };
+            const result = { v: 2, from, to, deposited, entries: news.entries.length, rateLimited: news.rateLimited, hitPageCap: news.hitPageCap, at: Date.now() };
             if (!news.rateLimited && !news.hitPageCap) {
                 await redis(['SET', ck, JSON.stringify(result), 'EX', '900']);
                 await redis(['SET', `wwl:xanax-dep-last:${factionId}`, JSON.stringify(result)]); // no expiry: members' own Xanax card reads this (it says when it was read)
@@ -431,6 +431,7 @@ module.exports.refreshXanaxOwed = async function refreshXanaxOwed(key, factionId
     const depRaw = await redis(['GET', `wwl:xanax-dep-last:${factionId}`]);
     if (!depRaw) return { skipped: 'deposits not read yet' };
     const dep = JSON.parse(depRaw);
+    if (dep.v !== 2) return { skipped: 'deposits were saved in an older form — press Re-check deposits once on the evaluation page' };
     const now = Math.floor(Date.now() / 1000);
     const news = await fetchDepositEntries(key, dep.to + 1, now);
     if (!news.rateLimited && !news.hitPageCap) {
@@ -438,8 +439,8 @@ module.exports.refreshXanaxOwed = async function refreshXanaxOwed(key, factionId
             const p = parseArmoryNewsEntry(String(entry.id), entry);
             if (p.unparsed || p.action !== 'deposited' || String(p.item).toLowerCase() !== 'xanax') continue;
             const id = p.actorId || p.actor;
-            const d = dep.deposited[id] || (dep.deposited[id] = { name: p.actor, n: 0 });
-            d.n += p.quantity || 1;
+            const d = dep.deposited[id] || (dep.deposited[id] = { name: p.actor, n: 0, events: [] });
+            d.n += p.quantity || 1; (d.events || (d.events = [])).push([entry.timestamp, p.quantity || 1]);
         }
         dep.to = now; dep.at = Date.now();
         await redis(['SET', `wwl:xanax-dep-last:${factionId}`, JSON.stringify(dep)]);
