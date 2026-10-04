@@ -25,14 +25,13 @@ function weRoleHtml(role) {
 }
 
 // ---- the pupil's own chapters (top of the Mentoring page) ----
-let weMine = null, weTab = null;
+let weMine = null; const weOpen = {}; // weOpen: which chapter windows are open (all closed to begin with)
 async function loadWelcomeMine() {
     const panel = $('mt-welcome-panel');
     if (!panel) return;
     const r = await weFetch({ action: 'wel-my' });
     if (r.error || !r.pupil) { panel.style.display = 'none'; return; }
     weMine = r;
-    if (weTab == null || weTab >= r.chapters.length || r.chapters[weTab].locked) weTab = r.current;
     renderWelcomeMine();
 }
 function renderWelcomeMine() {
@@ -42,20 +41,22 @@ function renderWelcomeMine() {
     $('we-bar').style.width = `${total ? Math.round(done / total * 100) : 0}%`;
     $('we-role').innerHTML = weRoleHtml(r.role);
     $('we-count').textContent = r.allDone ? 'All done! 🎉' : `${done} of ${total} steps done`;
-    $('we-tabs').innerHTML = r.chapters.map((c, i) => `<button type="button" class="we-tab" data-i="${i}" ${c.locked ? 'disabled' : ''} style="padding:6px 12px;border-radius:8px;border:1px solid ${i === weTab ? 'var(--reagent)' : 'var(--line)'};background:${i === weTab ? 'rgba(53,217,155,.15)' : 'transparent'};color:${c.locked ? 'var(--muted)' : 'var(--text)'};cursor:${c.locked ? 'not-allowed' : 'pointer'};font-size:13px;">${c.locked ? '🔒' : c.complete ? '✓' : ''} ${i + 1}${c.locked ? '' : `. ${esc(c.title)}`}</button>`).join('');
-    const c = r.chapters[weTab];
-    const next = r.chapters[weTab + 1];
-    $('we-body').innerHTML = `<h4 style="margin:12px 0 4px;">${weTab + 1}. ${esc(c.title)}</h4>
-        <div style="font-size:13px;color:var(--muted);white-space:pre-wrap;margin-bottom:8px;">${weRich(c.intro)}</div>
-        ${c.tasks.map(t => `<div style="display:flex;gap:10px;align-items:flex-start;padding:7px 0;border-top:1px solid var(--line);${t.waiting ? 'opacity:.6;' : ''}">
-            <input type="checkbox" class="we-check" data-id="${esc(t.id)}" ${t.done ? 'checked' : ''} ${t.auto || t.waiting ? 'disabled' : ''} style="width:auto;margin-top:3px;">
-            <div style="flex:1;font-size:13px;white-space:pre-wrap;">${weRich(t.text)}${t.auto ? ' <span style="color:var(--muted);font-size:11px;">· ticks itself</span>' : ''}${t.waiting ? ` <span style="color:#f0b432;font-size:11px;">· available from day ${t.fromDay + 1} in the faction (you are on day ${(r.days || 0) + 1})</span>` : ''}</div>
-            ${weLinkBtn(t)}</div>`).join('')}
-        <div style="margin-top:10px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
-            ${next ? (next.locked ? `<span style="font-size:12px;color:var(--muted);">🔒 Tick every step above to open chapter ${weTab + 2}.</span>` : `<button type="button" class="small" id="we-next">Next chapter →</button>`) : (r.allDone ? '<span style="font-size:13px;color:var(--reagent);">You finished everything. Well done! 🎉</span>' : '')}
-        </div>`;
-    $('we-tabs').querySelectorAll('.we-tab').forEach(b => b.addEventListener('click', () => { weTab = Number(b.dataset.i); renderWelcomeMine(); }));
-    const nb = $('we-next'); if (nb) nb.addEventListener('click', () => { weTab += 1; renderWelcomeMine(); });
+    $('we-tabs').innerHTML = '';
+    // every chapter is its own window: closed until you open it, and a locked one cannot be opened until the one before it is finished
+    $('we-body').innerHTML = r.chapters.map((c, i) => {
+        const next = r.chapters[i + 1];
+        if (c.locked) return `<div style="margin:6px 0;border:1px solid var(--line);border-radius:8px;padding:8px 12px;color:var(--muted);font-size:14px;">🔒 ${i + 1}. Finish chapter ${i} to open this one</div>`;
+        return `<details class="we-ch" data-i="${i}" ${weOpen[i] ? 'open' : ''} style="margin:6px 0;border:1px solid ${i === r.current && !r.allDone ? 'var(--reagent)' : 'var(--line)'};border-radius:8px;padding:6px 12px;">
+            <summary class="av-sum"><span style="font-size:14px;font-weight:700;color:${c.complete ? 'var(--reagent)' : 'var(--text)'};">${c.complete ? '✓' : '○'} ${i + 1}. ${esc(c.title)}</span> <span style="color:var(--muted);font-size:12px;">${c.doneCount}/${c.total}${i === r.current && !r.allDone ? ' · you are here' : ''}</span></summary>
+            <div style="font-size:13px;color:var(--muted);white-space:pre-wrap;margin:8px 0;">${weRich(c.intro)}</div>
+            ${c.tasks.map(t => `<div style="display:flex;gap:10px;align-items:flex-start;padding:7px 0;border-top:1px solid var(--line);${t.waiting ? 'opacity:.6;' : ''}">
+                <input type="checkbox" class="we-check" data-id="${esc(t.id)}" ${t.done ? 'checked' : ''} ${t.auto || t.waiting ? 'disabled' : ''} style="width:auto;margin-top:3px;">
+                <div style="flex:1;font-size:13px;white-space:pre-wrap;">${weRich(t.text)}${t.auto ? ' <span style="color:var(--muted);font-size:11px;">· ticks itself</span>' : ''}${t.waiting ? ` <span style="color:#f0b432;font-size:11px;">· available from day ${t.fromDay + 1} in the faction (you are on day ${(r.days || 0) + 1})</span>` : ''}</div>
+                ${weLinkBtn(t)}</div>`).join('')}
+            <div style="margin-top:8px;font-size:12px;color:var(--muted);">${next ? (next.locked ? `Tick every step above to open chapter ${i + 2}.` : `Chapter ${i + 2} is open.`) : (r.allDone ? '<span style="color:var(--reagent);">You finished everything. Well done! 🎉</span>' : '')}</div>
+        </details>`;
+    }).join('');
+    $('we-body').querySelectorAll('.we-ch').forEach(d => d.addEventListener('toggle', () => { weOpen[Number(d.dataset.i)] = d.open; }));
     $('we-body').querySelectorAll('.we-check').forEach(cb => cb.addEventListener('change', async () => {
         const d = await weFetch({ action: 'wel-done', id: cb.dataset.id, done: cb.checked });
         if (d.error) { toast(d.error); cb.checked = !cb.checked; return; }
@@ -75,7 +76,7 @@ async function weLoadPupil(pupilId, box) {
         box.innerHTML = `<details open style="margin-bottom:14px;"><summary class="av-sum"><span style="font-size:13px;font-weight:700;">${head}</span></summary>
             ${weRoleHtml(r2.role)}
             <div style="font-size:12px;color:var(--muted);margin:4px 0 6px;">Tick a step for them if they showed you it is done. Steps that say "ticks itself" are checked by WWL.</div>
-            ${r2.chapters.map((x, i) => `<details data-ch="${i}" ${(was[i] ?? (i === r2.current && !r2.allDone)) ? 'open' : ''} style="margin:4px 0;border:1px solid var(--line);border-radius:8px;padding:4px 10px;"><summary class="av-sum"><span style="font-size:13px;color:${x.complete ? 'var(--reagent)' : 'var(--text)'};">${x.complete ? '✓' : x.locked ? '🔒' : '○'} ${i + 1}. ${esc(x.title)} <span style="color:var(--muted);font-size:12px;">${x.doneCount}/${x.total}${x.locked ? ' · not open for them yet' : ''}</span></span></summary>
+            ${r2.chapters.map((x, i) => `<details data-ch="${i}" ${(was[i] ?? false) ? 'open' : ''} style="margin:4px 0;border:1px solid var(--line);border-radius:8px;padding:4px 10px;"><summary class="av-sum"><span style="font-size:13px;color:${x.complete ? 'var(--reagent)' : 'var(--text)'};">${x.complete ? '✓' : x.locked ? '🔒' : '○'} ${i + 1}. ${esc(x.title)} <span style="color:var(--muted);font-size:12px;">${x.doneCount}/${x.total}${x.locked ? ' · not open for them yet' : ''}</span></span></summary>
                 ${x.tasks.map(t => `<label style="display:flex;gap:8px;align-items:flex-start;padding:3px 0;font-size:13px;${t.waiting ? 'opacity:.6;' : ''}"><input type="checkbox" class="we-mtick" data-id="${esc(t.id)}" ${t.done ? 'checked' : ''} ${t.auto || t.waiting ? 'disabled' : ''} style="width:auto;margin-top:3px;"><span style="flex:1;white-space:pre-wrap;">${esc(t.text.replace(/\[([^\]]+)\]\([^)]*\)/g, '$1'))}${t.auto ? ' <span style="color:var(--muted);font-size:11px;">· ticks itself</span>' : ''}${t.waiting ? ` <span style="color:#f0b432;font-size:11px;">· from day ${t.fromDay + 1}</span>` : ''}</span></label>`).join('')}</details>`).join('')}</details>`;
         box.querySelectorAll('.we-mtick').forEach(cb => cb.addEventListener('change', async () => {
             const d = await weFetch({ action: 'wel-mentor-tick', pupilId, id: cb.dataset.id, done: cb.checked });
@@ -87,7 +88,7 @@ async function weLoadPupil(pupilId, box) {
 }
 
 // ---- leaders: write the chapters, see where the pupils are ----
-let weCfg = null, wePupils = [], weAutoKinds = {};
+let weCfg = null, wePupils = [], weAutoKinds = {}; const weAdminOpen = {}; // weAdminOpen: which chapter cards are open in the editor (closed to begin with)
 let weSync = () => {};
 async function loadWelcomeAdmin() {
     const st = $('wa-status');
@@ -103,7 +104,7 @@ async function loadWelcomeAdmin() {
 function renderWelcomeAdmin() {
     $('wa-note').textContent = weCfg.custom ? '' : 'These are starting texts, not saved yet. Rewrite them and press Save.';
     const autoOpts = sel => `<option value="">no (tick by hand)</option>${Object.entries(weAutoKinds).map(([k, v]) => `<option value="${k}" ${sel === k ? 'selected' : ''}>ticks itself when ${esc(v)}</option>`).join('')}`;
-    $('wa-steps').innerHTML = weCfg.chapters.map((c, i) => `<div class="panel" style="margin-bottom:12px;" data-c="${i}">
+    $('wa-steps').innerHTML = weCfg.chapters.map((c, i) => `<details class="panel wa-ch" style="margin-bottom:12px;" data-c="${i}" ${weAdminOpen[i] ? "open" : ""}><summary class="av-sum"><b style="font-size:15px;">${i + 1}. ${esc(c.title || "New chapter")}</b> <span style="color:var(--muted);font-size:12px;">${c.tasks.length} step${c.tasks.length === 1 ? "" : "s"}</span></summary>
         <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;">
             <div style="font-weight:700;font-size:18px;width:28px;">${i + 1}</div>
             <div class="field" style="margin:0;flex:1;min-width:220px;"><label>Chapter title</label><input class="wa-ctitle" maxlength="80" value="${esc(c.title)}"></div>
@@ -120,7 +121,8 @@ function renderWelcomeAdmin() {
                 <div class="field" style="margin:0;width:150px;"><label>Role name(s)</label><input class="wa-targ" maxlength="80" placeholder="Guinea Pig|Lab Rat" value="${esc(t.autoArg)}"></div>
                 <div class="field" style="margin:0;width:120px;"><label>From faction day</label><input type="number" class="wa-tday" min="0" max="60" value="${esc(t.fromDay || 0)}"></div>
             </div></div>`).join('')}
-        <button class="ghost small wa-tadd">+ Add step</button></div>`).join('');
+        <button class="ghost small wa-tadd">+ Add step</button></details>`).join('');
+    document.querySelectorAll('#wa-steps .wa-ch').forEach(d => d.addEventListener('toggle', () => { weAdminOpen[Number(d.dataset.c)] = d.open; }));
     weSync = () => {
         document.querySelectorAll('#wa-steps [data-c]').forEach(card => {
             const c = weCfg.chapters[Number(card.dataset.c)];
@@ -141,7 +143,7 @@ function renderWelcomeAdmin() {
     document.querySelectorAll('#wa-steps .wa-tdel').forEach(b => b.addEventListener('click', redo(() => weCfg.chapters[idx(b)].tasks.splice(Number(b.closest('[data-t]').dataset.t), 1))));
     $('wa-recruits').innerHTML = wePupils.length ? `<table style="width:100%;font-size:13px;border-collapse:collapse;"><thead><tr style="color:var(--muted);text-align:left;"><th style="padding:4px 8px;">Pupil</th><th style="padding:4px 8px;">Mentor</th><th style="padding:4px 8px;">Role</th><th style="padding:4px 8px;">Day</th><th style="padding:4px 8px;">Script</th><th style="padding:4px 8px;">Chapter</th><th style="padding:4px 8px;">Steps</th><th style="padding:4px 8px;">Last progress</th></tr></thead><tbody>${wePupils.map(m => `<tr style="border-top:1px solid var(--line);"><td style="padding:4px 8px;">${esc(m.name)}</td><td style="padding:4px 8px;color:${m.mentor ? 'var(--text)' : 'var(--danger)'};">${esc(m.mentor || 'none yet')}</td><td style="padding:4px 8px;color:var(--muted);">${esc(m.role || '')}</td><td style="padding:4px 8px;font-family:var(--mono);">${m.days == null ? '?' : m.days + 1}</td><td style="padding:4px 8px;">${m.script ? '✓' : '—'}</td><td style="padding:4px 8px;">${m.allDone ? 'done 🎉' : `${m.chapter}/${m.chapters} ${esc(m.chapterTitle)}`}</td><td style="padding:4px 8px;font-family:var(--mono);">${m.done}/${m.total}</td><td style="padding:4px 8px;color:var(--muted);">${weAgo(m.lastTick)}</td></tr>`).join('')}</tbody></table>` : '<p style="color:var(--muted);font-size:13px;margin:0;">No pupils in the mentoring program yet.</p>';
 }
-$('wa-add').addEventListener('click', () => { weSync(); weCfg.chapters.push({ id: '', title: '', intro: '', tasks: [] }); renderWelcomeAdmin(); });
+$('wa-add').addEventListener('click', () => { weSync(); weCfg.chapters.push({ id: '', title: '', intro: '', tasks: [] }); weAdminOpen[weCfg.chapters.length - 1] = true; renderWelcomeAdmin(); });
 $('wa-save').addEventListener('click', async () => {
     weSync();
     const st = $('wa-status'), btn = $('wa-save');
