@@ -26,7 +26,8 @@ let etDays = 30;
 // Defaults to the newsletter period still RUNNING (first Sunday up to today) rather than a rolling 30 days — that is the cycle
 // being built right now, and opening the page already showing it means no re-pick (and no
 // second fetch) is needed just to see the current numbers.
-let etRange = { ...etNewsletterRange(0), period: 'now' }; // { from, to, period: 'now' | 'last' | undefined (a custom pick) }
+// On the first Sunday itself the running period has just started (it is only today), so open on the last finished one instead.
+let etRange = (r => r.from === r.to ? { ...etNewsletterRange(1), period: 'last' } : { ...r, period: 'now' })(etNewsletterRange(0)); // { from, to, period: 'now' | 'last' | undefined (a custom pick) }
 let etOpen = new Set();
 let etSort = { key: 'total', dir: 'desc' }; // sortable table state — see core.js's sortRows/wireSort
 
