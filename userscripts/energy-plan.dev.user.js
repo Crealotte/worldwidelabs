@@ -2,7 +2,7 @@
 // @name         World Wide Labs
 // @namespace    https://worldwidelabs.vercel.app
 // @author       CreaLotte
-// @version      1.38.6
+// @version      1.38.7
 // @updateURL    __WWL_BASE__/worldwidelabs.user.js
 // @downloadURL  __WWL_BASE__/worldwidelabs.user.js
 // @description  Shows your WorldWideLabs weekly energy plan (the checklist from the Energy planner) inside Torn, a To do tab with small personal reminders (revive setting, feedback, timezone map, availability, Discord/Intel/CAT), your My Targets list, a simplified energy/war standing strip, and — if you are in the Mentoring Platform — your mentoring checklist too. Also shows faction banners at the top of every Torn page. A small ⚙ in the header shows the installed version, flags when a newer one is out, lets you set/replace your API key, and — for a leader — add or remove your faction's banners right from Torn. On a computer it is a small window you can drag around and close; in TornPDA it is a menu. Ticks are shared with the WWL site.
@@ -26,7 +26,7 @@
     const KEY_NAME = 'wwl_api_key', POS_NAME = 'wwl_plan_pos', STATE_NAME = 'wwl_plan_state';
     // GM_info gives the version Tampermonkey actually has installed right now — falls back to a
     // hardcoded copy (kept in sync with @version above) for TornPDA, which doesn't grant GM_info.
-    const SCRIPT_VERSION = (typeof GM_info !== 'undefined' && GM_info.script?.version) || '1.38.6';
+    const SCRIPT_VERSION = (typeof GM_info !== 'undefined' && GM_info.script?.version) || '1.38.7';
     const versionGreater = (a, b) => {
         const pa = String(a).split('.').map(Number), pb = String(b).split('.').map(Number);
         for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
@@ -342,6 +342,15 @@
     const weRich = t => esc(String(t || '')).replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g, (m, label, url) => `<a href="${url}" target="_blank" rel="noopener" style="color:#35d99b;">${label}</a>`);
     const weLink = t => { const l = String(t.link || '').trim(); if (!l) return ''; const h = /^https?:\/\//i.test(l) ? l : `${WWL}/${l.replace(/^\/+/, '')}`; return ` <a href="${esc(h)}" target="_blank" rel="noopener" style="color:#35d99b;white-space:nowrap;">${esc(t.label || 'Open')}</a>`; };
     const weTask = (t, cls, extra) => `<label style="display:flex;gap:8px;align-items:flex-start;padding:${IS_PDA ? 8 : 4}px 0;${t.waiting ? 'opacity:.6;' : ''}"><input type="checkbox" class="${cls}" ${extra} data-id="${esc(t.id)}" ${t.done ? 'checked' : ''} ${t.auto || t.waiting ? 'disabled' : ''}><span style="flex:1;">${weRich(t.text)}${t.auto ? ' <span style="color:#9aa4b5;font-size:11px;">· ticks itself</span>' : ''}${t.waiting ? ` <span style="color:#f0b432;font-size:11px;">· from day ${t.fromDay + 1}</span>` : ''}${weLink(t)}</span></label>`;
+    // the role path: where they are on the faction ladder and what the next role still needs
+    function weRole(role) {
+        if (!role) return '';
+        if (role.current < 0) return `<div style="color:#9aa4b5;margin-bottom:6px;">Role: <b style="color:#e8ecf3;">${esc(role.position || 'none')}</b></div>`;
+        const mark = ok => ok === true ? '<span style="color:#35d99b;">✓</span>' : ok === false ? '<span style="color:#9aa4b5;">○</span>' : '<span style="color:#9aa4b5;">?</span>';
+        const chips = role.steps.map((s, i) => `<span style="font-size:11px;border:1px solid ${i === role.current ? '#35d99b' : '#3a4352'};border-radius:10px;padding:1px 7px;color:${i <= role.current ? '#e8ecf3' : '#9aa4b5'};">${i < role.current ? '✓ ' : ''}${esc(s.name)}</span>`).join(' → ');
+        const next = role.next != null ? role.steps[role.next] : null;
+        return `<div style="margin:4px 0 8px;"><div style="font-size:11px;color:#9aa4b5;">Role path</div><div style="display:flex;gap:3px;flex-wrap:wrap;align-items:center;">${chips}</div>${next ? `<div style="margin-top:4px;">Next: <b>${esc(next.name)}</b>${next.gives ? ` <span style="color:#9aa4b5;">(${esc(next.gives)})</span>` : ''}${next.reqs.map(r => `<div style="padding-left:8px;">${mark(r.ok)} ${esc(r.text)}${r.detail ? ` <span style="color:#9aa4b5;font-size:11px;">(${esc(r.detail)})</span>` : ''}</div>`).join('')}</div>` : '<div style="color:#35d99b;margin-top:4px;">You are at the top of the ladder 🎉</div>'}</div>`;
+    }
     function renderWelcomeMine() {
         const r = welMine;
         if (!r || !r.pupil) return '';
@@ -349,6 +358,7 @@
         const total = r.chapters.reduce((s, x) => s + x.total, 0), done = r.chapters.reduce((s, x) => s + x.doneCount, 0);
         return `<div style="margin-bottom:14px;padding-bottom:10px;border-bottom:1px solid #3a4352;">
             <div style="font-weight:700;margin-bottom:4px;">👋 Your welcome missions <span style="font-weight:400;color:#9aa4b5;font-size:12px;">${r.allDone ? 'all done 🎉' : `${done} of ${total} steps`}</span></div>
+            ${weRole(r.role)}
             <div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:6px;">${r.chapters.map((x, i) => `<span style="font-size:11px;border:1px solid ${i === r.current && !r.allDone ? '#35d99b' : '#3a4352'};border-radius:10px;padding:1px 7px;color:${x.complete ? '#35d99b' : x.locked ? '#9aa4b5' : '#e8ecf3'};">${x.complete ? '✓' : x.locked ? '🔒' : ''} ${i + 1}${x.locked ? '' : ` ${esc(x.title)}`}</span>`).join('')}</div>
             ${r.allDone ? '<div style="color:#35d99b;">You finished everything. Well done! 🎉</div>' : `<div style="font-weight:700;margin:6px 0 2px;">${r.current + 1}. ${esc(c.title)}</div><div style="color:#9aa4b5;font-size:12px;white-space:pre-wrap;margin-bottom:4px;">${weRich(c.intro)}</div>${c.tasks.map(t => weTask(t, 'wwl-w-check', '')).join('')}`}
         </div>`;
@@ -359,6 +369,7 @@
         if (!r || r.error) return '';
         const total = r.chapters.reduce((s, x) => s + x.total, 0), done = r.chapters.reduce((s, x) => s + x.doneCount, 0);
         return `<div style="margin:6px 0 10px;"><div style="font-size:12px;font-weight:700;">${r.allDone ? '👋 Finished all welcome chapters 🎉' : `👋 Their welcome chapters: ${r.current + 1} of ${r.chapters.length}, ${done} of ${total} steps`}</div>
+            ${weRole(r.role)}
             <div style="color:#9aa4b5;font-size:12px;margin-bottom:4px;">Tick a step for them if they showed you it is done.</div>
             ${r.chapters.map((x, i) => { const k = `${pupilId}:${i}`; return `<details class="wwl-w-det" data-k="${esc(k)}" ${(welOpen[k] ?? (i === r.current && !r.allDone)) ? 'open' : ''} style="margin:3px 0;border:1px solid #3a4352;border-radius:6px;padding:3px 8px;"><summary style="cursor:pointer;color:${x.complete ? '#35d99b' : '#e8ecf3'};">${x.complete ? '✓' : x.locked ? '🔒' : '○'} ${i + 1}. ${esc(x.title)} <span style="color:#9aa4b5;font-size:11px;">${x.doneCount}/${x.total}${x.locked ? ' · not open for them yet' : ''}</span></summary>${x.tasks.map(t => weTask(t, 'wwl-w-mtick', `data-pupil="${esc(pupilId)}"`)).join('')}</details>`; }).join('')}</div>`;
     }

@@ -13,6 +13,17 @@ const weLinkBtn = s => { const h = weHref(s.link); return h ? `<a class="ghost s
 const weRich = t => esc(String(t || '')).replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g, (m, label, url) => `<a href="${url}" target="_blank" rel="noopener" style="color:var(--reagent);">${label}</a>`);
 const weAgo = ts => { if (!ts) return 'no progress yet'; const d = (Date.now() / 1000 - ts) / 86400; return d < 1 ? 'today' : `${Math.floor(d)} day${Math.floor(d) === 1 ? '' : 's'} ago`; };
 
+// ---- the role path: where a member is on the ladder and what the next role still needs ----
+function weRoleHtml(role) {
+    if (!role) return '';
+    if (role.current < 0) return `<div style="font-size:13px;color:var(--muted);">Your role: <b style="color:var(--text);">${esc(role.position || 'none')}</b></div>`;
+    const mark = ok => ok === true ? '<span style="color:var(--reagent);">✓</span>' : ok === false ? '<span style="color:var(--muted);">○</span>' : '<span style="color:var(--muted);" title="not known yet">?</span>';
+    const chips = role.steps.map((s, i) => `<span style="font-size:12px;border:1px solid ${i === role.current ? 'var(--reagent)' : 'var(--line)'};background:${i === role.current ? 'rgba(53,217,155,.15)' : 'transparent'};border-radius:10px;padding:2px 9px;color:${i <= role.current ? 'var(--text)' : 'var(--muted)'};">${i < role.current ? '✓ ' : ''}${esc(s.name)}</span>`).join('<span style="color:var(--muted);"> → </span>');
+    const next = role.next != null ? role.steps[role.next] : null;
+    return `<div style="margin:6px 0 10px;"><div style="font-size:12px;color:var(--muted);margin-bottom:4px;">Role path</div><div style="display:flex;gap:4px;align-items:center;flex-wrap:wrap;">${chips}</div>
+        ${next ? `<div style="font-size:13px;margin-top:6px;">Next: <b>${esc(next.name)}</b>${next.gives ? ` <span style="color:var(--muted);">(${esc(next.gives)})</span>` : ''}${next.reqs.map(r => ` <span style="margin-left:8px;">${mark(r.ok)} ${esc(r.text)}${r.detail ? ` <span style="color:var(--muted);font-size:11px;">(${esc(r.detail)})</span>` : ''}</span>`).join('')}</div>` : '<div style="font-size:13px;margin-top:6px;color:var(--reagent);">You are at the top of the ladder 🎉</div>'}</div>`;
+}
+
 // ---- the pupil's own chapters (top of the Mentoring page) ----
 let weMine = null, weTab = null;
 async function loadWelcomeMine() {
@@ -29,6 +40,7 @@ function renderWelcomeMine() {
     panel.style.display = 'block';
     const total = r.chapters.reduce((s, c) => s + c.total, 0), done = r.chapters.reduce((s, c) => s + c.doneCount, 0);
     $('we-bar').style.width = `${total ? Math.round(done / total * 100) : 0}%`;
+    $('we-role').innerHTML = weRoleHtml(r.role);
     $('we-count').textContent = r.allDone ? 'All done! 🎉' : `${done} of ${total} steps done`;
     $('we-tabs').innerHTML = r.chapters.map((c, i) => `<button type="button" class="we-tab" data-i="${i}" ${c.locked ? 'disabled' : ''} style="padding:6px 12px;border-radius:8px;border:1px solid ${i === weTab ? 'var(--reagent)' : 'var(--line)'};background:${i === weTab ? 'rgba(53,217,155,.15)' : 'transparent'};color:${c.locked ? 'var(--muted)' : 'var(--text)'};cursor:${c.locked ? 'not-allowed' : 'pointer'};font-size:13px;">${c.locked ? '🔒' : c.complete ? '✓' : ''} ${i + 1}${c.locked ? '' : `. ${esc(c.title)}`}</button>`).join('');
     const c = r.chapters[weTab];
@@ -61,6 +73,7 @@ async function weLoadPupil(pupilId, box) {
         const head = r2.allDone ? `👋 Finished all ${r2.chapters.length} welcome chapters 🎉` : `👋 Their welcome chapters: chapter ${r2.current + 1} of ${r2.chapters.length}, ${done} of ${total} steps (last progress: ${weAgo(r2.lastTick)})`;
         // the mentor sees every chapter in full with what is ticked (the pupil only sees the chapter they are on)
         box.innerHTML = `<details open style="margin-bottom:14px;"><summary class="av-sum"><span style="font-size:13px;font-weight:700;">${head}</span></summary>
+            ${weRoleHtml(r2.role)}
             <div style="font-size:12px;color:var(--muted);margin:4px 0 6px;">Tick a step for them if they showed you it is done. Steps that say "ticks itself" are checked by WWL.</div>
             ${r2.chapters.map((x, i) => `<details data-ch="${i}" ${(was[i] ?? (i === r2.current && !r2.allDone)) ? 'open' : ''} style="margin:4px 0;border:1px solid var(--line);border-radius:8px;padding:4px 10px;"><summary class="av-sum"><span style="font-size:13px;color:${x.complete ? 'var(--reagent)' : 'var(--text)'};">${x.complete ? '✓' : x.locked ? '🔒' : '○'} ${i + 1}. ${esc(x.title)} <span style="color:var(--muted);font-size:12px;">${x.doneCount}/${x.total}${x.locked ? ' · not open for them yet' : ''}</span></span></summary>
                 ${x.tasks.map(t => `<label style="display:flex;gap:8px;align-items:flex-start;padding:3px 0;font-size:13px;${t.waiting ? 'opacity:.6;' : ''}"><input type="checkbox" class="we-mtick" data-id="${esc(t.id)}" ${t.done ? 'checked' : ''} ${t.auto || t.waiting ? 'disabled' : ''} style="width:auto;margin-top:3px;"><span style="flex:1;white-space:pre-wrap;">${esc(t.text.replace(/\[([^\]]+)\]\([^)]*\)/g, '$1'))}${t.auto ? ' <span style="color:var(--muted);font-size:11px;">· ticks itself</span>' : ''}${t.waiting ? ` <span style="color:#f0b432;font-size:11px;">· from day ${t.fromDay + 1}</span>` : ''}</span></label>`).join('')}</details>`).join('')}</details>`;
@@ -84,6 +97,7 @@ async function loadWelcomeAdmin() {
     st.textContent = ''; st.className = 'status';
     weCfg = { chapters: r.config.chapters.map(c => ({ ...c, tasks: (c.tasks || []).map(t => ({ ...t })) })), custom: r.config.custom };
     wePupils = r.pupils; weAutoKinds = r.autoKinds || {};
+    renderPromotions(r.promotions);
     renderWelcomeAdmin();
 }
 function renderWelcomeAdmin() {
@@ -125,7 +139,7 @@ function renderWelcomeAdmin() {
     document.querySelectorAll('#wa-steps .wa-cdown').forEach(b => b.addEventListener('click', redo(() => { const i = idx(b); [weCfg.chapters[i + 1], weCfg.chapters[i]] = [weCfg.chapters[i], weCfg.chapters[i + 1]]; })));
     document.querySelectorAll('#wa-steps .wa-tadd').forEach(b => b.addEventListener('click', redo(() => weCfg.chapters[idx(b)].tasks.push({ id: '', text: '', link: '', label: '', auto: '', autoArg: '', fromDay: 0 }))));
     document.querySelectorAll('#wa-steps .wa-tdel').forEach(b => b.addEventListener('click', redo(() => weCfg.chapters[idx(b)].tasks.splice(Number(b.closest('[data-t]').dataset.t), 1))));
-    $('wa-recruits').innerHTML = wePupils.length ? `<table style="width:100%;font-size:13px;border-collapse:collapse;"><thead><tr style="color:var(--muted);text-align:left;"><th style="padding:4px 8px;">Pupil</th><th style="padding:4px 8px;">Mentor</th><th style="padding:4px 8px;">Day</th><th style="padding:4px 8px;">Script</th><th style="padding:4px 8px;">Chapter</th><th style="padding:4px 8px;">Steps</th><th style="padding:4px 8px;">Last progress</th></tr></thead><tbody>${wePupils.map(m => `<tr style="border-top:1px solid var(--line);"><td style="padding:4px 8px;">${esc(m.name)}</td><td style="padding:4px 8px;color:${m.mentor ? 'var(--text)' : 'var(--danger)'};">${esc(m.mentor || 'none yet')}</td><td style="padding:4px 8px;font-family:var(--mono);">${m.days == null ? '?' : m.days + 1}</td><td style="padding:4px 8px;">${m.script ? '✓' : '—'}</td><td style="padding:4px 8px;">${m.allDone ? 'done 🎉' : `${m.chapter}/${m.chapters} ${esc(m.chapterTitle)}`}</td><td style="padding:4px 8px;font-family:var(--mono);">${m.done}/${m.total}</td><td style="padding:4px 8px;color:var(--muted);">${weAgo(m.lastTick)}</td></tr>`).join('')}</tbody></table>` : '<p style="color:var(--muted);font-size:13px;margin:0;">No pupils in the mentoring program yet.</p>';
+    $('wa-recruits').innerHTML = wePupils.length ? `<table style="width:100%;font-size:13px;border-collapse:collapse;"><thead><tr style="color:var(--muted);text-align:left;"><th style="padding:4px 8px;">Pupil</th><th style="padding:4px 8px;">Mentor</th><th style="padding:4px 8px;">Role</th><th style="padding:4px 8px;">Day</th><th style="padding:4px 8px;">Script</th><th style="padding:4px 8px;">Chapter</th><th style="padding:4px 8px;">Steps</th><th style="padding:4px 8px;">Last progress</th></tr></thead><tbody>${wePupils.map(m => `<tr style="border-top:1px solid var(--line);"><td style="padding:4px 8px;">${esc(m.name)}</td><td style="padding:4px 8px;color:${m.mentor ? 'var(--text)' : 'var(--danger)'};">${esc(m.mentor || 'none yet')}</td><td style="padding:4px 8px;color:var(--muted);">${esc(m.role || '')}</td><td style="padding:4px 8px;font-family:var(--mono);">${m.days == null ? '?' : m.days + 1}</td><td style="padding:4px 8px;">${m.script ? '✓' : '—'}</td><td style="padding:4px 8px;">${m.allDone ? 'done 🎉' : `${m.chapter}/${m.chapters} ${esc(m.chapterTitle)}`}</td><td style="padding:4px 8px;font-family:var(--mono);">${m.done}/${m.total}</td><td style="padding:4px 8px;color:var(--muted);">${weAgo(m.lastTick)}</td></tr>`).join('')}</tbody></table>` : '<p style="color:var(--muted);font-size:13px;margin:0;">No pupils in the mentoring program yet.</p>';
 }
 $('wa-add').addEventListener('click', () => { weSync(); weCfg.chapters.push({ id: '', title: '', intro: '', tasks: [] }); renderWelcomeAdmin(); });
 $('wa-save').addEventListener('click', async () => {
@@ -136,4 +150,19 @@ $('wa-save').addEventListener('click', async () => {
     btn.disabled = false;
     if (r.error) { st.className = 'status err'; st.textContent = r.error; return; }
     loadWelcomeAdmin().then(() => { st.className = 'status ok'; st.textContent = '✓ Saved'; });
+});
+
+// ---- leaders: who is ready for promotion ----
+function renderPromotions(list) {
+    $('wa-promo-list').innerHTML = list && list.length
+        ? `<table style="width:100%;font-size:13px;border-collapse:collapse;"><thead><tr style="color:var(--muted);text-align:left;"><th style="padding:4px 8px;">Member</th><th style="padding:4px 8px;">Now</th><th style="padding:4px 8px;">Next</th><th style="padding:4px 8px;">Why</th></tr></thead><tbody>${list.map(m => `<tr style="border-top:1px solid var(--line);"><td style="padding:4px 8px;font-weight:700;">${esc(m.name)}</td><td style="padding:4px 8px;color:var(--muted);">${esc(m.from)}</td><td style="padding:4px 8px;color:var(--reagent);">${esc(m.to)}</td><td style="padding:4px 8px;color:var(--muted);">${esc(m.why)}</td></tr>`).join('')}</tbody></table>`
+        : '<p style="color:var(--muted);font-size:13px;margin:0;">Nobody is waiting for a promotion right now.</p>';
+}
+$('wa-promo-refresh').addEventListener('click', async () => {
+    const b = $('wa-promo-refresh');
+    b.disabled = true; b.textContent = 'Checking…';
+    const r = await weFetch({ action: 'wel-config-get', refreshPromotions: true });
+    b.disabled = false; b.textContent = 'Check again now';
+    if (r.error) { toast(r.error); return; }
+    renderPromotions(r.promotions);
 });

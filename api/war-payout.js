@@ -28,7 +28,7 @@ const { tornFetch } = require('../lib/tornFetch');
 const { fetchWarHits, sleep, fetchLiveChainHits, isRateLimited } = require('../lib/warHits');
 const { fetchWarBadgeStats } = require('../lib/warBadgeStats');
 const { tornToDiscordIds, resolveDiscordIds, discordStatus } = require('../lib/discordMap');
-const { moHandle, moMe, moStandings, xanaxOwedKey, loadExtra, isEventId } = require('../lib/memberOverview');
+const { moHandle, moMe, moStandings, moWarOk, xanaxOwedKey, loadExtra, isEventId } = require('../lib/memberOverview');
 const { evHandle } = require('../lib/evaluation');
 const { gymHandle } = require('../lib/gymStats');
 const { warReports } = require('../lib/warReports');
@@ -40,7 +40,7 @@ const { nightlyHandle, nightlyRun, getVaultKey } = require('../lib/nightly');
 const { usageFor } = require('../lib/tornFetch');
 const { targetsHandle } = require('../lib/targets');
 const { mentoringHandle, loadProgram: mentoringLoadProgram } = require('../lib/mentoring');
-const { welHandle, welcomeTodoItems } = require('../lib/welcome');
+const { welHandle, welcomeTodoItems, promotions: welPromotions } = require('../lib/welcome');
 const { ohHandle } = require('../lib/onlineHours');
 const { labsIsOwner, labsHasOwners, labsHandle, labsRecordReceipt } = require('../lib/labsLedger');
 
@@ -257,6 +257,24 @@ async function fetchOverdosed(id, key, timestamp) {
     return Number.isFinite(Number(v)) && v !== undefined && v !== null ? Number(v) : null;
 }
 
+// What the welcome chapters and the role ladder (lib/welcome.js) read, all from what is stored or already remembered (no extra Torn calls, except one
+// look-up of the member's own Discord link when they ask for themselves).
+function welDeps(key, factionId) {
+    let rosterCache = null;
+    const verifyOf = async id => { try { const raw = await redis(['HGET', manualVerifyKey(factionId), String(id)]); return raw ? JSON.parse(raw) : {}; } catch (e) { return {}; } };
+    return {
+        redis, factionId,
+        roster: async () => rosterCache || (rosterCache = await getRosterDays(key)),
+        verifyOf,
+        verifyAll: async () => { const flat = (await redis(['HGETALL', manualVerifyKey(factionId)])) || []; const o = {}; for (let i = 0; i < flat.length; i += 2) { try { o[flat[i]] = JSON.parse(flat[i + 1]); } catch (e) { /* skip */ } } return o; },
+        discordOf: async (id, self) => {
+            if ((await verifyOf(id)).discordExempt) return true; // a leader excused them from Discord
+            try { const { status } = await discordStatus([String(id)], { key, redis, guildMap: null, resolve: !!self, limit: 1 }); return status[String(id)] === 'yes' ? true : status[String(id)] === 'no' ? false : null; } catch (e) { return null; }
+        },
+        discordMany: async ids => (await discordStatus(ids.map(String), { key, redis, guildMap: null, resolve: false })).status,
+        warOk: members => moWarOk({ redis, factionId, members }),
+    };
+}
 // The member's own revive setting and whether they are in an Organized Crime — read live (not cached), only for the welcome steps that tick on these.
 async function getUserSnap(key) {
     try {
@@ -274,7 +292,7 @@ async function getRosterDays(key) { // everyone with the days they have been in 
         { headers: { accept: 'application/json' } });
     const d = await r.json();
     if (d.error) throw new Error(d.error.error);
-    return (d.members || []).map(m => ({ id: String(m.id), name: m.name, days: m.days_in_faction ?? null, position: m.position || '' }));
+    return (d.members || []).map(m => ({ id: String(m.id), name: m.name, days: m.days_in_faction ?? null, position: m.position || '', level: m.level ?? null }));
 }
 async function getRoster(key) {
     const r = await tornFetch(`https://api.torn.com/v2/faction/members?striptags=true&key=${encodeURIComponent(key)}`,
@@ -399,6 +417,13 @@ async function leaderTodos(key, factionId) {
     try {
         const sf = await steadfastHandle('steadfast-get', {}, { redis, key, factionId, leader: false });
         if (sf?.countdown?.allDone) add('steadfast', 'All the Steadfast challenges are done — time to upgrade.', 'Open the Steadfast planner', 'steadfast', null);
+    } catch (e) { /* skip */ }
+
+    // members who meet the requirements of the next role (Experiment B, Guinea Pig / Lab Rat, Chemist) but still hold the lower position — worked out
+    // by lib/welcome.js and kept for 30 minutes, so this costs one cheap lookup most of the time. A leader promotes them in Torn.
+    try {
+        const ready = await welPromotions(welDeps(key, factionId), false);
+        if (ready.length) add('promotions', `${ready.length} member${ready.length === 1 ? ' is' : 's are'} ready for promotion: ${ready.slice(0, 5).map(r => `${r.name} (${r.to})`).join(', ')}${ready.length > 5 ? ` +${ready.length - 5} more` : ''}.`, 'See who', 'welcome-admin', 'wa-promo');
     } catch (e) { /* skip */ }
 
     return { todos };
@@ -1206,7 +1231,7 @@ Cancel: ${cancelUrl}`, [], embeds, undefined, true);
             } catch (e) { /* skip */ }
 
             // Welcome steps while this member is a recruit (the first days in the faction), from the leaders' Welcome steps page.
-            try { items.push(...await welcomeTodoItems(redis, factionId, playerId, { site, snap: welcomeSnap, roster: () => getRosterDays(key) })); } catch (e) { /* skip */ }
+            try { items.push(...await welcomeTodoItems(redis, factionId, playerId, { site, snap: welcomeSnap, roster: welDeps(key, factionId).roster, discordOf: welDeps(key, factionId).discordOf })); } catch (e) { /* skip */ }
 
             // The member's own reminders (added on the dashboard) — shown at the end of their list.
             try {
@@ -1307,15 +1332,13 @@ Cancel: ${cancelUrl}`, [], embeds, undefined, true);
         // Welcome chapters (mentoring program): a pupil reads and ticks their own, a mentor looks at their pupil's, only leaders edit the chapters.
         if (action.startsWith('wel-')) {
             if (['wel-config-get', 'wel-config-save'].includes(action) && !(await isLeader(key))) return res.status(403).json({ error: 'Leaders only' });
-            let rosterCache = null, snapCache;
-            const rosterDays = async () => rosterCache || (rosterCache = await getRosterDays(key));
+            let snapCache;
             return res.status(200).json(await welHandle(action, req.body, {
-                redis, factionId, playerId, leader: () => isLeader(key), roster: rosterDays,
+                ...welDeps(key, factionId), playerId, leader: () => isLeader(key),
                 mentorOf: async pupilId => { const prog = await mentoringLoadProgram(redis, factionId); return String(prog.pupils?.[pupilId]?.mentorId || '') === String(playerId); },
                 userSnap: async () => { if (snapCache === undefined) snapCache = await getUserSnap(key); return snapCache; },
             }));
         }
-        // Suggestions — everyone can read, add and vote; only leaders set a status or delete.
         if (action.startsWith('sug-')) {
             const leader = ['sug-list', 'sug-status', 'sug-delete'].includes(action) ? await isLeader(key) : false;
             if (['sug-status', 'sug-delete'].includes(action) && !leader) return res.status(403).json({ error: 'Leaders only' });
