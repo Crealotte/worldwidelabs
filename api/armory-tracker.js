@@ -168,7 +168,9 @@ module.exports = async function handler(req, res) {
                 const item = ensureItem(parsed.item, category);
                 item.quantity += parsed.quantity;
                 if (price != null) item.value += price * parsed.quantity;
-                const p = item.players[parsed.actor] || (item.players[parsed.actor] = { name: parsed.actor, quantity: 0, value: 0 });
+                // a loan is attributed to whoever it was loaned TO (the sentence's actor is the leader handing it out)
+                const who = isConsumingLoan && parsed.otherParty ? parsed.otherParty : parsed.actor;
+                const p = item.players[who] || (item.players[who] = { name: who, quantity: 0, value: 0 });
                 p.quantity += parsed.quantity;
                 if (price != null) p.value += price * parsed.quantity;
             }
