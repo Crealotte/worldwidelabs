@@ -268,7 +268,7 @@ function renderAvOd() {
 // back to 'default' until a leader gives them their own destination (discord-settings-get says so via
 // `usingDefault`).
 let avDiscordKind = 'default';
-const AV_DC_LABELS = { default: 'Availability pings', feedback: 'Feedback reminders', whatsnew: "What's new posts", oc: 'OC requests' };
+const AV_DC_LABELS = { default: 'Availability pings', feedback: 'Feedback reminders', whatsnew: "What's new posts", oc: 'OC requests', bank: 'Bank requests' };
 async function loadAvDiscord(kind = avDiscordKind) {
     avDiscordKind = kind;
     document.querySelectorAll('.dc-kind-btn').forEach(b => b.style.background = b.dataset.kind === kind ? 'var(--bench-2)' : '');

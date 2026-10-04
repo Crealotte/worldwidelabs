@@ -36,7 +36,7 @@ const { sendBugReport, bugsHandle, suggestHandle } = require('../lib/bugReport')
 const { steadfastHandle, steadfastImage, energyDaily } = require('../lib/steadfast');
 const { tzHandle } = require('../lib/tzMap');
 const { planHandle } = require('../lib/planSync');
-const { nightlyHandle, nightlyRun } = require('../lib/nightly');
+const { nightlyHandle, nightlyRun, getVaultKey } = require('../lib/nightly');
 const { usageFor } = require('../lib/tornFetch');
 const { targetsHandle } = require('../lib/targets');
 const { mentoringHandle } = require('../lib/mentoring');
@@ -171,7 +171,7 @@ function isSharedServerFaction(factionId) {
 // DISCORD_KINDS: the named destinations a faction can point at different channels. 'default' is the
 // original single destination (availability pings); 'feedback' and 'whatsnew' are separate so a leader
 // can, say, keep availability pings in a war channel but feedback nudges somewhere quieter.
-const DISCORD_KINDS = ['default', 'feedback', 'whatsnew', 'oc'];
+const DISCORD_KINDS = ['default', 'feedback', 'whatsnew', 'oc', 'bank'];
 // Resolves to { post(content, users, embeds?) } for this faction and kind, { error }, or null if
 // nothing is set up for it. Newer saves live under `channels`, one destination per kind; a kind with
 // no destination of its own falls back to 'default', and 'default' itself still understands the old
@@ -184,15 +184,15 @@ async function getDiscordPoster(factionId, kind = 'default') {
     const s = all.channels?.[kind] || (kind === 'default' ? legacy : null) || all.channels?.default || legacy || {};
     if (s.webhookUrl) {
         if (!WEBHOOK_RE.test(s.webhookUrl)) return { error: 'The saved Discord webhook URL doesn\'t look valid — save it again in the Discord settings.' };
-        return { post: (content, users, embeds) => fetch(s.webhookUrl, {
+        return { post: (content, users, embeds, components) => fetch(components ? `${s.webhookUrl}${s.webhookUrl.includes('?') ? '&' : '?'}with_components=true` : s.webhookUrl, {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ content, username: 'WWLabs', allowed_mentions: { parse: [], users }, ...(embeds ? { embeds } : {}) }),
+            body: JSON.stringify({ content, username: 'WWLabs', allowed_mentions: { parse: [], users }, ...(embeds ? { embeds } : {}), ...(components ? { components } : {}) }),
         }) };
     }
     if (s.channelId && isSharedServerFaction(factionId) && process.env.DISCORD_BOT_TOKEN) {
-        return { post: (content, users, embeds) => fetch(`https://discord.com/api/v10/channels/${encodeURIComponent(s.channelId)}/messages`, {
+        return { post: (content, users, embeds, components) => fetch(`https://discord.com/api/v10/channels/${encodeURIComponent(s.channelId)}/messages`, {
             method: 'POST', headers: { Authorization: `Bot ${process.env.DISCORD_BOT_TOKEN}`, 'Content-Type': 'application/json' },
-            body: JSON.stringify({ content, allowed_mentions: { parse: [], users }, ...(embeds ? { embeds } : {}) }),
+            body: JSON.stringify({ content, allowed_mentions: { parse: [], users }, ...(embeds ? { embeds } : {}), ...(components ? { components } : {}) }),
         }) };
     }
     return null;
@@ -368,6 +368,32 @@ async function leaderTodos(key, factionId) {
 }
 
 
+
+// ---- Bank requests (see 'bank-info' / 'bank-submit' in the handler) ----
+const bankRequestsKey = (factionId) => `wwl:bank-requests:${factionId}`; // hash: requestId -> { id, playerId, name, amount, balance, at, status, claimedBy }
+// A member's own faction-vault balance. Only a leader key can read balances, so this uses the key kept for the nightly saving.
+async function bankBalanceOf(factionId, playerId) {
+    const lk = await getVaultKey(redis, factionId);
+    if (!lk) return { balance: null, error: 'Bank requests are not set up yet: a leader has to switch on "nightly saving" (Leader settings) so WWL can read balances.' };
+    try {
+        const r = await tornFetch(`https://api.torn.com/v2/faction/balance?key=${encodeURIComponent(lk)}`, { headers: { accept: 'application/json' } });
+        const d = await r.json();
+        if (d.error) return { balance: null, error: `Could not read the faction balance: ${d.error.error || d.error.code}` };
+        const b = d.balance || d;
+        const members = Array.isArray(b.members) ? b.members : Object.entries(b.members || {}).map(([id, m]) => ({ id, ...m }));
+        const mine = members.find(m => String(m.id ?? m.user_id) === String(playerId));
+        if (!mine) return { balance: null, error: 'You are not in the faction balance list.' };
+        const money = Number(mine.money ?? mine.balance ?? mine.cash);
+        if (!Number.isFinite(money)) return { balance: null, error: 'Torn returned a balance in a form WWL does not recognise.' };
+        return { balance: Math.max(0, Math.floor(money)) };
+    } catch (e) { return { balance: null, error: `Could not read the faction balance: ${String(e.message || e).slice(0, 80)}` }; }
+}
+// This member's open (unclaimed) request, if any
+async function bankOpenOf(factionId, playerId) {
+    const flat = (await redis(['HGETALL', bankRequestsKey(factionId)])) || [];
+    for (let i = 0; i < flat.length; i += 2) { try { const r = JSON.parse(flat[i + 1]); if (r.playerId === playerId && r.status === 'open') return r; } catch (e) { /* skip */ } }
+    return null;
+}
 
 // Turns the work file into a separately installable "DEV" userscript (see the GET handler: ?script=1&dev=1): its own
 // name/namespace and update address, a DEV tag on the button and window, a separate update channel for the version
@@ -647,6 +673,52 @@ module.exports = async function handler(req, res) {
         if (action === 'ocreq-cancel') {
             await redis(['HDEL', ocRequestsKey(factionId), playerId]);
             return res.status(200).json({ ok: true });
+        }
+
+        // Bank requests — a member asks for money out of their OWN faction balance; a banker claims it from Discord (or the page)
+        // and lands in Torn's vault screen with the member and amount already filled in. The amount can never be more than the
+        // member's own balance, which is read with the leader key kept for nightly saving (a member key cannot see balances).
+        // Nothing is paid by WWL: the banker still confirms the payout in Torn, and a claim is exclusive (SET NX).
+        if (action === 'bank-info') {
+            const [raw, open] = await Promise.all([bankBalanceOf(factionId, playerId), bankOpenOf(factionId, playerId)]);
+            return res.status(200).json({ balance: raw.balance, balanceError: raw.error || null, request: open });
+        }
+        if (action === 'bank-submit') {
+            const amount = Math.floor(Number(String(req.body.amount || '').replace(/[,\s$]/g, '')));
+            if (!(amount >= 1)) return res.status(400).json({ error: 'Enter an amount of at least 1.' });
+            const bal = await bankBalanceOf(factionId, playerId);
+            if (bal.balance === null) return res.status(400).json({ error: bal.error || 'Could not read your balance right now.' });
+            if (amount > bal.balance) return res.status(400).json({ error: `You can only ask for up to your own balance ($${bal.balance.toLocaleString('en-US')}).` });
+            const old = await bankOpenOf(factionId, playerId);
+            if (old) await redis(['HDEL', bankRequestsKey(factionId), old.id]); // one open request per member: a new one replaces it
+            const id = require('crypto').randomBytes(5).toString('hex');
+            const request = { id, playerId, name: playerName, amount, balance: bal.balance, at: Date.now(), status: 'open', posted: false };
+            const host = String(req.headers['x-forwarded-host'] || req.headers.host || '').replace(/[^\w.:-]/g, '');
+            try {
+                const poster = await getDiscordPoster(factionId, 'bank');
+                if (poster && !poster.error) {
+                    const claimUrl = `https://${host}/bank-claim?id=${id}`, cancelUrl = `https://${host}/bank-claim?id=${id}&cancel=1`;
+                    const content = `💰 **${playerName}** requests **$${amount.toLocaleString('en-US')}** from their faction balance ($${bal.balance.toLocaleString('en-US')} available).`;
+                    // Claim / Cancel as link buttons (they open WWL, which needs the banker's own login); if this Discord setup
+                    // cannot show buttons, the same two links are sent as plain text instead
+                    const buttons = [{ type: 1, components: [{ type: 2, style: 5, label: 'Claim', url: claimUrl }, { type: 2, style: 5, label: 'Cancel', url: cancelUrl }] }];
+                    let r = await poster.post(content, [], undefined, buttons);
+                    if (!r.ok) r = await poster.post(`${content}\nClaim: ${claimUrl}\nCancel: ${cancelUrl}`, []);
+                    request.posted = r.ok;
+                }
+            } catch (e) { /* the request still shows on the Bank request page */ }
+            await redis(['HSET', bankRequestsKey(factionId), id, JSON.stringify(request)]);
+            return res.status(200).json({ ok: true, request });
+        }
+        if (action === 'bank-cancel') {
+            const id = String(req.body.id || '').replace(/[^0-9a-f]/g, '');
+            const raw = id && await redis(['HGET', bankRequestsKey(factionId), id]);
+            if (!raw) return res.status(404).json({ error: 'That request no longer exists.' });
+            const r = JSON.parse(raw);
+            if (r.playerId !== playerId && !(await isLeader(key))) return res.status(403).json({ error: 'Only the person who asked, or a banker, can cancel it.' });
+            if (r.status === 'claimed') return res.status(400).json({ error: `Already claimed by ${r.claimedBy}.` });
+            await redis(['HDEL', bankRequestsKey(factionId), id]);
+            return res.status(200).json({ ok: true, name: r.name });
         }
 
 
@@ -968,6 +1040,31 @@ module.exports = async function handler(req, res) {
             if (!id) return res.status(400).json({ error: 'Missing member' });
             await redis(['HDEL', ocRequestsKey(factionId), id]);
             return res.status(200).json({ ok: true });
+        }
+        // Bank requests, the bankers' side: claim one (exclusive — whoever gets it first), and list the open ones.
+        if (action === 'bank-claim') {
+            const id = String(req.body.id || '').replace(/[^0-9a-f]/g, '');
+            const raw = id && await redis(['HGET', bankRequestsKey(factionId), id]);
+            if (!raw) return res.status(404).json({ error: 'That request was cancelled or no longer exists.' });
+            const r = JSON.parse(raw);
+            const link = `https://www.torn.com/factions.php?step=your#/tab=controls&giveMoneyTo=${encodeURIComponent(r.playerId)}&money=${encodeURIComponent(r.amount)}`;
+            // SET NX: only one banker can claim; the same banker opening it again just gets the link again
+            const got = await redis(['SET', `wwl:bank-claim:${factionId}:${id}`, playerId, 'NX', 'EX', String(7 * 86400)]);
+            if (!got) {
+                const by = await redis(['GET', `wwl:bank-claim:${factionId}:${id}`]);
+                if (by !== playerId) return res.status(409).json({ error: `Already claimed by ${r.claimedBy || 'another banker'}.`, claimedBy: r.claimedBy || null });
+            } else {
+                r.status = 'claimed'; r.claimedBy = playerName; r.claimedAt = Date.now();
+                await redis(['HSET', bankRequestsKey(factionId), id, JSON.stringify(r)]);
+            }
+            return res.status(200).json({ ok: true, link, request: r });
+        }
+        if (action === 'bank-list') {
+            const flat = (await redis(['HGETALL', bankRequestsKey(factionId)])) || [];
+            const list = [];
+            for (let i = 0; i < flat.length; i += 2) { try { list.push(JSON.parse(flat[i + 1])); } catch (e) { /* skip */ } }
+            // claimed ones stay visible for a day (so two bankers do not both pay), then drop out
+            return res.status(200).json({ requests: list.filter(r => r.status === 'open' || Date.now() - (r.claimedAt || 0) < 86400000).sort((a, b) => a.at - b.at) });
         }
 
         // The leader's side of manual verification (see 'verify-mine' above): the whole faction's Intel/CAT

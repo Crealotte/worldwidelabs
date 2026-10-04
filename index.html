@@ -548,6 +548,7 @@
             <div class="nav-group-items" data-group-items="faction">
                 <a class="nav-item" data-page="steadfast" href="/steadfast">Steadfast planner</a>
                 <a class="nav-item" data-page="competition" href="/competition">Competition</a>
+                <a class="nav-item" data-page="bank" href="/bank">Bank request</a>
                 <a class="nav-item" data-page="perk-roadmap" href="/perk-roadmap">Perk roadmap</a>
                 <a class="nav-item" data-page="tz-map" href="/tz-map">Timezone map</a>
         </div>
@@ -1793,6 +1794,33 @@
             </div>
         </section>
 
+        <section class="page" id="page-bank">
+            <div class="lab-label">WWL·34 / faction</div>
+            <h2>Bank request</h2>
+            <p class="pagedesc">Ask for money out of your own faction balance. You can never ask for more than your balance, and a banker confirms every payout in Torn.</p>
+            <div class="status" id="bank-status"></div>
+            <div class="panel">
+                <h3>Request money</h3>
+                <p id="bank-balance" style="margin:0 0 10px;"></p>
+                <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:10px;">
+                    <input id="bank-amount" type="number" min="1" step="1" placeholder="Amount" style="width:200px;">
+                    <button class="ghost small" id="bank-all" type="button">All of it</button>
+                    <button id="bank-send" type="button">Send request</button>
+                </div>
+                <div id="bank-mine"></div>
+            </div>
+            <div class="panel" id="bank-leader-panel" style="display:none;">
+                <h3>Open requests <span style="font-weight:400;font-size:12px;color:var(--muted);">(bankers) — Claim opens Torn's vault screen with everything filled in</span></h3>
+                <div id="bank-list"></div>
+            </div>
+        </section>
+
+        <section class="page" id="page-bank-claim">
+            <div class="lab-label">WWL·34 / faction</div>
+            <h2>Bank request</h2>
+            <div class="panel"><div id="bc-body"></div></div>
+        </section>
+
         <section class="page" id="page-newsletter">
             <div class="lab-label">WWL·25 / leaders &amp; council</div>
             <h2>Newsletter</h2>
@@ -1826,6 +1854,7 @@
                     <button type="button" class="ghost small dc-kind-btn" data-kind="feedback">Feedback reminders</button>
                     <button type="button" class="ghost small dc-kind-btn" data-kind="whatsnew">What's new posts</button>
                     <button type="button" class="ghost small dc-kind-btn" data-kind="oc">OC requests</button>
+                    <button type="button" class="ghost small dc-kind-btn" data-kind="bank">Bank requests</button>
                 </div>
                 <div id="av-discord-body"></div>
                 </details>
@@ -2473,6 +2502,7 @@
 <script src="competition.js"></script>
 <script src="script-card.js"></script>
 <script src="oc-requests.js"></script>
+<script src="bank.js"></script>
 <script src="crimes-guide.js"></script>
 <script src="war-payout-tracker.js"></script>
 <script src="war-badges-tracker.js"></script>
