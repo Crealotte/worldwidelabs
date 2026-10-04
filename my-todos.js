@@ -80,3 +80,11 @@ async function loadTodoIdeas() {
         }));
     } catch (e) { st.className = 'status err'; st.textContent = e.message; }
 }
+
+// The reminders panel at the bottom of the dashboard can be closed; it stays closed (or open) the way you left it.
+(function () {
+    const d = $('dash-mytodo-panel');
+    if (!d) return;
+    try { if (localStorage.getItem('wwl_mytodo_open') === '0') d.open = false; } catch (e) { /* stays open */ }
+    d.addEventListener('toggle', () => { try { localStorage.setItem('wwl_mytodo_open', d.open ? '1' : '0'); } catch (e) { /* not critical */ } });
+})();

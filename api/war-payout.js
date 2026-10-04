@@ -39,7 +39,8 @@ const { planHandle } = require('../lib/planSync');
 const { nightlyHandle, nightlyRun, getVaultKey } = require('../lib/nightly');
 const { usageFor } = require('../lib/tornFetch');
 const { targetsHandle } = require('../lib/targets');
-const { mentoringHandle } = require('../lib/mentoring');
+const { mentoringHandle, loadProgram: mentoringLoadProgram } = require('../lib/mentoring');
+const { welHandle, welcomeTodoItems } = require('../lib/welcome');
 const { ohHandle } = require('../lib/onlineHours');
 const { labsIsOwner, labsHasOwners, labsHandle, labsRecordReceipt } = require('../lib/labsLedger');
 
@@ -256,6 +257,13 @@ async function fetchOverdosed(id, key, timestamp) {
     return Number.isFinite(Number(v)) && v !== undefined && v !== null ? Number(v) : null;
 }
 
+async function getRosterDays(key) { // everyone with the days they have been in the faction (cached like the other roster reads)
+    const r = await tornFetch(`https://api.torn.com/v2/faction/members?striptags=true&key=${encodeURIComponent(key)}`,
+        { headers: { accept: 'application/json' } });
+    const d = await r.json();
+    if (d.error) throw new Error(d.error.error);
+    return (d.members || []).map(m => ({ id: String(m.id), name: m.name, days: m.days_in_faction ?? null }));
+}
 async function getRoster(key) {
     const r = await tornFetch(`https://api.torn.com/v2/faction/members?striptags=true&key=${encodeURIComponent(key)}`,
         { headers: { accept: 'application/json' } });
@@ -1183,6 +1191,9 @@ Cancel: ${cancelUrl}`, [], embeds, undefined, true);
                 });
             } catch (e) { /* skip */ }
 
+            // Welcome steps while this member is a recruit (the first days in the faction), from the leaders' Welcome steps page.
+            try { items.push(...await welcomeTodoItems(redis, factionId, playerId, daysInFaction, site)); } catch (e) { /* skip */ }
+
             // The member's own reminders (added on the dashboard) — shown at the end of their list.
             try {
                 const mine = await redis(['HGET', `wwl:my-todos:${factionId}`, playerId]);
@@ -1278,6 +1289,18 @@ Cancel: ${cancelUrl}`, [], embeds, undefined, true);
         if (action.startsWith('oh-')) {
             if (action === 'oh-all' && !(await isLeader(key))) return res.status(403).json({ error: 'Leaders only' });
             return res.status(200).json(await ohHandle(action, req.body, { redis, factionId, playerId }));
+        }
+        // Welcome steps for recruits: a member reads and ticks their own; a mentor looks at their pupil's; only leaders edit the steps.
+        if (action.startsWith('wel-')) {
+            if (['wel-config-get', 'wel-config-save'].includes(action) && !(await isLeader(key))) return res.status(403).json({ error: 'Leaders only' });
+            let rosterCache = null;
+            const rosterDays = async () => rosterCache || (rosterCache = await getRosterDays(key));
+            return res.status(200).json(await welHandle(action, req.body, {
+                redis, factionId, playerId, daysInFaction, leader: () => isLeader(key),
+                mentorOf: async pupilId => { const prog = await mentoringLoadProgram(redis, factionId); return String(prog.pupils?.[pupilId]?.mentorId || '') === String(playerId); },
+                daysOfMember: async id => { const m = (await rosterDays()).find(x => x.id === String(id)); return m ? m.days : null; },
+                recruits: async () => (await rosterDays()).filter(m => m.days != null),
+            }));
         }
         // Suggestions — everyone can read, add and vote; only leaders set a status or delete.
         if (action.startsWith('sug-')) {

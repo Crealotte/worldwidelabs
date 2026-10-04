@@ -502,7 +502,7 @@
         </div>
         <a class="nav-item active" data-page="dashboard" href="/dashboard">Dashboard</a>
         <a class="nav-item" data-page="profile" href="/profile">Player profile</a>
-        <a class="nav-item" data-page="mentoring" href="/mentoring" id="nav-mentoring" style="display:none;">🎓 Mentoring</a>
+        <a class="nav-item" data-page="mentoring" href="/mentoring" id="nav-mentoring">🎓 Mentoring</a>
 
         <div class="nav-group">
             <div class="nav-group-header" data-group="training">
@@ -586,6 +586,7 @@
                         <a class="nav-item" data-page="effort-calc" href="/effort-calc">Effort Calculator</a>
                         <a class="nav-item" data-page="evaluation" href="/evaluation">Monthly evaluation</a>
                         <a class="nav-item" data-page="todo-ideas" href="/todo-ideas">Member to-do</a>
+                        <a class="nav-item" data-page="welcome-admin" href="/welcome-admin">Welcome steps</a>
                         <a class="nav-item" data-page="newsletter" href="/newsletter">Newsletter</a>
                         <a class="nav-item" data-page="leader-settings" href="/leader-settings">Leader settings</a>
                         <a class="nav-item" data-page="mentoring-admin" href="/mentoring-admin">Mentoring admin</a>
@@ -657,25 +658,10 @@
                 <div id="dash-script-body"></div>
             </div>
 
-            <div class="panel" id="dash-oh-panel" style="display:none;">
-                <h3 style="margin-top:0;">🕐 When are you usually online?</h3>
-                <p style="color:var(--muted);font-size:12px;margin:0 0 8px;">Tick the hours of a normal day you are usually around. It helps leaders pair you with a mentor or pupil who is online at the same time. Hours are saved as TCT; the switch only shows them in your own time zone.</p>
-                <label style="display:flex;gap:6px;align-items:center;font-size:13px;margin-bottom:8px;cursor:pointer;"><input type="checkbox" id="oh-tz" style="width:auto;"> Show in my own time zone</label>
-                <div style="font-size:12px;color:var(--muted);margin-bottom:6px;">Hours shown in <b id="oh-zone" style="color:var(--text);">TCT</b> <span id="oh-tz-note"></span></div>
-                <div id="oh-grid" style="display:grid;grid-template-columns:repeat(12,1fr);gap:4px;max-width:520px;"></div>
-                <div style="margin-top:10px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
-                    <button id="oh-save" type="button" class="small">Save</button>
-                    <button id="oh-clear" type="button" class="ghost small">Clear all</button>
-                    <span id="oh-count" style="font-size:12px;color:var(--muted);"></span>
-                    <span id="oh-status" class="status"></span>
-                </div>
-            </div>
-
-            <div class="panel" id="dash-mytodo-panel" style="display:none;">
-                <h3 style="margin-top:0;">📝 My own reminders</h3>
-                <p style="color:var(--muted);font-size:12px;margin:0 0 8px;">Add anything you want to be reminded of, once or every day, and tick it off — it shows in your script To do list too. Leaders can see what people add here, to find reminders worth building for everyone.</p>
-                <div style="display:flex;gap:8px;margin-bottom:8px;flex-wrap:wrap;"><input id="mt-input" maxlength="100" placeholder="e.g. Buy Xanax before the war" style="flex:1;min-width:200px;"><select id="mt-repeat" style="width:auto;"><option value="once">One time</option><option value="daily">Every day</option></select><button id="mt-add" type="button">Add</button></div>
-                <div id="mt-list"></div>
+            <div class="panel" id="dash-welcome-panel" style="display:none;">
+                <h3 style="margin-top:0;">👋 Welcome: your first days</h3>
+                <p style="color:var(--muted);font-size:12px;margin:0 0 4px;">A few things to get you settled, one step at a time. Tick each one when you have done it, and ask your mentor or any leader if anything is unclear. No rush!</p>
+                <div id="we-list"></div>
             </div>
 
             <div class="panel" id="announcement-panel" style="display:none;">
@@ -867,6 +853,13 @@
                 <ul class="crimes-bullets" id="eg-jump-intro"></ul>
                 <div id="eg-jumps" style="margin-top:14px;"></div>
             </div>
+            <details class="panel" id="dash-mytodo-panel" style="display:none;" open>
+                <summary class="av-sum"><h3 style="display:inline;margin:0;">📝 My own reminders</h3></summary>
+                <p style="color:var(--muted);font-size:12px;margin:0 0 8px;">Add anything you want to be reminded of, once or every day, and tick it off — it shows in your script To do list too. Leaders can see what people add here, to find reminders worth building for everyone.</p>
+                <div style="display:flex;gap:8px;margin-bottom:8px;flex-wrap:wrap;"><input id="mt-input" maxlength="100" placeholder="e.g. Buy Xanax before the war" style="flex:1;min-width:200px;"><select id="mt-repeat" style="width:auto;"><option value="once">One time</option><option value="daily">Every day</option></select><button id="mt-add" type="button">Add</button></div>
+                <div id="mt-list"></div>
+            </details>
+
         </section>
 
         <!-- ========== ANNOUNCEMENTS EDITOR (leaders only) ========== -->
@@ -1054,6 +1047,19 @@
             <h2>🎓 Mentoring</h2>
             <p class="pagedesc">Your mentoring pairing(s): a shared checklist and a private chat with your mentor or pupil. A leader sets up who is paired with who — see them if you want to join in.</p>
             <div class="status" id="mt-status"></div>
+            <div class="panel" id="dash-oh-panel" style="display:none;margin-bottom:16px;">
+                <h3 style="margin-top:0;">🕐 When are you usually online?</h3>
+                <p style="color:var(--muted);font-size:12px;margin:0 0 8px;">Tick the hours of a normal day you are usually around. It helps leaders pair you with a mentor or pupil who is online at the same time. Hours are saved as TCT; the switch only shows them in your own time zone.</p>
+                <label style="display:flex;gap:6px;align-items:center;font-size:13px;margin-bottom:8px;cursor:pointer;"><input type="checkbox" id="oh-tz" style="width:auto;"> Show in my own time zone</label>
+                <div style="font-size:12px;color:var(--muted);margin-bottom:6px;">Hours shown in <b id="oh-zone" style="color:var(--text);">TCT</b> <span id="oh-tz-note"></span></div>
+                <div id="oh-grid" style="display:grid;grid-template-columns:repeat(12,1fr);gap:4px;max-width:520px;"></div>
+                <div style="margin-top:10px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+                    <button id="oh-save" type="button" class="small">Save</button>
+                    <button id="oh-clear" type="button" class="ghost small">Clear all</button>
+                    <span id="oh-count" style="font-size:12px;color:var(--muted);"></span>
+                    <span id="oh-status" class="status"></span>
+                </div>
+            </div>
             <div class="panel" id="mt-empty" style="display:none;">
                 <p style="color:var(--muted);margin:0;">You are not in a mentoring pair right now — ask a leader if you would like to mentor someone, or get a mentor yourself.</p>
             </div>
@@ -1864,6 +1870,23 @@
             <div class="panel"><div id="bc-body"></div></div>
         </section>
 
+        <section class="page" id="page-welcome-admin">
+            <div class="lab-label">WWL·29 / leaders</div>
+            <h2>👋 Welcome steps</h2>
+            <p class="pagedesc">The messages a new recruit gets in their first days, one step at a time (like a series of welcome mails). They show on the recruit's dashboard and in the script's To do list, and their mentor sees them on the Mentoring page. A step with "From day 0" shows straight away, "day 1" from the second day, and so on.</p>
+            <div class="status" id="wa-status"></div>
+            <div class="panel">
+                <div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;margin-bottom:10px;">
+                    <div class="field" style="margin:0;width:200px;"><label for="wa-window">Recruit for how many days</label><input type="number" id="wa-window" min="1" max="14" value="14"></div>
+                    <span id="wa-note" style="font-size:12px;color:var(--muted);"></span>
+                </div>
+                <div id="wa-steps"></div>
+                <button class="ghost small" id="wa-add">+ Add step</button>
+                <button id="wa-save" style="margin-left:8px;">Save steps</button>
+            </div>
+            <div class="panel"><h3 style="margin-top:0;">Who is in their first days</h3><div id="wa-recruits"></div></div>
+        </section>
+
         <section class="page" id="page-todo-ideas">
             <div class="lab-label">WWL·35 / leaders</div>
             <h2>Member to-do</h2>
@@ -2570,6 +2593,7 @@
 <script src="bank.js"></script>
 <script src="my-todos.js"></script>
 <script src="online-hours.js"></script>
+<script src="welcome.js"></script>
 <script src="crimes-guide.js"></script>
 <script src="war-payout-tracker.js"></script>
 <script src="war-badges-tracker.js"></script>

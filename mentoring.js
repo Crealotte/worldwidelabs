@@ -19,6 +19,7 @@ let mtData = null; // last 'mentor-my-status' response
 let mtPollTimer = null;
 
 async function loadMentoring() {
+    if (typeof loadOnlineHours === 'function') loadOnlineHours(); // the usual-online-hours panel at the top of this page
     if (mtPollTimer) { clearInterval(mtPollTimer); mtPollTimer = null; }
     const st = $('mt-status');
     st.className = 'status ok'; st.textContent = 'Loading…';
@@ -28,7 +29,7 @@ async function loadMentoring() {
         mtData = r;
         st.textContent = ''; st.className = 'status';
         // showing up in the menu at all already means you're in a pair (or a leader) — kept as a safety net for a direct link
-        $('nav-mentoring').style.display = (r.isMentor || r.isPupil || r.allPairs !== undefined) ? '' : 'none';
+        $('nav-mentoring').style.display = ''; // everyone sees it: it is also where members set their usual online hours
         $('mt-empty').style.display = (r.pairs.length || r.allPairs?.length) ? 'none' : 'block';
         renderMentoringPairs();
         $('mt-oversight-wrap').style.display = r.allPairs !== undefined ? 'block' : 'none';
@@ -68,6 +69,7 @@ function renderMentoringPairs() {
         return `
         <div class="panel" style="margin-bottom:16px;" data-pair="${esc(p.pairId)}">
             <h3 style="margin-top:0;">${p.role === 'mentor' ? `You are mentoring ${esc(p.otherName)}` : `Your mentor is ${esc(p.otherName)}`}</h3>
+            ${p.role === 'mentor' ? `<div class="mt-welcome" data-pupil="${esc(p.otherId)}"></div>` : ''}
             ${items.length ? `<div class="mt-todos" style="margin-bottom:16px;">
                 ${items.map(t => `<label style="display:flex;gap:8px;align-items:center;padding:4px 0;cursor:pointer;">
                     <input type="checkbox" style="width:auto;" class="mt-todo" data-id="${esc(t.id)}" ${p.done.includes(t.id) ? 'checked' : ''}> ${esc(t.text)}</label>`).join('')}
@@ -84,6 +86,8 @@ function renderMentoringPairs() {
 
     document.querySelectorAll('#mt-pairs .panel').forEach(card => {
         const pairId = card.dataset.pair;
+        const wel = card.querySelector('.mt-welcome'); // a mentor sees the welcome steps their pupil is getting (while the pupil is a recruit)
+        if (wel && typeof weLoadPupil === 'function') weLoadPupil(wel.dataset.pupil, wel);
         card.querySelectorAll('.mt-todo').forEach(cb => cb.addEventListener('change', async () => {
             const { mentorId, pupilId } = mtPairKey({ pairId });
             const r = await mtFetch({ action: 'mentor-todo-toggle', mentorId, pupilId, todoId: cb.dataset.id, checked: cb.checked });
@@ -291,6 +295,6 @@ async function checkMentoringAccess() {
         const nav = document.getElementById('nav-mentoring');
         // `allPairs` only ever comes back for a leader (see lib/mentoring.js) — so a leader gets the menu item
         // too, purely to look in on the program, even with no pairing of their own.
-        if (nav) nav.style.display = (!r.error && (r.isMentor || r.isPupil || r.allPairs !== undefined)) ? '' : 'none';
+        if (nav) nav.style.display = ''; // shown to everyone (the online-hours panel lives on this page)
     } catch (e) { /* nav item just stays hidden */ }
 }

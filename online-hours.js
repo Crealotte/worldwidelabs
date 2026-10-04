@@ -1,4 +1,4 @@
-// online-hours.js — "When are you usually online?" on the dashboard: tick the hours of a normal day you are usually around. Saved as TCT
+// online-hours.js — "When are you usually online?" at the top of the Mentoring page: tick the hours of a normal day you are usually around. Saved as TCT
 // (like the availability tracker); the toggle only changes how the hours are shown and ticked, in your own time zone instead.
 // Leaders see everyone's hours on the Mentoring admin page (ohStrip / ohOverlap below) to pair people who are online at the same time.
 // Backend: lib/onlineHours.js.
