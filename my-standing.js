@@ -52,7 +52,7 @@ async function loadMyStanding() {
         const xan = r.xanax;
         const xanaxTile = !xan ? '' : `
             <div class="stat" style="margin-bottom:14px;">
-                <div class="k">💊 Xanax from the armory (wars of this period)</div>
+                <div class="k">💊 Xanax from the armory (recent wars)</div>
                 ${!xan.known
                     ? `<div class="s">Not checked yet — a leader checks the Xanax once per period${xan.wars.length ? ` (${xan.wars.length} of ${xan.total} wars so far)` : ''}.</div>`
                     : `<div class="v" style="font-size:26px;color:${xan.outstanding > 0 ? 'var(--danger)' : 'var(--reagent)'};">${xan.outstanding > 0 ? `${xan.outstanding} to put back` : '✓ nothing to put back'}</div>
