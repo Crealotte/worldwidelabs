@@ -1280,7 +1280,7 @@ Cancel: ${cancelUrl}`, [], embeds, undefined, true);
 
         // Member Overview (who follows the rules / needs a push) — logic in lib/memberOverview.js.
         if (action.startsWith('mo-')) return res.status(200).json(await moHandle(action, req.body, { redis, key, factionId }));
-        if (action.startsWith('ev-')) return res.status(200).json(await evHandle(action, req.body, { redis, factionId }));
+        if (action.startsWith('ev-')) return res.status(200).json(await evHandle(action, req.body, { redis, factionId, name: playerName }));
         // OC requests, the leaders' side: the open requests (oldest first) and closing one — spawned, or dismissed.
         if (action === 'ocreq-list') {
             const flat = (await redis(['HGETALL', ocRequestsKey(factionId)])) || [];

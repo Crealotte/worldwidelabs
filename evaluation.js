@@ -11,6 +11,8 @@
 let evPeriodId = null;
 let evEnergy = null;
 let evLog = {};
+let evSent = {}; // who has been sent this period's message: member id -> { at, by } (shared by every leader)
+let evOnlyUnsent = false;
 let evBusy = false;
 let evOnlyBelow = false;
 let evOpen = new Set();
@@ -65,6 +67,7 @@ async function loadEvaluation() {
         if (lg.error) throw new Error(lg.error);
         evLog = lg.log || {};
         await evXanLoadCached();
+        await evLoadSent();
         st.textContent = '';
         renderEvaluation();
     } catch (e) {
@@ -169,7 +172,8 @@ function renderEvaluation() {
         <div><div style="color:var(--muted);font-size:11px;">Needs improvement</div><div style="font-weight:700;color:${EV_STATUS.improve[1]};">${count('improve')}</div></div>
         <div><div style="color:var(--muted);font-size:11px;">New, settling in</div><div style="font-weight:700;color:${EV_STATUS.new[1]};">${count('new')}</div></div>
         <div><div style="color:var(--muted);font-size:11px;">At risk</div><div style="font-weight:700;color:${EV_STATUS.risk[1]};">${count('risk')}</div></div>
-        <div><div style="color:var(--muted);font-size:11px;">Below AND warned before</div><div style="font-weight:700;">${rows.filter(r => r.fails && r.warned).length}</div></div>`;
+        <div><div style="color:var(--muted);font-size:11px;">Below AND warned before</div><div style="font-weight:700;">${rows.filter(r => r.fails && r.warned).length}</div></div>
+        <div><div style="color:var(--muted);font-size:11px;">Message sent</div><div style="font-weight:700;">${rows.filter(r => evSent[r.id]).length} of ${rows.length}</div></div>`;
     // the Xanax bar above the table: what is loaded for this period's wars, and the button that loads / refreshes it
     if (!evXan.busy) {
         const wars = evXan.wars, loaded = wars.filter(w => evXan.byWar[w.id]).length, all = loaded === wars.length;
@@ -192,13 +196,16 @@ function renderEvaluation() {
     if (matched.length) notes.push(`Availability plans matched to the wars — ${matched.join(' · ')}.`);
     $('ev-notes').innerHTML = notes.map(esc).join('<br>');
     $('ev-below').checked = evOnlyBelow;
+    $('ev-unsent').checked = evOnlyUnsent;
 
-    const shown = evOnlyBelow ? below : rows;
+    let shown = evOnlyBelow ? below : rows;
+    if (evOnlyUnsent) shown = shown.filter(r => !evSent[r.id]);
     const accessors = {
         name: r => r.name.toLowerCase(),
         war: r => (r.counted ? r.okWars / r.counted : -1),
         train: r => (r.pct === null ? -1 : r.pct),
         xan: r => (r.xanax.known ? r.xanax.outstanding : -1),
+        sent: r => (evSent[r.id] ? evSent[r.id].at : 0),
         status: r => r.severity,
         prev: r => r.history[0]?.date || '',
     };
@@ -213,6 +220,7 @@ function renderEvaluation() {
                 <th style="padding:4px 8px;">Last wars (war + chain hits)</th>
                 <th data-sort="train" style="padding:4px 8px;">Training</th>
                 <th data-sort="xan" style="padding:4px 8px;">Xanax</th>
+                <th data-sort="sent" style="padding:4px 8px;">Sent</th>
                 <th data-sort="status" style="padding:4px 8px;">Suggested</th>
                 <th data-sort="prev" style="padding:4px 8px;">Earlier</th>
             </tr></thead>
@@ -229,10 +237,11 @@ function renderEvaluation() {
                     <td style="padding:6px 8px;white-space:nowrap;font-family:var(--mono);">${perWar}</td>
                     <td style="padding:6px 8px;white-space:nowrap;font-family:var(--mono);color:${r.pct === null ? 'var(--muted)' : r.trainBelow ? MO_LIGHT.red : MO_LIGHT.green};">${r.pct === null ? (r.tierEff ? '…' : 'no tier') : `${evNum(r.trained)} / ${evNum(r.energyNeed)} (${Math.round(r.pct * 100)}%)`}</td>
                     <td style="padding:6px 8px;white-space:nowrap;font-family:var(--mono);">${r.xanax.known ? (r.xanax.outstanding > 0 ? `<span style="color:${MO_LIGHT.red};font-weight:700;" title="Took more Xanax than the hits covered and has not put it back">${r.xanax.outstanding} to return</span>` : r.xanax.owed > 0 ? `<span style="color:${MO_LIGHT.green};" title="Put it all back">✓ returned</span>` : `<span style="color:${MO_LIGHT.green};">✓</span>`) : `<span style="color:var(--muted);" title="Press Load Xanax data above the table">…</span>`}${r.xanax.known && !r.xanax.depKnown && r.xanax.owed > 0 ? ' <span style="color:var(--muted);" title="Deposits not checked yet">?</span>' : ''}</td>
+                    <td style="padding:6px 8px;white-space:nowrap;font-size:12px;">${evSent[r.id] ? `<span style="color:${MO_LIGHT.green};" title="Sent by ${esc(evSent[r.id].by || '?')} on ${esc(new Date(evSent[r.id].at).toLocaleString())}">✓ ${esc(new Date(evSent[r.id].at).toLocaleDateString(undefined, { day: 'numeric', month: 'short' }))}</span>` : '<span style="color:var(--muted);">—</span>'}</td>
                     <td style="padding:6px 8px;white-space:nowrap;color:${stColor};font-weight:600;">${stLabel}${r.fails && r.warned ? ' <span title="Below requirement and has an earlier warning/probation" style="color:var(--danger);">· repeat</span>' : ''}</td>
                     <td style="padding:6px 8px;white-space:nowrap;">${last ? `<span style="color:${EV_KIND_COLOR[last.kind]};">${esc(EV_KIND_LABEL[last.kind])}</span> <span style="color:var(--muted);">${esc(evDate(last.date))}${r.history.length > 1 ? ` · ${r.history.length} entries` : ''}</span>` : '<span style="color:var(--muted);">—</span>'}</td>
                 </tr>
-                ${open ? `<tr class="ev-detail" data-id="${esc(r.id)}"><td colspan="7" style="padding:10px 12px;background:var(--bench-2);white-space:normal;">${evDetailHtml(r)}</td></tr>` : ''}`;
+                ${open ? `<tr class="ev-detail" data-id="${esc(r.id)}"><td colspan="8" style="padding:10px 12px;background:var(--bench-2);white-space:normal;">${evDetailHtml(r)}</td></tr>` : ''}`;
             }).join('')}</tbody>
         </table>`;
     wireSort($('ev-table'), evSort, shown, accessors, renderEvaluation);
@@ -274,6 +283,7 @@ function evDetailHtml(r) {
                     <button class="small ev-copy">Copy message</button>
                     <button class="ghost small ev-copy-plain" type="button" title="Plain text only, no formatting">Copy plain text</button>
                     <button class="ghost small ev-mail" type="button" data-xid="${esc(r.id)}">Open Torn mail</button>
+                    <button class="small ev-sent" type="button" style="${evSent[r.id] ? "background:transparent;border:1px solid var(--reagent);color:var(--reagent);" : ""}">${evSent[r.id] ? "✅ Sent — undo" : "Mark as sent"}</button>
                 </div>
             </div>
             <div>
@@ -301,6 +311,21 @@ function wireEvDetail(tr, r) {
     tr.querySelector('.ev-mail').addEventListener('click', e => window.open(`https://www.torn.com/messages.php#/p=compose&XID=${e.currentTarget.dataset.xid}`, '_blank', 'noopener'));
     tr.querySelector('.ev-copy').addEventListener('click', () => evCopyMessage(tr.querySelector('.ev-msg').value, 'Message copied'));
     tr.querySelector('.ev-copy-plain').addEventListener('click', () => navigator.clipboard.writeText(tr.querySelector('.ev-msg').value).then(() => toast('Plain text copied')));
+    tr.querySelector('.ev-sent').addEventListener('click', async () => {
+        const btn = tr.querySelector('.ev-sent');
+        btn.disabled = true;
+        const wasSent = !!evSent[r.id];
+        try {
+            const res = await moFetch({ action: 'ev-sent-set', period: evPeriod().start, id: r.id, sent: !wasSent });
+            if (res.error) throw new Error(res.error);
+            if (wasSent) delete evSent[r.id]; else evSent[r.id] = { at: Date.now(), by: 'you' };
+            if (!wasSent) { // marking it sent also writes it into the member's log, so it shows up under Earlier next time
+                const lg = await moFetch({ action: 'ev-log-add', name: r.name, kind: 'told', date: new Date().toISOString().slice(0, 10), note: `Monthly evaluation message sent (${moFmt(evPeriod().start)} - ${moFmt(evPeriod().end)})` });
+                if (!lg.error) evLog[evKey(r.name)] = lg.entries;
+            }
+            renderEvaluation();
+        } catch (e) { toast(e.message); btn.disabled = false; }
+    });
     tr.querySelector('.ev-save').addEventListener('click', async () => {
         const btn = tr.querySelector('.ev-save');
         btn.disabled = true;
@@ -328,10 +353,12 @@ $('ev-period').addEventListener('change', async () => {
     const en = await moFetch({ action: 'mo-energy', from: p.start, to: p.end });
     evEnergy = en.error ? null : en;
     await evXanLoadCached(); // the Xanax of that period's wars (saved answers only)
+    await evLoadSent();
     $('ev-status').textContent = '';
     renderEvaluation();
 });
 $('ev-below').addEventListener('change', () => { evOnlyBelow = $('ev-below').checked; renderEvaluation(); });
+$('ev-unsent').addEventListener('change', () => { evOnlyUnsent = $('ev-unsent').checked; renderEvaluation(); });
 $('ev-import-btn').addEventListener('click', async () => {
     const btn = $('ev-import-btn'), out = $('ev-import-status');
     btn.disabled = true; out.className = 'status ok'; out.textContent = 'Importing…';
@@ -507,4 +534,12 @@ async function evCopyMessage(text, okMsg, title) {
         await navigator.clipboard.writeText(text);
     }
     toast(okMsg);
+}
+
+// ---- who has been sent the message ----
+async function evLoadSent() {
+    try {
+        const r = await moFetch({ action: 'ev-sent-get', period: evPeriod().start });
+        evSent = r.error ? {} : (r.sent || {});
+    } catch (e) { evSent = {}; }
 }
