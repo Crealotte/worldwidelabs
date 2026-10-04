@@ -431,6 +431,7 @@ async function bankBalanceOf(factionId, playerId, opts = {}) {
         if (!Number.isFinite(money)) return { balance: null, error: 'Torn returned a balance in a form WWL does not recognise.' };
         return { balance: Math.max(0, Math.floor(money)) };
     } catch (e) { return { balance: null, error: `Could not read the faction balance: ${String(e.message || e).slice(0, 80)}` }; }
+}
 
 // The banker cookie for the instant Claim button (see GET ?bankgo): a signed { player id, name, faction } that only 'bank-token'
 // (leader-gated) hands out. It says WHO is clicking so the Discord message can name them; the signature stops anyone from forging it.
@@ -449,7 +450,6 @@ function bankCookieParse(header) {
     const good = crypto.createHmac('sha256', bankCookieSecret()).update(p).digest('base64url');
     if (sig.length !== good.length || !crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(good))) return null;
     try { const d = JSON.parse(Buffer.from(p, 'base64url').toString()); return Date.now() - d.t < 30 * 86400000 ? d : null; } catch (e) { return null; }
-}
 }
 // Updates the Discord message of a bank request once it is claimed or cancelled: the buttons are removed or disabled and a line
 // says who claimed it, so nobody can press Claim again and pay it twice. Best effort — the claim itself is already exclusive on
