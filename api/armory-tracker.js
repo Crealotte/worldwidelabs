@@ -113,13 +113,73 @@ async function fetchAllArmoryNews(key, from, to, cat = 'armoryAction') {
     return { entries: all, pagesFetched: page, rateLimited, hitPageCap };
 }
 
+// ---- Finished days of the armory news are kept (compressed) so the same period is never read from Torn twice ----
+// Torn limits how many times a key may read these logs per day ("Daily read limit reached"), and a report, a By war run and the Xanax
+// check all re-read the same finished days. A day that is completely over (and was read completely — no rate limit, no page cap) is stored
+// once as one gzipped value and served from there from then on. Today and the last hour are never stored. If the database is unreachable
+// this quietly falls back to reading Torn, so a report never fails because of the cache.
+const zlib = require('zlib');
+const DAY_S = 86400;
+const NEWS_CACHE_TTL = 60 * 86400;
+const newsDayKey = (factionId, cat, day) => `wwl:armory-news:${factionId}:${cat || 'all'}:${day}`; // day = UTC day number
+
+async function fetchArmoryNewsCached(key, factionId, from, to, cat = 'armoryAction') {
+    const live = (a, b) => fetchAllArmoryNews(key, a, b, cat);
+    if (!factionId) return live(from, to);
+    const settledBefore = Math.floor(Date.now() / 1000) - 3600; // a day only counts once it ended more than an hour ago
+    const firstDay = Math.ceil(from / DAY_S), lastDay = Math.floor((Math.min(to, settledBefore) + 1) / DAY_S) - 1;
+    if (lastDay < firstDay) return live(from, to);
+    const days = [];
+    for (let d = firstDay; d <= lastDay; d++) days.push(d);
+
+    let stored;
+    try { stored = await redis(['MGET', ...days.map(d => newsDayKey(factionId, cat, d))]); }
+    catch (e) { return live(from, to); }
+
+    const entries = [];
+    const have = new Set();
+    days.forEach((d, i) => {
+        if (!stored[i]) return;
+        try {
+            for (const [id, timestamp, text] of JSON.parse(zlib.gunzipSync(Buffer.from(stored[i], 'base64')).toString())) entries.push({ id, timestamp, text });
+            have.add(d);
+        } catch (e) { /* unreadable: read that day again */ }
+    });
+
+    // what is still missing: everything in [from, to] outside the stored days, as runs
+    const gaps = [];
+    let cur = from;
+    for (const d of days) {
+        if (!have.has(d)) continue;
+        if (d * DAY_S > cur) gaps.push([cur, d * DAY_S - 1]);
+        cur = (d + 1) * DAY_S;
+    }
+    if (cur <= to) gaps.push([cur, to]);
+
+    let pagesFetched = 0, rateLimited = false, hitPageCap = false;
+    for (const [a, b] of gaps) {
+        const r = await live(a, b);
+        pagesFetched += r.pagesFetched; rateLimited = rateLimited || r.rateLimited; hitPageCap = hitPageCap || r.hitPageCap;
+        entries.push(...r.entries);
+        if (r.rateLimited || r.hitPageCap) continue; // incomplete: never store it
+        for (let d = Math.ceil(a / DAY_S); d <= Math.floor((b + 1) / DAY_S) - 1; d++) {
+            if (d < firstDay || d > lastDay) continue;
+            const rows = r.entries.filter(e => Math.floor(e.timestamp / DAY_S) === d).map(e => [e.id, e.timestamp, e.text ?? e.news ?? '']);
+            try { await redis(['SET', newsDayKey(factionId, cat, d), zlib.gzipSync(JSON.stringify(rows)).toString('base64'), 'EX', NEWS_CACHE_TTL]); } catch (e) { /* not critical */ }
+        }
+    }
+    entries.sort((x, y) => y.timestamp - x.timestamp);
+    return { entries, pagesFetched, rateLimited, hitPageCap, fromCache: have.size };
+}
+
 // Deposits ("Name deposited 1x Xanax") live in their OWN news category, armoryDeposit — confirmed with the deposit-log check on the
 // evaluation page (2026-10-04: 11 deposit lines there, none in armoryAction). That log is small, so a whole month is a page or two. Only if
 // the API refuses that category does this fall back to the busy armoryAction log, which can run past the page limit on a long period.
-async function fetchDepositEntries(key, from, to) {
+async function fetchDepositEntries(key, from, to, factionId) {
     try {
-        return await fetchAllArmoryNews(key, from, to, 'armoryDeposit');
+        return await fetchArmoryNewsCached(key, factionId, from, to, 'armoryDeposit');
     } catch (e) {
+        if (/daily read limit/i.test(String(e.message))) throw new Error('Torn says this key has reached its daily limit for reading the armory log (it resets at midnight TCT). Days read earlier are kept, so pressing the button again tomorrow only reads what is missing.');
         return await fetchAllArmoryNews(key, from, to, 'armoryAction');
     }
 }
@@ -209,7 +269,7 @@ module.exports = async function handler(req, res) {
             if (kept && !req.body.force) return res.status(200).json({ ...JSON.parse(kept), cached: true });
             if (req.body.cacheOnly) return res.status(200).json({ none: true });
             const to = Math.floor(Date.now() / 1000);
-            const news = await fetchDepositEntries(key, from, to);
+            const news = await fetchDepositEntries(key, from, to, factionId);
             const deposited = {};
             for (const entry of news.entries) {
                 const p = parseArmoryNewsEntry(String(entry.id), entry);
@@ -244,7 +304,7 @@ module.exports = async function handler(req, res) {
             if (!from || !to) return res.status(400).json({ error: 'Pick a date range first.' });
 
             const [newsResult, itemsRes] = await Promise.all([
-                fetchAllArmoryNews(key, from, to),
+                fetchArmoryNewsCached(key, factionId, from, to),
                 tornFetch(`https://api.torn.com/torn/?selections=items&key=${encodeURIComponent(key)}`),
             ]);
             const itemsData = await itemsRes.json();
@@ -429,10 +489,12 @@ module.exports = async function handler(req, res) {
             categories.sort((a, b) => a.category.localeCompare(b.category));
             return res.status(200).json({ categories });
         }
-
         return res.status(400).json({ error: 'Unknown action' });
     } catch (e) {
-        return res.status(500).json({ error: String(e.message || e) });
+
+        const msg = String(e.message || e);
+        if (/daily read limit/i.test(msg)) return res.status(429).json({ error: 'Torn says this key has reached its daily limit for reading the armory log (it resets at midnight TCT). Days that were read before are kept, so trying again tomorrow only reads what is missing.' });
+        return res.status(500).json({ error: msg });
     }
 };
 
@@ -445,7 +507,7 @@ module.exports.refreshXanaxOwed = async function refreshXanaxOwed(key, factionId
     const dep = JSON.parse(depRaw);
     if (dep.v !== 2) return { skipped: 'deposits were saved in an older form — press Re-check deposits once on the evaluation page' };
     const now = Math.floor(Date.now() / 1000);
-    const news = await fetchDepositEntries(key, dep.to + 1, now);
+    const news = await fetchDepositEntries(key, dep.to + 1, now, factionId);
     if (!news.rateLimited && !news.hitPageCap) {
         for (const entry of news.entries) {
             const p = parseArmoryNewsEntry(String(entry.id), entry);
