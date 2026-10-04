@@ -112,7 +112,8 @@ const EV_STATUS = {
 function evMessage(r) {
     const p = evPeriod();
     const s = moData.settings;
-    const soft = r.fresh && r.fails; // new member (only a few wars so far) below requirement: softer wording
+    const belowMin = r.warBelow || r.trainBelow; // only the war rule and training decide whether we ask for plans — Xanax has its own paragraph
+    const soft = r.fresh && belowMin; // new member (only a few wars so far) below requirement: softer wording
     const lines = [`Hi ${r.name},`, '', `This is our monthly check-in (${moFmt(p.start)} → ${moFmt(p.end - (p.id === 'now' ? 0 : 86400))}).`, ''];
     // war
     if (r.light === 'grey') lines.push('War participation: you have not been with us for enough wars to judge yet — no worries, take your time to settle in.');
@@ -132,7 +133,7 @@ function evMessage(r) {
     // Xanax (only the wars of this period): taken from the armory beyond what the hits covered
     if (r.xanax.known && r.xanax.owed > 0) {
         lines.push('');
-        lines.push(`Xanax: every Xanax taken from the faction armory should be backed by 10 hits. ${soft ? 'No worries, but in' : 'In'} this period's wars you took more than your hits covered:`);
+        lines.push(`Xanax: every Xanax taken from the faction armory should be backed by 10 hits. ${r.fresh ? 'No worries, but in' : 'In'} this period's wars you took more than your hits covered:`);
         for (const w of r.xanax.rows.filter(x => x.owed > 0)) lines.push(`- War vs ${w.opponent}: took ${w.taken}, made ${w.hits} hits (covers ${w.covered}) — ${w.owed} too many`);
         lines.push(r.xanax.outstanding > 0
             ? `${r.xanax.returned ? `You have already put back ${r.xanax.returned}. ` : ''}Please put ${r.xanax.outstanding} Xanax back in the faction armory.`
@@ -143,8 +144,9 @@ function evMessage(r) {
     if (prev) lines.push('', `Earlier: on ${evDate(prev.date)} this was noted for you — ${prev.verdict || EV_KIND_LABEL[prev.kind]}${prev.note && prev.source === 'manual' ? ` (${prev.note})` : ''}.`);
     lines.push('');
     if (soft) lines.push('There is no pressure — you are new, so you have some time to find your feet. But please do ask us for help if you need anything: tips on training or war hits, someone to show you the ropes, or a schedule that works for you. And feel free to tell us your plans and how it is going so far.');
-    else if (r.fails) lines.push('Could you let me know what your plans are, and whether you expect this to improve next month? If something is going on (offline, ill, busy, a different play style) just say so and we will take it into account.', '', 'And is there anything we can do to help you improve? Tips on training or the war, a different schedule, a mentor — just tell us what would make it easier for you.');
+    else if (belowMin) lines.push('Could you let me know what your plans are, and whether you expect this to improve next month? If something is going on (offline, ill, busy, a different play style) just say so and we will take it into account.', '', 'And is there anything we can do to help you improve? Tips on training or the war, a different schedule, a mentor — just tell us what would make it easier for you.');
     else if (r.light === 'grey' && r.pct === null) lines.push('Welcome to the faction! We do not have enough data to judge yet — if you need anything at all, just ask us.');
+    else if (r.xanBelow) lines.push('You are meeting the war and training requirements — thank you! The Xanax above is the only thing left to sort out.');
     else lines.push('You are meeting both of the requirements — thank you, keep it up!');
     lines.push('', 'Thanks!', 'Lots of Love', 'Crea <3');
     return lines.join('\n');
