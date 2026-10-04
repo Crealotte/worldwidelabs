@@ -65,10 +65,18 @@ async function loadTodoIdeas() {
         const r = await mtFetch({ action: 'todo-ideas' });
         if (r.error) throw new Error(r.error);
         st.textContent = ''; st.className = 'status';
+        const typeOf = i => (i.repeats.daily && i.repeats.once ? `mixed (${i.repeats.daily} daily, ${i.repeats.once} one time)` : i.repeats.daily ? 'recurring (daily)' : 'one time');
         $('ti-list').innerHTML = r.ideas.length
             ? `<p style="color:var(--muted);font-size:12px;margin:0 0 8px;">${r.total} reminder${r.total === 1 ? '' : 's'} added in total (the latest 1,000 are kept). Same words in a different order count as the same idea. Most people first.</p>
-               <table style="width:100%;font-size:13px;border-collapse:collapse;"><thead><tr style="color:var(--muted);text-align:left;"><th style="padding:4px 8px;">Reminder</th><th style="padding:4px 8px;">People</th><th style="padding:4px 8px;">Times</th><th style="padding:4px 8px;">Who</th></tr></thead>
-               <tbody>${r.ideas.map(i => `<tr style="border-top:1px solid var(--line);"><td style="padding:4px 8px;" title="${esc(i.variants.join(' | '))}">${esc(i.text)}</td><td style="padding:4px 8px;font-family:var(--mono);font-weight:700;">${i.people.length}</td><td style="padding:4px 8px;font-family:var(--mono);">${i.count}</td><td style="padding:4px 8px;color:var(--muted);white-space:normal;">${esc(i.people.slice(0, 8).join(', '))}${i.people.length > 8 ? ` +${i.people.length - 8}` : ''}</td></tr>`).join('')}</tbody></table>`
+               <table style="width:100%;font-size:13px;border-collapse:collapse;"><thead><tr style="color:var(--muted);text-align:left;"><th style="padding:4px 8px;">To-do</th><th style="padding:4px 8px;">Type</th><th style="padding:4px 8px;">People</th><th style="padding:4px 8px;">Times</th><th style="padding:4px 8px;">Who</th><th></th></tr></thead>
+               <tbody>${r.ideas.map(i => `<tr style="border-top:1px solid var(--line);"><td style="padding:4px 8px;" title="${esc(i.variants.join(' | '))}">${esc(i.text)}</td><td style="padding:4px 8px;white-space:nowrap;color:${i.repeats.daily ? 'var(--reagent)' : 'var(--muted)'};">${esc(typeOf(i))}</td><td style="padding:4px 8px;font-family:var(--mono);font-weight:700;">${i.people.length}</td><td style="padding:4px 8px;font-family:var(--mono);">${i.count}</td><td style="padding:4px 8px;color:var(--muted);white-space:normal;">${esc(i.people.slice(0, 8).join(', '))}${i.people.length > 8 ? ` +${i.people.length - 8}` : ''}</td><td style="padding:4px 8px;text-align:right;"><button class="ghost small ti-del" data-key="${esc(i.key)}" title="Remove this one from the overview">Delete</button></td></tr>`).join('')}</tbody></table>`
             : '<p style="color:var(--muted);margin:0;">Nobody has added a reminder yet.</p>';
+        $('ti-list').querySelectorAll('.ti-del').forEach(b => b.addEventListener('click', async () => {
+            if (!confirm('Remove this to-do from the overview? (Members keep it on their own lists.)')) return;
+            b.disabled = true;
+            const d = await mtFetch({ action: 'todo-ideas-delete', key: b.dataset.key });
+            if (d.error) { toast(d.error); b.disabled = false; return; }
+            loadTodoIdeas();
+        }));
     } catch (e) { st.className = 'status err'; st.textContent = e.message; }
 }

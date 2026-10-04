@@ -1322,19 +1322,27 @@ Cancel: ${cancelUrl}`, [], embeds, undefined, true);
         if (action.startsWith('ev-')) return res.status(200).json(await evHandle(action, req.body, { redis, factionId, name: playerName }));
         // The leaders' view of what members add to their own to-do: the ideas log grouped by meaning (same words in any order, small filler
         // words ignored), most asked first, with who asked.
-        if (action === 'todo-ideas') {
-            const raw = (await redis(['LRANGE', `wwl:todo-ideas:${factionId}`, '0', '999'])) || [];
+        if (action === 'todo-ideas' || action === 'todo-ideas-delete') {
             const stop = new Set(['a', 'an', 'the', 'to', 'my', 'i', 'and', 'for', 'of', 'in', 'on', 'up', 'at', 'is', 'me', 'it', 'do', 'remember', 'remind']);
+            const keyOf = text => { const words = String(text).toLowerCase().replace(/[^a-z0-9\s]/g, ' ').split(/\s+/).filter(w => w && !stop.has(w)); return [...new Set(words)].sort().join(' ') || String(text).toLowerCase(); };
+            const listKey = `wwl:todo-ideas:${factionId}`;
+            const raw = (await redis(['LRANGE', listKey, '0', '999'])) || [];
+            if (action === 'todo-ideas-delete') { // removes one grouped idea (every time it was added) from this overview — members' own lists are not touched
+                const key = String(req.body.key || '');
+                let removed = 0;
+                for (const s of raw) { try { if (keyOf(JSON.parse(s).text) === key) { await redis(['LREM', listKey, '0', s]); removed++; } } catch (x) { /* skip */ } }
+                return res.status(200).json({ ok: true, removed });
+            }
             const groups = new Map();
             for (const s of raw) {
                 let e; try { e = JSON.parse(s); } catch (x) { continue; }
-                const words = String(e.text).toLowerCase().replace(/[^a-z0-9\s]/g, ' ').split(/\s+/).filter(w => w && !stop.has(w));
-                const key = [...new Set(words)].sort().join(' ') || String(e.text).toLowerCase();
-                const g = groups.get(key) || { text: e.text, count: 0, people: new Map(), last: 0, variants: new Set() };
+                const key = keyOf(e.text);
+                const g = groups.get(key) || { key, text: e.text, count: 0, people: new Map(), last: 0, variants: new Set(), repeats: { once: 0, daily: 0 } };
                 g.count++; g.people.set(e.pid, e.name); g.last = Math.max(g.last, e.t); g.variants.add(e.text);
+                g.repeats[e.repeat === 'daily' ? 'daily' : 'once']++;
                 groups.set(key, g);
             }
-            const ideas = [...groups.values()].map(g => ({ text: g.text, variants: [...g.variants].slice(0, 5), count: g.count, people: [...g.people.values()], last: g.last }))
+            const ideas = [...groups.values()].map(g => ({ key: g.key, text: g.text, variants: [...g.variants].slice(0, 5), count: g.count, repeats: g.repeats, people: [...g.people.values()], last: g.last }))
                 .sort((a, b) => b.people.length - a.people.length || b.count - a.count || b.last - a.last);
             return res.status(200).json({ ideas, total: raw.length });
         }
