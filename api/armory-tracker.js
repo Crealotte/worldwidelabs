@@ -161,7 +161,10 @@ module.exports = async function handler(req, res) {
                 // straight from the shared armory) — so the loan is the only signal it's ever gone,
                 // and counts as consumption exactly like a real "used" event.
                 const isConsumingLoan = parsed.action === 'loaned' && category === 'Temporary';
-                if (parsed.action !== 'used' && !isConsumingLoan) continue;
+                // A drug or medical item GIVEN to a member out of the armory is gone for good (it is not loaned and returned),
+                // and the member then uses it from their own inventory — which never produces a "used" line either.
+                const isConsumingGive = parsed.action === 'gave' && (category === 'Drug' || category === 'Medical');
+                if (parsed.action !== 'used' && !isConsumingLoan && !isConsumingGive) continue;
                 if (!category) continue; // not on the curated tracked-items list
                 const price = catalog[parsed.item.toLowerCase()]?.price ?? null;
 
@@ -169,7 +172,7 @@ module.exports = async function handler(req, res) {
                 item.quantity += parsed.quantity;
                 if (price != null) item.value += price * parsed.quantity;
                 // a loan is attributed to whoever it was loaned TO (the sentence's actor is the leader handing it out)
-                const who = isConsumingLoan && parsed.otherParty ? parsed.otherParty : parsed.actor;
+                const who = (isConsumingLoan || isConsumingGive) && parsed.otherParty ? parsed.otherParty : parsed.actor;
                 const p = item.players[who] || (item.players[who] = { name: who, quantity: 0, value: 0 });
                 p.quantity += parsed.quantity;
                 if (price != null) p.value += price * parsed.quantity;
