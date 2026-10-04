@@ -119,7 +119,7 @@ function evMessage(r) {
     else if (soft && r.warBelow) {
         lines.push(`War participation: you have been with us for ${r.counted} war${r.counted === 1 ? '' : 's'} so far and met the war rule (${s.minWarHits} war hits, or ${s.minChainHits} chain hits, in a war) in ${r.okWars} of ${r.counted === 1 ? 'it' : 'them'}. Remember we ask you to meet it in ${s.needWars} of the last 5 wars — but you are new, so you have some more time to adjust.`);
     } else {
-        lines.push(`War participation: you met the war rule (${s.minWarHits} war hits, or ${s.minChainHits} chain hits, in a war) in ${r.okWars} of the last ${r.counted} wars you were here for — we need ${r.need}.${r.warBelow ? ' That is a bit short of what we need.' : ' That is fine.'}`);
+        lines.push(`War participation: you met the war rule (${s.minWarHits} war hits, or ${s.minChainHits} chain hits, in a war) in ${r.okWars} of the last ${r.counted} wars you were here for — we need ${r.need}.${r.warBelow ? ' That is a bit short of what we need.' : ' That is really good!'}`);
     }
     if (r.light !== 'grey') {
         const skipped = r.perWar.filter(x => x?.skipped).length;
@@ -128,7 +128,7 @@ function evMessage(r) {
     // training (a blank line after the war part, so the message is not one block)
     lines.push('');
     if (r.pct === null) lines.push(r.tierEff ? 'Training: I could not read your trained energy for this period.' : 'Training: your energy tier is not known yet.');
-    else lines.push(`Training: you trained ${evNum(r.trained)} E in this period; your target is ${evNum(r.energyNeed)} E${r.partial ? ` (it only counts the time you have been with us this period, about ${r.daysInFaction} days)` : ""} (${Math.round(r.pct * 100)}%).${r.trainBelow ? (soft ? ' You are still settling in, so this is just so you know what we are aiming for.' : ' You are a little under your target for this period.') : ' That is fine.'}`);
+    else lines.push(`Training: you trained ${evNum(r.trained)} E in this period; your target is ${evNum(r.energyNeed)} E${r.partial ? ` (it only counts the time you have been with us this period, about ${r.daysInFaction} days)` : ""} (${Math.round(r.pct * 100)}%).${r.trainBelow ? (soft ? ' You are still settling in, so this is just so you know what we are aiming for.' : ' You are a little under your target for this period.') : (r.pct >= 1.2 ? ' Wow, that is well above your target!' : ' That is amazing!')}`);
     // Xanax (only the wars of this period): taken from the armory beyond what the hits covered
     if (r.xanax.known && r.xanax.owed > 0) {
         lines.push('');
