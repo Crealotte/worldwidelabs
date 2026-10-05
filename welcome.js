@@ -26,13 +26,44 @@ function weRoleHtml(role) {
 
 // ---- the pupil's own chapters (top of the Mentoring page) ----
 let weMine = null; const weOpen = {}; // weOpen: which chapter windows are open (all closed to begin with)
+// the Lab Notes page (open to everyone): role path, the welcome chapters and the other cards, from one request
 async function loadWelcomeMine() {
-    const panel = $('mt-welcome-panel');
+    const panel = $('mt-welcome-panel'), st = $('ln-status');
     if (!panel) return;
-    const r = await weFetch({ action: 'wel-my' });
-    if (r.error || !r.pupil) { panel.style.display = 'none'; return; }
-    weMine = r;
+    const r = await weFetch({ action: 'lab-get' });
+    if (r.error) { if (st) { st.className = 'status err'; st.textContent = r.error; } return; }
+    if (st) { st.textContent = ''; st.className = 'status'; }
+    weMine = { ...r.welcome, role: r.role, days: r.days, pupil: r.pupil };
     renderWelcomeMine();
+    renderLabCards(r.cards || [], r.days);
+}
+// the other cards: each its own window, closed to begin with, no lock between them; after finishing one a member can put its daily habits on their own to-do
+const lnOpen = {};
+function renderLabCards(cards, days) {
+    const panel = $('ln-cards-panel');
+    if (!panel) return;
+    panel.style.display = cards.length ? 'block' : 'none';
+    $('ln-cards').innerHTML = cards.map(c => `<details class="ln-card" data-id="${esc(c.id)}" ${lnOpen[c.id] ? 'open' : ''} style="margin:6px 0;border:1px solid var(--line);border-radius:8px;padding:6px 12px;">
+        <summary class="av-sum"><span style="font-size:14px;font-weight:700;color:${c.complete ? 'var(--reagent)' : 'var(--text)'};">${c.complete ? '✓' : '○'} ${esc(c.title)}</span> <span style="color:var(--muted);font-size:12px;">${c.doneCount}/${c.total}</span></summary>
+        <div style="font-size:13px;color:var(--muted);white-space:pre-wrap;margin:8px 0;">${weRich(c.intro)}</div>
+        ${c.tasks.map(t => `<div style="display:flex;gap:10px;align-items:flex-start;padding:7px 0;border-top:1px solid var(--line);${t.waiting ? 'opacity:.6;' : ''}">
+            <input type="checkbox" class="ln-check" data-id="${esc(t.id)}" ${t.done ? 'checked' : ''} ${t.auto || t.waiting ? 'disabled' : ''} style="width:auto;margin-top:3px;">
+            <div style="flex:1;font-size:13px;white-space:pre-wrap;">${weRich(t.text)}${t.auto ? ' <span style="color:var(--muted);font-size:11px;">· ticks itself</span>' : ''}${t.remind ? ' <span style="color:var(--muted);font-size:11px;">· daily habit</span>' : ''}${t.waiting ? ` <span style="color:#f0b432;font-size:11px;">· available from day ${t.fromDay + 1} in the faction (you are on day ${(days || 0) + 1})</span>` : ''}</div>
+            ${weLinkBtn(t)}</div>`).join('')}
+        ${c.canRemind ? `<label style="display:flex;gap:8px;align-items:center;margin-top:8px;padding-top:8px;border-top:1px solid var(--line);font-size:13px;${c.complete ? 'cursor:pointer;' : 'opacity:.55;'}"><input type="checkbox" class="ln-remind" data-id="${esc(c.id)}" ${c.remindersOn ? 'checked' : ''} ${c.complete ? '' : 'disabled'} style="width:auto;"> 🔔 Put the daily habits of this Lab Note on my daily to-do${c.complete ? '' : ' <span style="color:var(--muted);font-size:11px;">(finish every step first)</span>'}</label>` : ''}
+    </details>`).join('');
+    $('ln-cards').querySelectorAll('.ln-card').forEach(d => d.addEventListener('toggle', () => { lnOpen[d.dataset.id] = d.open; }));
+    $('ln-cards').querySelectorAll('.ln-check').forEach(cb => cb.addEventListener('change', async () => {
+        const d = await weFetch({ action: 'wel-done', id: cb.dataset.id, done: cb.checked });
+        if (d.error) { toast(d.error); cb.checked = !cb.checked; return; }
+        loadWelcomeMine();
+    }));
+    $('ln-cards').querySelectorAll('.ln-remind').forEach(cb => cb.addEventListener('change', async () => {
+        const d = await weFetch({ action: 'lab-reminders', cardId: cb.dataset.id, on: cb.checked });
+        if (d.error) { toast(d.error); cb.checked = !cb.checked; return; }
+        toast(cb.checked ? 'Added to your daily to-do' : 'Taken off your daily to-do');
+        if (typeof loadMyTodos === 'function') loadMyTodos();
+    }));
 }
 function renderWelcomeMine() {
     const r = weMine, panel = $('mt-welcome-panel');
@@ -89,14 +120,15 @@ async function weLoadPupil(pupilId, box) {
 
 // ---- leaders: write the chapters, see where the pupils are ----
 let weCfg = null, wePupils = [], weAutoKinds = {}; const weAdminOpen = {}; // weAdminOpen: which chapter cards are open in the editor (closed to begin with)
-let weSync = () => {};
+let weSyncChapters = () => {}, weSyncCards = () => {};
+let weSync = () => { weSyncChapters(); weSyncCards(); }; // saves what is typed in both editors into weCfg before anything re-renders
 async function loadWelcomeAdmin() {
     const st = $('wa-status');
     st.className = 'status ok'; st.textContent = 'Loading…';
     const r = await weFetch({ action: 'wel-config-get' });
     if (r.error) { st.className = 'status err'; st.textContent = r.error; return; }
     st.textContent = ''; st.className = 'status';
-    weCfg = { chapters: r.config.chapters.map(c => ({ ...c, tasks: (c.tasks || []).map(t => ({ ...t })) })), custom: r.config.custom };
+    weCfg = { chapters: r.config.chapters.map(c => ({ ...c, tasks: (c.tasks || []).map(t => ({ ...t })) })), cards: (r.config.cards || []).map(c => ({ ...c, tasks: (c.tasks || []).map(t => ({ ...t })) })), custom: r.config.custom };
     wePupils = r.pupils; weAutoKinds = r.autoKinds || {};
     renderPromotions(r.promotions);
     renderWelcomeAdmin();
@@ -123,7 +155,7 @@ function renderWelcomeAdmin() {
             </div></div>`).join('')}
         <button class="ghost small wa-tadd">+ Add step</button></details>`).join('');
     document.querySelectorAll('#wa-steps .wa-ch').forEach(d => d.addEventListener('toggle', () => { weAdminOpen[Number(d.dataset.c)] = d.open; }));
-    weSync = () => {
+    weSyncChapters = () => {
         document.querySelectorAll('#wa-steps [data-c]').forEach(card => {
             const c = weCfg.chapters[Number(card.dataset.c)];
             c.title = card.querySelector('.wa-ctitle').value; c.intro = card.querySelector('.wa-cintro').value;
@@ -142,17 +174,62 @@ function renderWelcomeAdmin() {
     document.querySelectorAll('#wa-steps .wa-tadd').forEach(b => b.addEventListener('click', redo(() => weCfg.chapters[idx(b)].tasks.push({ id: '', text: '', link: '', label: '', auto: '', autoArg: '', fromDay: 0 }))));
     document.querySelectorAll('#wa-steps .wa-tdel').forEach(b => b.addEventListener('click', redo(() => weCfg.chapters[idx(b)].tasks.splice(Number(b.closest('[data-t]').dataset.t), 1))));
     $('wa-recruits').innerHTML = wePupils.length ? `<table style="width:100%;font-size:13px;border-collapse:collapse;"><thead><tr style="color:var(--muted);text-align:left;"><th style="padding:4px 8px;">Pupil</th><th style="padding:4px 8px;">Mentor</th><th style="padding:4px 8px;">Role</th><th style="padding:4px 8px;">Day</th><th style="padding:4px 8px;">Script</th><th style="padding:4px 8px;">Chapter</th><th style="padding:4px 8px;">Steps</th><th style="padding:4px 8px;">Last progress</th></tr></thead><tbody>${wePupils.map(m => `<tr style="border-top:1px solid var(--line);"><td style="padding:4px 8px;">${esc(m.name)}</td><td style="padding:4px 8px;color:${m.mentor ? 'var(--text)' : 'var(--danger)'};">${esc(m.mentor || 'none yet')}</td><td style="padding:4px 8px;color:var(--muted);">${esc(m.role || '')}</td><td style="padding:4px 8px;font-family:var(--mono);">${m.days == null ? '?' : m.days + 1}</td><td style="padding:4px 8px;">${m.script ? '✓' : '—'}</td><td style="padding:4px 8px;">${m.allDone ? 'done 🎉' : `${m.chapter}/${m.chapters} ${esc(m.chapterTitle)}`}</td><td style="padding:4px 8px;font-family:var(--mono);">${m.done}/${m.total}</td><td style="padding:4px 8px;color:var(--muted);">${weAgo(m.lastTick)}</td></tr>`).join('')}</tbody></table>` : '<p style="color:var(--muted);font-size:13px;margin:0;">No pupils in the mentoring program yet.</p>';
+    renderLabAdmin(); // the extra cards below the chapters
 }
 $('wa-add').addEventListener('click', () => { weSync(); weCfg.chapters.push({ id: '', title: '', intro: '', tasks: [] }); weAdminOpen[weCfg.chapters.length - 1] = true; renderWelcomeAdmin(); });
-$('wa-save').addEventListener('click', async () => {
+async function weSaveAll(btn) {
     weSync();
-    const st = $('wa-status'), btn = $('wa-save');
+    const st = $('wa-status');
     btn.disabled = true; st.className = 'status ok'; st.textContent = 'Saving…';
-    const r = await weFetch({ action: 'wel-config-save', chapters: weCfg.chapters });
+    const r = await weFetch({ action: 'wel-config-save', chapters: weCfg.chapters, cards: weCfg.cards });
     btn.disabled = false;
     if (r.error) { st.className = 'status err'; st.textContent = r.error; return; }
     loadWelcomeAdmin().then(() => { st.className = 'status ok'; st.textContent = '✓ Saved'; });
-});
+}
+$('wa-save').addEventListener('click', () => weSaveAll($('wa-save')));
+$('wa-save2').addEventListener('click', () => weSaveAll($('wa-save2')));
+
+// ---- leaders: the extra cards (Lab Notes without a lock between them) ----
+const weCardOpen = {};
+function renderLabAdmin() {
+    const autoOpts = sel => `<option value="">no (tick by hand)</option>${Object.entries(weAutoKinds).map(([k, v]) => `<option value="${k}" ${sel === k ? 'selected' : ''}>ticks itself when ${esc(v)}</option>`).join('')}`;
+    $('wa-cards').innerHTML = weCfg.cards.length ? weCfg.cards.map((c, i) => `<details class="panel wc-card" data-k="${i}" ${weCardOpen[i] ? 'open' : ''} style="margin-bottom:12px;">
+        <summary class="av-sum"><b style="font-size:15px;">${esc(c.title || 'New Lab Note')}</b> <span style="color:var(--muted);font-size:12px;">${c.tasks.length} step${c.tasks.length === 1 ? '' : 's'}${c.tasks.some(t => t.remind) ? ` · ${c.tasks.filter(t => t.remind).length} daily habit${c.tasks.filter(t => t.remind).length === 1 ? '' : 's'}` : ''}</span></summary>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-top:8px;">
+            <div class="field" style="margin:0;flex:1;min-width:220px;"><label>Title</label><input class="wc-title" maxlength="80" value="${esc(c.title)}"></div>
+            <button class="ghost small wc-del" style="color:var(--danger);">Remove this Lab Note</button>
+        </div>
+        <div class="field" style="margin:8px 0;"><label>Intro (put links as [text](https://...))</label><textarea class="wc-intro" rows="3" maxlength="1200">${esc(c.intro)}</textarea></div>
+        ${c.tasks.map((t, j) => `<div style="border-top:1px solid var(--line);padding:8px 0;" data-t="${j}">
+            <div style="display:flex;gap:8px;align-items:flex-start;"><div class="field" style="margin:0;flex:1;"><label>Step</label><textarea class="wc-ttext" rows="2" maxlength="600">${esc(t.text)}</textarea></div><button class="ghost small wc-tdel" style="color:var(--danger);margin-top:20px;">✕</button></div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:6px;">
+                <div class="field" style="margin:0;flex:1;min-width:200px;"><label>Link (WWL page or full link, optional)</label><input class="wc-tlink" maxlength="300" value="${esc(t.link)}"></div>
+                <div class="field" style="margin:0;width:150px;"><label>Button text</label><input class="wc-tlabel" maxlength="40" value="${esc(t.label)}"></div>
+                <div class="field" style="margin:0;min-width:230px;"><label>Checked</label><select class="wc-tauto">${autoOpts(t.auto)}</select></div>
+                <div class="field" style="margin:0;width:150px;"><label>Role name(s)</label><input class="wc-targ" maxlength="80" placeholder="Guinea Pig|Lab Rat" value="${esc(t.autoArg)}"></div>
+                <div class="field" style="margin:0;width:120px;"><label>From faction day</label><input type="number" class="wc-tday" min="0" max="60" value="${esc(t.fromDay || 0)}"></div>
+            </div>
+            <div class="field" style="margin:6px 0 0;"><label>Daily reminder (only if this step is a habit worth repeating; leave empty if not)</label><input class="wc-tremind" maxlength="100" placeholder="e.g. Buy your plushies from Bits and Bobs" value="${esc(t.remind || '')}"></div></div>`).join('')}
+        <button class="ghost small wc-tadd">+ Add step</button></details>`).join('') : '<p style="color:var(--muted);font-size:13px;margin:0 0 8px;">No extra Lab Notes yet.</p>';
+    weSyncCards = () => {
+        document.querySelectorAll('#wa-cards .wc-card').forEach(card => {
+            const c = weCfg.cards[Number(card.dataset.k)];
+            c.title = card.querySelector('.wc-title').value; c.intro = card.querySelector('.wc-intro').value;
+            card.querySelectorAll('[data-t]').forEach(row => {
+                const t = c.tasks[Number(row.dataset.t)];
+                t.text = row.querySelector('.wc-ttext').value; t.link = row.querySelector('.wc-tlink').value; t.label = row.querySelector('.wc-tlabel').value;
+                t.auto = row.querySelector('.wc-tauto').value; t.autoArg = row.querySelector('.wc-targ').value; t.fromDay = Number(row.querySelector('.wc-tday').value) || 0; t.remind = row.querySelector('.wc-tremind').value;
+            });
+        });
+    };
+    const idx = el => Number(el.closest('.wc-card').dataset.k);
+    const redo = fn => () => { weSync(); fn(); renderLabAdmin(); };
+    document.querySelectorAll('#wa-cards .wc-card').forEach(d => d.addEventListener('toggle', () => { weCardOpen[Number(d.dataset.k)] = d.open; }));
+    document.querySelectorAll('#wa-cards .wc-del').forEach(b => b.addEventListener('click', redo(() => { if (confirm('Remove this whole Lab Note?')) weCfg.cards.splice(idx(b), 1); })));
+    document.querySelectorAll('#wa-cards .wc-tadd').forEach(b => b.addEventListener('click', redo(() => weCfg.cards[idx(b)].tasks.push({ id: '', text: '', link: '', label: '', auto: '', autoArg: '', fromDay: 0, remind: '' }))));
+    document.querySelectorAll('#wa-cards .wc-tdel').forEach(b => b.addEventListener('click', redo(() => weCfg.cards[idx(b)].tasks.splice(Number(b.closest('[data-t]').dataset.t), 1))));
+}
+$('wa-card-add').addEventListener('click', () => { weSync(); weCfg.cards.push({ id: '', title: '', intro: '', tasks: [] }); weCardOpen[weCfg.cards.length - 1] = true; renderLabAdmin(); });
 
 // ---- leaders: who is ready for promotion ----
 function renderPromotions(list) {

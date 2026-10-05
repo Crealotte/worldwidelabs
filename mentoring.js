@@ -20,7 +20,6 @@ let mtPollTimer = null;
 
 async function loadMentoring() {
     if (typeof loadOnlineHours === 'function') loadOnlineHours(); // the usual-online-hours panel at the top of this page
-    if (typeof loadWelcomeMine === 'function') loadWelcomeMine(); // a pupil's welcome chapters
     if (mtPollTimer) { clearInterval(mtPollTimer); mtPollTimer = null; }
     const st = $('mt-status');
     st.className = 'status ok'; st.textContent = 'Loading…';

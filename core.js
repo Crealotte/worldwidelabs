@@ -413,6 +413,7 @@
         if (page === 'mentoring') loadMentoring();
         if (page === 'mentoring-admin') loadMentoringAdmin();
         if (page === 'welcome-admin') loadWelcomeAdmin();
+        if (page === 'lab-notes' && typeof loadWelcomeMine === 'function') loadWelcomeMine();
         if (page === 'bug-report') loadBugReport();
         if (page === 'labs-funds') loadLabsFunds();
         if (page === 'members-overview') loadMemberOverview();

@@ -503,6 +503,7 @@
         <a class="nav-item active" data-page="dashboard" href="/dashboard">Dashboard</a>
         <a class="nav-item" data-page="profile" href="/profile">Player profile</a>
         <a class="nav-item" data-page="mentoring" href="/mentoring" id="nav-mentoring" style="display:none;">🎓 Mentoring</a>
+        <a class="nav-item" data-page="lab-notes" href="/lab-notes">🧪 Lab Notes</a>
 
         <div class="nav-group">
             <div class="nav-group-header" data-group="training">
@@ -586,7 +587,7 @@
                         <a class="nav-item" data-page="effort-calc" href="/effort-calc">Effort Calculator</a>
                         <a class="nav-item" data-page="evaluation" href="/evaluation">Monthly evaluation</a>
                         <a class="nav-item" data-page="todo-ideas" href="/todo-ideas">Member to-do</a>
-                        <a class="nav-item" data-page="welcome-admin" href="/welcome-admin">Welcome steps</a>
+                        <a class="nav-item" data-page="welcome-admin" href="/welcome-admin">Lab Notes editor</a>
                         <a class="nav-item" data-page="newsletter" href="/newsletter">Newsletter</a>
                         <a class="nav-item" data-page="leader-settings" href="/leader-settings">Leader settings</a>
                         <a class="nav-item" data-page="mentoring-admin" href="/mentoring-admin">Mentoring admin</a>
@@ -1039,7 +1040,7 @@
         <section class="page" id="page-mentoring">
             <div class="lab-label">WWL·28 / for mentors &amp; pupils</div>
             <h2>🎓 Mentoring</h2>
-            <p class="pagedesc">Your mentoring pairing(s): a shared checklist and a private chat with your mentor or pupil. A leader sets up who is paired with who — see them if you want to join in.</p>
+            <p class="pagedesc">Your mentoring pairing(s): a private chat with your mentor or pupil. Your welcome chapters and role path are on the Lab Notes page. A leader sets up who is paired with who — see them if you want to join in.</p>
             <div class="status" id="mt-status"></div>
             <div class="panel" id="dash-oh-panel" style="display:none;margin-bottom:16px;">
                 <h3 style="margin-top:0;">🕐 When are you usually online?</h3>
@@ -1053,15 +1054,6 @@
                     <span id="oh-count" style="font-size:12px;color:var(--muted);"></span>
                     <span id="oh-status" class="status"></span>
                 </div>
-            </div>
-            <div class="panel" id="mt-welcome-panel" style="display:none;margin-bottom:16px;">
-                <h3 style="margin-top:0;">👋 Your welcome missions</h3>
-                <p style="color:var(--muted);font-size:12px;margin:0 0 8px;">Go through them at your own pace, one chapter at a time, or all in one go if you feel like it. Finishing every step of a chapter opens the next one. Questions? Ask your mentor.</p>
-                <div id="we-role"></div>
-                <div style="height:8px;background:var(--bench-2);border-radius:4px;overflow:hidden;"><div id="we-bar" style="height:100%;width:0;background:var(--reagent);"></div></div>
-                <div id="we-count" style="font-size:12px;color:var(--muted);margin:4px 0 10px;"></div>
-                <div id="we-tabs" style="display:flex;gap:6px;flex-wrap:wrap;"></div>
-                <div id="we-body"></div>
             </div>
             <div class="panel" id="mt-empty" style="display:none;">
                 <p style="color:var(--muted);margin:0;">No pairing yet. If you are waiting for a mentor, set your usual online hours above: a leader matches you with someone who is online at the same time. Would you like to mentor someone, or get a mentor? Ask a leader.</p>
@@ -1886,16 +1878,44 @@
             <div class="panel"><div id="bc-body"></div></div>
         </section>
 
+        <section class="page" id="page-lab-notes">
+            <div class="lab-label">WWL·36 / for everyone</div>
+            <h2>🧪 Lab Notes</h2>
+            <p class="pagedesc">Short guides in steps, from getting settled to making money. Open one, tick the steps as you go, and some of them tick themselves when WWL can see you did it. After finishing a Lab Note you can choose to put its daily habits on your own to-do list. If you have a mentor, they can see how far you are and help you along.</p>
+            <div class="status" id="ln-status"></div>
+            <div class="panel"><h3 style="margin-top:0;">Your role path</h3><div id="we-role"></div></div>
+            <div class="panel" id="mt-welcome-panel" style="display:none;">
+                <h3 style="margin-top:0;">👋 Welcome: your first steps</h3>
+                <p style="color:var(--muted);font-size:12px;margin:0 0 8px;">Go through them at your own pace, one chapter at a time, or all in one go if you feel like it. Finishing every step of a chapter opens the next one. Questions? Ask your mentor or any leader.</p>
+                <div style="height:8px;background:var(--bench-2);border-radius:4px;overflow:hidden;"><div id="we-bar" style="height:100%;width:0;background:var(--reagent);"></div></div>
+                <div id="we-count" style="font-size:12px;color:var(--muted);margin:4px 0 10px;"></div>
+                <div id="we-tabs" style="display:none;"></div>
+                <div id="we-body"></div>
+            </div>
+            <div class="panel" id="ln-cards-panel" style="display:none;">
+                <h3 style="margin-top:0;">More Lab Notes</h3>
+                <div id="ln-cards"></div>
+            </div>
+        </section>
+
         <section class="page" id="page-welcome-admin">
             <div class="lab-label">WWL·29 / leaders</div>
-            <h2>👋 Welcome chapters</h2>
-            <p class="pagedesc">The welcome missions for pupils in the mentoring program: chapters with a checklist each. A pupil only sees the chapter they are on, and finishing every step opens the next one. A step can tick itself when WWL can check it (script installed, online hours set, in an Organized Crime, a role...), or be ticked by hand by the pupil or their mentor. "From faction day" keeps a step waiting until they have been in the faction that long (Organized Crimes open on day 3) without holding up the next chapter.</p>
+            <h2>🧪 Lab Notes editor</h2>
+            <p class="pagedesc">The Lab Notes everyone sees: the welcome chapters (a checklist each) and the extra cards. A pupil only sees the chapter they are on, and finishing every step opens the next one. A step can tick itself when WWL can check it (script installed, online hours set, in an Organized Crime, a role...), or be ticked by hand by the pupil or their mentor. "From faction day" keeps a step waiting until they have been in the faction that long (Organized Crimes open on day 3) without holding up the next chapter.</p>
             <div class="status" id="wa-status"></div>
             <div class="panel">
+                <h3 style="margin-top:0;">Welcome chapters <span style="font-weight:400;font-size:12px;color:var(--muted);">— finishing a chapter opens the next one</span></h3>
                 <span id="wa-note" style="font-size:12px;color:var(--muted);display:block;margin-bottom:8px;"></span>
                 <div id="wa-steps"></div>
                 <button class="ghost small" id="wa-add">+ Add chapter</button>
-                <button id="wa-save" style="margin-left:8px;">Save chapters</button>
+                <button id="wa-save" style="margin-left:8px;">Save everything</button>
+            </div>
+            <div class="panel" id="wa-cards-panel">
+                <h3 style="margin-top:0;">More Lab Notes <span style="font-weight:400;font-size:12px;color:var(--muted);">— cards for everyone, with no lock between them</span></h3>
+                <p style="color:var(--muted);font-size:12px;margin:0 0 8px;">Each card is a short guide with steps (money making, training basics, ...). Everyone can open them. A step can be marked as a daily reminder: after finishing the card, a member can switch these on and they land on their own daily to-do. Only mark the steps that make sense as a habit.</p>
+                <div id="wa-cards"></div>
+                <button class="ghost small" id="wa-card-add">+ Add Lab Note</button>
+                <button id="wa-save2" style="margin-left:8px;">Save everything</button>
             </div>
             <div class="panel" id="wa-promo">
                 <h3 style="margin-top:0;">Promotions and moves down</h3>
