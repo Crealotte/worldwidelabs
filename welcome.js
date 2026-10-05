@@ -168,3 +168,20 @@ $('wa-promo-refresh').addEventListener('click', async () => {
     if (r.error) { toast(r.error); return; }
     renderPromotions(r.promotions);
 });
+
+// ---- a mentor sees their pupil's training and energy plan (inside the pupil's card), closed until opened ----
+async function weLoadInsight(pupilId, box) {
+    const r = await weFetch({ action: 'wel-pupil-insight', pupilId });
+    if (r.error) { box.innerHTML = ''; return; }
+    const n = v => Math.round(v).toLocaleString();
+    const max = Math.max(1, r.weekly || 0, ...r.weeks.map(w => w.total));
+    const day = iso => new Date(`${iso}T00:00:00Z`).toLocaleDateString(undefined, { day: 'numeric', month: 'short', timeZone: 'UTC' });
+    const planHtml = r.plan
+        ? `<div style="font-size:13px;margin:6px 0;"><b>⚡ Energy plan:</b> ${esc(r.plan.method || 'a plan')}${r.plan.stat ? ` <span style="color:var(--muted);">(${esc(r.plan.stat)})</span>` : ''}${r.plan.summary ? `<div style="color:var(--muted);font-size:12px;margin-top:2px;">${esc(r.plan.summary)}</div>` : ''}<div style="color:var(--muted);font-size:12px;margin-top:2px;">This week: ${r.plan.done} of ${r.plan.total} steps ticked${r.plan.weekly ? ` · weekly minimum ${n(r.plan.weekly)} E` : ''}</div></div>`
+        : '<div style="font-size:13px;margin:6px 0;color:#f0b432;">⚠ No energy plan set yet. They pick one on the Energy planner page: a good moment to help them choose a method that fits their level.</div>';
+    const rows = r.tracked ? r.weeks.map(w => {
+        const low = r.weekly && w.total < r.weekly;
+        return `<div style="display:flex;align-items:center;gap:8px;font-size:12px;margin:2px 0;"><div style="width:96px;color:var(--muted);">${day(w.from)} – ${day(w.to)}</div><div style="flex:1;background:var(--bench-2);border-radius:4px;height:12px;"><div style="width:${(w.total / max * 100).toFixed(1)}%;background:${low ? '#f0b432' : 'var(--reagent)'};height:12px;border-radius:4px;"></div></div><div style="width:70px;text-align:right;font-family:var(--mono);">${n(w.total)} E</div></div>`;
+    }).join('') : '<div style="font-size:12px;color:var(--muted);">No energy has been recorded for them yet.</div>';
+    box.innerHTML = `<details style="margin-bottom:14px;"><summary class="av-sum"><span style="font-size:13px;font-weight:700;">📈 Their training and energy plan</span></summary>${planHtml}<div style="font-size:12px;color:var(--muted);margin:6px 0 2px;">Energy trained per week${r.weekly ? ` (weekly minimum ${n(r.weekly)} E, below it shows amber)` : ''}</div>${rows}</details>`;
+}

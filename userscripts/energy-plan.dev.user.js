@@ -2,7 +2,7 @@
 // @name         World Wide Labs
 // @namespace    https://worldwidelabs.vercel.app
 // @author       CreaLotte
-// @version      1.38.10
+// @version      1.38.11
 // @updateURL    __WWL_BASE__/worldwidelabs.user.js
 // @downloadURL  __WWL_BASE__/worldwidelabs.user.js
 // @description  Shows your WorldWideLabs weekly energy plan (the checklist from the Energy planner) inside Torn, a To do tab with small personal reminders (revive setting, feedback, timezone map, availability, Discord/Intel/CAT), your My Targets list, a simplified energy/war standing strip, and — if you are in the Mentoring Platform — your mentoring checklist too. Also shows faction banners at the top of every Torn page. A small ⚙ in the header shows the installed version, flags when a newer one is out, lets you set/replace your API key, and — for a leader — add or remove your faction's banners right from Torn. On a computer it is a small window you can drag around and close; in TornPDA it is a menu. Ticks are shared with the WWL site.
@@ -26,7 +26,7 @@
     const KEY_NAME = 'wwl_api_key', POS_NAME = 'wwl_plan_pos', STATE_NAME = 'wwl_plan_state';
     // GM_info gives the version Tampermonkey actually has installed right now — falls back to a
     // hardcoded copy (kept in sync with @version above) for TornPDA, which doesn't grant GM_info.
-    const SCRIPT_VERSION = (typeof GM_info !== 'undefined' && GM_info.script?.version) || '1.38.10';
+    const SCRIPT_VERSION = (typeof GM_info !== 'undefined' && GM_info.script?.version) || '1.38.11';
     const versionGreater = (a, b) => {
         const pa = String(a).split('.').map(Number), pb = String(b).split('.').map(Number);
         for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
@@ -151,7 +151,7 @@
         <div id="wwl-body" style="overflow:auto;padding:8px 12px 12px;"></div>`;
     root.appendChild(win);
     const body = win.querySelector('#wwl-body'), prog2 = win.querySelector('#wwl-prog2'), head = win.querySelector('#wwl-head');
-    let plan = null, mtPairs = null, mtTodos = [], mtIsPupil = false, welMine = null, welPupils = {}, welOpen = {}, todoItems = null, tab = 'todo', lastTab = 'todo'; // tab: 'energy' | 'mentoring' | 'todo' | 'settings' | 'targets' — the mentoring tab only appears once we know there's something to show there
+    let plan = null, mtPairs = null, mtTodos = [], mtIsPupil = false, welMine = null, welPupils = {}, welInsights = {}, welOpen = {}, todoItems = null, tab = 'todo', lastTab = 'todo'; // tab: 'energy' | 'mentoring' | 'todo' | 'settings' | 'targets' — the mentoring tab only appears once we know there's something to show there
     let settingsData = null, updateAvailable = null; // settingsData: { banners, leader, owner } once the Settings tab has been opened
     let standing = null; // from 'mo-me' — the same numbers the site's "Your standing" dashboard card shows
     let myTargets = null, targetStatus = {}; // My Targets list + live status, fetched separately (status can lag behind the list)
@@ -363,6 +363,18 @@
             ${r.allDone ? '<div style="color:#35d99b;">You finished everything. Well done! 🎉</div>' : `<details class="wwl-w-det" data-k="me:${r.current}" ${welOpen[`me:${r.current}`] ? 'open' : ''} style="margin:3px 0;border:1px solid #3a4352;border-radius:6px;padding:3px 8px;"><summary style="cursor:pointer;font-weight:700;">${r.current + 1}. ${esc(c.title)} <span style="font-weight:400;color:#9aa4b5;font-size:11px;">${c.doneCount}/${c.total} · you are here</span></summary><div style="color:#9aa4b5;font-size:12px;white-space:pre-wrap;margin:4px 0;">${weRich(c.intro)}</div>${c.tasks.map(t => weTask(t, 'wwl-w-check', '')).join('')}</details>`}
         </div>`;
     }
+    // a mentor's closed-by-default look at their pupil's training per week and the energy plan they picked (from the site's own numbers)
+    function renderInsight(pupilId) {
+        const r = welInsights[pupilId];
+        if (!r || r.error) return '';
+        const n = v => Math.round(v).toLocaleString();
+        const max = Math.max(1, r.weekly || 0, ...r.weeks.map(w => w.total));
+        const day = iso => new Date(`${iso}T00:00:00Z`).toLocaleDateString(undefined, { day: 'numeric', month: 'short', timeZone: 'UTC' });
+        const plan = r.plan ? `<div><b>⚡ Plan:</b> ${esc(r.plan.method || 'a plan')}${r.plan.stat ? ` (${esc(r.plan.stat)})` : ''}<div style="color:#9aa4b5;font-size:12px;">${esc(r.plan.summary || '')}</div><div style="color:#9aa4b5;font-size:12px;">This week: ${r.plan.done} of ${r.plan.total} steps${r.plan.weekly ? ` · minimum ${n(r.plan.weekly)} E` : ''}</div></div>`
+            : '<div style="color:#f0b432;">⚠ No energy plan set yet: a good moment to help them choose one on the Energy planner.</div>';
+        const rows = r.tracked ? r.weeks.map(w => `<div style="display:flex;align-items:center;gap:6px;font-size:11px;margin:2px 0;"><span style="width:84px;color:#9aa4b5;">${day(w.from)}–${day(w.to)}</span><span style="flex:1;background:#39414f;border-radius:3px;height:9px;display:block;"><span style="display:block;height:9px;border-radius:3px;width:${(w.total / max * 100).toFixed(1)}%;background:${r.weekly && w.total < r.weekly ? '#f0b432' : '#35d99b'};"></span></span><span style="width:62px;text-align:right;">${n(w.total)} E</span></div>`).join('') : '<div style="color:#9aa4b5;font-size:12px;">No energy recorded for them yet.</div>';
+        return `<details class="wwl-w-det" data-k="${esc(pupilId)}:ins" ${welOpen[`${pupilId}:ins`] ? 'open' : ''} style="margin:3px 0;border:1px solid #3a4352;border-radius:6px;padding:3px 8px;"><summary style="cursor:pointer;font-weight:700;">📈 Their training and energy plan</summary>${plan}<div style="color:#9aa4b5;font-size:11px;margin:4px 0 2px;">Energy trained per week${r.weekly ? ' (amber = under the weekly minimum)' : ''}</div>${rows}</details>`;
+    }
     // the mentor sees every chapter in full with what is ticked (the pupil only gets the chapter they are on)
     function renderWelcomePupil(pupilId) {
         const r = welPupils[pupilId];
@@ -370,6 +382,7 @@
         const total = r.chapters.reduce((s, x) => s + x.total, 0), done = r.chapters.reduce((s, x) => s + x.doneCount, 0);
         return `<div style="margin:6px 0 10px;"><div style="font-size:12px;font-weight:700;">${r.allDone ? '👋 Finished all welcome chapters 🎉' : `👋 Their welcome chapters: ${r.current + 1} of ${r.chapters.length}, ${done} of ${total} steps`}</div>
             ${weRole(r.role)}
+            ${renderInsight(pupilId)}
             <div style="color:#9aa4b5;font-size:12px;margin-bottom:4px;">Tick a step for them if they showed you it is done.</div>
             ${r.chapters.map((x, i) => { const k = `${pupilId}:${i}`; return `<details class="wwl-w-det" data-k="${esc(k)}" ${(welOpen[k] ?? false) ? 'open' : ''} style="margin:3px 0;border:1px solid #3a4352;border-radius:6px;padding:3px 8px;"><summary style="cursor:pointer;color:${x.complete ? '#35d99b' : '#e8ecf3'};">${x.complete ? '✓' : x.locked ? '🔒' : '○'} ${i + 1}. ${esc(x.title)} <span style="color:#9aa4b5;font-size:11px;">${x.doneCount}/${x.total}${x.locked ? ' · not open for them yet' : ''}</span></summary>${x.tasks.map(t => weTask(t, 'wwl-w-mtick', `data-pupil="${esc(pupilId)}"`)).join('')}</details>`; }).join('')}</div>`;
     }
@@ -653,10 +666,11 @@
             plan = planR.plan; store.set('wwl_plan_cache', JSON.stringify({ at: Date.now(), plan }));
             mtPairs = mtR?.pairs || []; mtTodos = mtR?.todos || [];
             mtIsPupil = !!mtR?.isPupil;
-            welMine = null; welPupils = {};
+            welMine = null; welPupils = {}; welInsights = {};
             const welJobs = []; // the welcome chapters: a pupil's own, and each pupil a mentor looks after (only for people in the program)
             if (mtIsPupil) welJobs.push(api({ action: 'wel-my' }).then(r => { welMine = r; }).catch(() => { /* shows nothing */ }));
             for (const p of mtPairs) if (p.role === 'mentor') welJobs.push(api({ action: 'wel-pupil', pupilId: p.otherId }).then(r => { welPupils[p.otherId] = r; }).catch(() => { /* shows nothing */ }));
+            for (const p of mtPairs) if (p.role === 'mentor') welJobs.push(api({ action: 'wel-pupil-insight', pupilId: p.otherId }).then(r => { welInsights[p.otherId] = r; }).catch(() => { /* shows nothing */ }));
             await Promise.all(welJobs);
             todoItems = todoR?.items || [];
             standing = standingR;

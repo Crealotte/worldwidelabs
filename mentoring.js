@@ -67,6 +67,7 @@ function renderMentoringPairs() {
         <div class="panel" style="margin-bottom:16px;" data-pair="${esc(p.pairId)}">
             <h3 style="margin-top:0;">${p.role === 'mentor' ? `You are mentoring ${esc(p.otherName)}` : `Your mentor is ${esc(p.otherName)}`}</h3>
             ${p.role === 'mentor' ? `<div class="mt-welcome" data-pupil="${esc(p.otherId)}"></div>` : ''}
+            ${p.role === 'mentor' ? `<div class="mt-insight" data-pupil="${esc(p.otherId)}"></div>` : ''}
             <div style="border-top:1px solid var(--line);padding-top:12px;">
                 <div class="mt-chat" style="max-height:260px;overflow-y:auto;display:flex;flex-direction:column;gap:6px;margin-bottom:8px;"></div>
                 <div style="display:flex;gap:8px;">
@@ -81,6 +82,8 @@ function renderMentoringPairs() {
         const pairId = card.dataset.pair;
         const wel = card.querySelector('.mt-welcome'); // a mentor sees the welcome steps their pupil is getting (while the pupil is a recruit)
         if (wel && typeof weLoadPupil === 'function') weLoadPupil(wel.dataset.pupil, wel);
+        const ins = card.querySelector('.mt-insight'); // their training and energy plan, for the mentor only
+        if (ins && typeof weLoadInsight === 'function') weLoadInsight(ins.dataset.pupil, ins);
         const send = async () => {
             const input = card.querySelector('.mt-chat-input');
             const text = input.value.trim();
