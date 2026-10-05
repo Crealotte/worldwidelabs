@@ -1357,7 +1357,7 @@ Cancel: ${cancelUrl}`, [], embeds, undefined, true);
             return res.status(200).json(await ohHandle(action, req.body, { redis, factionId, playerId }));
         }
         // Welcome chapters (mentoring program): a pupil reads and ticks their own, a mentor looks at their pupil's, only leaders edit the chapters.
-        if (action.startsWith('wel-')) {
+        if (action.startsWith('wel-') || action === 'lab-get' || action === 'lab-reminders') {
             if (['wel-config-get', 'wel-config-save'].includes(action) && !(await isLeader(key))) return res.status(403).json({ error: 'Leaders only' });
             let snapCache;
             return res.status(200).json(await welHandle(action, req.body, {
