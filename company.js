@@ -32,7 +32,11 @@ function enterDirectorMode() {
     goToPage('company');
 }
 
-// ---- the director's page ----
+// ---- the director's page (tabs like TornStats: Management, Details, plus the payslip and the daily saving) ----
+let coTab = 'management', coState = null;
+const coOpenDay = {}; // date -> true: which expanded day rows are open
+const coK = n => n == null ? '—' : Math.abs(n) >= 1000 ? `${Math.round(n / 1000).toLocaleString('en-US')}k` : String(Math.round(n));
+
 async function loadCompany() {
     const st = $('co-status');
     st.className = 'status ok'; st.textContent = 'Loading your company…';
@@ -41,10 +45,11 @@ async function loadCompany() {
     st.textContent = ''; st.className = 'status';
     coMyId = r.company.id;
     const h = await coFetch({ action: 'co-history', companyId: coMyId });
-    renderCompany(r, h.error ? null : h);
+    coState = { r, h: h.error ? null : h };
+    renderCompany();
 }
 function renderPayslip(h) {
-    if (!h || !h.weeks.length) return '<p style="color:var(--muted);margin:0;">No days saved yet. Once the daily saving is on, the first week fills in here.</p>';
+    if (!h || !h.weeks.length) return '<p style="color:var(--muted);margin:0;">No days saved yet. Once the daily saving is on (or you press Fetch today\'s data on the Details tab), the first week fills in here.</p>';
     const line = (k, v, strong) => `<div style="display:flex;justify-content:space-between;gap:12px;padding:2px 0;${strong ? 'font-weight:700;border-top:1px solid var(--line);margin-top:4px;padding-top:6px;' : ''}"><span style="color:${strong ? 'var(--text)' : 'var(--muted)'};">${k}</span><span style="font-family:var(--mono);">${v}</span></div>`;
     return h.weeks.map((w, i) => `<details ${i === 0 ? 'open' : ''} style="margin:6px 0;border:1px solid var(--line);border-radius:8px;padding:6px 12px;">
         <summary class="av-sum"><b style="font-size:14px;">Week ending ${coDay(w.weekEnd)}${w.running ? ' (so far)' : ''}</b> <span style="color:var(--muted);font-size:12px;">${w.daysCounted} day${w.daysCounted === 1 ? '' : 's'} counted · ${w.send >= 0 ? `send ${coM(w.send)}` : `you receive ${coM(-w.send)}`}</span></summary>
@@ -54,48 +59,111 @@ function renderPayslip(h) {
             ${line(w.send >= 0 ? `Send to ${esc(h.sendTo)}` : `${esc(h.sendTo)} sends you`, coM(Math.abs(w.send)), true)}
         </div>
         <div style="margin-top:8px;overflow-x:auto;"><table style="width:100%;font-size:12px;border-collapse:collapse;"><thead><tr style="color:var(--muted);text-align:left;"><th style="padding:3px 8px;">Day</th><th style="padding:3px 8px;">Income</th><th style="padding:3px 8px;">Wages</th><th style="padding:3px 8px;">Ads</th><th style="padding:3px 8px;">Profit</th></tr></thead><tbody>${w.perDay.map(d => `<tr style="border-top:1px solid var(--line);"><td style="padding:3px 8px;">${coDay(d.date)}</td><td style="padding:3px 8px;font-family:var(--mono);">${coM(d.income)}</td><td style="padding:3px 8px;font-family:var(--mono);">${coM(d.wages)}</td><td style="padding:3px 8px;font-family:var(--mono);">${coM(d.ads)}</td><td style="padding:3px 8px;font-family:var(--mono);">${coM(d.profit)}</td></tr>`).join('')}</tbody></table></div>
-        <div style="font-size:11px;color:var(--muted);margin-top:4px;">Profit per day = income − wages − ads. Send = bank − total to keep − director cut − investment amount.</div>
+        <div style="font-size:11px;color:var(--muted);margin-top:4px;">Profit per day = income − wages − ads − stock cost. Send = bank − total to keep − director cut − investment amount.</div>
     </details>`).join('');
 }
-function renderHistory(h) {
-    if (!h || !h.days.length) return '<p style="color:var(--muted);margin:0;">The history starts the day the daily saving is switched on.</p>';
-    const max = Math.max(1, ...h.days.map(d => d.income || 0));
-    return `<div style="display:flex;align-items:flex-end;gap:3px;height:110px;margin-bottom:6px;">${h.days.map(d => `<div title="${coDay(d.date)}: income ${coM(d.income)}, profit ${coM((d.income || 0) - (d.wages || 0) - (d.ads || 0))}" style="flex:1;min-width:6px;height:${Math.max(2, (d.income || 0) / max * 100)}%;background:var(--reagent);border-radius:2px 2px 0 0;opacity:.85;"></div>`).join('')}</div>
-        <div style="font-size:11px;color:var(--muted);margin-bottom:8px;">Daily income, the last ${h.days.length} saved day${h.days.length === 1 ? '' : 's'}. Hover a bar for the day.</div>
-        <div style="overflow-x:auto;"><table style="width:100%;font-size:12px;border-collapse:collapse;"><thead><tr style="color:var(--muted);text-align:left;"><th style="padding:3px 8px;">Day</th><th style="padding:3px 8px;">Income</th><th style="padding:3px 8px;">Customers</th><th style="padding:3px 8px;">Bank</th><th style="padding:3px 8px;">Popularity</th><th style="padding:3px 8px;">Efficiency</th><th style="padding:3px 8px;">Staff</th></tr></thead><tbody>${h.days.slice(-14).reverse().map(d => `<tr style="border-top:1px solid var(--line);"><td style="padding:3px 8px;">${coDay(d.date)}</td><td style="padding:3px 8px;font-family:var(--mono);">${coM(d.income)}</td><td style="padding:3px 8px;font-family:var(--mono);">${coN(d.customers)}</td><td style="padding:3px 8px;font-family:var(--mono);">${coM(d.bank)}</td><td style="padding:3px 8px;font-family:var(--mono);">${d.popularity != null ? coN(d.popularity) + '%' : '—'}</td><td style="padding:3px 8px;font-family:var(--mono);">${d.efficiency != null ? coN(d.efficiency) + '%' : '—'}</td><td style="padding:3px 8px;font-family:var(--mono);">${coN(d.hired)}</td></tr>`).join('')}</tbody></table></div>`;
+
+// ---- the chart (Income, Ad budget, Wages, Profit by date), drawn as plain SVG ----
+function coChart(days) {
+    if (days.length < 2) return '<p style="color:var(--muted);margin:0;">The chart appears once two days are saved.</p>';
+    const W = 900, H = 260, L = 70, B = 40, T = 12, R = 14;
+    const profit = d => (d.income || 0) - (d.wages || 0) - (d.ads || 0) - (d.stockCost || 0);
+    const series = [['Income', d => d.income || 0, '#4aa3e8'], ['Ad Budget', d => d.ads || 0, '#e86a8a'], ['Wages', d => d.wages || 0, '#f0a050'], ['Profit', profit, '#f0d060']];
+    const max = Math.max(1, ...days.map(d => d.income || 0)) * 1.08;
+    const x = i => L + (W - L - R) * (i / (days.length - 1)), y = v => T + (H - T - B) * (1 - Math.max(0, v) / max);
+    const grid = [0, .25, .5, .75, 1].map(f => `<line x1="${L}" x2="${W - R}" y1="${y(max * f)}" y2="${y(max * f)}" stroke="var(--line)" stroke-width="1"/><text x="${L - 6}" y="${y(max * f) + 4}" text-anchor="end" font-size="11" fill="var(--muted)">$${(max * f / 1e6).toFixed(0)}M</text>`).join('');
+    const step = Math.max(1, Math.ceil(days.length / 12));
+    const xl = days.map((d, i) => i % step === 0 ? `<text x="${x(i)}" y="${H - B + 16}" text-anchor="end" font-size="10" fill="var(--muted)" transform="rotate(-40 ${x(i)} ${H - B + 16})">${d.date.slice(8)}/${d.date.slice(5, 7)}</text>` : '').join('');
+    const lines = series.map(([n, f, c]) => `<polyline fill="none" stroke="${c}" stroke-width="2" points="${days.map((d, i) => `${x(i).toFixed(1)},${y(f(d)).toFixed(1)}`).join(' ')}"/>`).join('');
+    const legend = series.map(([n, f, c]) => `<span style="display:inline-flex;align-items:center;gap:5px;margin-right:12px;font-size:12px;"><span style="width:14px;height:3px;background:${c};display:inline-block;"></span>${n}</span>`).join('');
+    return `<div style="margin-bottom:4px;">${legend}</div><svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;max-height:300px;">${grid}${xl}${lines}</svg>`;
 }
-function renderCompany(r, h) {
+function coDetailsTable(days) {
+    const profit = d => (d.income || 0) - (d.wages || 0) - (d.ads || 0) - (d.stockCost || 0);
+    const nextSun = iso => { const d = new Date(`${iso}T00:00:00Z`); d.setUTCDate(d.getUTCDate() + ((7 - d.getUTCDay()) % 7)); return d.toISOString().slice(0, 10); };
+    const groups = {};
+    for (const d of days) (groups[nextSun(d.date)] = groups[nextSun(d.date)] || []).push(d);
+    const td = (v, mono = true) => `<td style="padding:4px 8px;text-align:right;${mono ? 'font-family:var(--mono);' : ''}">${v}</td>`;
+    const rows = Object.keys(groups).sort().reverse().map(end => {
+        const ds = groups[end].slice().sort((a, b) => b.date.localeCompare(a.date));
+        const sum = f => ds.reduce((s, d) => s + (f(d) || 0), 0);
+        return ds.map(d => `<tr class="co-row" data-date="${esc(d.date)}" style="border-top:1px solid var(--line);"><td style="padding:4px 8px;"><button class="ghost small co-del" data-date="${esc(d.date)}" title="Delete this day" style="padding:0 6px;color:var(--danger);">✕</button></td><td style="padding:4px 8px;white-space:nowrap;">${coDay(d.date)}${d.imported ? ' <span style="color:var(--muted);font-size:10px;">(imported)</span>' : ''}</td>${td(coMoney(d.income))}${td(coMoney(d.wages))}${td(coMoney(d.ads))}${td(coMoney(d.stockCost))}${td(coMoney(profit(d)))}${td(coN(d.customers))}${td(coN(d.hired))}${td(coN(d.rating))}<td style="padding:4px 8px;">${d.detail ? `<button class="ghost small co-exp" data-date="${esc(d.date)}" style="padding:0 6px;">${coOpenDay[d.date] ? '▾' : '▸'}</button>` : ''}</td></tr>${coOpenDay[d.date] ? `<tr><td></td><td colspan="10" style="padding:4px 8px 10px;" id="co-day-${esc(d.date)}"><span style="color:var(--muted);font-size:12px;">Loading…</span></td></tr>` : ''}`).join('')
+            + `<tr style="background:var(--bench-2);font-weight:700;"><td></td><td style="padding:4px 8px;">Weekly total</td>${td(coMoney(sum(d => d.income)))}${td(coMoney(sum(d => d.wages)))}${td(coMoney(sum(d => d.ads)))}${td(coMoney(sum(d => d.stockCost)))}${td(coMoney(sum(profit)))}${td(coN(sum(d => d.customers)))}<td></td><td></td><td></td><td></td></tr>`;
+    }).join('');
+    return `<div style="overflow-x:auto;"><table style="width:100%;font-size:12px;border-collapse:collapse;"><thead><tr style="color:var(--muted);"><th></th><th style="padding:4px 8px;text-align:left;">Date</th><th style="padding:4px 8px;text-align:right;">Income</th><th style="padding:4px 8px;text-align:right;">Wages</th><th style="padding:4px 8px;text-align:right;">Ad Budget</th><th style="padding:4px 8px;text-align:right;">Stock</th><th style="padding:4px 8px;text-align:right;">Profit</th><th style="padding:4px 8px;text-align:right;">Cust</th><th style="padding:4px 8px;text-align:right;">Employees</th><th style="padding:4px 8px;text-align:right;">Rating</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>`;
+}
+function coDayDetail(day) {
+    const emps = (day.emps || []).map(e => `<tr style="border-top:1px solid var(--line);"><td style="padding:2px 8px;">${esc(e[1])}</td><td style="padding:2px 8px;">${esc(e[2])}</td><td style="padding:2px 8px;font-family:var(--mono);">${coK(e[5])} / ${coK(e[6])} / ${coK(e[7])}</td><td style="padding:2px 8px;font-family:var(--mono);text-align:right;">${coMoney(e[4])}</td><td style="padding:2px 8px;font-family:var(--mono);text-align:right;">${coN(e[8])}</td></tr>`).join('');
+    const stock = (day.stock || []).map(s => `<tr style="border-top:1px solid var(--line);"><td style="padding:2px 8px;">${esc(s.name)}</td><td style="padding:2px 8px;font-family:var(--mono);text-align:right;">${coN(s.inStock)}</td><td style="padding:2px 8px;font-family:var(--mono);text-align:right;">${coN(s.sold)}</td><td style="padding:2px 8px;font-family:var(--mono);text-align:right;">${coMoney(s.soldWorth)}</td></tr>`).join('');
+    return `<div style="display:flex;gap:24px;flex-wrap:wrap;font-size:12px;"><table style="border-collapse:collapse;"><thead><tr style="color:var(--muted);text-align:left;"><th style="padding:2px 8px;">Employee</th><th style="padding:2px 8px;">Role</th><th style="padding:2px 8px;">M / I / E</th><th style="padding:2px 8px;text-align:right;">Wage</th><th style="padding:2px 8px;text-align:right;">Effic.</th></tr></thead><tbody>${emps}</tbody></table>
+        <table style="border-collapse:collapse;"><thead><tr style="color:var(--muted);text-align:left;"><th style="padding:2px 8px;">Product</th><th style="padding:2px 8px;text-align:right;">In stock</th><th style="padding:2px 8px;text-align:right;">Sold</th><th style="padding:2px 8px;text-align:right;">Worth</th></tr></thead><tbody>${stock}</tbody></table></div>`;
+}
+
+function renderCompany() {
+    const { r, h } = coState;
     const d = r.data, c = r.company, sv = r.saving || { on: false };
-    const tile = (k, v, sub) => `<div style="min-width:130px;"><div style="color:var(--muted);font-size:11px;">${k}</div><div style="font-weight:700;font-family:var(--mono);">${v}</div>${sub ? `<div style="color:var(--muted);font-size:11px;">${sub}</div>` : ''}</div>`;
+    const days = h ? h.days : [];
+    const tabs = [['management', 'Management'], ['details', 'Details'], ['payslip', 'Payslip'], ['saving', 'Daily saving']];
+    const info = (k, v) => `<div style="margin:2px 0;"><b>${k}:</b> ${v}</div>`;
     const inactive = (list, title, color) => `<div style="margin:6px 0;"><b style="font-size:13px;">${title}</b> ${list.length ? list.map(e => `<span class="chip" style="cursor:default;border-color:${color};">${esc(e.name)} <span style="color:var(--muted);font-size:11px;">${esc(e.rel)}</span></span>`).join(' ') : '<span style="color:var(--muted);font-size:13px;">none</span>'}</div>`;
+    const inc = days.map(x => x.income).filter(v => v != null);
+    const monthPrefix = (h && h.today ? h.today : new Date().toISOString().slice(0, 10)).slice(0, 7);
+    const monthIncome = days.filter(x => x.date.startsWith(monthPrefix)).reduce((s, x) => s + (x.income || 0), 0);
+    let body = '';
+    if (coTab === 'management') {
+        body = `<div class="panel"><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:18px;font-size:14px;">
+                <div>${info('Type', esc(d.type || '—'))}${info('Employees', d.hired != null ? `${d.hired}${d.capacity ? ` / ${d.capacity}` : ''}` : '—')}${info('Rating', coN(d.rating))}${info('Ad Budget', coMoney(d.advertising))}${info('Bank', coMoney(d.bank ?? d.funds))}</div>
+                <div>${info('Daily Income', coMoney(d.dailyIncome))}${info('Daily Customers', coN(d.dailyCustomers))}${info('Weekly Income', coMoney(d.weeklyIncome))}${info('Weekly Customers', coN(d.weeklyCustomers))}${info('Popularity / Efficiency', `${d.popularity != null ? coN(d.popularity) + '%' : '—'} / ${d.efficiency != null ? coN(d.efficiency) + '%' : '—'}`)}</div>
+                <div><div style="font-size:18px;margin-bottom:4px;">Notes</div><textarea id="co-notes" rows="4" maxlength="3000" style="width:100%;">${esc(c.notes || '')}</textarea><button class="ghost small" id="co-notes-save" type="button" style="margin-top:4px;">Save notes</button></div>
+            </div></div>
+            <div class="panel"><h3 style="margin-top:0;">Employees</h3>
+            ${d.employees.length ? `<div style="overflow-x:auto;"><table style="width:100%;font-size:13px;border-collapse:collapse;"><thead><tr style="color:var(--muted);text-align:left;"><th style="padding:4px 8px;">Employee</th><th style="padding:4px 8px;text-align:right;">Efficiency</th><th style="padding:4px 8px;">Role</th><th style="padding:4px 8px;">M / I / E</th><th style="padding:4px 8px;text-align:right;">Wage</th><th style="padding:4px 8px;text-align:right;">Addiction</th><th style="padding:4px 8px;">Last seen</th></tr></thead><tbody>${d.employees.map((e, i) => `<tr style="border-top:1px solid var(--line);${i % 2 ? 'background:var(--bench-2);' : ''}"><td style="padding:4px 8px;"><a href="https://www.torn.com/profiles.php?XID=${esc(e.id)}" target="_blank" rel="noopener" style="color:var(--text);">${esc(e.name)} [${esc(e.id)}]</a></td><td style="padding:4px 8px;text-align:right;font-family:var(--mono);">${coN(e.effectiveness)}</td><td style="padding:4px 8px;">${esc(e.position)}</td><td style="padding:4px 8px;font-family:var(--mono);">${coK(e.manual)} / ${coK(e.intelligence)} / ${coK(e.endurance)}</td><td style="padding:4px 8px;text-align:right;font-family:var(--mono);">${coMoney(e.wage)}</td><td style="padding:4px 8px;text-align:right;font-family:var(--mono);${e.addiction != null && Math.abs(e.addiction) >= 12 ? 'color:var(--danger);' : ''}">${coN(e.addiction)}</td><td style="padding:4px 8px;color:var(--muted);">${esc(e.lastRel) || coAgo(e.lastTs)}</td></tr>`).join('')}</tbody></table></div>` : '<p style="color:var(--muted);margin:0;">Torn gave no employee list for this key.</p>'}</div>
+            <div class="panel"><h3 style="margin-top:0;">Stock</h3>
+            ${d.stock.length ? `<div style="overflow-x:auto;"><table style="width:100%;font-size:13px;border-collapse:collapse;"><thead><tr style="color:var(--muted);text-align:left;"><th style="padding:4px 8px;">Item</th><th style="padding:4px 8px;text-align:right;">Cost</th><th style="padding:4px 8px;text-align:right;">RRP</th><th style="padding:4px 8px;text-align:right;">Price</th><th style="padding:4px 8px;text-align:right;">In Stock</th><th style="padding:4px 8px;text-align:right;">On Order</th><th style="padding:4px 8px;text-align:right;">Amount Sold</th><th style="padding:4px 8px;text-align:right;">Amount Worth</th><th style="padding:4px 8px;text-align:right;">Profit</th></tr></thead><tbody>${d.stock.map((s, i) => `<tr style="border-top:1px solid var(--line);${i % 2 ? 'background:var(--bench-2);' : ''}"><td style="padding:4px 8px;font-weight:700;">${esc(s.name)}</td><td style="padding:4px 8px;text-align:right;font-family:var(--mono);">${coMoney(s.cost)}</td><td style="padding:4px 8px;text-align:right;font-family:var(--mono);">${coMoney(s.rrp)}</td><td style="padding:4px 8px;text-align:right;font-family:var(--mono);">${coMoney(s.price)}</td><td style="padding:4px 8px;text-align:right;font-family:var(--mono);">${coN(s.inStock)}</td><td style="padding:4px 8px;text-align:right;font-family:var(--mono);">${coN(s.onOrder)}</td><td style="padding:4px 8px;text-align:right;font-family:var(--mono);">${coN(s.sold)}</td><td style="padding:4px 8px;text-align:right;font-family:var(--mono);">${coMoney(s.soldWorth)}</td><td style="padding:4px 8px;text-align:right;font-family:var(--mono);">${coMoney((s.soldWorth || 0) - (s.cost || 0) * (s.sold || 0))}</td></tr>`).join('')}</tbody></table></div>` : '<p style="color:var(--muted);margin:0;">Torn gave no stock for this company.</p>'}</div>
+            <div class="panel"><h3 style="margin-top:0;">Who has been away</h3>${inactive(d.inactive.day, 'Inactive 24–48 h', '#f0b432')}${inactive(d.inactive.long, 'Inactive over 48 h', 'var(--danger)')}</div>
+            <details style="margin-top:8px;"><summary class="av-sum"><span style="font-size:12px;color:var(--muted);">Show Torn's raw answer (to check the numbers)</span></summary><pre id="co-raw" style="white-space:pre-wrap;word-break:break-all;font-size:11px;color:var(--muted);"></pre><button class="ghost small" id="co-raw-btn" type="button">Load the raw answer</button></details>`;
+    } else if (coTab === 'details') {
+        body = `<div class="panel"><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:18px;font-size:14px;">
+                <div>${info('Type', esc(d.type || '—'))}${info('Employees', coN(d.hired))}${info('Rating', coN(d.rating))}${info('Ad Budget', coMoney(d.advertising))}</div>
+                <div>${info('Daily Income', coMoney(d.dailyIncome))}${info('Daily Customers', coN(d.dailyCustomers))}${info('Weekly Income', coMoney(d.weeklyIncome))}${info('Weekly Customers', coN(d.weeklyCustomers))}</div>
+                <div>${info('Highest Daily Income', inc.length ? coMoney(Math.max(...inc)) : '—')}${info('Average Daily Income', inc.length ? coMoney(inc.reduce((s, v) => s + v, 0) / inc.length) : '—')}${info('Lowest Daily Income', inc.length ? coMoney(Math.min(...inc)) : '—')}${info('Current Month Income', days.length ? coMoney(monthIncome) : '—')}</div>
+            </div></div>
+            <div class="panel"><h3 style="margin-top:0;">Company details</h3>${coChart(days)}
+                <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:10px 0;"><button class="ghost small" id="co-fetch" type="button">Fetch today's data</button><span style="font-size:12px;color:var(--muted);">Reads the company now and saves it for the latest tick. The daily saving does this by itself every day at 18:25 TCT.</span></div>
+                ${days.length ? coDetailsTable(days) : '<p style="color:var(--muted);margin:0;">No days saved yet.</p>'}</div>
+            <details class="panel"><summary class="av-sum"><h3 style="display:inline;margin:0;">Import history from TornStats</h3></summary>
+                <p style="font-size:12px;color:var(--muted);margin:8px 0;">On TornStats open the company's Details page and copy the rows of the table (Date, Income, Wages, Ad Budget, Stock, Profit, Cust, Employees, Rating), then paste them here. Days WWL already has are kept as they are; "Weekly Total" rows are ignored.</p>
+                <textarea id="co-import" rows="6" style="width:100%;font-family:var(--mono);font-size:12px;" placeholder="06/10/26  $44,697,000  $17,685,000  $3,000,000  $0  $24,012,000  2  15  5"></textarea>
+                <button class="ghost small" id="co-import-btn" type="button" style="margin-top:6px;">Import</button></details>`;
+    } else if (coTab === 'payslip') {
+        body = `<div class="panel"><h3 style="margin-top:0;">Payslip <span style="font-weight:400;font-size:12px;color:var(--muted);">— the week runs Monday to Sunday; the Sunday tick (18:00–18:10 TCT) is in the week it ends</span></h3>
+            ${c.investment > 0 ? `<p style="margin:0 0 8px;">The owner owes you <b style="font-family:var(--mono);">${coMoney(c.investment)}</b>${c.invNote ? ` <span style="color:var(--muted);">(${esc(c.invNote)})</span>` : ''}. It is taken off what you send, so the money only moves once.</p>` : ''}
+            ${renderPayslip(h)}</div>`;
+    } else {
+        body = `<div class="panel"><h3 style="margin-top:0;">Daily saving and the Discord reports</h3>
+            ${sv.on ? `<p style="margin:0 0 8px;"><b style="color:var(--reagent);">On</b>: the numbers are saved every day after the tick${sv.lastRun ? `, last run ${coAgo(sv.lastRun)}` : ''}${sv.lastOk === false ? ` <span style="color:var(--danger);">(last run failed: ${esc(sv.lastError || '')})</span>` : ''}. The daily report (and the weekly one on Sunday) goes to your company's Discord channel.</p>` : '<p style="margin:0 0 8px;color:var(--muted);">Off: there is no history yet and no Discord report. Turn it on and your API key is kept (encrypted) only to read your company once a day.</p>'}
+            ${r.isDirector ? `<button class="ghost small" id="co-daily" type="button">${sv.on ? 'Turn the daily saving off' : 'Turn the daily saving on'}</button>` : ''}</div>`;
+    }
     $('co-body').innerHTML = `
         ${r.companies.length > 1 ? `<div class="field" style="max-width:300px;"><label for="co-pick">Company</label><select id="co-pick">${r.companies.map(x => `<option value="${esc(x.id)}" ${x.id === c.id ? 'selected' : ''}>${esc(x.name)}</option>`).join('')}</select></div>` : ''}
-        <div class="panel"><h3 style="margin-top:0;">${esc(d.name || c.name)}</h3>
-            <div style="display:flex;gap:26px;flex-wrap:wrap;">
-                ${tile('Daily income', coMoney(d.dailyIncome))}${tile('Weekly income', coMoney(d.weeklyIncome))}
-                ${tile('Daily customers', coN(d.dailyCustomers))}${tile('Weekly customers', coN(d.weeklyCustomers))}
-                ${tile('Employees', d.hired != null ? `${d.hired}${d.capacity ? ` / ${d.capacity}` : ''}` : '—')}
-                ${tile('Wages a day', coMoney(d.wagesPerDay))}${tile('Advertising a day', coMoney(d.advertising))}
-                ${tile('Bank', coMoney(d.bank ?? d.funds))}
-                ${tile('Popularity', d.popularity != null ? `${coN(d.popularity)}%` : '—')}${tile('Efficiency', d.efficiency != null ? `${coN(d.efficiency)}%` : '—')}
-            </div></div>
-        <div class="panel"><h3 style="margin-top:0;">Payslip <span style="font-weight:400;font-size:12px;color:var(--muted);">— the week runs Monday to Sunday; the Sunday tick (18:00–18:10 TCT) is in the week it ends</span></h3>
-            ${c.investment > 0 ? `<p style="margin:0 0 8px;">CreaLotte owes you <b style="font-family:var(--mono);">${coMoney(c.investment)}</b>${c.invNote ? ` <span style="color:var(--muted);">(${esc(c.invNote)})</span>` : ''}. It is taken off what you send, so the money only moves once.</p>` : ''}
-            ${renderPayslip(h)}</div>
-        <div class="panel"><h3 style="margin-top:0;">Daily saving and the Discord reports</h3>
-            ${sv.on ? `<p style="margin:0 0 8px;"><b style="color:var(--reagent);">On</b>: the numbers are saved every day after the tick${sv.lastRun ? `, last run ${coAgo(sv.lastRun)}` : ''}${sv.lastOk === false ? ` <span style="color:var(--danger);">(last run failed: ${esc(sv.lastError || '')})</span>` : ''}. The daily report (and the weekly one on Sunday) goes to your company's Discord channel.</p>` : '<p style="margin:0 0 8px;color:var(--muted);">Off: there is no history yet and no Discord report. Turn it on and your API key is kept (encrypted) only to read your company once a day.</p>'}
-            ${r.isDirector ? `<button class="ghost small" id="co-daily" type="button">${sv.on ? 'Turn the daily saving off' : 'Turn the daily saving on'}</button>` : ''}</div>
-        <div class="panel"><h3 style="margin-top:0;">History</h3>${renderHistory(h)}</div>
-        <div class="panel"><h3 style="margin-top:0;">Who has been away</h3>
-            ${inactive(d.inactive.day, 'Inactive 24–48 h', '#f0b432')}${inactive(d.inactive.long, 'Inactive over 48 h', 'var(--danger)')}</div>
-        <div class="panel"><h3 style="margin-top:0;">Employees</h3>
-            ${d.employees.length ? `<div style="overflow-x:auto;"><table style="width:100%;font-size:13px;border-collapse:collapse;"><thead><tr style="color:var(--muted);text-align:left;"><th style="padding:4px 8px;">Name</th><th style="padding:4px 8px;">Position</th><th style="padding:4px 8px;">Days</th><th style="padding:4px 8px;">Wage</th><th style="padding:4px 8px;">Manual</th><th style="padding:4px 8px;">Intelligence</th><th style="padding:4px 8px;">Endurance</th><th style="padding:4px 8px;">Effect.</th><th style="padding:4px 8px;">Addiction</th><th style="padding:4px 8px;">Last seen</th></tr></thead><tbody>${d.employees.map(e => `<tr style="border-top:1px solid var(--line);"><td style="padding:4px 8px;font-weight:700;">${esc(e.name)}</td><td style="padding:4px 8px;">${esc(e.position)}</td><td style="padding:4px 8px;font-family:var(--mono);">${coN(e.days)}</td><td style="padding:4px 8px;font-family:var(--mono);">${coMoney(e.wage)}</td><td style="padding:4px 8px;font-family:var(--mono);">${coN(e.manual)}</td><td style="padding:4px 8px;font-family:var(--mono);">${coN(e.intelligence)}</td><td style="padding:4px 8px;font-family:var(--mono);">${coN(e.endurance)}</td><td style="padding:4px 8px;font-family:var(--mono);">${coN(e.effectiveness)}</td><td style="padding:4px 8px;font-family:var(--mono);${e.addiction != null && Math.abs(e.addiction) >= 12 ? 'color:var(--danger);' : ''}">${coN(e.addiction)}</td><td style="padding:4px 8px;color:var(--muted);">${esc(e.lastRel) || coAgo(e.lastTs)}</td></tr>`).join('')}</tbody></table></div>` : '<p style="color:var(--muted);margin:0;">Torn gave no employee list for this key.</p>'}</div>
-        <div class="panel"><h3 style="margin-top:0;">Stock</h3>
-            ${d.stock.length ? `<table style="width:100%;font-size:13px;border-collapse:collapse;"><thead><tr style="color:var(--muted);text-align:left;"><th style="padding:4px 8px;">Product</th><th style="padding:4px 8px;">In stock</th><th style="padding:4px 8px;">On order</th><th style="padding:4px 8px;">Sold</th><th style="padding:4px 8px;">Sold worth</th></tr></thead><tbody>${d.stock.map(s => `<tr style="border-top:1px solid var(--line);"><td style="padding:4px 8px;font-weight:700;">${esc(s.name)}</td><td style="padding:4px 8px;font-family:var(--mono);">${coN(s.inStock)}</td><td style="padding:4px 8px;font-family:var(--mono);">${coN(s.onOrder)}</td><td style="padding:4px 8px;font-family:var(--mono);">${coN(s.sold)}</td><td style="padding:4px 8px;font-family:var(--mono);">${coMoney(s.soldWorth)}</td></tr>`).join('')}</tbody></table>` : '<p style="color:var(--muted);margin:0;">Torn gave no stock for this company.</p>'}</div>
-        <details style="margin-top:8px;"><summary class="av-sum"><span style="font-size:12px;color:var(--muted);">Show Torn's raw answer (to check the numbers)</span></summary><pre id="co-raw" style="white-space:pre-wrap;word-break:break-all;font-size:11px;color:var(--muted);"></pre><button class="ghost small" id="co-raw-btn" type="button">Load the raw answer</button></details>`;
+        <h3 style="margin:0 0 8px;font-size:20px;">${esc(d.name || c.name)}</h3>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px;border-bottom:1px solid var(--line);padding-bottom:8px;">${tabs.map(([k, l]) => `<button type="button" class="co-tab" data-t="${k}" style="padding:7px 16px;border-radius:8px 8px 0 0;border:1px solid ${coTab === k ? 'var(--reagent)' : 'var(--line)'};background:${coTab === k ? 'rgba(53,217,155,.12)' : 'transparent'};color:var(--text);cursor:pointer;font-size:14px;">${l}</button>`).join('')}</div>
+        ${body}`;
+    document.querySelectorAll('.co-tab').forEach(b => b.addEventListener('click', () => { coTab = b.dataset.t; renderCompany(); }));
     $('co-pick')?.addEventListener('change', () => { coMyId = $('co-pick').value; loadCompany(); });
-    $('co-raw-btn').addEventListener('click', async () => { const x = await coFetch({ action: 'co-raw', companyId: coMyId }); $('co-raw').textContent = x.error || x.raw; });
+    $('co-raw-btn')?.addEventListener('click', async () => { const x = await coFetch({ action: 'co-raw', companyId: coMyId }); $('co-raw').textContent = x.error || x.raw; });
     $('co-daily')?.addEventListener('click', async () => { const x = await coFetch({ action: 'co-daily', companyId: coMyId, on: !sv.on }); if (x.error) { toast(x.error); return; } toast(!sv.on ? 'Daily saving is on' : 'Daily saving is off'); loadCompany(); });
+    $('co-notes-save')?.addEventListener('click', async () => { const x = await coFetch({ action: 'co-notes', companyId: coMyId, notes: $('co-notes').value }); if (x.error) { toast(x.error); return; } c.notes = $('co-notes').value; toast('Notes saved'); });
+    $('co-fetch')?.addEventListener('click', async () => { const b = $('co-fetch'); b.disabled = true; const x = await coFetch({ action: 'co-fetch-now', companyId: coMyId }); b.disabled = false; if (x.error) { toast(x.error); return; } toast(`Saved for ${x.date}`); loadCompany(); });
+    $('co-import-btn')?.addEventListener('click', async () => { const x = await coFetch({ action: 'co-import', companyId: coMyId, text: $('co-import').value }); if (x.error) { toast(x.error); return; } toast(`${x.added} day${x.added === 1 ? '' : 's'} imported${x.kept ? `, ${x.kept} already there` : ''}`); loadCompany(); });
+    document.querySelectorAll('.co-del').forEach(b => b.addEventListener('click', async () => { if (!confirm(`Delete ${b.dataset.date} from the history?`)) return; const x = await coFetch({ action: 'co-day-delete', companyId: coMyId, date: b.dataset.date }); if (x.error) { toast(x.error); return; } loadCompany(); }));
+    document.querySelectorAll('.co-exp').forEach(b => b.addEventListener('click', async () => {
+        const date = b.dataset.date;
+        coOpenDay[date] = !coOpenDay[date];
+        renderCompany();
+        if (coOpenDay[date]) { const x = await coFetch({ action: 'co-day', companyId: coMyId, date }); const cell = $(`co-day-${date}`); if (cell) cell.innerHTML = x.error ? esc(x.error) : coDayDetail(x.day); }
+    }));
+    Object.keys(coOpenDay).filter(k => coOpenDay[k]).forEach(async date => { const cell = $(`co-day-${date}`); if (cell && cell.textContent.trim() === 'Loading…') { const x = await coFetch({ action: 'co-day', companyId: coMyId, date }); cell.innerHTML = x.error ? esc(x.error) : coDayDetail(x.day); } });
 }
 
 // ---- the owner's page: register companies, set the cut, the Investment amount, the Discord channel and the key ----
