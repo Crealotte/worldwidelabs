@@ -185,6 +185,7 @@ function renderCompany() {
 }
 
 // ---- the owner's page: register companies, set the cut, the Investment amount, the Discord channel and the key ----
+const csOpen = {}; // which company cards have their settings open (all closed to begin with)
 async function loadCompanies() {
     const st = $('cs-status');
     st.className = 'status ok'; st.textContent = 'Loading…';
@@ -195,6 +196,7 @@ async function loadCompanies() {
         const sv = c.saving || {};
         return `<div class="panel" style="margin-bottom:12px;" data-id="${esc(c.id)}">
         <div style="display:flex;gap:12px;align-items:baseline;flex-wrap:wrap;"><h3 style="margin:0;">${esc(c.name)}</h3><span style="color:var(--muted);font-size:12px;">company ${esc(c.id)} · director <b style="color:var(--text);">${esc(c.directorName || c.directorId)}</b> [${esc(c.directorId)}]</span><button class="ghost small cs-open" style="margin-left:auto;">Open the company</button><button class="ghost small cs-del" style="color:var(--danger);">Remove</button></div>
+        <details class="cs-det" data-id="${esc(c.id)}" ${csOpen[c.id] ? 'open' : ''} style="margin-top:8px;"><summary class="av-sum"><span style="font-size:12px;color:var(--muted);">Cut ${esc(c.cutPct)}% · Investment ${coMoney(c.investment)} · Discord ${c.discord.channelId || c.discord.webhookSet ? 'set' : 'not set'} · Daily saving ${sv.on ? 'on' : 'off'}</span></summary>
         <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-top:10px;">
             <div class="field" style="margin:0;width:110px;"><label>Director cut %</label><input class="cs-cut" type="number" min="0" max="100" value="${esc(c.cutPct)}"></div>
             <button class="ghost small cs-cutsave">Save cut</button>
@@ -222,7 +224,9 @@ async function loadCompanies() {
             </div>
             <div style="font-size:11px;color:var(--muted);margin-top:4px;">The key is stored encrypted and only used to read this company once a day (after the 18:00–18:10 TCT tick).</div>
         </div>
+        </details>
     </div>`; }).join('') : '<p style="color:var(--muted);">No companies registered yet.</p>';
+    document.querySelectorAll('#cs-list .cs-det').forEach(d => d.addEventListener('toggle', () => { csOpen[d.dataset.id] = d.open; }));
     document.querySelectorAll('#cs-list [data-id]').forEach(card => {
         const id = card.dataset.id, q = s => card.querySelector(s), on = (s, fn) => { const el = q(s); if (el) el.addEventListener('click', fn); };
         const run = async (body, ok) => { const x = await coFetch({ companyId: id, ...body }); if (x.error) { toast(x.error); return null; } if (ok) toast(ok); return x; };
