@@ -42,7 +42,8 @@ const { targetsHandle } = require('../lib/targets');
 const { mentoringHandle, loadProgram: mentoringLoadProgram } = require('../lib/mentoring');
 const { welHandle, welcomeTodoItems, promotions: welPromotions } = require('../lib/welcome');
 const { factionAllowed, allowedList, resetCache: accessReset, LIST: ACCESS_LIST, DENIED: ACCESS_DENIED } = require('../lib/access');
-const { companyHandle, isDirector } = require('../lib/company');
+const { companyHandle, isDirector, tornCompany: coTorn, normalize: coNormalize, getAll: coGetAll } = require('../lib/company');
+const { runCompanyReports } = require('../lib/companyReports');
 const { ohHandle } = require('../lib/onlineHours');
 const { labsIsOwner, labsHasOwners, labsHandle, labsRecordReceipt } = require('../lib/labsLedger');
 
@@ -708,6 +709,13 @@ module.exports = async function handler(req, res) {
             return res.status(302).setHeader('Location', `https://www.torn.com/factions.php?step=your#/tab=controls&giveMoneyTo=${encodeURIComponent(r.playerId)}&money=${encodeURIComponent(pay)}`).end();
         }
 
+        // The companies' daily job (Vercel Cron, see vercel.json): after the company tick (18:00-18:10 TCT) it saves each company's numbers and posts the daily report
+        // (and on Sundays the weekly financials) to the company's own Discord channel. It posts at most once a day per company, so it is harmless to call by hand.
+        if (req.method === 'GET' && req.query?.cron === 'company') {
+            const results = await runCompanyReports({ redis, tornCompany: coTorn, normalize: coNormalize, getAllCompanies: () => coGetAll(redis), getPoster: id => getDiscordPoster('c' + id, 'default') });
+            return res.status(200).json({ ran: results.length, results });
+        }
+
         // The daily snapshot (Vercel Cron, see vercel.json): saves the faction's gym counters and upgrade levels once a day
         // without anyone having to log in. It uses the API key(s) in the WWL_SNAPSHOT_KEYS environment variable — one
         // key per faction, of a leader with faction API access, separated by commas. Harmless to call by hand: it only
@@ -765,7 +773,7 @@ module.exports = async function handler(req, res) {
             const director = await isDirector(redis, who.playerId);
             if (action === 'access-check') return res.status(200).json({ allowed: who.factionId ? await factionAllowed(who.factionId, who.playerId) : owner, director, owner });
             if (!(owner || director)) return res.status(403).json({ error: 'The company pages are for the owner and the company directors.' });
-            return res.status(200).json(await companyHandle(action, req.body, { redis, key, playerId: who.playerId, playerName: who.name, owner }));
+            return res.status(200).json(await companyHandle(action, req.body, { redis, key, playerId: who.playerId, playerName: who.name, owner, getPoster: id => getDiscordPoster('c' + id, 'default') }));
         }
 
 

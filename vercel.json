@@ -5,7 +5,8 @@
     "api/respect.js": { "maxDuration": 60 }
   },
   "crons": [
-    { "path": "/api/war-payout?cron=1", "schedule": "5 0 * * *" }
+    { "path": "/api/war-payout?cron=1", "schedule": "5 0 * * *" },
+    { "path": "/api/war-payout?cron=company", "schedule": "25 18 * * *" }
   ],
   "redirects": [
     { "source": "/worldwidelabs.user.js(.+)", "destination": "/worldwidelabs.user.js", "permanent": false },
