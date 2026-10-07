@@ -29,6 +29,7 @@
 // full reporting feature) whenever a leader loads the team catalog, to power rough payout estimates.
 
 const { tornFetch } = require('../lib/tornFetch');
+const { factionAllowed, DENIED: ACCESS_DENIED } = require('../lib/access');
 const REDIS_URL = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL;
 const REDIS_TOKEN = process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN;
 const ROLE_WEIGHTS_KEY = 'wwl:oc-role-weights';
@@ -223,6 +224,7 @@ module.exports = async function handler(req, res) {
             if (!(await isLeader(key))) return res.status(403).json({ error: 'Leaders only' });
             const factionId = await getFactionId(key);
             if (!factionId) return res.status(403).json({ error: 'Could not determine your faction from this key' });
+            if (!(await factionAllowed(factionId))) return res.status(403).json(ACCESS_DENIED); // only factions on the owner's list may use WWL
 
             // One faction-crimes pull, reused for open-slot detection AND completed-crime capture.
             const crimesRes = await tornFetch(`https://api.torn.com/v2/faction?selections=crimes&key=${encodeURIComponent(key)}`,
@@ -335,6 +337,7 @@ module.exports = async function handler(req, res) {
             if (!(await isLeader(key))) return res.status(403).json({ error: 'Leaders only' });
             const factionId = await getFactionId(key);
             if (!factionId) return res.status(403).json({ error: 'Could not determine your faction from this key' });
+            if (!(await factionAllowed(factionId))) return res.status(403).json(ACCESS_DENIED); // only factions on the owner's list may use WWL
             const { scenarioKey, scenario, difficulty, roles } = req.body; // roles: { normRole: {memberId, memberName} | null }
             if (!scenarioKey) return res.status(400).json({ error: 'Missing scenarioKey' });
             const plansRaw = await redis(['GET', `wwl:ocplan:${factionId}`]);
@@ -348,6 +351,7 @@ module.exports = async function handler(req, res) {
             if (!(await isLeader(key))) return res.status(403).json({ error: 'Leaders only' });
             const factionId = await getFactionId(key);
             if (!factionId) return res.status(403).json({ error: 'Could not determine your faction from this key' });
+            if (!(await factionAllowed(factionId))) return res.status(403).json(ACCESS_DENIED); // only factions on the owner's list may use WWL
             const { scenarioKey } = req.body;
             if (!scenarioKey) return res.status(400).json({ error: 'Missing scenarioKey' });
             const plansRaw = await redis(['GET', `wwl:ocplan:${factionId}`]);

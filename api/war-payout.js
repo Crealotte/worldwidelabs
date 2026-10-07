@@ -41,6 +41,7 @@ const { usageFor } = require('../lib/tornFetch');
 const { targetsHandle } = require('../lib/targets');
 const { mentoringHandle, loadProgram: mentoringLoadProgram } = require('../lib/mentoring');
 const { welHandle, welcomeTodoItems, promotions: welPromotions } = require('../lib/welcome');
+const { factionAllowed, allowedList, resetCache: accessReset, LIST: ACCESS_LIST, DENIED: ACCESS_DENIED } = require('../lib/access');
 const { ohHandle } = require('../lib/onlineHours');
 const { labsIsOwner, labsHasOwners, labsHandle, labsRecordReceipt } = require('../lib/labsLedger');
 
@@ -752,6 +753,63 @@ module.exports = async function handler(req, res) {
         const profile = await getProfile(key);
         if (!profile) return res.status(403).json({ error: `Could not determine your faction from this key${getProfile.lastError ? ` — ${getProfile.lastError}` : ''}` });
         const { factionId, playerId, name: playerName, factionName, daysInFaction } = profile;
+        // Only factions on the owner's list may use WWL (see lib/access.js; while the list is empty nothing is restricted, and an owner always passes).
+        // 'access-check' is what the login screen asks, so it can turn a faction that is not on the list away with a clear message.
+        if (action === 'access-check') return res.status(200).json({ allowed: await factionAllowed(factionId, playerId) });
+        if (!(await factionAllowed(factionId, playerId))) return res.status(403).json(ACCESS_DENIED);
+        // The owner's list of factions that may use WWL: see it, add a faction (by its Torn ID), remove one, or add everyone who already uses WWL in
+        // one go (so switching the restriction on does not lock out the factions that are using it today). Owners only.
+        if (action.startsWith('access-')) {
+            if (!(await labsIsOwner(redis, playerId))) return res.status(403).json({ error: 'Owners only' });
+            const nameOf = async id => {
+                let name = '';
+                try { name = (await redis(['HGET', 'wwl:faction-names', id])) || ''; } catch (e) { /* look it up */ }
+                if (!name) { try { const r = await fetch(`https://api.torn.com/faction/${id}?selections=basic&key=${encodeURIComponent(key)}`); const d = await r.json(); name = d?.name || ''; if (name) await redis(['HSET', 'wwl:faction-names', id, name]); } catch (e) { /* no name */ } }
+                return name;
+            };
+            if (action === 'access-list') {
+                const list = await allowedList(true);
+                return res.status(200).json({ enabled: Object.keys(list).length > 0, mine: String(factionId), factions: Object.entries(list).map(([id, v]) => ({ id, name: v.name || '', by: v.by || '', at: v.at || 0 })).sort((a, b) => (a.name || a.id).localeCompare(b.name || b.id)) });
+            }
+            if (action === 'access-add') {
+                const id = String(req.body.factionId || '').replace(/\D/g, '');
+                if (!/^\d{1,9}$/.test(id)) return res.status(400).json({ error: 'Enter the faction ID (a number).' });
+                const name = await nameOf(id);
+                if (!name) return res.status(400).json({ error: 'Torn does not know a faction with that ID, or the lookup failed — check the number.' });
+                await redis(['HSET', ACCESS_LIST, id, JSON.stringify({ name, by: playerName, at: Date.now() })]);
+                accessReset();
+                return res.status(200).json({ ok: true, name });
+            }
+            if (action === 'access-remove') {
+                const id = String(req.body.factionId || '').replace(/\D/g, '');
+                if (id === String(factionId)) return res.status(400).json({ error: 'Your own faction cannot be removed from the list.' });
+                await redis(['HDEL', ACCESS_LIST, id]);
+                accessReset();
+                return res.status(200).json({ ok: true });
+            }
+            if (action === 'access-seed') { // everyone who already uses WWL: the owner's own faction, nightly-saving factions, the shared server's factions, and any faction with data stored
+                const found = new Set([String(factionId)]);
+                ((await redis(['HKEYS', 'wwl:snapshot-vault'])) || []).forEach(i => found.add(String(i)));
+                try { Object.keys(JSON.parse(process.env.DISCORD_ROLE_MAP || '{}')).forEach(i => found.add(String(i))); } catch (e) { /* none */ }
+                (process.env.DISCORD_WAR_FACTION_IDS || '').split(',').map(s => s.trim()).filter(Boolean).forEach(i => found.add(i));
+                for (const [pattern, prefix] of [['wwl:mo-roster:*', 'wwl:mo-roster:'], ['wwl:discord-settings:*', 'wwl:discord-settings:'], ['wwl:userscript-seen:*', 'wwl:userscript-seen:']]) {
+                    let cursor = '0';
+                    for (let n = 0; n < 30; n++) {
+                        const r = await redis(['SCAN', cursor, 'MATCH', pattern, 'COUNT', '500']);
+                        cursor = String(r[0]);
+                        for (const k of r[1] || []) { const id = k.slice(prefix.length); if (/^\d{1,9}$/.test(id)) found.add(id); }
+                        if (cursor === '0') break;
+                    }
+                }
+                const have = await allowedList(true);
+                const add = [...found].filter(id => !have[id]).slice(0, 40);
+                for (const id of add) await redis(['HSET', ACCESS_LIST, id, JSON.stringify({ name: await nameOf(id), by: playerName, at: Date.now(), seeded: true })]);
+                accessReset();
+                return res.status(200).json({ ok: true, added: add.length });
+            }
+            return res.status(400).json({ error: 'Unknown action' });
+        }
+
         // Open to any logged-in member of the faction, not leader-gated — this is what lets the
         // faction dashboard show the latest war's badge winners to everyone, not just leaders.
         if (action === 'get-latest-badges') {

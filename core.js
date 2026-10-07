@@ -149,6 +149,9 @@
         apiKey = key;
         const data = await tornV1('profile,bars,cooldowns,notifications,gym,personalstats');
         profile = data;
+        // Only factions the owner has put on the list may use WWL: ask the server before showing anything. (Opened as a local file there is no server: no check.)
+        const acc = await fetch('/api/war-payout', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key, action: 'access-check' }) }).then(r => r.json()).catch(() => null);
+        if (acc && acc.allowed === false) { const denied = new Error('Your faction is not on the list of factions that can use WWL yet. Ask the WWL owner to add it.'); denied.denied = true; apiKey = ''; throw denied; }
         localStorage.setItem(KEY_STORAGE, key);
         $('login-view').style.display = 'none';
         $('app-view').style.display = 'block';
@@ -414,6 +417,7 @@
         if (page === 'mentoring-admin') loadMentoringAdmin();
         if (page === 'welcome-admin') loadWelcomeAdmin();
         if (page === 'lab-notes' && typeof loadWelcomeMine === 'function') loadWelcomeMine();
+        if (page === 'access') loadAccess();
         if (page === 'bug-report') loadBugReport();
         if (page === 'labs-funds') loadLabsFunds();
         if (page === 'members-overview') loadMemberOverview();

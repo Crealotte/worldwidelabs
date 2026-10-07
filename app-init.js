@@ -15,7 +15,7 @@
         loadPayoutReceipt(receiptId);
     } else if (apiKey) {
         login(apiKey).catch(async e => {
-            if (e.tornCode === 2) {
+            if (e.tornCode === 2 || e.denied) { // a rejected key, or a faction that is not on the owner's list: forget the saved key and say why
                 localStorage.removeItem(KEY_STORAGE);
                 apiKey = '';
                 $('login-error').textContent = e.message;

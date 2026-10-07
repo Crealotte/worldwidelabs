@@ -32,6 +32,7 @@
 // POST { key, action: 'remove-goal', id }                    -> leader-only
 
 const { tornFetch } = require('../lib/tornFetch');
+const { factionAllowed, DENIED: ACCESS_DENIED } = require('../lib/access');
 const REDIS_URL = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL;
 const REDIS_TOKEN = process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN;
 
@@ -765,6 +766,7 @@ module.exports = async function handler(req, res) {
         const factionResult = await getFactionId(key);
         if (factionResult.error) return res.status(403).json({ error: `Could not check your faction right now: ${factionResult.error}` });
         const factionId = factionResult.factionId;
+        if (!(await factionAllowed(factionId))) return res.status(403).json(ACCESS_DENIED); // only factions on the owner's list may use WWL
         await ensureSchema(factionId);
 
         if (action === 'read') {

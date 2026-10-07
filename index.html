@@ -592,6 +592,7 @@
                         <a class="nav-item" data-page="leader-settings" href="/leader-settings">Leader settings</a>
                         <a class="nav-item" data-page="mentoring-admin" href="/mentoring-admin">Mentoring admin</a>
                         <a class="nav-item" data-page="labs-funds" href="/labs-funds" style="display:none;">Labs Funds</a>
+                        <a class="nav-item" data-page="access" href="/access" style="display:none;">🔒 Allowed factions</a>
                     </div>
                 </div>
                 <div class="nav-group">
@@ -1878,6 +1879,27 @@
             <div class="panel"><div id="bc-body"></div></div>
         </section>
 
+        <section class="page" id="page-access">
+            <div class="lab-label">WWL·37 / owner</div>
+            <h2>🔒 Allowed factions</h2>
+            <p class="pagedesc">Only members of the factions on this list can use WWL. While the list is empty everyone can log in; as soon as a faction is on it, every other faction is turned away at the login. You can never lock yourself out: as an owner you always get in, and your own faction cannot be removed. Changes can take up to a minute to reach everywhere.</p>
+            <div class="status" id="ac-status"></div>
+            <div class="panel">
+                <h3 style="margin-top:0;">Status</h3>
+                <div id="ac-state" style="margin-bottom:10px;"></div>
+                <button class="ghost small" id="ac-seed" type="button">Add every faction that already uses WWL</button>
+                <span style="color:var(--muted);font-size:12px;margin-left:8px;">Finds the factions with data stored (nightly saving, Discord, Member Overview, script users, the shared server) so switching this on does not lock any of them out.</span>
+            </div>
+            <div class="panel">
+                <h3 style="margin-top:0;">Factions that may use WWL</h3>
+                <div id="ac-list"></div>
+                <div style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap;margin-top:12px;padding-top:12px;border-top:1px solid var(--line);">
+                    <div class="field" style="margin:0;width:200px;"><label for="ac-id">Faction ID</label><input id="ac-id" inputmode="numeric" placeholder="e.g. 12345"></div>
+                    <button id="ac-add" type="button">Add faction</button>
+                </div>
+            </div>
+        </section>
+
         <section class="page" id="page-lab-notes">
             <div class="lab-label">WWL·36 / for everyone</div>
             <h2>🧪 Lab Notes</h2>
@@ -2635,6 +2657,7 @@
 <script src="online-hours.js"></script>
 <script src="welcome.js"></script>
 <script src="request-log.js"></script>
+<script src="faction-access.js"></script>
 <script src="crimes-guide.js"></script>
 <script src="war-payout-tracker.js"></script>
 <script src="war-badges-tracker.js"></script>

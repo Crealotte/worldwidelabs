@@ -10,6 +10,7 @@
 // resolved server-side from their key — never something the client can choose.
 
 const { tornFetch } = require('../lib/tornFetch');
+const { factionAllowed, DENIED: ACCESS_DENIED } = require('../lib/access');
 const DISCORD_API = 'https://discord.com/api/v10';
 
 async function fetchAllMembers(guildId, token) {
@@ -57,6 +58,7 @@ module.exports = async function handler(req, res) {
 
         const factionId = await getFactionId(key);
         if (!factionId) return res.status(403).json({ error: 'Could not determine your faction from this key' });
+        if (!(await factionAllowed(factionId))) return res.status(403).json(ACCESS_DENIED); // only factions on the owner's list may use WWL
         const roleId = ROLE_MAP[factionId] || null; // this faction's own verified role — if unset, "in server" counts as verified
 
         const members = await fetchAllMembers(GUILD_ID, BOT_TOKEN);

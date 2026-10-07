@@ -15,6 +15,7 @@
 // POST { key, action:'vote', pollId, optionIndex }          -> any member: vote on the ACTIVE poll only
 
 const { tornFetch } = require('../lib/tornFetch');
+const { factionAllowed, DENIED: ACCESS_DENIED } = require('../lib/access');
 const REDIS_URL = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL;
 const REDIS_TOKEN = process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN;
 
@@ -83,6 +84,7 @@ module.exports = async function handler(req, res) {
 
         const factionId = await getFactionId(key);
         if (!factionId) return res.status(403).json({ error: 'Could not determine your faction from this key' });
+        if (!(await factionAllowed(factionId))) return res.status(403).json(ACCESS_DENIED); // only factions on the owner's list may use WWL
 
         if (action === 'read') {
             const pollIds = (await redis(['LRANGE', listKey(factionId), 0, -1])) || []; // newest first

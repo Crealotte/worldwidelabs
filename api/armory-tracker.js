@@ -119,6 +119,7 @@ async function fetchAllArmoryNews(key, from, to, cat = 'armoryAction') {
 // once as one gzipped value and served from there from then on. Today and the last hour are never stored. If the database is unreachable
 // this quietly falls back to reading Torn, so a report never fails because of the cache.
 const zlib = require('zlib');
+const { factionAllowed, DENIED: ACCESS_DENIED } = require('../lib/access');
 const DAY_S = 86400;
 const NEWS_CACHE_TTL = 60 * 86400;
 const newsDayKey = (factionId, cat, day) => `wwl:armory-news:${factionId}:${cat || 'all'}:${day}`; // day = UTC day number
@@ -192,6 +193,7 @@ module.exports = async function handler(req, res) {
 
         const factionId = await getFactionId(key);
         if (!factionId) return res.status(403).json({ error: 'Could not determine your faction from this key' });
+        if (!(await factionAllowed(factionId))) return res.status(403).json(ACCESS_DENIED); // only factions on the owner's list may use WWL
         if (!(await isLeader(key))) return res.status(403).json({ error: 'Leaders only' });
 
         // Xanax taken out of the armory during one war's window (from `leadHours` before the war starts until 24h after it ends — the

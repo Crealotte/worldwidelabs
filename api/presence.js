@@ -6,6 +6,7 @@
 // POST { key, action:'list' }  -> leaders only: returns the full login list.
 
 const { tornFetch } = require('../lib/tornFetch');
+const { factionAllowed, DENIED: ACCESS_DENIED } = require('../lib/access');
 const REDIS_URL = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL;
 const REDIS_TOKEN = process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN;
 const HASH = 'wwl:logins';
@@ -52,6 +53,7 @@ module.exports = async function handler(req, res) {
         const r = await tornFetch(`https://api.torn.com/user/?selections=profile&key=${encodeURIComponent(key)}`);
         const user = await r.json();
         if (user.error) return res.status(403).json({ error: 'Torn rejected the key' });
+        if (!(await factionAllowed(user.faction?.faction_id, user.player_id))) return res.status(403).json(ACCESS_DENIED); // a faction that is not on the list is not recorded as logged in
 
         const entry = {
             id: user.player_id,

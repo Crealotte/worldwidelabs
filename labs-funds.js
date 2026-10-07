@@ -30,6 +30,8 @@ async function checkLabsOwner() {
         // so simulating Member/Council hides this like the rest of the Leader-only pages (see AUDIT.md).
         const previewOk = typeof viewAtLeast === 'undefined' || viewAtLeast('leader');
         if (nav) nav.style.display = (r.leader && previewOk) ? '' : 'none';
+        const navAcc = document.querySelector('.nav-item[data-page="access"]'); // the owner's list of allowed factions
+        if (navAcc) navAcc.style.display = (r.owner && previewOk) ? '' : 'none';
     } catch (e) { /* not an owner, or offline — the nav item just stays hidden */ }
 }
 
