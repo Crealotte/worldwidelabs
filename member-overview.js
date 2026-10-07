@@ -274,7 +274,7 @@ function renderMemberOverview() {
         
         <div><div style="color:var(--muted);font-size:11px;">Needs a push</div><div style="font-weight:700;color:${MO_LIGHT.red};">${red.length}</div></div>
         <div><div style="color:var(--muted);font-size:11px;">Wars judged</div><div style="font-weight:700;">${moWarsInPeriod().length}</div></div>`;
-    $('mo-push').innerHTML = red.length ? `<span style="color:var(--muted);font-size:12px;">Needs a push on warring (met the war rule in fewer than ${moData.settings.needWars} of the last 5 wars): </span>${red.map(r => `<span class="chip" style="cursor:default;border-color:${MO_LIGHT.red};">${esc(r.name)}</span>`).join(' ')}` : '';
+    $('mo-push').innerHTML = ''; // the list of who needs a push is gone; the numbers above stay and the red lights in the table show who it is
 
     const winners = moWinners(rows);
     const medal = ['🥇', '🥈', '🥉'];
