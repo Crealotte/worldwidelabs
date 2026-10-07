@@ -1501,6 +1501,7 @@
             </div>
 
             <div id="mo-body" style="display:none;">
+                <div id="mo-owner-bar" style="display:none;"></div>
                 <div class="status" id="mo-status"></div>
 
                 <div class="panel">
@@ -2001,7 +2002,7 @@
                 <h3 style="margin-top:0;">🌙 Nightly saving</h3>
                     <div id="pc-nightly" style="margin-bottom:14px;padding-bottom:14px;border-bottom:1px solid var(--line);">
                         <div style="font-size:13px;font-weight:700;margin-bottom:6px;">Leaders: save the faction's gym counters every night</div>
-                        <p style="color:var(--muted);font-size:12px;margin:0 0 8px;">So the numbers keep building up (energy trained per member, the countdown) even on days nobody opens WWL. Turn it on once, with your own key — nobody has to share a key or touch anything else.</p>
+                        <p style="color:var(--muted);font-size:12px;margin:0 0 8px;">So the numbers keep building up (energy trained per member, the countdown) even on days nobody opens WWL. Turn it on once, with your own key — nobody has to share a key or touch anything else. The key is used for this nightly job and for your own faction's pages; the WWL owner can also look at your faction's Member Overview and Who's on board (read-only, nothing can be changed) through it.</p>
                         <div id="pc-nightly-status" style="font-size:13px;margin-bottom:8px;"></div>
                         <button class="ghost small" id="pc-nightly-on">Turn on nightly saving</button>
                         <button class="ghost small" id="pc-nightly-off" style="display:none;">Turn it off</button>
@@ -2658,6 +2659,7 @@
 <script src="welcome.js"></script>
 <script src="request-log.js"></script>
 <script src="faction-access.js"></script>
+<script src="owner-view.js"></script>
 <script src="crimes-guide.js"></script>
 <script src="war-payout-tracker.js"></script>
 <script src="war-badges-tracker.js"></script>

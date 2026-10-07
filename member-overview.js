@@ -28,7 +28,7 @@ const MO_DAY = 86400;
 async function moFetch(body) {
     const res = await fetch('/api/war-payout', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ key: apiKey, ...body }),
+        body: JSON.stringify({ key: apiKey, ...body, ...(typeof ownerBody === 'function' ? ownerBody() : {}) }),
     });
     const text = await res.text();
     try { return JSON.parse(text); } catch (e) { return { error: `Server problem (${res.status}) — ${text.slice(0, 120)}` }; }
@@ -123,6 +123,7 @@ async function loadMemberOverview() {
     if (moBusy) return;
     if (!isLeaderCached) { $('mo-locked').style.display = 'block'; $('mo-body').style.display = 'none'; return; }
     $('mo-locked').style.display = 'none'; $('mo-body').style.display = 'block';
+    if (typeof renderOwnerBar === 'function') renderOwnerBar(); // the owner's faction picker (only an owner sees it)
     // Council reads the hits/rules table and Who's on board; the register, Rules settings, Energy
     // Intel import, and dev checks stay Leader-only whole panels (see AUDIT.md).
     const editOnly = typeof canEditLeaderOnly === 'undefined' ? isLeaderCached : canEditLeaderOnly;

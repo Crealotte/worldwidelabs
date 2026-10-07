@@ -59,7 +59,15 @@ module.exports = async function handler(req, res) {
         const factionId = await getFactionId(key);
         if (!factionId) return res.status(403).json({ error: 'Could not determine your faction from this key' });
         if (!(await factionAllowed(factionId))) return res.status(403).json(ACCESS_DENIED); // only factions on the owner's list may use WWL
-        const roleId = ROLE_MAP[factionId] || null; // this faction's own verified role — if unset, "in server" counts as verified
+        // The owner looking at another faction's Who's on board: the same Discord roster, checked against THAT faction's verified role.
+        let viewFaction = factionId;
+        const asF = String(req.body.asFaction || '').replace(/\D/g, '');
+        if (asF && asF !== factionId) {
+            const pr = await (await tornFetch(`https://api.torn.com/user/?selections=profile&key=${encodeURIComponent(key)}`)).json(); // cached by tornFetch
+            if (!(await require('../lib/labsLedger').labsIsOwner(require('../lib/access').redis, String(pr.player_id)))) return res.status(403).json({ error: 'Only the owner can look at another faction.' });
+            viewFaction = asF;
+        }
+        const roleId = ROLE_MAP[viewFaction] || null; // this faction's own verified role — if unset, "in server" counts as verified
 
         const members = await fetchAllMembers(GUILD_ID, BOT_TOKEN);
 

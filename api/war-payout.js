@@ -60,6 +60,7 @@ async function redis(command) {
 }
 
 const restockedKey = (factionId) => `wwl:restocked-wars:${factionId}`;
+const OWNER_VIEW_ACTIONS = new Set(['mo-get', 'mo-energy', 'mo-consumption', 'mo-war', 'mo-reg-get', 'verify-get', 'userscript-get', 'owner-roster']); // what the owner can read of another faction
 const manualVerifyKey = (factionId) => `wwl:manual-verify:${factionId}`; // hash: playerId -> { intel, cat, updatedAt } — Torn Intel / CAT have no API to check, so a leader ticks it by hand
 const userscriptSeenKey = (factionId) => `wwl:userscript-seen:${factionId}`; // hash: playerId -> last-seen epoch ms, stamped by the userscript itself (see 'script-checkin') for Who's on board
 const userscriptInfoKey = (factionId) => `wwl:userscript-info:${factionId}`; // hash: playerId -> "version|pda" (or "version|pc"), sent by the script's own check-in
@@ -726,7 +727,7 @@ module.exports = async function handler(req, res) {
             return res.status(200).send(png);
         }
         if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
-        const { key, action } = req.body || {};
+        let { key, action } = req.body || {};
 
         // Receipts are readable by anyone with the link — genuinely public, no key or login
         // required, since the whole point is being shareable outside the faction too.
@@ -752,11 +753,24 @@ module.exports = async function handler(req, res) {
 
         const profile = await getProfile(key);
         if (!profile) return res.status(403).json({ error: `Could not determine your faction from this key${getProfile.lastError ? ` — ${getProfile.lastError}` : ''}` });
-        const { factionId, playerId, name: playerName, factionName, daysInFaction } = profile;
+        let { factionId, playerId, name: playerName, factionName, daysInFaction } = profile;
         // Only factions on the owner's list may use WWL (see lib/access.js; while the list is empty nothing is restricted, and an owner always passes).
         // 'access-check' is what the login screen asks, so it can turn a faction that is not on the list away with a clear message.
         if (action === 'access-check') return res.status(200).json({ allowed: await factionAllowed(factionId, playerId) });
         if (!(await factionAllowed(factionId, playerId))) return res.status(403).json(ACCESS_DENIED);
+        // The owner can look at another faction's Member Overview and Who's on board (read-only) through that faction's stored nightly-saving key
+        // (their leader knows: the owner runs these factions). `asFaction` names the faction; only the actions listed in OWNER_VIEW_ACTIONS are
+        // answered that way, so nothing can be changed in another faction from here.
+        if (req.body.asFaction) {
+            const target = String(req.body.asFaction).replace(/\D/g, '');
+            if (target && target !== String(factionId)) {
+                if (!(await labsIsOwner(redis, playerId))) return res.status(403).json({ error: 'Only the owner can look at another faction.' });
+                if (!OWNER_VIEW_ACTIONS.has(action)) return res.status(403).json({ error: 'That is not available while you are looking at another faction: it is read-only.' });
+                const theirKey = await getVaultKey(redis, target);
+                if (!theirKey) return res.status(400).json({ error: 'That faction has no stored key (nightly saving is off), so there is no live data to show.' });
+                key = theirKey; factionId = target;
+            }
+        }
         // The owner's list of factions that may use WWL: see it, add a faction (by its Torn ID), remove one, or add everyone who already uses WWL in
         // one go (so switching the restriction on does not lock out the factions that are using it today). Owners only.
         if (action.startsWith('access-')) {
@@ -1643,6 +1657,15 @@ Cancel: ${cancelUrl}`, [], embeds, undefined, true);
         // This faction's own Discord destination(s) (see getDiscordPoster). Leader-only. The webhook
         // URL is a secret — it's never sent back, only a hint of which webhook is saved. `kind` picks
         // which named destination to read/write ('default', 'feedback', 'whatsnew'); omitted = 'default'.
+        // The member list of the faction being looked at (the owner's view of another faction, or just the own faction): Who's on board needs it, and the
+        // browser would otherwise ask Torn with the owner's own key, which only ever shows the owner's own faction.
+        if (action === 'owner-roster') {
+            if (!(await isLeader(key))) return res.status(403).json({ error: 'Leaders only' });
+            const r = await tornFetch(`https://api.torn.com/v2/faction/members?striptags=true&key=${encodeURIComponent(key)}`, { headers: { accept: 'application/json' } });
+            const d = await r.json();
+            if (d.error) return res.status(400).json({ error: d.error.error || 'Torn could not give the member list.' });
+            return res.status(200).json({ members: d.members || [] });
+        }
         // The owner's list of factions to set Discord up for: the shared server's factions, every faction that switched nightly saving on, and
         // the owner's own. Names are looked up once and remembered. For each: which destinations (kinds) already have a channel or webhook.
         if (action === 'owner-factions') {

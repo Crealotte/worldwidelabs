@@ -9,7 +9,7 @@ let adoptionSort = { key: null, dir: 'desc' }; // Who's on board's clickable col
 
 async function fetchVerifyMap() {
     try {
-        const res = await fetch('/api/war-payout', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key: apiKey, action: 'verify-get' }) });
+        const res = await fetch('/api/war-payout', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key: apiKey, action: 'verify-get', ...(typeof ownerBody === 'function' ? ownerBody() : {}) }) });
         const data = await res.json();
         return data.error ? {} : (data.map || {});
     } catch (e) { return {}; }
@@ -20,7 +20,7 @@ async function fetchVerifyMap() {
 let usInfo = {}, usLatest = null; // version/platform each script reported, and the newest script version
 async function fetchUserscriptMap() {
     try {
-        const res = await fetch('/api/war-payout', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key: apiKey, action: 'userscript-get' }) });
+        const res = await fetch('/api/war-payout', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key: apiKey, action: 'userscript-get', ...(typeof ownerBody === 'function' ? ownerBody() : {}) }) });
         const data = await res.json();
         if (data.error) return {};
         usInfo = data.info || {}; usLatest = data.latest || null;
@@ -42,10 +42,10 @@ async function loadAdoption(sfx = '') {
                     method: 'POST', headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ key: apiKey, action: 'list' }),
                 }).then(r => r.json()),
-                tornV2('/faction/members?striptags=true'),
+                (typeof ownerAs === 'string' && ownerAs) ? fetch('/api/war-payout', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key: apiKey, action: 'owner-roster', asFaction: ownerAs }) }).then(r => r.json()).then(d => { if (d.error) throw new Error(d.error); return d; }) : tornV2('/faction/members?striptags=true'), // the owner looking at another faction gets that faction's list from the server
                 fetch('/api/discord-members', {
                     method: 'POST', headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ key: apiKey }),
+                    body: JSON.stringify({ key: apiKey, ...(typeof ownerBody === 'function' ? ownerBody() : {}) }),
                 }).then(r => r.json()).catch(() => null),
                 fetchVerifyMap(),
                 fetchUserscriptMap(),
