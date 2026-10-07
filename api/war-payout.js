@@ -170,6 +170,14 @@ function isSharedServerFaction(factionId) {
     return Object.keys(roleMap).includes(String(factionId)) || extra.includes(String(factionId));
 }
 
+// Which faction a Discord-settings call is about: the caller's own, or — only for an owner (the person who owns the Discord server) — any faction
+// they name in `asFaction`. null when someone who is not an owner asks for another faction.
+async function discordTarget(body, factionId, playerId) {
+    const as = String(body.asFaction || '').replace(/\D/g, '');
+    const owner = await labsIsOwner(redis, playerId);
+    if (!as || as === String(factionId)) return { id: String(factionId), other: false, owner };
+    return owner ? { id: as, other: true, owner } : null;
+}
 // DISCORD_KINDS: the named destinations a faction can point at different channels. 'default' is the
 // original single destination (availability pings); 'feedback' and 'whatsnew' are separate so a leader
 // can, say, keep availability pings in a war channel but feedback nudges somewhere quieter.
@@ -200,7 +208,7 @@ async function getDiscordPoster(factionId, kind = 'default') {
             }),
         };
     }
-    if (s.channelId && isSharedServerFaction(factionId) && process.env.DISCORD_BOT_TOKEN) {
+    if (s.channelId && (isSharedServerFaction(factionId) || s.ownerSet) && process.env.DISCORD_BOT_TOKEN) {
         const base = `https://discord.com/api/v10/channels/${encodeURIComponent(s.channelId)}/messages`, auth = { Authorization: `Bot ${process.env.DISCORD_BOT_TOKEN}`, 'Content-Type': 'application/json' };
         return {
             post: (content, users, embeds, components) => fetch(base, {
@@ -1577,16 +1585,49 @@ Cancel: ${cancelUrl}`, [], embeds, undefined, true);
         // This faction's own Discord destination(s) (see getDiscordPoster). Leader-only. The webhook
         // URL is a secret — it's never sent back, only a hint of which webhook is saved. `kind` picks
         // which named destination to read/write ('default', 'feedback', 'whatsnew'); omitted = 'default'.
+        // The owner's list of factions to set Discord up for: the shared server's factions, every faction that switched nightly saving on, and
+        // the owner's own. Names are looked up once and remembered. For each: which destinations (kinds) already have a channel or webhook.
+        if (action === 'owner-factions') {
+            if (!(await labsIsOwner(redis, playerId))) return res.status(403).json({ error: 'Owners only' });
+            const ids = new Set([String(factionId)]);
+            try { Object.keys(JSON.parse(process.env.DISCORD_ROLE_MAP || '{}')).forEach(i => ids.add(String(i))); } catch (e) { /* none */ }
+            (process.env.DISCORD_WAR_FACTION_IDS || '').split(',').map(s => s.trim()).filter(Boolean).forEach(i => ids.add(i));
+            const vaultIds = new Set(((await redis(['HKEYS', 'wwl:snapshot-vault'])) || []).map(String));
+            vaultIds.forEach(i => ids.add(i));
+            for (const extra of (Array.isArray(req.body.extra) ? req.body.extra : [])) if (/^\d{1,9}$/.test(String(extra))) ids.add(String(extra));
+            const list = [...ids].slice(0, 40);
+            const cachedNames = list.length ? await redis(['HMGET', 'wwl:faction-names', ...list]) : [];
+            const settings = list.length ? await redis(['MGET', ...list.map(i => discordSettingsKey(i))]) : [];
+            const out = [];
+            for (let i = 0; i < list.length; i++) {
+                let name = cachedNames[i] || '';
+                if (!name) {
+                    try { const r = await fetch(`https://api.torn.com/faction/${list[i]}?selections=basic&key=${encodeURIComponent(key)}`); const d = await r.json(); name = d?.name || ''; if (name) await redis(['HSET', 'wwl:faction-names', list[i], name]); } catch (e) { /* no name */ }
+                }
+                let all = {}; try { all = settings[i] ? JSON.parse(settings[i]) : {}; } catch (e) { all = {}; }
+                const configured = DISCORD_KINDS.filter(k => { const c = all.channels?.[k] || (k === 'default' ? { webhookUrl: all.webhookUrl, channelId: all.channelId } : null); return !!(c && (c.webhookUrl || c.channelId)); });
+                out.push({ id: list[i], name, mine: list[i] === String(factionId), shared: isSharedServerFaction(list[i]), nightly: vaultIds.has(list[i]), configured });
+            }
+            return res.status(200).json({ factions: out });
+        }
+
+        // The owner (who owns the Discord server) can look at and set up any faction's destinations: `asFaction` names the faction.
+        // Everyone else always works on their own faction.
+        if (action === 'discord-settings-get' || action === 'discord-settings-set' || action === 'discord-settings-test') {
+            req.dsTarget = await discordTarget(req.body, factionId, playerId);
+            if (!req.dsTarget) return res.status(403).json({ error: 'Only the owner can set up another faction.' });
+        }
         if (action === 'discord-settings-get') {
+            const tgt = req.dsTarget, canChannel = isSharedServerFaction(tgt.id) || tgt.owner; // the bot can post by channel ID on the shared server, and anywhere for the owner
             const kind = DISCORD_KINDS.includes(req.body.kind) ? req.body.kind : 'default';
-            const raw = await redis(['GET', discordSettingsKey(factionId)]);
+            const raw = await redis(['GET', discordSettingsKey(tgt.id)]);
             const all = raw ? JSON.parse(raw) : {};
             const legacy = (all.webhookUrl || all.channelId) ? { webhookUrl: all.webhookUrl, channelId: all.channelId } : null;
             const ownSetting = all.channels?.[kind] || (kind === 'default' ? legacy : null);
             const s = ownSetting || {};
             return res.status(200).json({
-                factionId, kind,
-                shared: isSharedServerFaction(factionId), // on the shared server -> the bot can post here
+                factionId: tgt.id, kind, owner: tgt.owner, other: tgt.other,
+                shared: canChannel, // the bot can post here by channel ID (on the shared server, or anywhere for the owner)
                 channelId: s.channelId || '',
                 webhookSet: !!s.webhookUrl,
                 webhookHint: s.webhookUrl ? `webhook …${s.webhookUrl.match(/\/webhooks\/(\d+)\//)?.[1]?.slice(-6) || ''}` : '',
@@ -1595,8 +1636,9 @@ Cancel: ${cancelUrl}`, [], embeds, undefined, true);
         }
 
         if (action === 'discord-settings-set') {
+            const tgt = req.dsTarget, canChannel = isSharedServerFaction(tgt.id) || tgt.owner;
             const kind = DISCORD_KINDS.includes(req.body.kind) ? req.body.kind : 'default';
-            const raw = await redis(['GET', discordSettingsKey(factionId)]);
+            const raw = await redis(['GET', discordSettingsKey(tgt.id)]);
             const all = raw ? JSON.parse(raw) : {};
             if (!all.channels) all.channels = {};
             const s = { ...(all.channels[kind] || (kind === 'default' ? { webhookUrl: all.webhookUrl, channelId: all.channelId } : {})) };
@@ -1608,23 +1650,24 @@ Cancel: ${cancelUrl}`, [], embeds, undefined, true);
             }
             if (typeof channelId === 'string') {
                 if (channelId.trim() && !/^\d{15,25}$/.test(channelId.trim())) return res.status(400).json({ error: 'A channel ID is just a long number — right-click the channel in Discord (Developer Mode on) and choose Copy Channel ID.' });
-                if (channelId.trim() && !isSharedServerFaction(factionId)) return res.status(400).json({ error: 'The shared bot can only post for factions on the shared Discord server — use a webhook instead.' });
-                if (channelId.trim()) s.channelId = channelId.trim(); else delete s.channelId;
+                if (channelId.trim() && !canChannel) return res.status(400).json({ error: 'The shared bot can only post for factions on the shared Discord server — use a webhook instead.' });
+                if (channelId.trim()) { s.channelId = channelId.trim(); if (!isSharedServerFaction(tgt.id)) s.ownerSet = true; } else { delete s.channelId; delete s.ownerSet; } // ownerSet: a channel the owner chose for a faction outside the shared list
             }
             all.channels[kind] = s;
             // Once 'default' is saved under the new shape, drop the old flat fields so it's the one
             // source of truth from now on — getDiscordPoster's legacy fallback still covers anyone
             // who saved before named channels existed and hasn't touched settings since.
             if (kind === 'default') { delete all.webhookUrl; delete all.channelId; }
-            await redis(['SET', discordSettingsKey(factionId), JSON.stringify(all)]);
+            await redis(['SET', discordSettingsKey(tgt.id), JSON.stringify(all)]);
             return res.status(200).json({ ok: true });
         }
 
         // Sends a harmless test message (mentions nobody) so a leader can confirm the destination
         // works before the first real ping.
         if (action === 'discord-settings-test') {
+            const tgt = req.dsTarget;
             const kind = DISCORD_KINDS.includes(req.body.kind) ? req.body.kind : 'default';
-            const poster = await getDiscordPoster(factionId, kind);
+            const poster = await getDiscordPoster(tgt.id, kind);
             if (poster?.error) return res.status(400).json({ error: poster.error });
             if (!poster) return res.status(400).json({ error: 'Nothing saved yet — add a channel ID or webhook first.' });
             const what = kind === 'feedback' ? 'feedback reminders' : kind === 'whatsnew' ? 'What\'s new posts' : 'war availability pings';

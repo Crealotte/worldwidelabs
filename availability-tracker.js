@@ -79,6 +79,7 @@ async function updateAvailabilityBadge() {
 // 12-Serverless-Function-per-deployment limit, same reason War Badges lives there too.
 async function avFetch(body) {
     if (AV_PLAN_ACTIONS.has(body.action) && avPlanId && !body.planId) body = { ...body, planId: avPlanId };
+    if (/^discord-settings-/.test(body.action) && typeof avDcFaction === 'string' && avDcFaction && !body.asFaction) body = { ...body, asFaction: avDcFaction }; // the owner setting up another faction
     const res = await fetch('/api/war-payout', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ key: apiKey, ...body }),
@@ -262,6 +263,24 @@ function renderAvOd() {
     if (d.scannedAt && d.members.length) wireSort(el, avOdSort, d.members, avOdAccessors(d.window.warStart), renderAvOd);
 }
 
+// Owner only (the person who owns the Discord server): pick any faction and set up ITS Discord destinations. Everyone else never sees this and always
+// works on their own faction. '' = my own faction.
+let avDcFaction = '', avDcFactions = null; // avDcFactions: null = not loaded, false = not an owner, otherwise the list
+async function loadAvDcOwner(force, extraId) {
+    if (avDcFactions === false || (avDcFactions !== null && !force && !extraId)) return;
+    const r = await avFetch({ action: 'owner-factions', ...(extraId ? { extra: [...(avDcFactions || []).map(f => f.id), extraId] } : {}) });
+    avDcFactions = r.error ? false : r.factions;
+    const box = $('av-dc-owner');
+    if (!box) return;
+    if (!avDcFactions) { box.style.display = 'none'; return; }
+    box.style.display = 'block';
+    box.innerHTML = `<div style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap;padding-bottom:10px;margin-bottom:10px;border-bottom:1px solid var(--line);">
+        <div class="field" style="margin:0;min-width:300px;flex:1;"><label for="av-dc-faction">Owner: set up Discord for</label><select id="av-dc-faction">${avDcFactions.map(f => `<option value="${f.mine ? '' : esc(f.id)}" ${(f.mine ? '' : f.id) === avDcFaction ? 'selected' : ''}>${esc(f.name || `Faction ${f.id}`)} [${esc(f.id)}]${f.mine ? ' (yours)' : ''} — ${f.configured.length ? f.configured.map(k => AV_DC_LABELS[k]).join(', ') : 'nothing set yet'}</option>`).join('')}</select></div>
+        <div class="field" style="margin:0;width:170px;"><label for="av-dc-addid">Another faction ID</label><input id="av-dc-addid" inputmode="numeric" placeholder="e.g. 12345"></div>
+        <button class="ghost small" id="av-dc-add" type="button">Add</button></div>`;
+    $('av-dc-faction').addEventListener('change', () => { avDcFaction = $('av-dc-faction').value; loadAvDiscord(); });
+    $('av-dc-add').addEventListener('click', async () => { const id = $('av-dc-addid').value.replace(/\D/g, ''); if (id) { avDcFaction = id; await loadAvDcOwner(false, id); loadAvDiscord(); } });
+}
 // Leader-only: this faction's own Discord destination(s). A faction on the shared server saves a
 // channel ID (the bot posts there); any faction can instead save a webhook URL. Three named kinds
 // share this one panel (buttons in index.html toggle avDiscordKind) — 'feedback' and 'whatsnew' fall
@@ -272,6 +291,7 @@ const AV_DC_LABELS = { default: 'Availability pings', feedback: 'Feedback remind
 async function loadAvDiscord(kind = avDiscordKind) {
     avDiscordKind = kind;
     document.querySelectorAll('.dc-kind-btn').forEach(b => b.style.background = b.dataset.kind === kind ? 'var(--bench-2)' : '');
+    await loadAvDcOwner(); // only an owner gets the faction picker
     const el = $('av-discord-body');
     try {
         const s = await avFetch({ action: 'discord-settings-get', kind });
@@ -306,7 +326,7 @@ async function loadAvDiscord(kind = avDiscordKind) {
             if (r.error) throw new Error(r.error);
         };
         $('av-dc-save').addEventListener('click', async () => {
-            try { await save(); toast(`${AV_DC_LABELS[kind]}: Discord settings saved`); loadAvDiscord(kind); } catch (e) { toast(e.message); }
+            try { await save(); toast(`${AV_DC_LABELS[kind]}: Discord settings saved`); loadAvDcOwner(true); loadAvDiscord(kind); } catch (e) { toast(e.message); }
         });
         $('av-dc-test').addEventListener('click', async () => {
             try {
