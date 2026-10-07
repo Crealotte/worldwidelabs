@@ -33,7 +33,7 @@ function enterDirectorMode() {
 }
 
 // ---- the director's page (tabs like TornStats: Management, Details, plus the payslip and the daily saving) ----
-let coTab = 'management', coState = null;
+let coTab = 'details', coState = null; // tab keys are historic: 'details' (the chart and the day table) is shown as Management, 'management' (info, employees, stock, notes) as Details
 const coOpenDay = {}; // date -> true: which expanded day rows are open
 const coK = n => n == null ? '—' : Math.abs(n) >= 1000 ? `${Math.round(n / 1000).toLocaleString('en-US')}k` : String(Math.round(n));
 
@@ -103,7 +103,7 @@ function renderCompany() {
     const { r, h } = coState;
     const d = r.data, c = r.company, sv = r.saving || { on: false };
     const days = h ? h.days : [];
-    const tabs = [['management', 'Management'], ['details', 'Details'], ['payslip', 'Payslip'], ['saving', 'Daily saving']];
+    const tabs = [['details', 'Management'], ['management', 'Details'], ['staffing', 'Staffing'], ['payslip', 'Payslip'], ['saving', 'Daily saving']];
     const info = (k, v) => `<div style="margin:2px 0;"><b>${k}:</b> ${v}</div>`;
     const inactive = (list, title, color) => `<div style="margin:6px 0;"><b style="font-size:13px;">${title}</b> ${list.length ? list.map(e => `<span class="chip" style="cursor:default;border-color:${color};">${esc(e.name)} <span style="color:var(--muted);font-size:11px;">${esc(e.rel)}</span></span>`).join(' ') : '<span style="color:var(--muted);font-size:13px;">none</span>'}</div>`;
     const inc = days.map(x => x.income).filter(v => v != null);
@@ -135,6 +135,8 @@ function renderCompany() {
                 <p style="font-size:12px;color:var(--muted);margin:8px 0;">On TornStats open the company's Details page and copy the rows of the table (Date, Income, Wages, Ad Budget, Stock, Profit, Cust, Employees, Rating), then paste them here. Days WWL already has are kept as they are; "Weekly Total" rows are ignored.</p>
                 <textarea id="co-import" rows="6" style="width:100%;font-family:var(--mono);font-size:12px;" placeholder="06/10/26  $44,697,000  $17,685,000  $3,000,000  $0  $24,012,000  2  15  5"></textarea>
                 <button class="ghost small" id="co-import-btn" type="button" style="margin-top:6px;">Import</button></details>`;
+    } else if (coTab === 'staffing') {
+        body = typeof stfRender === 'function' ? stfRender(r) : '';
     } else if (coTab === 'payslip') {
         body = `<div class="panel"><h3 style="margin-top:0;">Payslip <span style="font-weight:400;font-size:12px;color:var(--muted);">— the week runs Monday to Sunday; the Sunday tick (18:00–18:10 TCT) is in the week it ends</span></h3>
             ${c.investment > 0 ? `<p style="margin:0 0 8px;">The owner owes you <b style="font-family:var(--mono);">${coMoney(c.investment)}</b>${c.invNote ? ` <span style="color:var(--muted);">(${esc(c.invNote)})</span>` : ''}. It is taken off what you send, so the money only moves once.</p>` : ''}
@@ -150,6 +152,7 @@ function renderCompany() {
         <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px;border-bottom:1px solid var(--line);padding-bottom:8px;">${tabs.map(([k, l]) => `<button type="button" class="co-tab" data-t="${k}" style="padding:7px 16px;border-radius:8px 8px 0 0;border:1px solid ${coTab === k ? 'var(--reagent)' : 'var(--line)'};background:${coTab === k ? 'rgba(53,217,155,.12)' : 'transparent'};color:var(--text);cursor:pointer;font-size:14px;">${l}</button>`).join('')}</div>
         ${body}`;
     document.querySelectorAll('.co-tab').forEach(b => b.addEventListener('click', () => { coTab = b.dataset.t; renderCompany(); }));
+    if (coTab === 'staffing' && typeof stfWire === 'function') stfWire(r, loadCompany);
     $('co-pick')?.addEventListener('change', () => { coMyId = $('co-pick').value; loadCompany(); });
     $('co-raw-btn')?.addEventListener('click', async () => { const x = await coFetch({ action: 'co-raw', companyId: coMyId }); $('co-raw').textContent = x.error || x.raw; });
     $('co-daily')?.addEventListener('click', async () => { const x = await coFetch({ action: 'co-daily', companyId: coMyId, on: !sv.on }); if (x.error) { toast(x.error); return; } toast(!sv.on ? 'Daily saving is on' : 'Daily saving is off'); loadCompany(); });
