@@ -34,10 +34,11 @@ function enterDirectorMode() {
 
 // ---- the director's page (tabs like TornStats: Management, Details, plus the payslip and the daily saving) ----
 let coTab = 'details', coState = null; // tab keys are historic: 'details' (the chart and the day table) is shown as Management, 'management' (info, employees, stock, notes) as Details
-const coOpenDay = {}; // date -> true: which expanded day rows are open
+let coDetailDate = null; const coDayCache = {}; // coDetailDate: the day shown on the Details tab (null = today, live); coDayCache: the saved days fetched so far
 const coK = n => n == null ? '—' : Math.abs(n) >= 1000 ? `${Math.round(n / 1000).toLocaleString('en-US')}k` : String(Math.round(n));
 
 async function loadCompany() {
+    Object.keys(coDayCache).forEach(k => delete coDayCache[k]); // days are fetched again after anything that may have changed them
     const st = $('co-status');
     st.className = 'status ok'; st.textContent = 'Loading your company…';
     const r = await coFetch({ action: 'co-my', companyId: coMyId });
@@ -87,7 +88,7 @@ function coDetailsTable(days) {
     const rows = Object.keys(groups).sort().reverse().map(end => {
         const ds = groups[end].slice().sort((a, b) => b.date.localeCompare(a.date));
         const sum = f => ds.reduce((s, d) => s + (f(d) || 0), 0);
-        return ds.map(d => `<tr class="co-row" data-date="${esc(d.date)}" style="border-top:1px solid var(--line);"><td style="padding:4px 8px;"><button class="ghost small co-del" data-date="${esc(d.date)}" title="Delete this day" style="padding:0 6px;color:var(--danger);">✕</button></td><td style="padding:4px 8px;white-space:nowrap;">${coDay(d.date)}${d.imported ? ' <span style="color:var(--muted);font-size:10px;">(imported)</span>' : ''}</td>${td(coMoney(d.income))}${td(coMoney(d.wages))}${td(coMoney(d.ads))}${td(coMoney(d.stockCost))}${td(coMoney(profit(d)))}${td(coN(d.customers))}${td(coN(d.hired))}${td(coN(d.rating))}<td style="padding:4px 8px;">${d.detail ? `<button class="ghost small co-exp" data-date="${esc(d.date)}" style="padding:0 6px;">${coOpenDay[d.date] ? '▾' : '▸'}</button>` : ''}</td></tr>${coOpenDay[d.date] ? `<tr><td></td><td colspan="10" style="padding:4px 8px 10px;" id="co-day-${esc(d.date)}"><span style="color:var(--muted);font-size:12px;">Loading…</span></td></tr>` : ''}`).join('')
+        return ds.map(d => `<tr class="co-row" data-date="${esc(d.date)}" style="border-top:1px solid var(--line);cursor:pointer;"><td style="padding:4px 8px;"><button class="ghost small co-del" data-date="${esc(d.date)}" title="Delete this day" style="padding:0 6px;color:var(--danger);">✕</button></td><td style="padding:4px 8px;white-space:nowrap;">${coDay(d.date)}${d.imported ? ' <span style="color:var(--muted);font-size:10px;">(imported)</span>' : ''}</td>${td(coMoney(d.income))}${td(coMoney(d.wages))}${td(coMoney(d.ads))}${td(coMoney(d.stockCost))}${td(coMoney(profit(d)))}${td(coN(d.customers))}${td(coN(d.hired))}${td(coN(d.rating))}<td style="padding:4px 8px;color:var(--reagent);font-weight:700;" title="Open this day on the Details tab">›</td></tr>`).join('')
             + `<tr style="background:var(--bench-2);font-weight:700;"><td></td><td style="padding:4px 8px;">Weekly total</td>${td(coMoney(sum(d => d.income)))}${td(coMoney(sum(d => d.wages)))}${td(coMoney(sum(d => d.ads)))}${td(coMoney(sum(d => d.stockCost)))}${td(coMoney(sum(profit)))}${td(coN(sum(d => d.customers)))}<td></td><td></td><td></td><td></td></tr>`;
     }).join('');
     return `<div style="overflow-x:auto;"><table style="width:100%;font-size:12px;border-collapse:collapse;"><thead><tr style="color:var(--muted);"><th></th><th style="padding:4px 8px;text-align:left;">Date</th><th style="padding:4px 8px;text-align:right;">Income</th><th style="padding:4px 8px;text-align:right;">Wages</th><th style="padding:4px 8px;text-align:right;">Ad Budget</th><th style="padding:4px 8px;text-align:right;">Stock</th><th style="padding:4px 8px;text-align:right;">Profit</th><th style="padding:4px 8px;text-align:right;">Cust</th><th style="padding:4px 8px;text-align:right;">Employees</th><th style="padding:4px 8px;text-align:right;">Rating</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>`;
@@ -99,9 +100,25 @@ function coDayDetail(day) {
         <table style="border-collapse:collapse;"><thead><tr style="color:var(--muted);text-align:left;"><th style="padding:2px 8px;">Product</th><th style="padding:2px 8px;text-align:right;">In stock</th><th style="padding:2px 8px;text-align:right;">Sold</th><th style="padding:2px 8px;text-align:right;">Worth</th></tr></thead><tbody>${stock}</tbody></table></div>`;
 }
 
+// a saved day in the shape of the live data, so the Details tab can show it with the same code
+function coSnapData(live, s) {
+    return { ...live, dailyIncome: s.income, weeklyIncome: s.weeklyIncome, dailyCustomers: s.customers, weeklyCustomers: s.weeklyCustomers, hired: s.hired, capacity: s.capacity, rating: s.rating, advertising: s.ads, bank: s.bank, funds: s.funds, popularity: s.popularity, efficiency: s.efficiency,
+        employees: (s.emps || []).map(e => ({ id: e[0], name: e[1], position: e[2], days: e[3], wage: e[4], manual: e[5], intelligence: e[6], endurance: e[7], effectiveness: e[8], addiction: e[9], lastTs: e[10], lastRel: '' })),
+        stock: (s.stock || []).map(x => ({ name: x.name, cost: x.cost, rrp: x.rrp, price: x.price, inStock: x.inStock, onOrder: x.onOrder, sold: x.sold, soldWorth: x.soldWorth })), inactive: { day: [], long: [] } };
+}
 function renderCompany() {
     const { r, h } = coState;
-    const d = r.data, c = r.company, sv = r.saving || { on: false };
+    // a day opened from the table on Management: the Details tab then shows the company as it stood that day (fetched once, then kept)
+    if (coTab === 'management' && coDetailDate && !coDayCache[coDetailDate]) {
+        const asked = coDetailDate;
+        coFetch({ action: 'co-day', companyId: coMyId, date: asked }).then(x => { coDayCache[asked] = x.error ? { error: x.error } : x.day; renderCompany(); });
+        $('co-body').innerHTML = '<p style="color:var(--muted);">Loading that day…</p>';
+        return;
+    }
+    const dayRec = coTab === 'management' && coDetailDate ? coDayCache[coDetailDate] : null;
+    const pastDay = !!(dayRec && !dayRec.error);
+    const d = pastDay ? coSnapData(r.data, dayRec) : r.data, c = r.company, sv = r.saving || { on: false };
+    const pastBanner = coTab === 'management' && coDetailDate ? `<div class="panel" style="border-color:#f0b432;"><b>${coDay(coDetailDate)}</b> <span style="color:var(--muted);">: the company as it stood on that day.</span> <button class="ghost small" id="co-live" type="button" style="margin-left:8px;">Back to today</button>${dayRec && dayRec.error ? `<div style="color:var(--danger);margin-top:6px;">${esc(dayRec.error)}</div>` : ''}${pastDay && !(dayRec.emps || []).length ? '<div style="color:var(--muted);margin-top:6px;font-size:13px;">Only the table values were saved for this day (it was imported), so there are no employees or stock for it.</div>' : ''}</div>` : '';
     const days = h ? h.days : [];
     const tabs = [['details', 'Management'], ['management', 'Details'], ['staffing', 'Staffing'], ['payslip', 'Payslip'], ['saving', 'Daily saving']];
     const info = (k, v) => `<div style="margin:2px 0;"><b>${k}:</b> ${v}</div>`;
@@ -111,7 +128,7 @@ function renderCompany() {
     const monthIncome = days.filter(x => x.date.startsWith(monthPrefix)).reduce((s, x) => s + (x.income || 0), 0);
     let body = '';
     if (coTab === 'management') {
-        body = `<div class="panel"><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:18px;font-size:14px;">
+        body = `${pastBanner}<div class="panel"><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:18px;font-size:14px;">
                 <div>${info('Type', esc(d.type || '—'))}${info('Employees', d.hired != null ? `${d.hired}${d.capacity ? ` / ${d.capacity}` : ''}` : '—')}${info('Rating', coN(d.rating))}${info('Ad Budget', coMoney(d.advertising))}${info('Bank', coMoney(d.bank ?? d.funds))}</div>
                 <div>${info('Daily Income', coMoney(d.dailyIncome))}${info('Daily Customers', coN(d.dailyCustomers))}${info('Weekly Income', coMoney(d.weeklyIncome))}${info('Weekly Customers', coN(d.weeklyCustomers))}${info('Popularity / Efficiency', `${d.popularity != null ? coN(d.popularity) + '%' : '—'} / ${d.efficiency != null ? coN(d.efficiency) + '%' : '—'}`)}</div>
                 <div><div style="font-size:18px;margin-bottom:4px;">Notes</div><textarea id="co-notes" rows="4" maxlength="3000" style="width:100%;">${esc(c.notes || '')}</textarea><button class="ghost small" id="co-notes-save" type="button" style="margin-top:4px;">Save notes</button></div>
@@ -120,8 +137,8 @@ function renderCompany() {
             ${d.employees.length ? `<div style="overflow-x:auto;"><table style="width:100%;font-size:13px;border-collapse:collapse;"><thead><tr style="color:var(--muted);text-align:left;"><th style="padding:4px 8px;">Employee</th><th style="padding:4px 8px;text-align:right;">Efficiency</th><th style="padding:4px 8px;">Role</th><th style="padding:4px 8px;">M / I / E</th><th style="padding:4px 8px;text-align:right;">Wage</th><th style="padding:4px 8px;text-align:right;">Addiction</th><th style="padding:4px 8px;">Last seen</th></tr></thead><tbody>${d.employees.map((e, i) => `<tr style="border-top:1px solid var(--line);${i % 2 ? 'background:var(--bench-2);' : ''}"><td style="padding:4px 8px;"><a href="https://www.torn.com/profiles.php?XID=${esc(e.id)}" target="_blank" rel="noopener" style="color:var(--text);">${esc(e.name)} [${esc(e.id)}]</a></td><td style="padding:4px 8px;text-align:right;font-family:var(--mono);">${coN(e.effectiveness)}</td><td style="padding:4px 8px;">${esc(e.position)}</td><td style="padding:4px 8px;font-family:var(--mono);">${coK(e.manual)} / ${coK(e.intelligence)} / ${coK(e.endurance)}</td><td style="padding:4px 8px;text-align:right;font-family:var(--mono);">${coMoney(e.wage)}</td><td style="padding:4px 8px;text-align:right;font-family:var(--mono);${e.addiction != null && Math.abs(e.addiction) >= 12 ? 'color:var(--danger);' : ''}">${coN(e.addiction)}</td><td style="padding:4px 8px;color:var(--muted);">${esc(e.lastRel) || coAgo(e.lastTs)}</td></tr>`).join('')}</tbody></table></div>` : '<p style="color:var(--muted);margin:0;">Torn gave no employee list for this key.</p>'}</div>
             <div class="panel"><h3 style="margin-top:0;">Stock</h3>
             ${d.stock.length ? `<div style="overflow-x:auto;"><table style="width:100%;font-size:13px;border-collapse:collapse;"><thead><tr style="color:var(--muted);text-align:left;"><th style="padding:4px 8px;">Item</th><th style="padding:4px 8px;text-align:right;">Cost</th><th style="padding:4px 8px;text-align:right;">RRP</th><th style="padding:4px 8px;text-align:right;">Price</th><th style="padding:4px 8px;text-align:right;">In Stock</th><th style="padding:4px 8px;text-align:right;">On Order</th><th style="padding:4px 8px;text-align:right;">Amount Sold</th><th style="padding:4px 8px;text-align:right;">Amount Worth</th><th style="padding:4px 8px;text-align:right;">Profit</th></tr></thead><tbody>${d.stock.map((s, i) => `<tr style="border-top:1px solid var(--line);${i % 2 ? 'background:var(--bench-2);' : ''}"><td style="padding:4px 8px;font-weight:700;">${esc(s.name)}</td><td style="padding:4px 8px;text-align:right;font-family:var(--mono);">${coMoney(s.cost)}</td><td style="padding:4px 8px;text-align:right;font-family:var(--mono);">${coMoney(s.rrp)}</td><td style="padding:4px 8px;text-align:right;font-family:var(--mono);">${coMoney(s.price)}</td><td style="padding:4px 8px;text-align:right;font-family:var(--mono);">${coN(s.inStock)}</td><td style="padding:4px 8px;text-align:right;font-family:var(--mono);">${coN(s.onOrder)}</td><td style="padding:4px 8px;text-align:right;font-family:var(--mono);">${coN(s.sold)}</td><td style="padding:4px 8px;text-align:right;font-family:var(--mono);">${coMoney(s.soldWorth)}</td><td style="padding:4px 8px;text-align:right;font-family:var(--mono);">${coMoney((s.soldWorth || 0) - (s.cost || 0) * (s.sold || 0))}</td></tr>`).join('')}</tbody></table></div>` : '<p style="color:var(--muted);margin:0;">Torn gave no stock for this company.</p>'}</div>
-            <div class="panel"><h3 style="margin-top:0;">Who has been away</h3>${inactive(d.inactive.day, 'Inactive 24–48 h', '#f0b432')}${inactive(d.inactive.long, 'Inactive over 48 h', 'var(--danger)')}</div>
-            <details style="margin-top:8px;"><summary class="av-sum"><span style="font-size:12px;color:var(--muted);">Show Torn's raw answer (to check the numbers)</span></summary><pre id="co-raw" style="white-space:pre-wrap;word-break:break-all;font-size:11px;color:var(--muted);"></pre><button class="ghost small" id="co-raw-btn" type="button">Load the raw answer</button></details>`;
+            ${pastDay ? '' : `<div class="panel"><h3 style="margin-top:0;">Who has been away</h3>${inactive(d.inactive.day, 'Inactive 24–48 h', '#f0b432')}${inactive(d.inactive.long, 'Inactive over 48 h', 'var(--danger)')}</div>`}
+            ${pastDay ? '' : `<details style="margin-top:8px;"><summary class="av-sum"><span style="font-size:12px;color:var(--muted);">Show Torn's raw answer (to check the numbers)</span></summary><pre id="co-raw" style="white-space:pre-wrap;word-break:break-all;font-size:11px;color:var(--muted);"></pre><button class="ghost small" id="co-raw-btn" type="button">Load the raw answer</button></details>`}`;
     } else if (coTab === 'details') {
         body = `<div class="panel"><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:18px;font-size:14px;">
                 <div>${info('Type', esc(d.type || '—'))}${info('Employees', coN(d.hired))}${info('Rating', coN(d.rating))}${info('Ad Budget', coMoney(d.advertising))}</div>
@@ -153,20 +170,18 @@ function renderCompany() {
         ${body}`;
     document.querySelectorAll('.co-tab').forEach(b => b.addEventListener('click', () => { coTab = b.dataset.t; renderCompany(); }));
     if (coTab === 'staffing' && typeof stfWire === 'function') stfWire(r, loadCompany);
-    $('co-pick')?.addEventListener('change', () => { coMyId = $('co-pick').value; loadCompany(); });
+    $('co-pick')?.addEventListener('change', () => { coMyId = $('co-pick').value; coDetailDate = null; loadCompany(); });
     $('co-raw-btn')?.addEventListener('click', async () => { const x = await coFetch({ action: 'co-raw', companyId: coMyId }); $('co-raw').textContent = x.error || x.raw; });
     $('co-daily')?.addEventListener('click', async () => { const x = await coFetch({ action: 'co-daily', companyId: coMyId, on: !sv.on }); if (x.error) { toast(x.error); return; } toast(!sv.on ? 'Daily saving is on' : 'Daily saving is off'); loadCompany(); });
+    $('co-live')?.addEventListener('click', () => { coDetailDate = null; renderCompany(); });
     $('co-notes-save')?.addEventListener('click', async () => { const x = await coFetch({ action: 'co-notes', companyId: coMyId, notes: $('co-notes').value }); if (x.error) { toast(x.error); return; } c.notes = $('co-notes').value; toast('Notes saved'); });
     $('co-fetch')?.addEventListener('click', async () => { const b = $('co-fetch'); b.disabled = true; const x = await coFetch({ action: 'co-fetch-now', companyId: coMyId }); b.disabled = false; if (x.error) { toast(x.error); return; } toast(`Saved for ${x.date}`); loadCompany(); });
     $('co-import-btn')?.addEventListener('click', async () => { const x = await coFetch({ action: 'co-import', companyId: coMyId, text: $('co-import').value }); if (x.error) { toast(x.error); return; } toast(`${x.added} day${x.added === 1 ? '' : 's'} imported${x.kept ? `, ${x.kept} already there` : ''}`); loadCompany(); });
     document.querySelectorAll('.co-del').forEach(b => b.addEventListener('click', async () => { if (!confirm(`Delete ${b.dataset.date} from the history?`)) return; const x = await coFetch({ action: 'co-day-delete', companyId: coMyId, date: b.dataset.date }); if (x.error) { toast(x.error); return; } loadCompany(); }));
-    document.querySelectorAll('.co-exp').forEach(b => b.addEventListener('click', async () => {
-        const date = b.dataset.date;
-        coOpenDay[date] = !coOpenDay[date];
-        renderCompany();
-        if (coOpenDay[date]) { const x = await coFetch({ action: 'co-day', companyId: coMyId, date }); const cell = $(`co-day-${date}`); if (cell) cell.innerHTML = x.error ? esc(x.error) : coDayDetail(x.day); }
+    document.querySelectorAll('.co-row').forEach(tr => tr.addEventListener('click', e => { // a day of the table opens that day on the Details tab
+        if (e.target.closest('.co-del')) return;
+        coDetailDate = tr.dataset.date; coTab = 'management'; renderCompany();
     }));
-    Object.keys(coOpenDay).filter(k => coOpenDay[k]).forEach(async date => { const cell = $(`co-day-${date}`); if (cell && cell.textContent.trim() === 'Loading…') { const x = await coFetch({ action: 'co-day', companyId: coMyId, date }); cell.innerHTML = x.error ? esc(x.error) : coDayDetail(x.day); } });
 }
 
 // ---- the owner's page: register companies, set the cut, the Investment amount, the Discord channel and the key ----
