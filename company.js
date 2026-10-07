@@ -16,9 +16,9 @@ const coAgo = ts => { if (!ts) return '—'; const s = Date.now() / 1000 - ts; r
 // Called by login() with the answer of the server's access check: shows the "My company" / "Companies" menu items to those it concerns.
 function checkCompanyAccess(acc) {
     coOwner = !!(acc && acc.owner);
-    const mine = document.querySelector('.nav-item[data-page="company"]'), all = document.querySelector('.nav-item[data-page="companies"]');
+    const mine = document.querySelector('.nav-item[data-page="company"]'), ownerGroup = $('nav-owner-group');
     if (mine) mine.style.display = acc && (acc.director) ? '' : 'none';
-    if (all) all.style.display = coOwner ? '' : 'none';
+    if (ownerGroup) ownerGroup.style.display = coOwner ? '' : 'none'; // the CreaLotte menu: only for the owner
 }
 // A company director who is not in one of the allowed factions: WWL is just their company page.
 function enterDirectorMode() {
