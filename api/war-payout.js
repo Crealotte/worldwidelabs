@@ -42,6 +42,7 @@ const { targetsHandle } = require('../lib/targets');
 const { mentoringHandle, loadProgram: mentoringLoadProgram } = require('../lib/mentoring');
 const { welHandle, welcomeTodoItems, promotions: welPromotions } = require('../lib/welcome');
 const { factionAllowed, allowedList, resetCache: accessReset, LIST: ACCESS_LIST, DENIED: ACCESS_DENIED } = require('../lib/access');
+const { companyHandle, isDirector } = require('../lib/company');
 const { ohHandle } = require('../lib/onlineHours');
 const { labsIsOwner, labsHasOwners, labsHandle, labsRecordReceipt } = require('../lib/labsLedger');
 
@@ -750,6 +751,23 @@ module.exports = async function handler(req, res) {
             return res.status(200).json({ version: m ? m[1] : null });
         }
         if (!key) return res.status(400).json({ error: 'Missing key' });
+        // The login's access check and the company side (owner setup, directors) are answered BEFORE the faction lookup below: a company director does not
+        // have to be in a faction at all, and a director only ever gets the co-* actions (see lib/company.js). Everyone else goes on to the faction checks.
+        if (action === 'access-check' || action.startsWith('co-')) {
+            const who = await (async () => {
+                const r = await tornFetch(`https://api.torn.com/user/?selections=profile&key=${encodeURIComponent(key)}`);
+                const p = await r.json();
+                if (p.error || !p.player_id) return null;
+                return { playerId: String(p.player_id), name: p.name, factionId: p.faction?.faction_id ? String(p.faction.faction_id) : null };
+            })();
+            if (!who) return res.status(403).json({ error: 'Could not read your profile from this key.' });
+            const owner = await labsIsOwner(redis, who.playerId);
+            const director = await isDirector(redis, who.playerId);
+            if (action === 'access-check') return res.status(200).json({ allowed: who.factionId ? await factionAllowed(who.factionId, who.playerId) : owner, director, owner });
+            if (!(owner || director)) return res.status(403).json({ error: 'The company pages are for the owner and the company directors.' });
+            return res.status(200).json(await companyHandle(action, req.body, { redis, key, playerId: who.playerId, playerName: who.name, owner }));
+        }
+
 
         const profile = await getProfile(key);
         if (!profile) return res.status(403).json({ error: `Could not determine your faction from this key${getProfile.lastError ? ` — ${getProfile.lastError}` : ''}` });

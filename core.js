@@ -151,6 +151,14 @@
         profile = data;
         // Only factions the owner has put on the list may use WWL: ask the server before showing anything. (Opened as a local file there is no server: no check.)
         const acc = await fetch('/api/war-payout', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key, action: 'access-check' }) }).then(r => r.json()).catch(() => null);
+        if (typeof checkCompanyAccess === 'function') checkCompanyAccess(acc); // shows "My company" for directors and "Companies" for the owner
+        if (acc && acc.allowed === false && acc.director) { // a company director outside the allowed factions: WWL is just their company page
+            localStorage.setItem(KEY_STORAGE, key);
+            $('login-view').style.display = 'none';
+            $('app-view').style.display = 'block';
+            if (typeof enterDirectorMode === 'function') enterDirectorMode();
+            return;
+        }
         if (acc && acc.allowed === false) { const denied = new Error('Your faction is not on the list of factions that can use WWL yet. Ask the WWL owner to add it.'); denied.denied = true; apiKey = ''; throw denied; }
         localStorage.setItem(KEY_STORAGE, key);
         $('login-view').style.display = 'none';
@@ -418,6 +426,8 @@
         if (page === 'welcome-admin') loadWelcomeAdmin();
         if (page === 'lab-notes' && typeof loadWelcomeMine === 'function') loadWelcomeMine();
         if (page === 'access') loadAccess();
+        if (page === 'company') loadCompany();
+        if (page === 'companies') loadCompanies();
         if (page === 'bug-report') loadBugReport();
         if (page === 'labs-funds') loadLabsFunds();
         if (page === 'members-overview') loadMemberOverview();
