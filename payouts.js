@@ -27,7 +27,7 @@ function finRenderPay() {
             <span style="font-size:12px;"><span style="background:rgba(53,217,155,.28);padding:1px 8px;border-radius:4px;">paid</span> <span style="background:rgba(240,180,50,.30);padding:1px 8px;border-radius:4px;">still to pay</span> <span style="padding:1px 8px;border:1px solid var(--line);border-radius:4px;">not followed / later</span></span></div>
         <div id="pay-grid" class="panel" style="padding:0;overflow:auto;max-height:70vh;"></div>
         <div class="panel"><h3 style="margin-top:0;">Weekly update for Discord</h3><div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px;"><label style="font-size:13px;">Week ending <select id="pay-week"></select></label><button class="small" data-paycopy="1" type="button">Copy</button></div>
-            <textarea id="pay-text" rows="13" readonly style="width:100%;font-family:var(--mono);font-size:12px;"></textarea></div>`;
+            <div style="font-size:12px;color:var(--muted);margin-bottom:6px;">It counts what you marked as paid in the calendar (green): mark the week first, then copy.</div><textarea id="pay-text" rows="13" readonly style="width:100%;font-family:var(--mono);font-size:12px;"></textarea></div>`;
     finWire('pay-body');
     finRefresh();
 }
@@ -56,15 +56,20 @@ function finRefreshPay() {
     sel.innerHTML = weeks.map(d => `<option value="${d}" ${d === finPayWeek ? 'selected' : ''}>${esc(finDate(d))}</option>`).join('');
     $('pay-text').value = finWeeklyText(finPayWeek);
 }
-// the weekly update, in the shape of the Discord post: this week's range, what the weekly investors got, the date the monthly ones are paid, and the overview of the fund
+// the weekly update, in the shape of the Discord post. It counts what was PAID (the cells marked green in the calendar): the weekly investors paid that Sunday; on the monthly payday the monthly investors paid, on other
+// weeks the date of the next monthly payday; the active money and investors now; and everything paid out since the start up to that Sunday.
 function finWeeklyText(sun) {
     const fmt = d => new Date(finD(d)).toLocaleDateString('en-US', { month: 'short', day: '2-digit', timeZone: 'UTC' });
-    const weekly = finData.investors.filter(i => i.mode === 'weekly' && (i.active || i.returnedOn)).reduce((s, i) => s + finSum(finInvPeriods(i, sun, finAdd(sun, -1)).filter(p => p.date === sun)), 0);
-    const y = +sun.slice(0, 4), m = +sun.slice(5, 7) - 1, last = finMonthLastSunday(y, m);
-    const monthlyDate = `${last.slice(8, 10)}${new Date(finD(last)).toLocaleDateString('en-US', { month: 'short', timeZone: 'UTC' })}${last.slice(0, 4)}`;
+    const live = finData.investors.filter(i => i.active || i.returnedOn);
+    const paidOn = i => finSum(finInvPeriods(i, sun, finAdd(sun, -1)).filter(p => p.date === sun && finIsPaid(i, sun)));
+    const weekly = live.filter(i => i.mode === 'weekly').reduce((s, i) => s + paidOn(i), 0);
+    const last = finMonthLastSunday(+sun.slice(0, 4), +sun.slice(5, 7) - 1), payday = sun === last;
+    const monthly = live.filter(i => i.mode === 'monthly').reduce((s, i) => s + paidOn(i), 0);
+    const dateText = `${last.slice(8, 10)}${new Date(finD(last)).toLocaleDateString('en-US', { month: 'short', timeZone: 'UTC' })}${last.slice(0, 4)}`; // 25Oct2026
     const act = finData.investors.filter(i => i.active);
-    const people = new Set(act.map(finPersonKey)).size, capital = act.reduce((s, i) => s + i.amount, 0), paid = finData.investors.reduce((s, i) => s + finPaidTotal(i), 0);
-    return ['@everyone', '💰 CreaLabs Weekly Update', `[${fmt(finAdd(sun, -6))} → ${fmt(sun)}]`, '', 'Investor Payouts', `💵 Weekly investors paid: ${finMoney(weekly)}`, `🗓️ Monthly investors paid: ${monthlyDate}`, '', 'Fund Overview',
+    const people = new Set(act.map(finPersonKey)).size, capital = act.reduce((s, i) => s + i.amount, 0);
+    const paid = finData.investors.reduce((s, i) => s + finSum(finPaidList(i).filter(p => p.date <= sun)), 0);
+    return ['@everyone', '💰 CreaLabs Weekly Update', `[${fmt(finAdd(sun, -6))} → ${fmt(sun)}]`, '', 'Investor Payouts', `💵 Weekly investors paid: ${finMoney(weekly)}`, `🗓️ Monthly investors paid: ${payday ? finMoney(monthly) : dateText}`, '', 'Fund Overview',
         `💎 Total investment capital: ${finMoney(capital)}`, `🤝 Number of investors: ${people}`, `💰 Total paid out since start: ${finMoney(paid)}`].join('\n');
 }
 // click a cell: paid / not paid. Before "paid through" a week left unpaid is remembered in `skip`, after it a single paid week in `extra`; a run of paid weeks right after "paid through" moves it forward.
