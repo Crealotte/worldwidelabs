@@ -280,6 +280,8 @@ function finParseSheet(text, markPaid) {
         const A = list.reduce((s, r) => s + r.amount, 0), W = list.reduce((s, r) => s + r.weekly, 0);
         const rate = W > 0 && fixed.length ? W / fixed.reduce((s, r) => s + r.amount, 0) : A > 0 ? finRoi(A, finData.roi) / A : 0;
         const modeOf = (list.find(r => r.weekly > 0 && r.mode) || list.find(r => r.mode) || {}).mode || 'weekly'; // one way of being paid per person, as in the pay calendar: the line that carries the weekly amount decides
+        const fixedA = fixed.reduce((s, r) => s + r.amount, 0), expectW = finRoi(fixedA, finData.roi); // the sheet's weekly amount against the pay table: a difference is worth a look
+        if (W > 0 && fixedA > 0 && expectW > 0 && Math.abs(W - expectW) / expectW > 0.02) warnings.push(`${list[0].name} (#${list[0].sheetId}): the sheet says ${finMoney(W)} a week for ${finMoney(fixedA)}, the pay table gives ${finMoney(expectW)}. The sheet's amount is used.`);
         for (const r of list) {
             const gone = !r.amount; // withdrew, and the sheet has no amount for it
             const ended = r.back > 0 || r.guessed || gone, termEnd = latest([r.first, r.n1, r.n2]);
