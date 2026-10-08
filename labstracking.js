@@ -56,6 +56,7 @@ function ltEditor() {
 }
 function ltRtoBlock(rto, open) {
     const m = ltMetrics(rto, ltData.defaults);
+    const tdue = ltTornDue(rto), due = tdue ? tdue.due : m.due, dueIn = tdue ? tdue.dueIn : m.dueIn; // the lease days left on Torn when the island is linked and synced
     const ext = rto.propertyId ? `https://www.torn.com/properties.php#/p=options&ID=${rto.propertyId}&tab=offerExtension` : null;
     return `<details ${open ? 'open' : ''} style="margin-top:8px;border:1px solid var(--line);border-radius:8px;padding:6px 10px;">
         <summary class="av-sum"><span>🤝 ${esc(rto.clientName)}</span> <span style="color:var(--reagent);font-size:12px;margin-left:8px;">${m.percent}%</span></summary>
@@ -66,7 +67,7 @@ function ltRtoBlock(rto, open) {
         <div style="font-size:13px;line-height:1.7;">Start: <b>${esc(m.startDate || '—')}</b> (${m.recorded ? `${m.pays.length} payment${m.pays.length === 1 ? '' : 's'} recorded` : `${m.cycles} cycle${m.cycles > 1 ? 's' : ''} paid upfront, by the calendar`})<br>Goal: <b>${ltMoney(m.goal)}</b><br>Paid equity: <b style="color:var(--reagent);">${ltMoney(m.paid)}</b>${m.override ? ' <span style="font-size:11px;color:var(--muted);">(typed in)</span>' : ''}<br>Remaining: <b>${ltMoney(m.remaining)}</b></div>
         <div style="height:8px;background:var(--bench-2);border-radius:4px;overflow:hidden;margin:8px 0;"><div style="height:100%;width:${m.percent}%;background:var(--reagent);"></div></div>
         <div style="margin:8px 0;padding:8px;border:1px solid var(--line);border-radius:6px;font-size:13px;">
-            <div>Next payment: <b style="color:${m.dueIn < 0 ? 'var(--danger)' : m.dueIn <= 3 ? '#e0a030' : 'var(--reagent)'};">${esc(m.due)}</b> <span style="color:var(--muted);font-size:12px;">(${m.dueIn < 0 ? `${-m.dueIn} day${m.dueIn === -1 ? '' : 's'} late` : m.dueIn === 0 ? 'today' : `in ${m.dueIn} day${m.dueIn === 1 ? '' : 's'}`})</span>${rto.offeredOn ? ` <span style="font-size:12px;color:#e0a030;">· lease offered ${esc(rto.offeredOn)}, waiting for the tenant</span>` : ''}</div>
+            <div>Next payment: <b style="color:${dueIn < 0 ? 'var(--danger)' : dueIn <= 3 ? '#e0a030' : 'var(--reagent)'};">${esc(due)}</b> <span style="color:var(--muted);font-size:12px;">(${dueIn < 0 ? `${-dueIn} day${dueIn === -1 ? '' : 's'} late` : dueIn === 0 ? 'today' : `in ${dueIn} day${dueIn === 1 ? '' : 's'}`})</span> <span style="font-size:11px;color:var(--muted);">${tdue ? `(Torn's lease, synced ${esc(tdue.synced)})` : '(by the contract dates: sync the islands and link the island to follow the lease on Torn)'}</span>${rto.offeredOn ? ` <span style="font-size:12px;color:#e0a030;">· lease offered ${esc(rto.offeredOn)}, waiting for the tenant</span>` : ''}</div>
             <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px;">${rto.offeredOn ? `<button class="ghost small lt-offer-clear" data-id="${esc(rto.id)}" type="button">Take back "offered"</button>` : `<button class="ghost small lt-offer" data-id="${esc(rto.id)}" type="button">✅ I offered the lease</button>`}<button class="small lt-pay" data-id="${esc(rto.id)}" type="button">💰 Tenant paid</button><button class="ghost small lt-addpay" data-id="${esc(rto.id)}" type="button">+ Past payment</button></div>
             ${m.pays.length ? `<details style="margin-top:6px;"><summary class="av-sum" style="font-size:12px;color:var(--muted);">Payments (${m.pays.length})</summary>${m.pays.slice().reverse().map(p => `<div style="display:flex;gap:10px;align-items:center;font-size:12px;padding:2px 0;"><span style="font-family:var(--mono);">${esc(p.date)}</span><span style="font-family:var(--mono);flex:1;">${ltMoney((p.rent || 0) + (p.equity || 0))} <span style="color:var(--muted);">(${ltMoneyShort(p.rent)} rent + ${ltMoneyShort(p.equity)} equity)</span></span><button class="ghost small lt-paydel" data-id="${esc(rto.id)}" data-pay="${esc(p.id)}" type="button">✕</button></div>`).join('')}</details>` : ''}</div>
         <button class="ghost small lt-edit" data-id="${esc(rto.id)}" type="button">Edit contract</button> <button class="ghost small lt-del" data-id="${esc(rto.id)}" type="button" style="color:var(--danger);">Delete</button></details>`;
@@ -148,4 +149,13 @@ function ltWirePayments() {
         if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) { toast('Write the date as YYYY-MM-DD'); return; }
         upd(await ltFetch({ action: 'lt-pay', id: b.dataset.id, date }));
     }));
+}
+
+// The next payment is when the lease on Torn runs out (days left at the last sync counted from the sync date), not 30 days from the contract start: a tenant who goes inactive delays a renewal.
+function ltTornDue(rto) {
+    const pi = ltData.pis.find(p => (rto.propertyId && String(p.id) === String(rto.propertyId)) || (rto.tenantId && p.tenantID && String(p.tenantID) === String(rto.tenantId)));
+    if (!pi || !pi.isRented || !ltData.syncedAt) return null;
+    const synced = new Date(ltData.syncedAt).toISOString().slice(0, 10), today = new Date().toISOString().slice(0, 10);
+    const due = new Date(Date.parse(`${synced}T00:00:00Z`) + (Number(pi.daysLeft) || 0) * 86400000).toISOString().slice(0, 10);
+    return { due, dueIn: Math.round((Date.parse(`${due}T00:00:00Z`) - Date.parse(`${today}T00:00:00Z`)) / 86400000), synced };
 }

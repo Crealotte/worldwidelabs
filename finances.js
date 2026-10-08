@@ -79,31 +79,24 @@ function finModel(plan, planStart) {
             if (v) { wk.co += v; wk.coParts.push(`${c.name}: ${finMoney(v)}${real ? '' : ' (average)'}`); }
         }
     }
-    // rent-to-own: rent + the equity cycle every 30 days from the start of each contract, until the goal is reached
+    // rent-to-own: a payment (rent + equity) each time the lease runs out, until the full price is paid. Past weeks: the payments that were recorded (or, without a record, the 30-day dates from the start as an estimate).
+    // Coming weeks: the next payment is when the lease runs out on Torn (the days left at the last sync), else 30 days after the last recorded payment, else the contract calendar; then every 30 days.
+    const synced = S.rto.syncedAt ? finIso(S.rto.syncedAt) : null;
     for (const r of (S.rto.rtoItems || [])) {
         if (!r.startDate) continue;
         const eq = Number(r.cycleEquity) || 0, rent = Number(r.monthlyRent) || 0, goal = Number(r.totalEquityNeeded) || Infinity;
-        // payments recorded with the "Tenant paid" clicks: those are real (they show in their own weeks); what is still needed is planned 30 days after the last one, but not before today
-        const recPays = r.payments || [];
-        if (recPays.length) {
-            for (const p of recPays) if (p.date >= firstDay && p.date <= lastDay) place(p.date, (Number(p.rent) || 0) + (Number(p.equity) || 0), 'rto');
-            const paid = (Number(r.opening) || 0) + recPays.reduce((s, p) => s + (Number(p.equity) || 0), 0);
-            let left = eq ? Math.max(0, Math.ceil((goal - paid) / eq)) : 0;
-            const nextIso = finAdd(recPays.map(p => p.date).sort().pop(), 30);
-            for (let iso = nextIso < S.today ? S.today : nextIso; left > 0 && iso <= lastDay; left--, iso = finAdd(iso, 30)) place(iso, rent + eq, 'rto');
-            continue;
-        }
-        // a typed-in "paid so far" wins over the calendar: only the payments still needed are planned, from today on
-        const typed = r.manualEquityPaid !== null && r.manualEquityPaid !== undefined && r.manualEquityPaid !== '';
-        let left = typed && eq ? Math.max(0, Math.ceil((goal - Number(r.manualEquityPaid)) / eq)) : Infinity;
-        for (let n = 0; n < 200; n++) {
-            if (typed ? left <= 0 : (eq && n * eq >= goal)) break;
-            const iso = finAdd(r.startDate, 30 * n);
-            if (iso > lastDay) break;
-            if (typed && iso < S.today) continue;
-            if (iso >= firstDay) place(iso, rent + eq, 'rto');
-            if (typed) left--;
-        }
+        const recPays = r.payments || [], recorded = recPays.length > 0 || Number(r.opening) > 0;
+        const typed = !recorded && r.manualEquityPaid !== null && r.manualEquityPaid !== undefined && r.manualEquityPaid !== '';
+        const cycles = Math.max(1, Math.floor(Math.max(0, Math.round((finD(S.today) - finD(r.startDate)) / 86400000)) / 30) + 1);
+        let paid;
+        if (recorded) { paid = (Number(r.opening) || 0) + recPays.reduce((s, p) => s + (Number(p.equity) || 0), 0); for (const p of recPays) if (p.date >= firstDay && p.date <= lastDay) place(p.date, (Number(p.rent) || 0) + (Number(p.equity) || 0), 'rto'); }
+        else if (typed) paid = Number(r.manualEquityPaid);
+        else { paid = cycles * eq; for (let n = 0; n < cycles; n++) { if (eq && n * eq >= goal) break; const iso = finAdd(r.startDate, 30 * n); if (iso >= firstDay) place(iso, rent + eq, 'rto'); } }
+        let left = eq ? Math.max(0, Math.ceil((goal - paid) / eq)) : 0;
+        const pi = (S.rto.pis || []).find(p => (r.propertyId && String(p.id) === String(r.propertyId)) || (r.tenantId && p.tenantID && String(p.tenantID) === String(r.tenantId)));
+        let first = pi && pi.isRented && synced ? finAdd(synced, Number(pi.daysLeft) || 0) : recPays.length ? finAdd(recPays.map(p => p.date).sort().pop(), 30) : finAdd(r.startDate, 30 * cycles);
+        if (first < S.today) first = S.today;
+        for (let iso = first; left > 0 && iso <= lastDay; left--, iso = finAdd(iso, 30)) place(iso, rent + eq, 'rto');
     }
     for (const i of D.income) {
         if (!i.active || !i.amount) continue;

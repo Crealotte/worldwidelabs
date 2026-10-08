@@ -1460,7 +1460,7 @@ Cancel: ${cancelUrl}`, [], embeds, undefined, true);
                     const ocsOpen = ocs.filter(q => q.status !== 'claimed'); if (ocsOpen.length) items.push({ id: 'oc-requests', text: `${ocsOpen.length} OC request${ocsOpen.length === 1 ? '' : 's'}: ${ocsOpen.slice(0, 4).map(r => `${r.name} (level ${r.level})`).join(', ')}${ocsOpen.length > 4 ? ` +${ocsOpen.length - 4} more` : ''}.`, cta: 'See requests', url: `${site}/oc-requests` });
                     const openBanks = banks.filter(r => r.status === 'open');
                     if (openBanks.length) items.push({ id: 'bank-requests', text: `${openBanks.length} bank request${openBanks.length === 1 ? '' : 's'}: ${openBanks.slice(0, 4).map(r => `${r.name} ($${Number(r.amount).toLocaleString('en-US')})`).join(', ')}${openBanks.length > 4 ? ` +${openBanks.length - 4} more` : ''}.`, cta: 'Open bank requests', url: `${site}/bank` });
-                    if (await labsIsOwner(redis, playerId)) items.push(...(await leaseTodos(redis))); // the owner's lease payments that are due (the script shows Offered / Paid buttons on them)
+                    if (await labsIsOwner(redis, playerId)) items.push(...(await leaseTodos(redis, key))); // the owner's lease payments that are due (the script shows Offered / Paid buttons on them)
                 }
             } catch (e) { /* skip */ }
 
