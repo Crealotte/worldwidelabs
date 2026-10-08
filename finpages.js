@@ -25,6 +25,7 @@ function finRenderFund() {
         <div id="fund-tablebox" class="panel" style="padding:0;overflow-x:auto;"></div>
         <details class="panel"><summary class="av-sum"><b>Payout history</b> <span style="font-size:12px;color:var(--muted);">(the payouts you marked as paid)</span></summary><div id="fund-history" style="margin-top:6px;"></div></details>
         <details class="panel"><summary class="av-sum"><b>Pay table</b> <span style="font-size:12px;color:var(--muted);">(what an investor is paid a week for an amount)</span></summary>${finListEditor('roi')}</details>
+        <details class="panel"><summary class="av-sum"><b>Every stored line</b> <span style="font-size:12px;color:var(--muted);">(plain list, in case a line is hard to find in the table)</span></summary><div style="margin-top:6px;"><input id="fund-rawq" type="search" placeholder="Name or ID (empty = all)" style="width:200px;"> <button class="ghost small" data-rawlist="1" type="button">Show</button><div id="fund-raw" style="margin-top:6px;font-size:12px;overflow-x:auto;"></div></div></details>
         <details class="panel"><summary class="av-sum"><b>Backups</b> <span style="font-size:12px;color:var(--muted);">(a copy of your data is kept every hour for 14 days, in case a save ever loses something)</span></summary><div style="margin-top:6px;"><button class="ghost small" data-baklist="1" type="button">Show the backups</button><div id="fund-bak" style="margin-top:6px;font-size:13px;"></div></div></details>
         ${finImportPanel()}`;
     finWire('fund-body');
@@ -162,6 +163,12 @@ function finRefreshFund() {
     $('fund-history').innerHTML = hist.length ? `<div><table style="border-collapse:collapse;font-size:13px;">${hist.map(p => `<tr><td style="padding:2px 10px 2px 0;font-family:var(--mono);">${esc(p.date)}</td><td style="padding:2px 14px 2px 0;">${esc(p.name)}</td><td style="padding:2px 14px 2px 0;font-family:var(--mono);text-align:right;">${finMoney(p.amount)}</td><td style="padding:2px 0;color:var(--muted);font-size:12px;">${p.through ? `through ${esc(finDate(p.through))}` : ''}</td></tr>`).join('')}</table></div>` : '';
 }
 function finClickFund(b) {
+    if (b.dataset.rawlist !== undefined) { // every line exactly as stored, no grouping, no filter
+        const q = ($('fund-rawq').value || '').trim().toLowerCase();
+        const rows = finData.investors.map((x, k) => ({ x, k })).filter(({ x }) => !q || String(x.name).toLowerCase().includes(q) || String(x.fundId) === q || String(x.tornId) === q);
+        $('fund-raw').innerHTML = `<div style="color:var(--muted);margin-bottom:4px;">${rows.length} of ${finData.investors.length} lines</div><table style="border-collapse:collapse;font-family:var(--mono);">${rows.map(({ x, k }) => `<tr style="border-top:1px solid var(--line);"><td style="padding:1px 8px;">#${k}</td><td style="padding:1px 8px;">ID ${esc(x.fundId || '-')}</td><td style="padding:1px 8px;">${esc(x.name)}</td><td style="padding:1px 8px;">torn ${esc(x.tornId || '-')}</td><td style="padding:1px 8px;text-align:right;">${finFull(x.amount)}</td><td style="padding:1px 8px;">${esc(x.start)}</td><td style="padding:1px 8px;">${x.active ? 'active' : 'ended'}${x.returnedOn ? ` returned ${esc(x.returnedOn)}` : ''}</td><td style="padding:1px 8px;">${esc(x.mode)}</td></tr>`).join('')}</table>`;
+        return;
+    }
     if (b.dataset.baklist !== undefined) { // the saved copies: pick one to put back the investors that are missing now
         finFetch({ action: 'fin-bak-list' }).then(r => {
             if (r.error) { toast(r.error); return; }
@@ -337,10 +344,11 @@ function finClickImport(b) {
         const replace = $('fund-imp-mode').value === 'replace';
         if (replace && finData.investors.length && !confirm(`Replace the ${finData.investors.length} investors in the list with the ${finImpPending.rows.length} from the sheet?`)) return;
         const keyOf = x => `${x.name.toLowerCase()}|${x.start}|${x.amount}`, have = new Set(finData.investors.map(keyOf));
-        finData.investors = replace ? finImpPending.rows : finData.investors.concat(finImpPending.rows.filter(x => !have.has(keyOf(x))));
+        const before = finData.investors.length, rowsIn = finImpPending.rows, fresh = replace ? rowsIn : rowsIn.filter(x => !have.has(keyOf(x)));
+        finData.investors = replace ? rowsIn : finData.investors.concat(fresh);
         finImpPending = null;
         finRenderAll(); finTouch();
-        toast('Imported');
+        toast(replace ? `Imported ${rowsIn.length} lines` : `${fresh.length} lines added, ${rowsIn.length - fresh.length} were already in the list (${before} lines before)`);
     }
 }
 
