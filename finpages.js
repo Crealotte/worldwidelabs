@@ -25,6 +25,7 @@ function finRenderFund() {
         <div id="fund-tablebox" class="panel" style="padding:0;overflow-x:auto;"></div>
         <details class="panel"><summary class="av-sum"><b>Payout history</b> <span style="font-size:12px;color:var(--muted);">(the payouts you marked as paid)</span></summary><div id="fund-history" style="margin-top:6px;"></div></details>
         <details class="panel"><summary class="av-sum"><b>Pay table</b> <span style="font-size:12px;color:var(--muted);">(what an investor is paid a week for an amount)</span></summary>${finListEditor('roi')}</details>
+        <details class="panel"><summary class="av-sum"><b>Backups</b> <span style="font-size:12px;color:var(--muted);">(a copy of your data is kept every hour for 14 days, in case a save ever loses something)</span></summary><div style="margin-top:6px;"><button class="ghost small" data-baklist="1" type="button">Show the backups</button><div id="fund-bak" style="margin-top:6px;font-size:13px;"></div></div></details>
         ${finImportPanel()}`;
     finWire('fund-body');
     $('fund-q').addEventListener('input', e => { finFundQ = e.target.value; finRenderFundTable(); finRefreshFund(); });
@@ -161,6 +162,18 @@ function finRefreshFund() {
     $('fund-history').innerHTML = hist.length ? `<div><table style="border-collapse:collapse;font-size:13px;">${hist.map(p => `<tr><td style="padding:2px 10px 2px 0;font-family:var(--mono);">${esc(p.date)}</td><td style="padding:2px 14px 2px 0;">${esc(p.name)}</td><td style="padding:2px 14px 2px 0;font-family:var(--mono);text-align:right;">${finMoney(p.amount)}</td><td style="padding:2px 0;color:var(--muted);font-size:12px;">${p.through ? `through ${esc(finDate(p.through))}` : ''}</td></tr>`).join('')}</table></div>` : '';
 }
 function finClickFund(b) {
+    if (b.dataset.baklist !== undefined) { // the saved copies: pick one to put back the investors that are missing now
+        finFetch({ action: 'fin-bak-list' }).then(r => {
+            if (r.error) { toast(r.error); return; }
+            $('fund-bak').innerHTML = r.stamps.length ? r.stamps.map(s => `<div style="display:flex;gap:10px;align-items:center;padding:2px 0;"><span style="font-family:var(--mono);">${esc(s.replace('T', ' '))}:00</span><button class="ghost small" data-bakrestore="${esc(s)}" type="button">Put missing investors back</button></div>`).join('') : 'No backups yet: they are kept from the first save after this update.';
+        });
+        return;
+    }
+    if (b.dataset.bakrestore !== undefined) {
+        if (!confirm('Add the investors that are in this backup but missing now? Nothing that exists now is changed.')) return;
+        finFetch({ action: 'fin-bak-restore', stamp: b.dataset.bakrestore }).then(r => { if (r.error) { toast(r.error); return; } toast(r.restored ? `Put back ${r.restored} line${r.restored === 1 ? '' : 's'}: ${r.names.join(', ')}` : 'Nothing was missing'); loadInvestFund(); });
+        return;
+    }
     if (b.dataset.pmark !== undefined || b.dataset.psync !== undefined) { // "Paid" / "Set paid through" in a person's row: every line of that person at once
         const ixs = (b.dataset.pmark ?? b.dataset.psync).split(',').map(Number), today = finSrv.today;
         ixs.forEach(k => {
