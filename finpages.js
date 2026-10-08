@@ -56,7 +56,7 @@ function finPersonCells(s, ixs, open) {
     const today = finSrv.today, left = s.ends ? Math.round((finD(s.ends) - finD(today)) / 86400000) : null;
     const dim = s.act.length ? '' : 'color:var(--muted);';
     return [
-        `<span style="color:var(--muted);">${esc(s.rows[0].fundId || '')}</span>`,
+        `${finIdClash(s.rows[0].fundId) ? '<span title="Another investor has the same ID: change one of them" style="color:#e0a030;">⚠ </span>' : ''}<span style="color:var(--muted);">${esc(s.rows[0].fundId || '')}</span>`,
         `<b style="${dim}">${esc(s.rows[s.rows.length - 1].name)}</b>${s.lines > 1 ? ` <span style="color:var(--muted);font-size:11px;">${s.lines} lines</span>` : ''}${s.leaving ? ' <span style="color:#e0a030;font-size:11px;">leaving</span>' : ''}`,
         s.act.length ? finShort(s.inNow) : '<span style="color:var(--muted);">—</span>',
         s.act.length ? `<b>${finShort(s.week)}</b>` : '<span style="color:var(--muted);">—</span>',

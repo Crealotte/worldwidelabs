@@ -85,7 +85,8 @@ function finInvPeriods(i, upTo, from) {
 }
 const finSum = a => a.reduce((s, p) => s + p.amount, 0);
 // One person = one ID in the fund (her InvestorID: all the lines of an investor who invested more than once share it); without it the Torn ID, else the name.
-const finPersonKey = i => (i.fundId ? `f${i.fundId}` : i.tornId ? `t${i.tornId}` : `n${String(i.name || '').trim().toLowerCase()}`);
+const finPersonKey = i => (i.fundId ? `f${i.fundId}|${String(i.name || '').trim().toLowerCase()}` : i.tornId ? `t${i.tornId}` : `n${String(i.name || '').trim().toLowerCase()}`); // the same ID with another name is another person (a clash is flagged in the table)
+const finIdClash = id => !!id && new Set(finData.investors.filter(x => String(x.fundId) === String(id)).map(x => String(x.name || '').trim().toLowerCase())).size > 1;
 // What was paid out to an investment: the payouts of the schedule up to "paid through" (for one that ended without it: up to the last Sunday before the money was returned).
 const finPaidThrough = i => i.paidUntil || (i.returnedOn ? finAdd(i.returnedOn, -new Date(finD(i.returnedOn)).getUTCDay()) : '');
 // A payout is paid when it is on or before "paid through" (unless it is in `skip`: a week that was left unpaid), or when it was marked paid on its own (`extra`: paid after "paid through"). The payout calendar colours the cells that way.
