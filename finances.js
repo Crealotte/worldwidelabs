@@ -21,9 +21,11 @@ async function finFetch(body) {
 const finFull = n => Math.round(Number(n) || 0).toLocaleString('en-US');
 const finMoney = n => `${Number(n) < 0 ? '-' : ''}$${finFull(Math.abs(Number(n) || 0))}`;
 const finShort = n => { const v = Number(n) || 0, a = Math.abs(v), s = v < 0 ? '-' : ''; return a >= 1e9 ? `${s}$${(a / 1e9).toFixed(2)}B` : a >= 1e6 ? `${s}$${(a / 1e6).toFixed(1)}M` : `${s}$${finFull(a)}`; };
-// "500m", "1.5b", "6,731,000" all work; anything else is refused (null)
+// "500m", "1.5b", "6,731,000" and "6.731.000" (dots as thousands, as in her sheets) all work; anything else is refused (null)
 function finParse(s) {
-    const t = String(s ?? '').toLowerCase().replace(/[$,\s]/g, '');
+    let t = String(s ?? '').toLowerCase().replace(/[$\s]/g, '');
+    if (/^-?[0-9]{1,3}(\.[0-9]{3}){2,}$/.test(t) || /^-?[0-9]{1,3}(\.[0-9]{3})+,[0-9]+$/.test(t)) t = t.replace(/\./g, '').replace(',', '.'); // 6.731.000 or 6.731.000,50
+    t = t.replace(/,/g, '');
     const m = t.match(/^(-?[0-9]*\.?[0-9]+)([kmb]?)$/);
     if (!m) return null;
     return Math.round(Number(m[1]) * ({ k: 1e3, m: 1e6, b: 1e9 }[m[2]] || 1));
@@ -48,6 +50,32 @@ function finRoi(amount, tbl) {
 }
 const finPayout = i => (i.payout !== null && i.payout !== undefined ? i.payout : finRoi(i.amount, finData.roi));
 const finFunds = () => finData.fundsManual; // the amount she types: her money sits in cash, stocks, a faction vault and more, so Torn's cash alone says little
+
+// ---- investor payouts ----
+const finMonthLastSunday = (y, m) => { const last = Date.UTC(y, m + 1, 0); return finIso(last - new Date(last).getUTCDay() * 86400000); };
+// The payouts of an investor dated after `from` and up to `upTo` (and not after the day the money was returned). The first payout is pro rata: the day after the money arrived counts as the first day,
+// up to the first Sunday (a Wednesday investor gets Thursday to Sunday = 4 days of the week's pay), rounded to the nearest 100 (1b: 6,731,000 / 7 x 4 = 3,846,286 -> 3,846,300). Weekly = every Sunday;
+// monthly = the last Sunday of each month, with all the Sundays of that month (from the first payout) together.
+function finInvPeriods(i, upTo, from) {
+    const pay = finPayout(i), out = [];
+    if (!pay || !i.start) return out;
+    const cap = i.returnedOn && i.returnedOn < upTo ? i.returnedOn : upTo;
+    const dow = new Date(finD(i.start)).getUTCDay(), off = dow === 0 ? 7 : 7 - dow, first = finAdd(i.start, off);
+    const amt = s => (s === first && off < 7 ? Math.round(pay / 7 * off / 100) * 100 : pay);
+    if (i.mode === 'weekly') { for (let s = first, n = 0; s <= cap && n < 800; s = finAdd(s, 7), n++) if (s > from) out.push({ date: s, amount: amt(s) }); }
+    else {
+        const y0 = +first.slice(0, 4), m0 = +first.slice(5, 7) - 1;
+        for (let k = 0; k < 800; k++) {
+            const y = y0 + Math.floor((m0 + k) / 12), m = (m0 + k) % 12, L = finMonthLastSunday(y, m);
+            if (L > cap) break;
+            if (L <= from) continue;
+            let sum = 0, cnt = 0; for (let s = L; new Date(finD(s)).getUTCMonth() === m && s >= first; s = finAdd(s, -7)) { sum += amt(s); cnt++; }
+            if (cnt) out.push({ date: L, amount: sum, weeks: cnt });
+        }
+    }
+    return out;
+}
+const finSum = a => a.reduce((s, p) => s + p.amount, 0);
 
 // ---- the timeline: weeks end on Sunday; 8 weeks back, 52 ahead ----
 function finModel(plan, planStart) {
@@ -104,24 +132,13 @@ function finModel(plan, planStart) {
         else if (i.freq === 'weekly') weeks.forEach(wk => { if (wk.end >= i.date) wk.inc += i.amount; });
         else monthly(i.date, iso => place(iso, i.amount, 'inc'));
     }
-    // investors: paid on Sundays; a monthly investor is paid the Sundays of the month together on the last Sunday of it. An investor whose pay is netted in a company's send is not an outflow again.
+    // investors: paid on Sundays (the first payout is pro rata, see finInvPeriods); a monthly investor is paid the Sundays of the month together on the last Sunday of it. An investor whose pay is netted in a company's send is not an outflow again,
+    // and one who got the money back stops after that date. What was due before this week and is not marked paid yet is counted in the current week.
+    const week0 = finAdd(cur, -6);
     for (const i of D.investors) {
-        if (!i.active || i.nettedIn) continue;
-        const pay = finPayout(i);
-        if (!pay) continue;
-        if (i.mode === 'weekly') weeks.forEach(wk => { if (wk.end >= i.start) { wk.inv += pay; wk.invParts.push(`${i.name}: ${finMoney(pay)}`); } });
-        else {
-            const y0 = +i.start.slice(0, 4), m0 = +i.start.slice(5, 7) - 1;
-            for (let k = 0; k < 600; k++) {
-                const y = y0 + Math.floor((m0 + k) / 12), m = (m0 + k) % 12;
-                const last = Date.UTC(y, m + 1, 0), dow = new Date(last).getUTCDay();
-                let sun = last - dow * 86400000, cnt = 0;
-                const lastSun = finIso(sun);
-                if (lastSun > lastDay) break;
-                for (; new Date(sun).getUTCMonth() === m && finIso(sun) >= i.start; sun -= 7 * 86400000) cnt++;
-                if (cnt && lastSun >= firstDay) { place(lastSun, pay * cnt, 'inv'); const j = idx(lastSun); if (j >= 0) weeks[j].invParts.push(`${i.name}: ${finMoney(pay * cnt)} (${cnt} weeks)`); }
-            }
-        }
+        if (i.nettedIn || (!i.active && !i.returnedOn)) continue;
+        for (const p of finInvPeriods(i, lastDay, finAdd(firstDay, -1))) { place(p.date, p.amount, 'inv'); const j = idx(p.date); if (j >= 0) weeks[j].invParts.push(`${i.name}: ${finMoney(p.amount)}`); }
+        if (i.paidUntil) { const old = finInvPeriods(i, finAdd(week0, -1), i.paidUntil); if (old.length) { place(S.today, finSum(old), 'inv'); const j = idx(S.today); if (j >= 0) weeks[j].invParts.push(`${i.name}: ${finMoney(finSum(old))} (still due)`); } }
     }
     for (const o of D.outlays) place(o.date, o.amount, 'out');
     // buddy banking: the cash leaves on the day it is given (if that is still ahead) and comes back, plus her share of the profit, when the term ends; a late one counts in the current week
@@ -215,9 +232,9 @@ function finInvestorCost() {
 
 // ---- drawing ----
 const FIN_LISTS = {
-    investors: { title: 'Investors', add: '+ Investor', fresh: () => ({ id: finId(), name: '', amount: 0, payout: null, mode: 'weekly', start: new Date().toISOString().slice(0, 10), active: true, nettedIn: '', note: '', tornId: '', paidUntil: '', payments: [] }), cols: [
+    investors: { title: 'Investors', add: '+ Investor', fresh: () => ({ id: finId(), name: '', amount: 0, payout: null, mode: 'weekly', start: new Date().toISOString().slice(0, 10), active: true, nettedIn: '', note: '', tornId: '', paidUntil: '', payments: [], termEnd: '', returnedOn: '', renewals: [] }), cols: [
         { f: 'active', l: 'On', t: 'bool' }, { f: 'name', l: 'Name', t: 'text', w: 120 }, { f: 'tornId', l: 'Torn ID', t: 'text', w: 80 }, { f: 'amount', l: 'Invested', t: 'money', w: 110 }, { f: 'payout', l: 'Paid a week (empty = by the table)', t: 'money', w: 130, nullable: true },
-        { f: 'mode', l: 'Paid', t: 'sel', opts: [['weekly', 'Every Sunday'], ['monthly', 'Last Sunday of the month']] }, { f: 'start', l: 'Since', t: 'date' }, { f: 'paidUntil', l: 'Paid through', t: 'date' }, { f: 'nettedIn', l: 'Already netted in the send of', t: 'company' }] },
+        { f: 'mode', l: 'Paid', t: 'sel', opts: [['weekly', 'Every Sunday'], ['monthly', 'Last Sunday of the month']] }, { f: 'start', l: 'Since', t: 'date' }, { f: 'termEnd', l: 'Term ends', t: 'date' }, { f: 'returnedOn', l: 'Money returned on', t: 'date' }, { f: 'paidUntil', l: 'Paid through', t: 'date' }, { f: 'nettedIn', l: 'Already netted in the send of', t: 'company' }] },
     income: { title: 'Other income', add: '+ Income', fresh: () => ({ id: finId(), name: '', amount: 0, freq: 'weekly', date: new Date().toISOString().slice(0, 10), active: true }), cols: [
         { f: 'active', l: 'On', t: 'bool' }, { f: 'name', l: 'What', t: 'text', w: 160 }, { f: 'amount', l: 'Amount', t: 'money', w: 120 }, { f: 'freq', l: 'How often', t: 'sel', opts: [['weekly', 'Every week'], ['monthly', 'Every month'], ['once', 'Once']] }, { f: 'date', l: 'From / on', t: 'date' }] },
     outlays: { title: 'Planned spending (one time)', add: '+ Spending', fresh: () => ({ id: finId(), name: '', amount: 0, date: new Date().toISOString().slice(0, 10) }), cols: [
@@ -244,10 +261,10 @@ function finCell(list, i, col, row, extra = '') {
 }
 function finListEditor(list) {
     const L = FIN_LISTS[list], rows = finData[list];
-    const extra = list === 'investors' ? ['Yearly', 'Payout due'] : list === 'loans' ? ['Still to come back'] : list === 'buddies' ? ['Due / comes back', ''] : [];
+    const extra = list === 'investors' ? ['Yearly', 'Payout due', 'Term'] : list === 'loans' ? ['Still to come back'] : list === 'buddies' ? ['Due / comes back', ''] : [];
     return `<div class="panel"><h3 style="margin-top:0;">${L.title}</h3>${list === 'roi' ? '<p style="font-size:12px;color:var(--muted);margin:0 0 8px;">From the top row up, an investor is paid per billion the same as the top row. In between rows it is scaled from the row below it. At most 35% a year.</p>' : ''}
         <div style="overflow-x:auto;"><table style="border-collapse:collapse;font-size:13px;"><thead><tr>${L.cols.map(c => `<th style="text-align:left;padding:4px 8px;font-size:11px;color:var(--muted);font-weight:600;">${c.l}</th>`).join('')}${extra.map(x => `<th style="padding:4px 8px;font-size:11px;color:var(--muted);font-weight:600;text-align:left;">${x}</th>`).join('')}<th></th></tr></thead>
-        <tbody>${rows.map((r, i) => `<tr>${L.cols.map(c => `<td style="padding:3px 6px;">${finCell(list, i, c, r)}</td>`).join('')}${list === 'investors' ? `<td style="padding:3px 8px;white-space:nowrap;" data-pct="${i}"></td><td style="padding:3px 8px;font-size:12px;" data-invdue="${i}"></td>` : list === 'loans' ? `<td style="padding:3px 8px;white-space:nowrap;font-family:var(--mono);" data-loanleft="${i}"></td>` : list === 'buddies' ? `<td style="padding:3px 8px;white-space:nowrap;font-size:12px;" data-bbinfo="${i}"></td><td style="padding:3px 8px;white-space:nowrap;" data-bbact="${i}"></td>` : ''}<td><button class="ghost small" data-del="${list}" data-i="${i}" type="button" title="Remove">✕</button></td></tr>`).join('') || `<tr><td colspan="${L.cols.length + 2}" style="color:var(--muted);padding:6px 8px;">Nothing yet.</td></tr>`}</tbody></table></div>
+        <tbody>${rows.map((r, i) => `<tr>${L.cols.map(c => `<td style="padding:3px 6px;">${finCell(list, i, c, r)}</td>`).join('')}${list === 'investors' ? `<td style="padding:3px 8px;white-space:nowrap;" data-pct="${i}"></td><td style="padding:3px 8px;font-size:12px;" data-invdue="${i}"></td><td style="padding:3px 8px;font-size:12px;white-space:nowrap;" data-invterm="${i}"></td>` : list === 'loans' ? `<td style="padding:3px 8px;white-space:nowrap;font-family:var(--mono);" data-loanleft="${i}"></td>` : list === 'buddies' ? `<td style="padding:3px 8px;white-space:nowrap;font-size:12px;" data-bbinfo="${i}"></td><td style="padding:3px 8px;white-space:nowrap;" data-bbact="${i}"></td>` : ''}<td><button class="ghost small" data-del="${list}" data-i="${i}" type="button" title="Remove">✕</button></td></tr>`).join('') || `<tr><td colspan="${L.cols.length + 2}" style="color:var(--muted);padding:6px 8px;">Nothing yet.</td></tr>`}</tbody></table></div>
         <button class="ghost small" data-add="${list}" type="button" style="margin-top:8px;">${L.add}</button></div>`;
 }
 function finPlansPanel() {
@@ -433,6 +450,7 @@ function finWire(bodyId) {
         }
         if (el.dataset.s === 'fundsMode') v = el.value;
         target[field] = v;
+        if (el.dataset.l === 'investors' && field === 'returnedOn') { target.active = !v; finRenderAll(); } // the money was given back: stops the payouts after that date; clearing the date (they came back) switches it on again
         if (el.dataset.l === 'buddies' && field === 'tier' && FIN_TIERS[v]) { target.amount = FIN_TIERS[v].amount; target.term = FIN_TIERS[v].days; finRenderAll(); } // a tier brings its usual amount and term
         finTouch();
     });
