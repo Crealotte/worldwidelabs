@@ -19,32 +19,89 @@ const loadBuddyBank = () => finLoadLight('buddy', 'bb-status');
 
 // ---- Investment fund ----
 function finRenderFund() {
-    $('fund-body').innerHTML = `<div id="fund-summary"></div><div id="fund-requests"></div>${finInvestorCards()}<div id="fund-history"></div>${finListEditor('roi')}${finImportPanel()}`;
+    const opt = (list, cur) => list.map(([v, l]) => `<option value="${v}" ${cur === v ? 'selected' : ''}>${l}</option>`).join('');
+    $('fund-body').innerHTML = `<div id="fund-summary"></div><div id="fund-requests"></div>
+        <div class="panel" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;padding:8px 12px;margin-bottom:8px;"><input id="fund-q" type="search" placeholder="Search a name or ID" value="${esc(finFundQ)}" style="width:190px;"><select id="fund-f">${opt(FIN_FUND_FILTERS, finFundFilter)}</select><label style="font-size:12px;color:var(--muted);">Sort <select id="fund-s">${opt(FIN_FUND_SORTS, finFundSort)}</select></label><span id="fund-count" style="font-size:12px;color:var(--muted);"></span><span style="flex:1;"></span><button class="ghost small" data-newinv="1" type="button">+ New investor</button></div>
+        <div id="fund-tablebox" class="panel" style="padding:0;overflow-x:auto;"></div>
+        <details class="panel"><summary class="av-sum"><b>Payout history</b> <span style="font-size:12px;color:var(--muted);">(the payouts you marked as paid)</span></summary><div id="fund-history" style="margin-top:6px;"></div></details>
+        <details class="panel"><summary class="av-sum"><b>Pay table</b> <span style="font-size:12px;color:var(--muted);">(what an investor is paid a week for an amount)</span></summary>${finListEditor('roi')}</details>
+        ${finImportPanel()}`;
     finWire('fund-body');
+    $('fund-q').addEventListener('input', e => { finFundQ = e.target.value; finRenderFundTable(); finRefreshFund(); });
+    finRenderFundTable();
     finRefresh();
 }
-// One card per investor (all the lines with the same fund ID together): the ID, name and Torn ID once at the top, every investment of that person as a line below it. Active investors first;
-// people who have taken everything out are folded away but keep their lines (the history).
-function finInvestorCards() {
+// The investors as ONE compact table (a row per person, like a spreadsheet), with a search, a filter and a sort; click a row and the lines of that person (every investment) open under it to edit.
+let finFundQ = '', finFundFilter = 'live', finFundSort = 'id'; const finFundOpen = new Set();
+const FIN_FUND_FILTERS = [['live', 'With money in now'], ['all', 'Everyone'], ['due', 'Payout due'], ['soon', 'Term ends within 30 days'], ['leaving', 'Leaving at the end of the term'], ['gone', 'Earlier investors']];
+const FIN_FUND_SORTS = [['id', 'ID'], ['name', 'Name'], ['inNow', 'Invested (high first)'], ['week', 'A week (high first)'], ['ends', 'Term ends (soonest first)'], ['paid', 'Paid out (high first)']];
+
+// what one person gets and is owed, from all their lines
+function finPersonStats(ix) {
+    const today = finSrv.today, rows = ix.map(k => finData.investors[k]).filter(Boolean), act = rows.filter(r => r.active), own = act.filter(r => !r.nettedIn);
+    const modes = new Set(act.map(r => r.mode));
+    let next = null;
+    own.forEach(r => { const p = finInvPeriods(r, finAdd(today, 400), finAdd(today, -1))[0]; if (p && (!next || p.date < next.date)) next = { date: p.date, amount: 0 }; });
+    if (next) own.forEach(r => { const p = finInvPeriods(r, next.date, finAdd(next.date, -1))[0]; if (p && p.date === next.date) next.amount += p.amount; });
+    let due = 0, unsynced = 0;
+    own.forEach(r => { if (r.paidUntil) due += finSum(finInvPeriods(r, today, r.paidUntil)); else if (finInvPeriods(r, today, '').length) unsynced++; });
+    const asked = rows.some(r => (finData.invRequests || []).some(q => q.status === 'open' && q.type === 'withdraw' && q.rowId === r.id));
+    return { rows, act, week: act.reduce((s, r) => s + finPayout(r), 0), inNow: act.reduce((s, r) => s + r.amount, 0), paid: rows.reduce((s, r) => s + finPaidTotal(r), 0), mode: modes.size > 1 ? 'mixed' : [...modes][0] || '', next, due, unsynced,
+        ends: act.map(r => r.termEnd).filter(Boolean).sort()[0] || '', leaving: act.some(r => r.leaving) || asked, lines: rows.length };
+}
+// the cells of a person's row (also used to refresh them without redrawing the table)
+function finPersonCells(s, ixs, open) {
+    const today = finSrv.today, left = s.ends ? Math.round((finD(s.ends) - finD(today)) / 86400000) : null;
+    const dim = s.act.length ? '' : 'color:var(--muted);';
+    return [
+        `<span style="color:var(--muted);">${esc(s.rows[0].fundId || '')}</span>`,
+        `<b style="${dim}">${esc(s.rows[s.rows.length - 1].name)}</b>${s.lines > 1 ? ` <span style="color:var(--muted);font-size:11px;">${s.lines} lines</span>` : ''}${s.leaving ? ' <span style="color:#e0a030;font-size:11px;">leaving</span>' : ''}`,
+        s.act.length ? finShort(s.inNow) : '<span style="color:var(--muted);">—</span>',
+        s.act.length ? `<b>${finShort(s.week)}</b>` : '<span style="color:var(--muted);">—</span>',
+        s.act.length ? `<span style="color:var(--muted);">${s.mode}</span>` : '',
+        s.next ? `${esc(finDate(s.next.date))} <span style="color:var(--muted);">${finShort(s.next.amount)}</span>` : '<span style="color:var(--muted);">—</span>',
+        s.due > 0 ? `<b style="color:#e0a030;">${finShort(s.due)}</b> <button class="small" data-pmark="${ixs}" type="button">Paid</button>` : s.unsynced ? `<button class="ghost small" data-psync="${ixs}" type="button" title="Everything up to the last Sunday is already paid">Set paid through</button>` : '<span style="color:var(--muted);">—</span>',
+        s.ends ? `<span style="color:${left < 0 ? 'var(--danger)' : left < 30 ? '#e0a030' : 'inherit'};">${esc(finDate(s.ends))}</span> <span style="color:var(--muted);font-size:11px;">${left < 0 ? 'ended' : `${left}d`}</span>` : '<span style="color:var(--muted);">—</span>',
+        finShort(s.paid),
+        `<span style="color:var(--muted);">${open ? '▾' : '▸'}</span>`,
+    ];
+}
+function finFundDetail(ix) {
+    const cols = FIN_LISTS.investors.cols.filter(c => !['fundId', 'name', 'tornId'].includes(c.f)), r0 = finData.investors[ix[0]], ids = ix.join(',');
+    const hdr = (f, v, w, ph, bold) => `<input type="text" data-pers="${ids}" data-f="${f}" data-t="text" value="${esc(v || '')}" placeholder="${ph}" style="width:${w}px;${bold ? 'font-weight:700;' : ''}">`;
+    const th = t => `<th style="text-align:left;padding:2px 6px;font-size:10.5px;color:var(--muted);font-weight:600;white-space:nowrap;">${t}</th>`;
+    return `<div style="padding:8px 12px 10px;background:rgba(127,127,127,.06);"><div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:6px;"><span style="color:var(--muted);font-size:12px;">ID</span>${hdr('fundId', r0.fundId, 46, '#')}${hdr('name', finData.investors[ix[ix.length - 1]].name, 170, 'Name', true)}${hdr('tornId', r0.tornId, 90, 'Torn ID')}<button class="ghost small" data-addline="${ix[0]}" type="button">+ Investment</button></div>
+        <div style="overflow-x:auto;"><table style="border-collapse:collapse;font-size:12.5px;"><thead><tr><th></th>${cols.map(c => th(c.l)).join('')}${th('Yearly')}${th('Payout due')}${th('Term')}<th></th></tr></thead>
+        <tbody>${ix.map((k, n) => `<tr style="border-top:1px solid var(--line);"><td style="padding:2px 6px;color:var(--muted);font-size:11px;white-space:nowrap;">line ${n + 1}</td>${cols.map(c => `<td style="padding:2px 5px;">${finCell('investors', k, c, finData.investors[k])}</td>`).join('')}<td style="padding:2px 6px;white-space:nowrap;" data-pct="${k}"></td><td style="padding:2px 6px;font-size:12px;" data-invdue="${k}"></td><td style="padding:2px 6px;font-size:12px;white-space:nowrap;" data-invterm="${k}"></td><td><button class="ghost small" data-del="investors" data-i="${k}" type="button" title="Remove this line">✕</button></td></tr>`).join('')}</tbody></table></div></div>`;
+}
+function finRenderFundTable() {
+    const box = $('fund-tablebox'); if (!box) return;
     const groups = {};
     finData.investors.forEach((x, idx) => { (groups[finPersonKey(x)] = groups[finPersonKey(x)] || []).push(idx); });
-    const people = Object.values(groups).map(ix => { ix.sort((a, b) => (finData.investors[a].start < finData.investors[b].start ? -1 : 1)); const rows = ix.map(k => finData.investors[k]); return { ix, rows, live: rows.some(r => r.active), id: parseInt(rows[0].fundId, 10) || 1e9, name: rows[rows.length - 1].name }; })
-        .sort((a, b) => (b.live - a.live) || (a.id - b.id) || (a.name < b.name ? -1 : 1));
-    const cols = FIN_LISTS.investors.cols.filter(c => !['fundId', 'name', 'tornId'].includes(c.f));
-    const card = p => {
-        const ids = p.ix.join(','), r0 = p.rows[0];
-        const hdr = (f, v, w, ph, bold) => `<input type="text" data-pers="${ids}" data-f="${f}" data-t="text" value="${esc(v || '')}" placeholder="${ph}" style="width:${w}px;${bold ? 'font-weight:700;' : ''}">`;
-        return `<div class="panel" style="margin:0 0 10px;${p.live ? '' : 'opacity:.85;'}"><div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:6px;"><span style="color:var(--muted);font-size:12px;">ID</span>${hdr('fundId', r0.fundId, 46, '#')}${hdr('name', p.rows[p.rows.length - 1].name, 170, 'Name', true)}${hdr('tornId', r0.tornId, 90, 'Torn ID')}<span data-persum="${ids}" style="font-size:12px;color:var(--muted);"></span><button class="ghost small" data-addline="${p.ix[0]}" type="button">+ Investment</button></div>
-            <div style="overflow-x:auto;"><table style="border-collapse:collapse;font-size:13px;"><thead><tr><th></th>${cols.map(c => `<th style="text-align:left;padding:2px 8px;font-size:11px;color:var(--muted);font-weight:600;">${c.l}</th>`).join('')}<th style="padding:2px 8px;font-size:11px;color:var(--muted);text-align:left;">Yearly</th><th style="padding:2px 8px;font-size:11px;color:var(--muted);text-align:left;">Payout due</th><th style="padding:2px 8px;font-size:11px;color:var(--muted);text-align:left;">Term</th><th></th></tr></thead>
-            <tbody>${p.ix.map((k, n) => `<tr style="border-top:1px solid var(--line);"><td style="padding:3px 6px;color:var(--muted);font-size:11px;white-space:nowrap;">line ${n + 1}</td>${cols.map(c => `<td style="padding:3px 6px;">${finCell('investors', k, c, finData.investors[k])}</td>`).join('')}<td style="padding:3px 8px;white-space:nowrap;" data-pct="${k}"></td><td style="padding:3px 8px;font-size:12px;" data-invdue="${k}"></td><td style="padding:3px 8px;font-size:12px;white-space:nowrap;" data-invterm="${k}"></td><td><button class="ghost small" data-del="investors" data-i="${k}" type="button" title="Remove this line">✕</button></td></tr>`).join('')}</tbody></table></div></div>`;
-    };
-    const live = people.filter(p => p.live), gone = people.filter(p => !p.live);
-    return `<div style="margin-bottom:6px;"><h3 style="margin:14px 0 8px;">Investors <span style="font-size:13px;color:var(--muted);font-weight:400;">(${live.length} with money in now)</span></h3>${live.map(card).join('') || '<div style="color:var(--muted);">Nobody yet.</div>'}
-        ${gone.length ? `<details class="panel"><summary class="av-sum"><b>Earlier investors</b> <span style="color:var(--muted);font-size:13px;">(${gone.length} took their money out; their lines are the history)</span></summary><div style="margin-top:8px;">${gone.map(card).join('')}</div></details>` : ''}
-        <button class="ghost small" data-newinv="1" type="button">+ New investor</button></div>`;
+    let people = Object.entries(groups).map(([key, ix]) => { ix.sort((a, b) => (finData.investors[a].start < finData.investors[b].start ? -1 : 1)); return { key, ix, s: finPersonStats(ix), id: parseInt(finData.investors[ix[0]].fundId, 10) || 1e9, name: finData.investors[ix[ix.length - 1]].name }; });
+    const total = people.length, q = finFundQ.trim().toLowerCase();
+    if (q) people = people.filter(p => p.name.toLowerCase().includes(q) || String(finData.investors[p.ix[0]].fundId).toLowerCase() === q || String(finData.investors[p.ix[0]].tornId || '') === q);
+    const today = finSrv.today, flt = { live: p => p.s.act.length, all: () => true, due: p => p.s.due > 0 || p.s.unsynced, soon: p => p.s.act.length && p.s.ends && p.s.ends <= finAdd(today, 30), leaving: p => p.s.leaving, gone: p => !p.s.act.length }[finFundFilter] || (() => true);
+    people = people.filter(flt);
+    const cmp = { id: (a, b) => a.id - b.id, name: (a, b) => (a.name.toLowerCase() < b.name.toLowerCase() ? -1 : 1), inNow: (a, b) => b.s.inNow - a.s.inNow, week: (a, b) => b.s.week - a.s.week, ends: (a, b) => (a.s.ends || '9') < (b.s.ends || '9') ? -1 : 1, paid: (a, b) => b.s.paid - a.s.paid }[finFundSort] || ((a, b) => a.id - b.id);
+    people.sort(cmp);
+    if ($('fund-count')) $('fund-count').textContent = `${people.length} of ${total} investors`;
+    const th = (t, r) => `<th style="padding:6px 9px;font-size:11px;color:var(--muted);font-weight:600;text-align:${r ? 'right' : 'left'};white-space:nowrap;">${t}</th>`;
+    box.innerHTML = `<table class="fund-table" style="width:100%;border-collapse:collapse;font-size:13px;"><thead><tr style="border-bottom:1px solid var(--line);">${th('ID')}${th('Investor')}${th('In now', 1)}${th('A week', 1)}${th('Pays')}${th('Next payout')}${th('Due now')}${th('Term ends')}${th('Paid out', 1)}<th></th></tr></thead><tbody>
+        ${people.map(p => { const open = finFundOpen.has(p.key), ixs = p.ix.join(','), cells = finPersonCells(p.s, ixs, open), right = [2, 3, 8];
+            return `<tr class="fund-row" data-pkey="${esc(p.key)}" data-ix="${ixs}" style="cursor:pointer;border-top:1px solid var(--line);${open ? 'background:rgba(127,127,127,.10);' : ''}">${cells.map((c, i) => `<td style="padding:5px 9px;white-space:nowrap;${right.includes(i) ? 'text-align:right;font-family:var(--mono);' : ''}">${c}</td>`).join('')}</tr>${open ? `<tr class="fund-detail"><td colspan="10" style="padding:0;">${finFundDetail(p.ix)}</td></tr>` : ''}`; }).join('') || '<tr><td colspan="10" style="padding:14px;color:var(--muted);">Nobody matches.</td></tr>'}</tbody></table>`;
 }
+// refresh the numbers of the rows after an edit (the table is not drawn again, so nothing you are typing in is lost)
+function finRefreshRows() {
+    document.querySelectorAll('tr.fund-row').forEach(tr => {
+        const ix = tr.dataset.ix.split(',').map(Number), s = finPersonStats(ix), cells = finPersonCells(s, tr.dataset.ix, finFundOpen.has(tr.dataset.pkey));
+        tr.querySelectorAll('td').forEach((td, i) => { if (cells[i] !== undefined) td.innerHTML = cells[i]; });
+    });
+}
+function finFundRowClick(tr) { const k = tr.dataset.pkey; if (finFundOpen.has(k)) finFundOpen.delete(k); else finFundOpen.add(k); finRenderFundTable(); finRefreshFund(); }
 
 function finRefreshFund() {
+    finRefreshRows();
     const today = finSrv.today, act = finData.investors.filter(i => i.active), cost = finInvestorCost();
     const own = act.filter(i => !i.nettedIn && i.paidUntil);
     const dueNow = own.reduce((s, i) => s + finSum(finInvPeriods(i, today, i.paidUntil)), 0);
@@ -101,9 +158,21 @@ function finRefreshFund() {
         el.innerHTML = `${act.length ? `<b style="color:var(--text);font-size:13px;">gets ${finMoney(week)} a week</b>${monthly ? ' <span title="Monthly lines: the weekly amounts of the month added up, paid on the last Sunday">(monthly lines paid together)</span>' : ''} · ` : ''}in now ${finShort(act.reduce((s, r) => s + r.amount, 0))} · ${rows.length} investment${rows.length === 1 ? '' : 's'} · invested over time ${finShort(rows.reduce((s, r) => s + r.amount, 0))} · paid out ${finShort(rows.reduce((s, r) => s + finPaidTotal(r), 0))}`;
     });
     const hist = finData.investors.flatMap(i => (i.payments || []).map(p => ({ ...p, name: i.name }))).sort((a, b) => (a.date < b.date ? 1 : -1)).slice(0, 30);
-    $('fund-history').innerHTML = hist.length ? `<div class="panel"><h3 style="margin-top:0;">Payout history</h3><table style="border-collapse:collapse;font-size:13px;">${hist.map(p => `<tr><td style="padding:2px 10px 2px 0;font-family:var(--mono);">${esc(p.date)}</td><td style="padding:2px 14px 2px 0;">${esc(p.name)}</td><td style="padding:2px 14px 2px 0;font-family:var(--mono);text-align:right;">${finMoney(p.amount)}</td><td style="padding:2px 0;color:var(--muted);font-size:12px;">${p.through ? `through ${esc(finDate(p.through))}` : ''}</td></tr>`).join('')}</table></div>` : '';
+    $('fund-history').innerHTML = hist.length ? `<div><table style="border-collapse:collapse;font-size:13px;">${hist.map(p => `<tr><td style="padding:2px 10px 2px 0;font-family:var(--mono);">${esc(p.date)}</td><td style="padding:2px 14px 2px 0;">${esc(p.name)}</td><td style="padding:2px 14px 2px 0;font-family:var(--mono);text-align:right;">${finMoney(p.amount)}</td><td style="padding:2px 0;color:var(--muted);font-size:12px;">${p.through ? `through ${esc(finDate(p.through))}` : ''}</td></tr>`).join('')}</table></div>` : '';
 }
 function finClickFund(b) {
+    if (b.dataset.pmark !== undefined || b.dataset.psync !== undefined) { // "Paid" / "Set paid through" in a person's row: every line of that person at once
+        const ixs = (b.dataset.pmark ?? b.dataset.psync).split(',').map(Number), today = finSrv.today;
+        ixs.forEach(k => {
+            const i = finData.investors[k]; if (!i || !i.active || i.nettedIn) return;
+            if (b.dataset.psync !== undefined) { if (i.paidUntil) return; const p = finInvPeriods(i, today, ''); if (p.length) i.paidUntil = p[p.length - 1].date; return; }
+            if (!i.paidUntil) return;
+            const p = finInvPeriods(i, today, i.paidUntil); if (!p.length) return;
+            i.payments = (i.payments || []).concat({ date: today, amount: finSum(p), through: p[p.length - 1].date }).slice(-100);
+            i.paidUntil = p[p.length - 1].date;
+        });
+        finRenderAll(); finTouch(); return;
+    }
     if (b.dataset.addline !== undefined) { // another investment of the same person
         const base = finData.investors[+b.dataset.addline]; if (!base) return;
         finData.investors.push({ ...FIN_LISTS.investors.fresh(), fundId: base.fundId, name: base.name, tornId: base.tornId, mode: base.mode });
@@ -265,5 +334,5 @@ function finClickImport(b) {
     }
 }
 
-FIN_PAGES.fund = { status: 'fund-status', render: finRenderFund, refresh: finRefreshFund, click: finClickFund, parts: ['investors', 'roi'] };
+FIN_PAGES.fund = { status: 'fund-status', render: finRenderFund, refresh: finRefreshFund, click: finClickFund, rowclick: finFundRowClick, parts: ['investors', 'roi'] };
 FIN_PAGES.buddy = { status: 'bb-status', render: finRenderBuddy, refresh: finRefreshBuddy, click: finClickBuddy, parts: ['buddies'] };

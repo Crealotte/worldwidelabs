@@ -466,6 +466,8 @@ function finWire(bodyId) {
         const el = e.target;
         if (el.id === 'fin-ahead') { finAhead = +el.value; finRefresh(); return; }
         if (el.id === 'fin-overlay') { finShowPlan = el.value; finRefresh(); return; }
+        if (el.id === 'fund-f') { finFundFilter = el.value; finRenderFundTable(); finRefreshFund(); return; }
+        if (el.id === 'fund-s') { finFundSort = el.value; finRenderFundTable(); finRefreshFund(); return; }
         if (el.dataset.pers) { // the ID, name or Torn ID in the top line of an investor card: it applies to every line of that investor
             const f = el.dataset.f, v = f === 'tornId' ? el.value.replace(/\D/g, '').slice(0, 10) : el.value.trim();
             el.dataset.pers.split(',').forEach(k => { if (finData.investors[+k]) finData.investors[+k][f] = v; });
@@ -501,7 +503,9 @@ function finWire(bodyId) {
         finTouch();
     });
     body.addEventListener('click', e => {
-        const b = e.target.closest('button'); if (!b) return;
+        const b = e.target.closest('button');
+        const frow = e.target.closest('tr.fund-row'); if (!b && frow && !e.target.closest('input, select, a') && FIN_PAGES[finPage].rowclick) { FIN_PAGES[finPage].rowclick(frow); return; }
+        if (!b) return;
         if (b.dataset.add) { finData[b.dataset.add].push(FIN_LISTS[b.dataset.add].fresh()); finRenderAll(); finTouch(); }
         else if (b.dataset.del) { finData[b.dataset.del].splice(+b.dataset.i, 1); finRenderAll(); finTouch(); }
         else if (b.id === 'fin-addplan') { finData.plans.push({ id: finId(), name: 'New plan', steps: [{ label: '', amount: 0, afterWeeks: 0 }] }); finRenderAll(); finTouch(); }
