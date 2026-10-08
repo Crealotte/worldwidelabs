@@ -466,6 +466,12 @@ function finWire(bodyId) {
         const el = e.target;
         if (el.id === 'fin-ahead') { finAhead = +el.value; finRefresh(); return; }
         if (el.id === 'fin-overlay') { finShowPlan = el.value; finRefresh(); return; }
+        if (el.dataset.pers) { // the ID, name or Torn ID in the top line of an investor card: it applies to every line of that investor
+            const f = el.dataset.f, v = f === 'tornId' ? el.value.replace(/\D/g, '').slice(0, 10) : el.value.trim();
+            el.dataset.pers.split(',').forEach(k => { if (finData.investors[+k]) finData.investors[+k][f] = v; });
+            if (f === 'fundId') finRenderAll();
+            finTouch(); return;
+        }
         const read = () => {
             if (el.dataset.t === 'bool') return el.checked;
             if (el.dataset.t === 'staff') return Number(el.value) || 0;
