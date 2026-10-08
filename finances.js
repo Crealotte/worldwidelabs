@@ -189,7 +189,6 @@ function finVentures(m) {
     const rent = S.rto.defaults.rent, eqs = S.rto.defaults.equity;
     for (const tier of [4100, 3600, 2600]) {
         const cap = D.capitals[`pi:${tier}`] ?? S.rto.defaults.cost[tier], eq = eqs[tier];
-        rows.push({ name: `Island ${tier} rented out`, type: 'Private Island', capital: cap, weekly: rent[tier] * 7 / 30, note: 'rent only' });
         // rent-to-own: the equity the tenant pays is the sale price coming in by instalments, and every month a part of the money is back (and can be reinvested)
         const goal = (S.rto.defaults.goals || {})[tier] || 0, st = goal && eq ? finRtoStats(cap, rent[tier], eq, goal) : null;
         rows.push(st ? { name: `Island ${tier} rent-to-own`, type: 'Private Island', capital: cap, weekly: st.weeklyEquiv, irr: st.irr, payMonths: st.payMonths, note: `${st.months.toFixed(1)} months: rent plus the sale at ${finShort(goal)}; after ${st.payMonths} months the money is back and the rest is profit (still tied up after 6 months: ${finShort(Math.max(0, cap - st.back6))})` }
@@ -364,7 +363,7 @@ function finRefresh() {
             ${td(r.capital ? finShort(r.capital) : '<span style="color:var(--muted);">set it</span>')}${td(finShort(r.weekly))}${td(r.roi === null ? '—' : `${r.roi.toFixed(1)}%`, { b: 1, color: r.roi === null ? '' : good ? 'var(--success,#35d99b)' : pct === null ? '' : 'var(--danger)' })}
             ${td(r.irr == null ? '—' : `${r.irr.toFixed(0)}%`)}${td(r.payMonths ? `${r.payMonths} months` : r.capital > 0 && r.weekly > 0 ? `${(r.capital / r.weekly / 52 * 12).toFixed(1)} months` : '—')}${td(margin === null ? '—' : finShort(margin), { color: margin !== null && margin < 0 ? 'var(--danger)' : '' })}</tr>`;
         }).join('')}</tbody></table>
-        <p style="font-size:11px;color:var(--muted);margin:8px 0 0;">Green earns more a year than your investors cost you; red earns less, so money borrowed for it would cost more than it brings in. Companies use the profit after the director cut; islands use the rent from your rental terms; rent-to-own counts the rent plus the sale at the end (price minus capital), spread over the months it lasts. "Counting money coming back" is the monthly return when the part of the money that returns every month is taken into account: you can reinvest it, so the money is not stuck for the whole contract. The capital per island is set below.</p>`;
+        <p style="font-size:11px;color:var(--muted);margin:8px 0 0;">Green earns more a year than your investors cost you; red earns less, so money borrowed for it would cost more than it brings in. Companies use the profit after the director cut; islands are rent-to-own only; rent-to-own counts the rent plus the sale at the end (price minus capital), spread over the months it lasts. "Counting money coming back" is the monthly return when the part of the money that returns every month is taken into account: you can reinvest it, so the money is not stuck for the whole contract. The capital per island is set below.</p>`;
     // the yearly percentage and the placeholder (what the table pays) in the investor list
     document.querySelectorAll('[data-pct]').forEach(el => {
         const i = finData.investors[+el.dataset.pct]; if (!i) return;
