@@ -20,7 +20,7 @@ async function finFetch(body) {
 }
 const finFull = n => Math.round(Number(n) || 0).toLocaleString('en-US');
 const finMoney = n => `${Number(n) < 0 ? '-' : ''}$${finFull(Math.abs(Number(n) || 0))}`;
-const finShort = n => { const v = Number(n) || 0, a = Math.abs(v), s = v < 0 ? '-' : ''; return a >= 1e9 ? `${s}$${(a / 1e9).toFixed(2)}B` : a >= 1e6 ? `${s}$${(a / 1e6).toFixed(1)}M` : `${s}$${finFull(a)}`; };
+const finShort = n => finMoney(n); // amounts are always written in full (23,558,500), never cut off as 23.6M
 // "500m", "1.5b", "6,731,000" and "6.731.000" (dots as thousands, as in her sheets) all work; anything else is refused (null)
 function finParse(s) {
     let t = String(s ?? '').toLowerCase().replace(/[$\s]/g, '');

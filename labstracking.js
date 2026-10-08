@@ -10,7 +10,7 @@ async function ltFetch(body) {
     try { return JSON.parse(text); } catch (e) { return { error: `Server problem (${res.status})` }; }
 }
 const ltMoney = n => `$${Math.round(Number(n) || 0).toLocaleString('en-US')}`;
-const ltMoneyShort = n => { const a = Math.abs(Number(n) || 0); return a >= 1e9 ? `$${(a / 1e9).toFixed(2)}B` : a >= 1e6 ? `$${(a / 1e6).toFixed(1)}M` : ltMoney(n); };
+const ltMoneyShort = n => ltMoney(n); // amounts are always written in full
 
 // the same maths as the old page: one 30-day cycle is paid upfront at the start, a new one every 30 days; a typed-in "paid so far" overrides the calculation
 function ltMetrics(rto, defaults) {
