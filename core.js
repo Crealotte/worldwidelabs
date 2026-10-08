@@ -429,6 +429,7 @@
         if (page === 'company') loadCompany();
         if (page === 'companies') loadCompanies();
         if (page === 'labstracking') loadLabstracking();
+        if (page === 'finances') loadFinances();
         if (page === 'bug-report') loadBugReport();
         if (page === 'labs-funds') loadLabsFunds();
         if (page === 'members-overview') loadMemberOverview();
