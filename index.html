@@ -620,6 +620,7 @@
                 <a class="nav-item" data-page="company" href="/company">📊 Company view</a>
                 <a class="nav-item" data-page="access" href="/access">🔒 Allowed factions</a>
                 <a class="nav-item" data-page="companies" href="/companies">🏢 Companies</a>
+                <a class="nav-item" data-page="labstracking" href="/labstracking">🏝️ Rent-to-own</a>
             </div>
         </div>
 
@@ -1915,6 +1916,14 @@
             </div>
         </section>
 
+        <section class="page" id="page-labstracking">
+            <div class="lab-label">WWL·39 / owner</div>
+            <h2>🏝️ Rent-to-own (Labstracking)</h2>
+            <p class="pagedesc">Your Private Islands and the rent-to-own contracts on them: who rents which island, how many days the lease has left, how far each tenant is towards owning it, and the 30-day amount to offer for an extension. Islands are read from Torn with your own key; the contracts are kept here, on the server.</p>
+            <div class="status" id="lt-status"></div>
+            <div id="lt-body"></div>
+        </section>
+
         <section class="page" id="page-access">
             <div class="lab-label">WWL·37 / owner</div>
             <h2>🔒 Allowed factions</h2>
@@ -2697,6 +2706,7 @@
 <script src="owner-view.js"></script>
 <script src="company.js"></script>
 <script src="company-staffing.js"></script>
+<script src="labstracking.js"></script>
 <script src="crimes-guide.js"></script>
 <script src="war-payout-tracker.js"></script>
 <script src="war-badges-tracker.js"></script>

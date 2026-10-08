@@ -44,6 +44,7 @@ const { welHandle, welcomeTodoItems, promotions: welPromotions } = require('../l
 const { factionAllowed, allowedList, resetCache: accessReset, LIST: ACCESS_LIST, DENIED: ACCESS_DENIED } = require('../lib/access');
 const { companyHandle, isDirector, tornCompany: coTorn, normalize: coNormalize, getAll: coGetAll } = require('../lib/company');
 const { runCompanyReports } = require('../lib/companyReports');
+const { ltHandle } = require('../lib/labstracking');
 const { ohHandle } = require('../lib/onlineHours');
 const { labsIsOwner, labsHasOwners, labsHandle, labsRecordReceipt } = require('../lib/labsLedger');
 
@@ -761,7 +762,7 @@ module.exports = async function handler(req, res) {
         if (!key) return res.status(400).json({ error: 'Missing key' });
         // The login's access check and the company side (owner setup, directors) are answered BEFORE the faction lookup below: a company director does not
         // have to be in a faction at all, and a director only ever gets the co-* actions (see lib/company.js). Everyone else goes on to the faction checks.
-        if (action === 'access-check' || action.startsWith('co-')) {
+        if (action === 'access-check' || action.startsWith('co-') || action.startsWith('lt-')) {
             const who = await (async () => {
                 const r = await tornFetch(`https://api.torn.com/user/?selections=profile&key=${encodeURIComponent(key)}`);
                 const p = await r.json();
@@ -772,6 +773,10 @@ module.exports = async function handler(req, res) {
             const owner = await labsIsOwner(redis, who.playerId);
             const director = await isDirector(redis, who.playerId);
             if (action === 'access-check') return res.status(200).json({ allowed: who.factionId ? await factionAllowed(who.factionId, who.playerId) : owner, director, owner });
+            if (action.startsWith('lt-')) { // Labstracking (the owner's Private Islands and rent-to-own contracts): owners only
+                if (!owner) return res.status(403).json({ error: 'Owners only' });
+                return res.status(200).json(await ltHandle(action, req.body, { redis, key }));
+            }
             if (!(owner || director)) return res.status(403).json({ error: 'The company pages are for the owner and the company directors.' });
             return res.status(200).json(await companyHandle(action, req.body, { redis, key, playerId: who.playerId, playerName: who.name, owner, getPoster: id => getDiscordPoster('c' + id, 'default') }));
         }
