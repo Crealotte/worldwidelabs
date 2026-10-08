@@ -34,7 +34,7 @@ async function loadInvestor() {
 }
 function invRender() {
     const saved = typeof finData !== 'undefined' ? finData : null;
-    finData = { roi: invData.roi, investors: [] }; // the pay table, for the helpers of finances.js
+    finData = { roi: invData.roi, investors: invData.rows }; // the pay table and the person's lines, for the helpers of finances.js
     try { $('inv-body').innerHTML = invHtml(invData); } finally { finData = saved; }
     invWire();
 }

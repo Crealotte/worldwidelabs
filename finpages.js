@@ -307,7 +307,7 @@ function finParseSheet(text, markPaid) {
             const ended = r.back > 0 || r.guessed || gone, termEnd = latest([r.first, r.n1, r.n2]);
             const renewals = []; if (r.n1 && r.n1 !== r.first) renewals.push({ from: r.first, to: r.n1 }); if (r.n2 && r.n2 !== r.n1) renewals.push({ from: r.n1 || r.first, to: r.n2 });
             const word = [r.r1, r.r2].filter(x => x && !/^\d+$/.test(x)).join(', ');
-            const row = { id: finId(), fundId: r.sheetId, name: r.name, tornId: '', amount: r.amount || 0, payout: Math.round((r.amount || 0) * rate), mode: modeOf, start: r.start, active: !ended, nettedIn: '', note: `${word}${r.guessed ? ' · amount split from the total paid back' : ''}${gone ? ' · withdrew, amount not in the sheet' : ''}`.slice(0, 120),
+            const row = { id: finId(), fundId: r.sheetId, name: r.name, tornId: '', amount: r.amount || 0, payout: (W > 0 && fixedA > 0 && !(expectW > 0 && Math.abs(W - expectW) / expectW <= 0.02)) ? Math.round((r.amount || 0) * rate) : null, mode: modeOf, start: r.start, active: !ended, nettedIn: '', note: `${word}${r.guessed ? ' · amount split from the total paid back' : ''}${gone ? ' · withdrew, amount not in the sheet' : ''}`.slice(0, 120),
                 paidUntil: '', payments: [], termEnd, returnedOn: ended ? termEnd : '', renewals };
             if (!ended && markPaid) { const dow = new Date(finD(r.start)).getUTCDay(), first = finAdd(r.start, dow === 0 ? 7 : 7 - dow); if (first <= sun) row.paidUntil = sun; }
             if (r.guessed && r === list.find(x => x.guessed)) warnings.push(`${r.name} (#${r.sheetId}): ${finShort(backBlank)} paid back, divided equally over ${blanks.length} line${blanks.length === 1 ? '' : 's'}; the term end is taken as the day the money was returned.`);

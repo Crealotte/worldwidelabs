@@ -48,7 +48,15 @@ function finRoi(amount, tbl) {
     const lower = t.filter(r => r.amount < amount).pop() || t[0];
     return Math.round(lower.weekly * amount / lower.amount);
 }
-const finPayout = i => (i.payout !== null && i.payout !== undefined ? i.payout : finRoi(i.amount, finData.roi));
+// What a line is paid a week at a date. An amount typed on the line wins. Otherwise the pay table decides for the TOTAL the person has in at that time (a second investment makes the whole worth more: 2 x 500m is paid
+// like 1b), divided over the person's lines by amount; so an investor who topped up later was paid less before the top-up.
+const finPayAt = (i, s, peers) => {
+    if (i.payout !== null && i.payout !== undefined) return i.payout;
+    const total = (peers || [i]).filter(x => x === i || (x.start < s && (x.active || x.returnedOn) && (!x.returnedOn || x.returnedOn >= s))).reduce((a, x) => a + (x.amount || 0), 0);
+    return total ? Math.round(finRoi(total, finData.roi) * i.amount / total) : 0;
+};
+const finPeersOf = i => (finData.investors || []).filter(x => finPersonKey(x) === finPersonKey(i));
+const finPayout = i => finPayAt(i, finAdd((typeof finSrv !== 'undefined' && finSrv && finSrv.today) || new Date().toISOString().slice(0, 10), 1), finPeersOf(i)); // what it is paid a week now
 // Companies: until a company has real weeks, an estimate stands in (her numbers, October 2026: the 16-person mines CreaLabs 20.66m and CreaLabs1 21m a day net, the 14-person ones CreaLabs4 15m, CreaLabs5 19.2m
 // and CreaLabs6 21.77m; CreaLabs3 was sold to its director). A 14-person mine costs about 9b to get, a 16-person one 12b; optimized they make about 25m / 35m a day, but these ones are no longer optimized.
 // The numbers are net profit of the company; the director cut of that company is taken off (what is left is hers). All of it can be changed per company on the page.
@@ -65,12 +73,12 @@ const finMonthLastSunday = (y, m) => { const last = Date.UTC(y, m + 1, 0); retur
 // up to the first Sunday (a Wednesday investor gets Thursday to Sunday = 4 days of the week's pay), rounded to the nearest 100 (1b: 6,731,000 / 7 x 4 = 3,846,286 -> 3,846,300). Weekly = every Sunday;
 // monthly = the last Sunday of each month, with all the Sundays of that month (from the first payout) together.
 function finInvPeriods(i, upTo, from) {
-    const pay = finPayout(i), out = [];
-    if (!pay || !i.start) return out;
-    const cap = i.returnedOn && i.returnedOn < upTo ? i.returnedOn : upTo;
+    const out = [];
+    if (!i.start) return out;
+    const peers = finPeersOf(i), cap = i.returnedOn && i.returnedOn < upTo ? i.returnedOn : upTo;
     const dow = new Date(finD(i.start)).getUTCDay(), off = dow === 0 ? 7 : 7 - dow, first = finAdd(i.start, off);
-    const amt = s => (s === first && off < 7 ? Math.round(pay / 7 * off / 100) * 100 : pay);
-    if (i.mode === 'weekly') { for (let s = first, n = 0; s <= cap && n < 800; s = finAdd(s, 7), n++) if (s > from) out.push({ date: s, amount: amt(s) }); }
+    const amt = s => { const p = finPayAt(i, s, peers); return s === first && off < 7 ? Math.round(p / 7 * off / 100) * 100 : p; };
+    if (i.mode === 'weekly') { for (let s = first, n = 0; s <= cap && n < 800; s = finAdd(s, 7), n++) if (s > from) { const a = amt(s); if (a > 0) out.push({ date: s, amount: a }); } }
     else {
         const y0 = +first.slice(0, 4), m0 = +first.slice(5, 7) - 1;
         for (let k = 0; k < 800; k++) {
