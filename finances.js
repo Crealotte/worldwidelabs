@@ -5,7 +5,6 @@
 'use strict';
 
 const FIN_PAST = 8, FIN_HORIZON = 52;
-const FIN_PI_CAP = { 4100: 1790000000, 3600: 880000000, 2600: 630000000 }; // what one island of each kind is worth to her, from her rental terms (editable)
 let finData = null, finSrv = null, finAhead = 16, finShowPlan = '', finTimer = null, finWired = false, finSaving = false;
 
 async function finFetch(body) {
@@ -148,9 +147,9 @@ function finVentures(m) {
         const weekly = w.length ? w.reduce((s, x) => s + x.profit - x.cut, 0) / w.length : 0;
         rows.push({ name: c.name, type: 'Company', capital: D.capitals[`co:${c.id}`] || 0, weekly, note: w.length ? `profit after the director cut, average of ${w.length} week${w.length > 1 ? 's' : ''}` : 'no full weeks saved yet' });
     }
-    const rent = S.rto.defaults.rent, eq = S.rto.defaults.cycleEquity;
+    const rent = S.rto.defaults.rent, eqs = S.rto.defaults.equity;
     for (const tier of [4100, 3600, 2600]) {
-        const cap = D.capitals[`pi:${tier}`] ?? FIN_PI_CAP[tier];
+        const cap = D.capitals[`pi:${tier}`] ?? S.rto.defaults.cost[tier], eq = eqs[tier];
         rows.push({ name: `Island ${tier} rented out`, type: 'Private Island', capital: cap, weekly: rent[tier] * 7 / 30, note: 'rent only' });
         // rent-to-own: the equity the tenant pays is the sale price coming in by instalments, so the gain is the rent over the whole contract plus (goal - capital), spread over its length
         const goal = (S.rto.defaults.goals || {})[tier] || 0, cycles = goal && eq ? goal / eq : 0, gain = cycles * rent[tier] + goal - cap;
@@ -212,9 +211,9 @@ function finPlansPanel() {
 function finCapitalsPanel() {
     const S = finSrv, D = finData;
     const row = (key, label, val, note) => `<tr><td style="padding:3px 8px;">${esc(label)}${note ? `<div style="font-size:11px;color:var(--muted);">${esc(note)}</div>` : ''}</td><td style="padding:3px 8px;"><input type="text" inputmode="decimal" data-cap="${key}" data-t="money" value="${finFull(val)}" style="width:140px;text-align:right;font-family:var(--mono);"></td></tr>`;
-    return `<div class="panel"><h3 style="margin-top:0;">Capital behind each venture</h3><p style="font-size:12px;color:var(--muted);margin:0 0 8px;">What a company or an island is worth to you. The return table needs it to work out the percentage a year.</p>
+    return `<div class="panel"><h3 style="margin-top:0;">Capital behind each venture</h3><p style="font-size:12px;color:var(--muted);margin:0 0 8px;">What you put into a company, or what you paid for an island (the buying prices are filled in). The return table needs it to work out the percentage a year.</p>
         <table style="border-collapse:collapse;font-size:13px;"><tbody>${S.companies.map(c => row(`co:${c.id}`, c.name, D.capitals[`co:${c.id}`] || 0, 'company')).join('')}
-        ${[4100, 3600, 2600].map(t => row(`pi:${t}`, `Island ${t}`, D.capitals[`pi:${t}`] ?? FIN_PI_CAP[t], 'per island')).join('')}</tbody></table></div>`;
+        ${[4100, 3600, 2600].map(t => row(`pi:${t}`, `Island ${t}`, D.capitals[`pi:${t}`] ?? S.rto.defaults.cost[t], 'per island')).join('')}</tbody></table></div>`;
 }
 
 async function loadFinances() {
@@ -223,7 +222,7 @@ async function loadFinances() {
     const r = await finFetch({ action: 'fin-get' });
     if (r.error) { st.className = 'status err'; st.textContent = r.error; return; }
     st.textContent = ''; st.className = 'status';
-    finSrv = { cash: r.cash, companies: r.companies || [], rto: r.rto || { rtoItems: [], pis: [], defaults: { rent: { 4100: 27000000, 3600: 12300000, 2600: 8700000 }, cycleEquity: 81000000 } }, today: r.today };
+    finSrv = { cash: r.cash, companies: r.companies || [], rto: r.rto || { rtoItems: [], pis: [], defaults: { rent: { 4100: 27000000, 3600: 15000000, 2600: 12000000 }, equity: { 4100: 81000000, 3600: 45000000, 2600: 36000000 }, goals: { 4100: 1701000000, 3600: 855000000, 2600: 612000000 }, cost: { 4100: 1482500000, 3600: 757500000, 2600: 557500000 } } }, today: r.today };
     finData = { fundsMode: r.fundsMode, fundsManual: r.fundsManual, reserve: r.reserve, investors: r.investors, income: r.income, outlays: r.outlays, plans: r.plans, roi: r.roi, ventures: r.ventures, capitals: r.capitals };
     finRenderAll();
 }

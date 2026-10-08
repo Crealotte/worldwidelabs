@@ -15,7 +15,7 @@ const ltMoneyShort = n => { const a = Math.abs(Number(n) || 0); return a >= 1e9 
 // the same maths as the old page: one 30-day cycle is paid upfront at the start, a new one every 30 days; a typed-in "paid so far" overrides the calculation
 function ltMetrics(rto, defaults) {
     const tier = Number(rto.originalHappy) || 4100;
-    const rent = Number(rto.monthlyRent) || (defaults.rent[tier] || 27000000), cycleEquity = Number(rto.cycleEquity) || defaults.cycleEquity;
+    const rent = Number(rto.monthlyRent) || (defaults.rent[tier] || 27000000), cycleEquity = Number(rto.cycleEquity) || (defaults.equity[tier] || 81000000);
     const start = new Date(rto.startDate || new Date().toISOString().slice(0, 10));
     const days = Math.max(0, Math.floor((Date.now() - start) / 86400000));
     const cycles = Math.max(1, Math.floor(days / 30) + 1);
@@ -47,7 +47,7 @@ function ltEditor() {
             ${f('goal', 'Total equity goal ($)', e.totalEquityNeeded, 190, 'number')}${f('paid', 'Paid equity so far ($)', e.manualEquityPaid ?? '', 190, 'number', 'blank = calculated')}
         </div>
         <div style="margin-top:10px;display:flex;gap:8px;"><button id="lt-save" type="button">Save contract</button><button class="ghost" id="lt-cancel" type="button">Cancel</button></div>
-        <div style="font-size:11px;color:var(--muted);margin-top:6px;">Defaults per tier: goal ${[4100, 3600, 2600].map(t => `${t}: ${ltMoneyShort(d.goals[t])}`).join(' · ')} · rent ${[4100, 3600, 2600].map(t => `${t}: ${ltMoneyShort(d.rent[t])}`).join(' · ')} · equity ${ltMoneyShort(d.cycleEquity)} per 30 days. Leave "paid so far" empty and WWL counts one cycle at the start plus one every 30 days.</div></div>`;
+        <div style="font-size:11px;color:var(--muted);margin-top:6px;">Defaults per tier: goal ${[4100, 3600, 2600].map(t => `${t}: ${ltMoneyShort(d.goals[t])}`).join(' · ')} · rent ${[4100, 3600, 2600].map(t => `${t}: ${ltMoneyShort(d.rent[t])}`).join(' · ')} · equity ${[4100, 3600, 2600].map(t => `${t}: ${ltMoneyShort(d.equity[t])}`).join(' · ')} per 30 days. Leave "paid so far" empty and WWL counts one cycle at the start plus one every 30 days.</div></div>`;
 }
 function ltRtoBlock(rto, open) {
     const m = ltMetrics(rto, ltData.defaults);
@@ -104,16 +104,16 @@ function renderLabstracking() {
     wireLabstracking();
 }
 function wireLabstracking() {
-    const fresh = (over = {}) => ({ id: null, clientName: '', originalHappy: 4100, propertyId: '', tenantId: '', startDate: new Date().toISOString().slice(0, 10), cycleEquity: ltData.defaults.cycleEquity, monthlyRent: ltData.defaults.rent[4100], totalEquityNeeded: ltData.defaults.goals[4100], manualEquityPaid: null, ...over });
+    const fresh = (over = {}) => ({ id: null, clientName: '', originalHappy: 4100, propertyId: '', tenantId: '', startDate: new Date().toISOString().slice(0, 10), cycleEquity: ltData.defaults.equity[4100], monthlyRent: ltData.defaults.rent[4100], totalEquityNeeded: ltData.defaults.goals[4100], manualEquityPaid: null, ...over });
     $('lt-sync').addEventListener('click', async () => { const b = $('lt-sync'); b.disabled = true; b.textContent = 'Syncing…'; const r = await ltFetch({ action: 'lt-sync' }); if (r.error) { toast(r.error); b.disabled = false; b.textContent = 'Sync islands from Torn'; return; } ltData = r; toast(`Synced ${r.pis.length} island${r.pis.length === 1 ? '' : 's'}`); renderLabstracking(); });
     $('lt-add').addEventListener('click', () => { ltEdit = fresh(); renderLabstracking(); $('lt-f-client')?.focus(); });
     $('lt-hide').addEventListener('change', () => { ltHide = $('lt-hide').checked; renderLabstracking(); });
-    document.querySelectorAll('.lt-new').forEach(b => b.addEventListener('click', () => { const tier = Number(b.dataset.tier); ltEdit = fresh({ propertyId: b.dataset.prop, tenantId: b.dataset.tenant && b.dataset.tenant !== 'null' ? b.dataset.tenant : '', clientName: b.dataset.tenant && b.dataset.tenant !== 'null' ? `Tenant #${b.dataset.tenant}` : '', originalHappy: tier, monthlyRent: ltData.defaults.rent[tier], totalEquityNeeded: ltData.defaults.goals[tier] }); renderLabstracking(); window.scrollTo({ top: 0, behavior: 'smooth' }); }));
+    document.querySelectorAll('.lt-new').forEach(b => b.addEventListener('click', () => { const tier = Number(b.dataset.tier); ltEdit = fresh({ propertyId: b.dataset.prop, tenantId: b.dataset.tenant && b.dataset.tenant !== 'null' ? b.dataset.tenant : '', clientName: b.dataset.tenant && b.dataset.tenant !== 'null' ? `Tenant #${b.dataset.tenant}` : '', originalHappy: tier, cycleEquity: ltData.defaults.equity[tier], monthlyRent: ltData.defaults.rent[tier], totalEquityNeeded: ltData.defaults.goals[tier] }); renderLabstracking(); window.scrollTo({ top: 0, behavior: 'smooth' }); }));
     document.querySelectorAll('.lt-edit').forEach(b => b.addEventListener('click', () => { ltEdit = { ...ltData.rtoItems.find(r => r.id === b.dataset.id) }; renderLabstracking(); window.scrollTo({ top: 0, behavior: 'smooth' }); }));
     document.querySelectorAll('.lt-del').forEach(b => b.addEventListener('click', async () => { if (!confirm('Remove this RTO contract?')) return; const r = await ltFetch({ action: 'lt-rto-delete', id: b.dataset.id }); if (r.error) { toast(r.error); return; } loadLabstracking(); }));
     document.querySelectorAll('.lt-copy').forEach(b => b.addEventListener('click', () => { navigator.clipboard.writeText(b.dataset.amount).then(() => toast('Amount copied')); }));
     $('lt-cancel')?.addEventListener('click', () => { ltEdit = null; renderLabstracking(); });
-    $('lt-f-tier')?.addEventListener('change', () => { const t = Number($('lt-f-tier').value); if (!ltEdit.id) { $('lt-f-rent').value = ltData.defaults.rent[t]; $('lt-f-goal').value = ltData.defaults.goals[t]; } });
+    $('lt-f-tier')?.addEventListener('change', () => { const t = Number($('lt-f-tier').value); if (!ltEdit.id) { $('lt-f-rent').value = ltData.defaults.rent[t]; $('lt-f-cycle').value = ltData.defaults.equity[t]; $('lt-f-goal').value = ltData.defaults.goals[t]; } });
     $('lt-save')?.addEventListener('click', async () => {
         const v = id => $(`lt-f-${id}`).value;
         const item = { id: ltEdit.id, clientName: v('client'), originalHappy: Number(v('tier')), propertyId: v('prop'), tenantId: v('tenant'), startDate: v('start'), cycleEquity: v('cycle'), monthlyRent: v('rent'), totalEquityNeeded: v('goal'), manualEquityPaid: v('paid') };
