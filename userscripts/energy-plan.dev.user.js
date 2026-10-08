@@ -2,7 +2,7 @@
 // @name         World Wide Labs
 // @namespace    https://worldwidelabs.vercel.app
 // @author       CreaLotte
-// @version      1.38.11
+// @version      1.38.12
 // @updateURL    __WWL_BASE__/worldwidelabs.user.js
 // @downloadURL  __WWL_BASE__/worldwidelabs.user.js
 // @description  Shows your WorldWideLabs weekly energy plan (the checklist from the Energy planner) inside Torn, a To do tab with small personal reminders (revive setting, feedback, timezone map, availability, Discord/Intel/CAT), your My Targets list, a simplified energy/war standing strip, and — if you are in the Mentoring Platform — your mentoring checklist too. Also shows faction banners at the top of every Torn page. A small ⚙ in the header shows the installed version, flags when a newer one is out, lets you set/replace your API key, and — for a leader — add or remove your faction's banners right from Torn. On a computer it is a small window you can drag around and close; in TornPDA it is a menu. Ticks are shared with the WWL site.
@@ -26,7 +26,7 @@
     const KEY_NAME = 'wwl_api_key', POS_NAME = 'wwl_plan_pos', STATE_NAME = 'wwl_plan_state';
     // GM_info gives the version Tampermonkey actually has installed right now — falls back to a
     // hardcoded copy (kept in sync with @version above) for TornPDA, which doesn't grant GM_info.
-    const SCRIPT_VERSION = (typeof GM_info !== 'undefined' && GM_info.script?.version) || '1.38.11';
+    const SCRIPT_VERSION = (typeof GM_info !== 'undefined' && GM_info.script?.version) || '1.38.12';
     const versionGreater = (a, b) => {
         const pa = String(a).split('.').map(Number), pb = String(b).split('.').map(Number);
         for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
@@ -499,6 +499,10 @@
                 <span style="flex:1;${t.mine && t.done ? 'text-decoration:line-through;color:#9aa4b5;' : ''}">${esc(t.text)}</span>
                 ${t.mine ? `<span style="font-size:10px;color:#9aa4b5;border:1px solid #3a4352;border-radius:8px;padding:0 6px;">${t.repeat === 'daily' ? 'daily' : 'once'}</span>` : ''}
                 ${t.scriptTab ? `<button type="button" class="wwl-t-go" data-tab="${esc(t.scriptTab)}" style="color:#35d99b;white-space:nowrap;background:transparent;border:1px solid #35d99b;border-radius:6px;padding:4px 8px;font-size:12px;cursor:pointer;">${esc(t.cta)}</button>` : t.url ? `<a href="${esc(t.url)}" target="_blank" rel="noopener" style="color:#35d99b;white-space:nowrap;text-decoration:none;border:1px solid #35d99b;border-radius:6px;padding:4px 8px;font-size:12px;">${esc(t.cta)}</a>` : ''}
+                ${t.lease ? `<span style="display:flex;gap:6px;flex-wrap:wrap;">
+                    <button type="button" class="wwl-lease-copy" data-amount="${esc(String(t.lease.amount))}" style="background:transparent;border:1px solid #3a4352;border-radius:6px;padding:4px 8px;font-size:12px;color:#e6e9ef;cursor:pointer;">Copy amount</button>
+                    ${t.lease.status === 'due' ? `<button type="button" class="wwl-lease" data-act="offer" data-id="${esc(t.lease.id)}" style="background:transparent;border:1px solid #f0b432;border-radius:6px;padding:4px 8px;font-size:12px;color:#f0b432;cursor:pointer;">Offered ✓</button>` : ''}
+                    <button type="button" class="wwl-lease" data-act="pay" data-id="${esc(t.lease.id)}" style="background:transparent;border:1px solid #35d99b;border-radius:6px;padding:4px 8px;font-size:12px;color:#35d99b;cursor:pointer;">Paid ✓</button></span>` : ''}
             </div>${t.id === 'oc' ? ocRequestHtml(t) : ''}`).join('');
         return daily + rest;
     }
@@ -641,6 +645,12 @@
         }));
         body.querySelectorAll('.wwl-w-det').forEach(d => d.addEventListener('toggle', () => { welOpen[d.dataset.k] = d.open; }));
         body.querySelectorAll('.wwl-t-go').forEach(b => b.addEventListener('click', () => { tab = lastTab = b.dataset.tab; render(); }));
+        // the owner's lease lines: copy the amount, mark "I offered the lease" or "the tenant paid" (each click is one request; the To do list is re-read afterwards)
+        body.querySelectorAll('.wwl-lease-copy').forEach(b => b.addEventListener('click', () => { const v = b.dataset.amount; (navigator.clipboard ? navigator.clipboard.writeText(v) : Promise.reject()).catch(() => { const ta = document.createElement('textarea'); ta.value = v; document.body.appendChild(ta); ta.select(); try { document.execCommand('copy'); } catch (e) { /* manual copy */ } ta.remove(); }); b.textContent = 'Copied'; }));
+        body.querySelectorAll('.wwl-lease').forEach(b => b.addEventListener('click', async () => {
+            b.disabled = true;
+            try { await api({ action: b.dataset.act === 'pay' ? 'lt-pay' : 'lt-offer', id: b.dataset.id }); await refreshTodoItems(true); } catch (e) { b.disabled = false; b.textContent = 'Failed'; }
+        }));
         body.querySelectorAll('.wwl-w-check').forEach(cb => cb.addEventListener('change', async () => {
             try { await api({ action: 'wel-done', id: cb.dataset.id, done: cb.checked }); welMine = await api({ action: 'wel-my' }); } catch (e) { /* shown on next load */ }
             render();

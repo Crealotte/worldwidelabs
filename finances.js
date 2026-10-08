@@ -82,6 +82,16 @@ function finModel(plan, planStart) {
     for (const r of (S.rto.rtoItems || [])) {
         if (!r.startDate) continue;
         const eq = Number(r.cycleEquity) || 0, rent = Number(r.monthlyRent) || 0, goal = Number(r.totalEquityNeeded) || Infinity;
+        // payments recorded with the "Tenant paid" clicks: those are real (they show in their own weeks); what is still needed is planned 30 days after the last one, but not before today
+        const recPays = r.payments || [];
+        if (recPays.length) {
+            for (const p of recPays) if (p.date >= firstDay && p.date <= lastDay) place(p.date, (Number(p.rent) || 0) + (Number(p.equity) || 0), 'rto');
+            const paid = (Number(r.opening) || 0) + recPays.reduce((s, p) => s + (Number(p.equity) || 0), 0);
+            let left = eq ? Math.max(0, Math.ceil((goal - paid) / eq)) : 0;
+            const nextIso = finAdd(recPays.map(p => p.date).sort().pop(), 30);
+            for (let iso = nextIso < S.today ? S.today : nextIso; left > 0 && iso <= lastDay; left--, iso = finAdd(iso, 30)) place(iso, rent + eq, 'rto');
+            continue;
+        }
         // a typed-in "paid so far" wins over the calendar: only the payments still needed are planned, from today on
         const typed = r.manualEquityPaid !== null && r.manualEquityPaid !== undefined && r.manualEquityPaid !== '';
         let left = typed && eq ? Math.max(0, Math.ceil((goal - Number(r.manualEquityPaid)) / eq)) : Infinity;

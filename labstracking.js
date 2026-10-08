@@ -18,11 +18,16 @@ function ltMetrics(rto, defaults) {
     const rent = Number(rto.monthlyRent) || (defaults.rent[tier] || 27000000), cycleEquity = Number(rto.cycleEquity) || (defaults.equity[tier] || 81000000);
     const start = new Date(rto.startDate || new Date().toISOString().slice(0, 10));
     const days = Math.max(0, Math.floor((Date.now() - start) / 86400000));
-    const cycles = Math.max(1, Math.floor(days / 30) + 1);
-    const override = rto.manualEquityPaid !== null && rto.manualEquityPaid !== undefined && rto.manualEquityPaid !== '';
-    const paid = override ? Number(rto.manualEquityPaid) : cycles * cycleEquity;
+    const pays = rto.payments || [], recorded = pays.length > 0 || Number(rto.opening) > 0; // a payment record (the Paid clicks) replaces the calendar guess
+    const cycles = recorded ? pays.length : Math.max(1, Math.floor(days / 30) + 1);
+    const override = !recorded && rto.manualEquityPaid !== null && rto.manualEquityPaid !== undefined && rto.manualEquityPaid !== '';
+    const paid = recorded ? (Number(rto.opening) || 0) + pays.reduce((s, p) => s + (Number(p.equity) || 0), 0) : override ? Number(rto.manualEquityPaid) : cycles * cycleEquity;
     const goal = Number(rto.totalEquityNeeded) || (defaults.goals[tier] || 1800000000);
-    return { cycles, rent, cycleEquity, paid, override, goal, total30: rent + cycleEquity, percent: Math.min(100, Math.round(paid / goal * 100)), remaining: Math.max(0, goal - paid), startDate: rto.startDate };
+    // the next 30-day payment: 30 days after the last recorded one, or by the calendar from the start
+    const iso = ms => new Date(ms).toISOString().slice(0, 10), today = iso(Date.now());
+    const due = recorded && pays.length ? iso(Date.parse(pays.map(p => p.date).sort().pop() + 'T00:00:00Z') + 30 * 86400000) : iso(Date.parse((rto.startDate || today) + 'T00:00:00Z') + 30 * Math.max(1, Math.floor(days / 30) + 1) * 86400000);
+    const dueIn = Math.round((Date.parse(due + 'T00:00:00Z') - Date.parse(today + 'T00:00:00Z')) / 86400000);
+    return { cycles, rent, cycleEquity, paid, override, recorded, pays, due, dueIn, goal, total30: rent + cycleEquity, percent: Math.min(100, Math.round(paid / goal * 100)), remaining: Math.max(0, goal - paid), startDate: rto.startDate };
 }
 
 async function loadLabstracking() {
@@ -58,8 +63,12 @@ function ltRtoBlock(rto, open) {
             <div style="font-size:18px;font-weight:700;font-family:var(--mono);color:var(--reagent);">${ext ? `<a href="${ext}" target="_blank" rel="noopener" style="color:inherit;">${ltMoney(m.total30)} ↗</a>` : ltMoney(m.total30)}</div>
             <div style="font-size:12px;color:var(--muted);">${ltMoney(m.rent)} rent + ${ltMoney(m.cycleEquity)} equity</div>
             ${ext ? `<a href="${ext}" target="_blank" rel="noopener" style="font-size:12px;color:var(--reagent);">🔗 Offer extension in Torn ↗</a> <button class="ghost small lt-copy" data-amount="${m.total30}" type="button" style="margin-left:6px;">📋 Copy amount</button>` : `<button class="ghost small lt-copy" data-amount="${m.total30}" type="button">📋 Copy amount</button>`}</div>
-        <div style="font-size:13px;line-height:1.7;">Start: <b>${esc(m.startDate || '—')}</b> (${m.cycles} cycle${m.cycles > 1 ? 's' : ''} paid upfront)<br>Goal: <b>${ltMoney(m.goal)}</b><br>Paid equity: <b style="color:var(--reagent);">${ltMoney(m.paid)}</b>${m.override ? ' <span style="font-size:11px;color:var(--muted);">(typed in)</span>' : ''}<br>Remaining: <b>${ltMoney(m.remaining)}</b></div>
+        <div style="font-size:13px;line-height:1.7;">Start: <b>${esc(m.startDate || '—')}</b> (${m.recorded ? `${m.pays.length} payment${m.pays.length === 1 ? '' : 's'} recorded` : `${m.cycles} cycle${m.cycles > 1 ? 's' : ''} paid upfront, by the calendar`})<br>Goal: <b>${ltMoney(m.goal)}</b><br>Paid equity: <b style="color:var(--reagent);">${ltMoney(m.paid)}</b>${m.override ? ' <span style="font-size:11px;color:var(--muted);">(typed in)</span>' : ''}<br>Remaining: <b>${ltMoney(m.remaining)}</b></div>
         <div style="height:8px;background:var(--bench-2);border-radius:4px;overflow:hidden;margin:8px 0;"><div style="height:100%;width:${m.percent}%;background:var(--reagent);"></div></div>
+        <div style="margin:8px 0;padding:8px;border:1px solid var(--line);border-radius:6px;font-size:13px;">
+            <div>Next payment: <b style="color:${m.dueIn < 0 ? 'var(--danger)' : m.dueIn <= 3 ? '#e0a030' : 'var(--reagent)'};">${esc(m.due)}</b> <span style="color:var(--muted);font-size:12px;">(${m.dueIn < 0 ? `${-m.dueIn} day${m.dueIn === -1 ? '' : 's'} late` : m.dueIn === 0 ? 'today' : `in ${m.dueIn} day${m.dueIn === 1 ? '' : 's'}`})</span>${rto.offeredOn ? ` <span style="font-size:12px;color:#e0a030;">· lease offered ${esc(rto.offeredOn)}, waiting for the tenant</span>` : ''}</div>
+            <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px;">${rto.offeredOn ? `<button class="ghost small lt-offer-clear" data-id="${esc(rto.id)}" type="button">Take back "offered"</button>` : `<button class="ghost small lt-offer" data-id="${esc(rto.id)}" type="button">✅ I offered the lease</button>`}<button class="small lt-pay" data-id="${esc(rto.id)}" type="button">💰 Tenant paid</button><button class="ghost small lt-addpay" data-id="${esc(rto.id)}" type="button">+ Past payment</button></div>
+            ${m.pays.length ? `<details style="margin-top:6px;"><summary class="av-sum" style="font-size:12px;color:var(--muted);">Payments (${m.pays.length})</summary>${m.pays.slice().reverse().map(p => `<div style="display:flex;gap:10px;align-items:center;font-size:12px;padding:2px 0;"><span style="font-family:var(--mono);">${esc(p.date)}</span><span style="font-family:var(--mono);flex:1;">${ltMoney((p.rent || 0) + (p.equity || 0))} <span style="color:var(--muted);">(${ltMoneyShort(p.rent)} rent + ${ltMoneyShort(p.equity)} equity)</span></span><button class="ghost small lt-paydel" data-id="${esc(rto.id)}" data-pay="${esc(p.id)}" type="button">✕</button></div>`).join('')}</details>` : ''}</div>
         <button class="ghost small lt-edit" data-id="${esc(rto.id)}" type="button">Edit contract</button> <button class="ghost small lt-del" data-id="${esc(rto.id)}" type="button" style="color:var(--danger);">Delete</button></details>`;
 }
 function renderLabstracking() {
@@ -102,6 +111,7 @@ function renderLabstracking() {
             <p style="font-size:12px;color:var(--muted);margin:8px 0;">1) Open the old page (labstracking.vercel.app) in this browser. 2) Press F12, open the Console tab, paste <code>copy(localStorage.getItem('labstracking_db'))</code> and press Enter. 3) Paste what was copied into the box below and press Import. Contracts that are already here are skipped.</p>
             <textarea id="lt-import" rows="4" style="width:100%;font-family:var(--mono);font-size:11px;"></textarea><button class="ghost small" id="lt-import-btn" type="button" style="margin-top:6px;">Import</button></details>`;
     wireLabstracking();
+    ltWirePayments();
 }
 function wireLabstracking() {
     const fresh = (over = {}) => ({ id: null, clientName: '', originalHappy: 4100, propertyId: '', tenantId: '', startDate: new Date().toISOString().slice(0, 10), cycleEquity: ltData.defaults.equity[4100], monthlyRent: ltData.defaults.rent[4100], totalEquityNeeded: ltData.defaults.goals[4100], manualEquityPaid: null, ...over });
@@ -122,4 +132,20 @@ function wireLabstracking() {
         ltEdit = null; toast('Contract saved'); loadLabstracking();
     });
     $('lt-import-btn').addEventListener('click', async () => { const r = await ltFetch({ action: 'lt-import', json: $('lt-import').value }); if (r.error) { toast(r.error); return; } toast(`${r.added} contract${r.added === 1 ? '' : 's'} imported${r.skipped ? `, ${r.skipped} already here` : ''}`); loadLabstracking(); });
+}
+
+// the lease buttons on each contract: offered / tenant paid / a payment from the past / remove a payment
+function ltWirePayments() {
+    const upd = r => { if (r.error) { toast(r.error); return; } const i = ltData.rtoItems.findIndex(x => x.id === r.item.id); if (i >= 0) ltData.rtoItems[i] = r.item; renderLabstracking(); };
+    const bind = (cls, fn) => document.querySelectorAll(cls).forEach(b => b.addEventListener('click', async () => { b.disabled = true; upd(await fn(b)); }));
+    bind('.lt-offer', b => ltFetch({ action: 'lt-offer', id: b.dataset.id }));
+    bind('.lt-offer-clear', b => ltFetch({ action: 'lt-offer-clear', id: b.dataset.id }));
+    bind('.lt-pay', b => ltFetch({ action: 'lt-pay', id: b.dataset.id }));
+    bind('.lt-paydel', b => ltFetch({ action: 'lt-pay-delete', id: b.dataset.id, paymentId: b.dataset.pay }));
+    document.querySelectorAll('.lt-addpay').forEach(b => b.addEventListener('click', async () => {
+        const date = prompt('Date of the payment (YYYY-MM-DD):', new Date().toISOString().slice(0, 10));
+        if (!date) return;
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) { toast('Write the date as YYYY-MM-DD'); return; }
+        upd(await ltFetch({ action: 'lt-pay', id: b.dataset.id, date }));
+    }));
 }
