@@ -5,6 +5,11 @@
 'use strict';
 
 const FIN_PAST = 8, FIN_HORIZON = 52;
+// buddy banking: she puts up the cash, the buddy invests it in their City Bank, and when the term ends keeps 30% of the profit and sends back the principal + 70% of it.
+// The profit estimate is the Torn bank's rate for 10/10 merits (no TCI) on that term: 5.14% for 1 month, 11.93% for 2 months (Torn's bank page); a real profit can be typed per buddy.
+const FIN_TIERS = { bronze: { amount: 500000000, days: 30 }, silver: { amount: 1000000000, days: 30 }, gold: { amount: 2000000000, days: 60 } };
+const finBankRate = days => (days <= 45 ? 0.0514 : 0.1193);
+const finBuddy = b => { const profit = b.profit > 0 ? b.profit : Math.round(b.amount * finBankRate(b.term)); return { profit, back: b.amount + Math.round(profit * b.share / 100), due: finAdd(b.given, b.term) }; };
 let finData = null, finSrv = null, finAhead = 16, finShowPlan = '', finTimer = null, finWired = false, finSaving = false;
 
 async function finFetch(body) {
@@ -47,7 +52,7 @@ const finFunds = () => finData.fundsManual; // the amount she types: her money s
 function finModel(plan, planStart) {
     const D = finData, S = finSrv, cur = finSun(S.today);
     const weeks = [];
-    for (let w = -FIN_PAST; w < FIN_HORIZON; w++) weeks.push({ w, end: finAdd(cur, 7 * w), co: 0, coParts: [], rto: 0, inc: 0, inv: 0, invParts: [], out: 0, plan: 0, loan: 0, loanParts: [] });
+    for (let w = -FIN_PAST; w < FIN_HORIZON; w++) weeks.push({ w, end: finAdd(cur, 7 * w), co: 0, coParts: [], rto: 0, inc: 0, inv: 0, invParts: [], out: 0, plan: 0, loan: 0, loanParts: [], bb: 0, bbParts: [] });
     const idx = iso => { const w = Math.ceil(Math.round((finD(iso) - finD(cur)) / 86400000) / 7); return w >= -FIN_PAST && w < FIN_HORIZON ? w + FIN_PAST : -1; };
     const place = (iso, amt, key) => { const j = idx(iso); if (j >= 0) weeks[j][key] += amt; };
     const firstDay = finAdd(weeks[0].end, -6), lastDay = weeks[weeks.length - 1].end;
@@ -115,6 +120,13 @@ function finModel(plan, planStart) {
         }
     }
     for (const o of D.outlays) place(o.date, o.amount, 'out');
+    // buddy banking: the cash leaves on the day it is given (if that is still ahead) and comes back, plus her share of the profit, when the term ends; a late one counts in the current week
+    for (const b of D.buddies) {
+        if (b.status !== 'active' || !b.amount) continue;
+        if (b.given > S.today) place(b.given, b.amount, 'out');
+        const f = finBuddy(b), j = idx(f.due < S.today ? S.today : f.due);
+        if (j >= 0) { weeks[j].bb += f.back; weeks[j].bbParts.push(`${b.name}: ${finMoney(f.back)}`); }
+    }
     // loans given to people: what is still to come back arrives on the repayment dates; a loan that is not given yet leaves on its date. An overdue payment counts in the current week.
     for (const L of D.loans) {
         if (!L.active) continue;
@@ -131,7 +143,7 @@ function finModel(plan, planStart) {
     // the balance runs forward from the money available now
     const funds = finFunds(); let bal = funds;
     for (const wk of weeks) {
-        wk.net = wk.co + wk.rto + wk.inc + wk.loan - wk.inv - wk.out;
+        wk.net = wk.co + wk.rto + wk.inc + wk.loan + wk.bb - wk.inv - wk.out;
         if (wk.w >= 0) { bal += wk.net - wk.plan; wk.bal = bal; } else wk.bal = null;
     }
     return { weeks, funds, cur, coAvg };
@@ -172,6 +184,10 @@ function finVentures(m) {
         const goal = (S.rto.defaults.goals || {})[tier] || 0, cycles = goal && eq ? goal / eq : 0, gain = cycles * rent[tier] + goal - cap;
         rows.push({ name: `Island ${tier} rent-to-own`, type: 'Private Island', capital: cap, weekly: cycles ? gain / (cycles * 30 / 7) : (rent[tier] + eq) * 7 / 30, noPayback: true, note: cycles ? `rent plus the sale at ${finShort(goal)}, over about ${(cycles * 30 / 365).toFixed(1)} years` : 'rent + the equity the tenant builds up' });
     }
+    for (const [tier, t] of Object.entries(FIN_TIERS)) { // buddy banking: her share of the bank's profit on the cash she puts up
+        const weekly = t.amount * finBankRate(t.days) * 0.7 / (t.days / 7);
+        rows.push({ name: `Buddy bank ${tier[0].toUpperCase() + tier.slice(1)}`, type: 'Buddy banking', capital: t.amount, weekly, note: `${t.days} days, 70% of the bank profit (estimate at 10/10 merits)` });
+    }
     for (const v of D.ventures) if (v.active) rows.push({ name: v.name, type: v.type || 'Other', capital: v.capital, weekly: v.weekly, note: v.note });
     return rows.map(r => ({ ...r, roi: r.capital > 0 ? r.weekly * 52 / r.capital * 100 : null }))
         .sort((a, b) => (b.roi ?? -1e9) - (a.roi ?? -1e9));
@@ -191,6 +207,9 @@ const FIN_LISTS = {
         { f: 'active', l: 'On', t: 'bool' }, { f: 'name', l: 'What', t: 'text', w: 160 }, { f: 'amount', l: 'Amount', t: 'money', w: 120 }, { f: 'freq', l: 'How often', t: 'sel', opts: [['weekly', 'Every week'], ['monthly', 'Every month'], ['once', 'Once']] }, { f: 'date', l: 'From / on', t: 'date' }] },
     outlays: { title: 'Planned spending (one time)', add: '+ Spending', fresh: () => ({ id: finId(), name: '', amount: 0, date: new Date().toISOString().slice(0, 10) }), cols: [
         { f: 'name', l: 'What', t: 'text', w: 180 }, { f: 'amount', l: 'Amount', t: 'money', w: 120 }, { f: 'date', l: 'On', t: 'date' }] },
+    buddies: { title: 'Buddy banking', add: '+ Buddy', fresh: () => ({ id: finId(), name: '', tornId: '', tier: 'bronze', amount: FIN_TIERS.bronze.amount, term: FIN_TIERS.bronze.days, given: new Date().toISOString().slice(0, 10), profit: 0, share: 70, status: 'active', note: '' }), cols: [
+        { f: 'name', l: 'Who', t: 'text', w: 120 }, { f: 'tornId', l: 'Torn ID', t: 'text', w: 80 }, { f: 'tier', l: 'Tier', t: 'sel', opts: [['bronze', 'Bronze'], ['silver', 'Silver'], ['gold', 'Gold'], ['', 'Other']] }, { f: 'amount', l: 'Given', t: 'money', w: 120 }, { f: 'term', l: 'Days', t: 'money', w: 60 },
+        { f: 'given', l: 'Given on', t: 'date' }, { f: 'profit', l: 'Expected profit (0 = estimate)', t: 'money', w: 120 }, { f: 'share', l: 'Your share %', t: 'money', w: 60 }, { f: 'status', l: 'Status', t: 'sel', opts: [['active', 'Invested'], ['returned', 'Paid back']] }, { f: 'note', l: 'Note', t: 'text', w: 110 }] },
     loans: { title: 'Loans I gave', add: '+ Loan', fresh: () => ({ id: finId(), name: '', lent: 0, owed: 0, repaid: 0, freq: 'open', payment: 0, date: new Date().toISOString().slice(0, 10), from: new Date().toISOString().slice(0, 10), active: true, note: '' }), cols: [
         { f: 'active', l: 'On', t: 'bool' }, { f: 'name', l: 'Who', t: 'text', w: 120 }, { f: 'lent', l: 'Lent', t: 'money', w: 110 }, { f: 'owed', l: 'To get back (0 = same as lent)', t: 'money', w: 120 }, { f: 'repaid', l: 'Paid back so far', t: 'money', w: 110 },
         { f: 'freq', l: 'Pays back', t: 'sel', opts: [['open', 'No fixed plan'], ['weekly', 'Every week'], ['monthly', 'Every month'], ['once', 'All at once']] }, { f: 'payment', l: 'Per payment', t: 'money', w: 100 }, { f: 'from', l: 'First / due on', t: 'date' }, { f: 'date', l: 'Lent on', t: 'date' }, { f: 'note', l: 'Note', t: 'text', w: 120 }] },
@@ -210,10 +229,10 @@ function finCell(list, i, col, row, extra = '') {
 }
 function finListEditor(list) {
     const L = FIN_LISTS[list], rows = finData[list];
-    const extra = list === 'investors' ? ['Yearly'] : list === 'loans' ? ['Still to come back'] : [];
+    const extra = list === 'investors' ? ['Yearly'] : list === 'loans' ? ['Still to come back'] : list === 'buddies' ? ['Due / comes back'] : [];
     return `<div class="panel"><h3 style="margin-top:0;">${L.title}</h3>${list === 'roi' ? '<p style="font-size:12px;color:var(--muted);margin:0 0 8px;">From the top row up, an investor is paid per billion the same as the top row. In between rows it is scaled from the row below it. At most 35% a year.</p>' : ''}
         <div style="overflow-x:auto;"><table style="border-collapse:collapse;font-size:13px;"><thead><tr>${L.cols.map(c => `<th style="text-align:left;padding:4px 8px;font-size:11px;color:var(--muted);font-weight:600;">${c.l}</th>`).join('')}${extra.map(x => `<th style="padding:4px 8px;font-size:11px;color:var(--muted);font-weight:600;text-align:left;">${x}</th>`).join('')}<th></th></tr></thead>
-        <tbody>${rows.map((r, i) => `<tr>${L.cols.map(c => `<td style="padding:3px 6px;">${finCell(list, i, c, r)}</td>`).join('')}${list === 'investors' ? `<td style="padding:3px 8px;white-space:nowrap;" data-pct="${i}"></td>` : list === 'loans' ? `<td style="padding:3px 8px;white-space:nowrap;font-family:var(--mono);" data-loanleft="${i}"></td>` : ''}<td><button class="ghost small" data-del="${list}" data-i="${i}" type="button" title="Remove">✕</button></td></tr>`).join('') || `<tr><td colspan="${L.cols.length + 2}" style="color:var(--muted);padding:6px 8px;">Nothing yet.</td></tr>`}</tbody></table></div>
+        <tbody>${rows.map((r, i) => `<tr>${L.cols.map(c => `<td style="padding:3px 6px;">${finCell(list, i, c, r)}</td>`).join('')}${list === 'investors' ? `<td style="padding:3px 8px;white-space:nowrap;" data-pct="${i}"></td>` : list === 'loans' ? `<td style="padding:3px 8px;white-space:nowrap;font-family:var(--mono);" data-loanleft="${i}"></td>` : list === 'buddies' ? `<td style="padding:3px 8px;white-space:nowrap;font-size:12px;" data-bbinfo="${i}"></td>` : ''}<td><button class="ghost small" data-del="${list}" data-i="${i}" type="button" title="Remove">✕</button></td></tr>`).join('') || `<tr><td colspan="${L.cols.length + 2}" style="color:var(--muted);padding:6px 8px;">Nothing yet.</td></tr>`}</tbody></table></div>
         <button class="ghost small" data-add="${list}" type="button" style="margin-top:8px;">${L.add}</button></div>`;
 }
 function finPlansPanel() {
@@ -243,7 +262,7 @@ async function loadFinances() {
     if (r.error) { st.className = 'status err'; st.textContent = r.error; return; }
     st.textContent = ''; st.className = 'status';
     finSrv = { cash: r.cash, companies: r.companies || [], rto: r.rto || { rtoItems: [], pis: [], defaults: { rent: { 4100: 27000000, 3600: 15000000, 2600: 12000000 }, equity: { 4100: 81000000, 3600: 45000000, 2600: 36000000 }, goals: { 4100: 1701000000, 3600: 855000000, 2600: 612000000 }, cost: { 4100: 1482500000, 3600: 757500000, 2600: 557500000 } } }, today: r.today };
-    finData = { fundsMode: r.fundsMode, fundsManual: r.fundsManual, reserve: r.reserve, investors: r.investors, income: r.income, outlays: r.outlays, plans: r.plans, roi: r.roi, ventures: r.ventures, capitals: r.capitals, loans: r.loans || [] };
+    finData = { fundsMode: r.fundsMode, fundsManual: r.fundsManual, reserve: r.reserve, investors: r.investors, income: r.income, outlays: r.outlays, plans: r.plans, roi: r.roi, ventures: r.ventures, capitals: r.capitals, loans: r.loans || [], buddies: r.buddies || [] };
     finRenderAll();
 }
 function finRenderAll() {
@@ -263,7 +282,7 @@ function finRenderAll() {
             <p style="font-size:11px;color:var(--muted);margin:8px 0 0;">Weeks end on Sunday. In past weeks the companies column is what they really sent (from the saved days with a bank amount); the rest is what your settings say should have happened. From now on the companies column is the average of the last four known weeks.</p></div>
         ${finPlansPanel()}
         <div class="panel"><h3 style="margin-top:0;">🏆 What earns the most on its capital</h3><div id="fin-vent" style="overflow-x:auto;"></div></div>
-        ${finListEditor('investors')}${finListEditor('income')}${finListEditor('outlays')}${finListEditor('loans')}${finListEditor('ventures')}${finCapitalsPanel()}${finListEditor('roi')}`;
+        ${finListEditor('investors')}${finListEditor('income')}${finListEditor('outlays')}${finListEditor('buddies')}${finListEditor('loans')}${finListEditor('ventures')}${finCapitalsPanel()}${finListEditor('roi')}`;
     finWire();
     finRefresh();
 }
@@ -280,12 +299,14 @@ function finRefresh() {
     const noCo = finSrv.companies.filter(c => !c.weeks.some(x => x.send != null)).map(c => c.name);
     const inAvg = avg('co') + avg('rto') + avg('inc') + avg('loan');
     const loanOut = finData.loans.filter(l => l.active).reduce((s, l) => s + Math.max(0, (l.owed > 0 ? l.owed : l.lent) - l.repaid), 0);
+    const bbOut = finData.buddies.filter(b => b.status === 'active'), bbBack = bbOut.reduce((s, b) => s + finBuddy(b).back, 0);
     $('fin-summary').innerHTML = `<div class="panel" style="display:flex;gap:26px;flex-wrap:wrap;font-size:13px;">
         <div><div style="color:var(--muted);font-size:11px;">Available now</div><b style="font-family:var(--mono);">${finShort(m.funds)}</b></div>
         <div><div style="color:var(--muted);font-size:11px;">Coming in a week (average of the next 12 weeks)</div><b style="font-family:var(--mono);color:var(--success,#35d99b);">${finShort(inAvg)}</b>
-            <div style="font-size:11px;color:var(--muted);">companies ${finShort(avg('co'))} · rent-to-own ${finShort(avg('rto'))} · other ${finShort(avg('inc'))} · loans ${finShort(avg('loan'))}</div>${noCo.length ? `<div style="font-size:11px;color:#e0a030;">No weekly send known yet for ${esc(noCo.join(', '))}, so that part is counted as 0.</div>` : ''}</div>
+            <div style="font-size:11px;color:var(--muted);">companies ${finShort(avg('co'))} · rent-to-own ${finShort(avg('rto'))} · other ${finShort(avg('inc'))} · loans ${finShort(avg('loan'))}</div><div style="font-size:11px;color:var(--muted);">Buddy banks paying back (${finShort(avg('bb'))} a week) is mostly your own cash returning, so it is not counted here.</div>${noCo.length ? `<div style="font-size:11px;color:#e0a030;">No weekly send known yet for ${esc(noCo.join(', '))}, so that part is counted as 0.</div>` : ''}</div>
         <div><div style="color:var(--muted);font-size:11px;">Paid to investors a week</div><b style="font-family:var(--mono);">${finShort(avg('inv'))}</b></div>
         <div><div style="color:var(--muted);font-size:11px;">Left over a week (before one-time spending)</div><b style="font-family:var(--mono);">${finShort(inAvg - avg('inv'))}</b></div>
+        <div><div style="color:var(--muted);font-size:11px;">In buddy banks</div><b style="font-family:var(--mono);">${finShort(bbOut.reduce((s, b) => s + b.amount, 0))}</b> <span style="color:var(--muted);font-size:11px;">(${bbOut.length}; back with profit ${finShort(bbBack)})</span></div>
         <div><div style="color:var(--muted);font-size:11px;">Lent out, still to come back</div><b style="font-family:var(--mono);">${finShort(loanOut)}</b></div>
         <div><div style="color:var(--muted);font-size:11px;">Invested by others</div><b style="font-family:var(--mono);">${finShort(cost.invested)}</b></div>
         <div><div style="color:var(--muted);font-size:11px;">They cost you a year</div><b style="color:${cost.pct !== null && cost.pct > 35.05 ? 'var(--danger)' : 'inherit'};">${cost.pct === null ? '—' : `${cost.pct.toFixed(1)}%`}</b> <span style="color:var(--muted);font-size:11px;">(max 35%)</span></div>
@@ -294,11 +315,11 @@ function finRefresh() {
     const shown = m.weeks.filter(w => w.w < finAhead);
     const th = (t, r) => `<th style="padding:5px 9px;font-size:11px;color:var(--muted);font-weight:600;text-align:${r ? 'right' : 'left'};white-space:nowrap;">${t}</th>`;
     const td = (v, o = {}) => `<td style="padding:4px 9px;text-align:right;font-family:var(--mono);white-space:nowrap;${o.color ? `color:${o.color};` : ''}${o.b ? 'font-weight:700;' : ''}" ${o.title ? `title="${esc(o.title)}"` : ''}>${v}</td>`;
-    $('fin-timeline').innerHTML = `<table style="width:100%;border-collapse:collapse;font-size:13px;"><thead><tr>${th('Week ending')}${th('Companies', 1)}${th('Rent-to-own', 1)}${th('Other income', 1)}${th('Loans back', 1)}${th('Investors', 1)}${th('Planned', 1)}${sel && res[sel.id] && res[sel.id].start != null ? th(esc(sel.name), 1) : ''}${th('Net', 1)}${th('Balance', 1)}</tr></thead>
+    $('fin-timeline').innerHTML = `<table style="width:100%;border-collapse:collapse;font-size:13px;"><thead><tr>${th('Week ending')}${th('Companies', 1)}${th('Rent-to-own', 1)}${th('Other income', 1)}${th('Loans back', 1)}${th('Buddy banks', 1)}${th('Investors', 1)}${th('Planned', 1)}${sel && res[sel.id] && res[sel.id].start != null ? th(esc(sel.name), 1) : ''}${th('Net', 1)}${th('Balance', 1)}</tr></thead>
         <tbody>${shown.map(w => {
             const past = w.w < 0, now = w.w === 0;
             return `<tr style="${past ? 'opacity:.6;' : ''}${now ? 'background:rgba(53,217,155,.10);' : ''}border-top:1px solid var(--border,rgba(255,255,255,.08));"><td style="padding:4px 9px;white-space:nowrap;">${esc(finDate(w.end))}${now ? ' <span style="font-size:11px;color:var(--muted);">this week</span>' : ''}</td>
-            ${td(w.co ? finShort(w.co) : '—', { title: w.coParts.join('\n') })}${td(w.rto ? finShort(w.rto) : '—')}${td(w.inc ? finShort(w.inc) : '—')}${td(w.loan ? finShort(w.loan) : '—', { title: w.loanParts.join('\n') })}${td(w.inv ? '-' + finShort(w.inv) : '—', { title: w.invParts.join('\n') })}${td(w.out ? '-' + finShort(w.out) : '—')}
+            ${td(w.co ? finShort(w.co) : '—', { title: w.coParts.join('\n') })}${td(w.rto ? finShort(w.rto) : '—')}${td(w.inc ? finShort(w.inc) : '—')}${td(w.loan ? finShort(w.loan) : '—', { title: w.loanParts.join('\n') })}${td(w.bb ? finShort(w.bb) : '—', { title: w.bbParts.join('\n') })}${td(w.inv ? '-' + finShort(w.inv) : '—', { title: w.invParts.join('\n') })}${td(w.out ? '-' + finShort(w.out) : '—')}
             ${sel && res[sel.id] && res[sel.id].start != null ? td(w.plan ? '-' + finShort(w.plan) : '—', { color: '#e0a030' }) : ''}${td(finShort(w.net), { color: w.net < 0 ? 'var(--danger)' : '' })}${td(w.bal === null ? '—' : finShort(w.bal), { b: 1, color: w.bal !== null && w.bal < reserve ? 'var(--danger)' : '' })}</tr>`;
         }).join('')}</tbody></table>`;
     // plan results
@@ -329,6 +350,11 @@ function finRefresh() {
         el.innerHTML = `<span style="color:${y > 35.05 ? 'var(--danger)' : 'var(--muted)'};">${y.toFixed(1)}%${y > 35.05 ? ' ⚠' : ''}</span>`;
     });
     document.querySelectorAll('[data-phinv]').forEach(el => { const i = finData.investors[+el.dataset.phinv]; if (i) el.placeholder = finFull(finRoi(i.amount, finData.roi)); });
+    document.querySelectorAll('[data-bbinfo]').forEach(el => {
+        const b = finData.buddies[+el.dataset.bbinfo]; if (!b) return;
+        const f = finBuddy(b);
+        el.innerHTML = b.status === 'returned' ? '<span style="color:var(--muted);">paid back</span>' : `${esc(finDate(f.due))}${f.due < finSrv.today ? ' <span style="color:var(--danger);">late</span>' : ''}<div style="font-family:var(--mono);color:var(--muted);">${finShort(f.back)} (profit ${finShort(f.profit)}${b.profit > 0 ? '' : ', est.'})</div>`;
+    });
     document.querySelectorAll('[data-loanleft]').forEach(el => {
         const l = finData.loans[+el.dataset.loanleft]; if (!l) return;
         const left = Math.max(0, (l.owed > 0 ? l.owed : l.lent) - l.repaid);
@@ -383,6 +409,7 @@ function finWire() {
         }
         if (el.dataset.s === 'fundsMode') v = el.value;
         target[field] = v;
+        if (el.dataset.l === 'buddies' && field === 'tier' && FIN_TIERS[v]) { target.amount = FIN_TIERS[v].amount; target.term = FIN_TIERS[v].days; finRenderAll(); } // a tier brings its usual amount and term
         finTouch();
     });
     body.addEventListener('click', e => {
