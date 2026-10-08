@@ -624,6 +624,7 @@
                 <a class="nav-item" data-page="labstracking" href="/labstracking">🏝️ Rent-to-own</a>
                 <a class="nav-item" data-page="finances" href="/finances">💰 Finances</a>
                 <a class="nav-item" data-page="fund" href="/fund">📈 Investment fund</a>
+                <a class="nav-item" data-page="payouts" href="/payouts">💸 Payout calendar</a>
                 <a class="nav-item" data-page="buddybank" href="/buddybank">🤝 Buddy banking</a>
             </div>
         </div>
@@ -1960,6 +1961,14 @@
             <div id="inv-body"></div>
         </section>
 
+        <section class="page" id="page-payouts">
+            <div class="lab-label">WWL·44 / owner</div>
+            <h2>💸 Payout calendar</h2>
+            <p class="pagedesc">Your pay calendar: a row per Sunday, a column per active investor, the amount to pay in every cell. Click an amount when you have paid it and it turns green (click again to undo); "✓ all" marks a whole Sunday. Weekly and monthly investors have their own sheet. Under the calendar is the weekly update for Discord, ready to copy.</p>
+            <div class="status" id="pay-status"></div>
+            <div id="pay-body"></div>
+        </section>
+
         <section class="page" id="page-access">
             <div class="lab-label">WWL·37 / owner</div>
             <h2>🔒 Allowed factions</h2>
@@ -2745,6 +2754,7 @@
 <script src="labstracking.js"></script>
 <script src="finances.js"></script>
 <script src="finpages.js"></script>
+<script src="payouts.js"></script>
 <script src="investor.js"></script>
 <script src="crimes-guide.js"></script>
 <script src="war-payout-tracker.js"></script>

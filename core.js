@@ -442,6 +442,7 @@
         if (page === 'labstracking') loadLabstracking();
         if (page === 'finances') loadFinances();
         if (page === 'fund') loadInvestFund();
+        if (page === 'payouts') loadPayouts();
         if (page === 'investor') loadInvestor();
         if (page === 'buddybank') loadBuddyBank();
         if (page === 'bug-report') loadBugReport();

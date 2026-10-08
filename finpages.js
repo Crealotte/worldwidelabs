@@ -44,7 +44,7 @@ function finPersonStats(ix) {
     own.forEach(r => { const p = finInvPeriods(r, finAdd(today, 400), finAdd(today, -1))[0]; if (p && (!next || p.date < next.date)) next = { date: p.date, amount: 0 }; });
     if (next) own.forEach(r => { const p = finInvPeriods(r, next.date, finAdd(next.date, -1))[0]; if (p && p.date === next.date) next.amount += p.amount; });
     let due = 0, unsynced = 0;
-    own.forEach(r => { if (r.paidUntil) due += finSum(finInvPeriods(r, today, r.paidUntil)); else if (finInvPeriods(r, today, '').length) unsynced++; });
+    own.forEach(r => { if (finTracked(r)) due += finSum(finDueList(r, today)); else if (finInvPeriods(r, today, '').length) unsynced++; });
     const asked = rows.some(r => (finData.invRequests || []).some(q => q.status === 'open' && q.type === 'withdraw' && q.rowId === r.id));
     return { rows, act, week: act.reduce((s, r) => s + finPayout(r), 0), inNow: act.reduce((s, r) => s + r.amount, 0), paid: rows.reduce((s, r) => s + finPaidTotal(r), 0), mode: modes.size > 1 ? 'mixed' : [...modes][0] || '', next, due, unsynced,
         ends: act.map(r => r.termEnd).filter(Boolean).sort()[0] || '', leaving: act.some(r => r.leaving) || asked, lines: rows.length };
@@ -103,8 +103,8 @@ function finFundRowClick(tr) { const k = tr.dataset.pkey; if (finFundOpen.has(k)
 function finRefreshFund() {
     finRefreshRows();
     const today = finSrv.today, act = finData.investors.filter(i => i.active), cost = finInvestorCost();
-    const own = act.filter(i => !i.nettedIn && i.paidUntil);
-    const dueNow = own.reduce((s, i) => s + finSum(finInvPeriods(i, today, i.paidUntil)), 0);
+    const own = act.filter(i => !i.nettedIn && finTracked(i));
+    const dueNow = own.reduce((s, i) => s + finSum(finDueList(i, today)), 0);
     const sun = finSun(today), nextAmt = act.filter(i => !i.nettedIn).reduce((s, i) => s + finSum(finInvPeriods(i, sun, finAdd(sun, -1))), 0);
     const paidOut = finData.investors.reduce((s, i) => s + finPaidTotal(i), 0);
     const over = act.filter(i => i.amount > 0 && finPayout(i) * 52 / i.amount * 100 > 35.05).length;
@@ -119,14 +119,14 @@ function finRefreshFund() {
         const i = finData.investors[+el.dataset.invdue]; if (!i) return;
         if (!i.active) { el.innerHTML = '<span style="color:var(--muted);">' + (i.returnedOn ? 'ended' : 'off') + '</span>'; return; }
         if (i.nettedIn) { el.innerHTML = '<span style="color:var(--muted);">via company send</span>'; return; }
-        if (!i.paidUntil) {
+        if (!finTracked(i)) {
             const p = finInvPeriods(i, today, '');
             el.innerHTML = p.length ? `<button class="ghost small" data-invsync="${el.dataset.invdue}" type="button" title="Everything up to the last Sunday is already paid">Paid until ${esc(finDate(p[p.length - 1].date))}</button>` : `<span style="color:var(--muted);">first payout ${esc(finDate(finInvPeriods(i, finAdd(today, 400), '')[0]?.date || i.start))}</span>`;
             return;
         }
-        const due = finInvPeriods(i, today, i.paidUntil);
+        const due = finDueList(i, today);
         if (due.length) { el.innerHTML = `<b style="color:#e0a030;">${finShort(finSum(due))}</b> <span style="color:var(--muted);">(${due.length} payout${due.length === 1 ? '' : 's'})</span> <button class="small" data-invpay="${el.dataset.invdue}" type="button">Mark paid</button>`; return; }
-        const nx = finInvPeriods(i, finAdd(today, 400), i.paidUntil)[0];
+        const nx = finInvPeriods(i, finAdd(today, 400), finAdd(today, -1))[0];
         el.innerHTML = `<span style="color:var(--success,#35d99b);">paid up</span>${nx ? ` <span style="color:var(--muted);">· next ${esc(finDate(nx.date))} ${finShort(nx.amount)}</span>` : ''}`;
     });
     // the term of each investment: when it ends, renew it (the old end is kept in the history)
@@ -165,11 +165,8 @@ function finClickFund(b) {
         const ixs = (b.dataset.pmark ?? b.dataset.psync).split(',').map(Number), today = finSrv.today;
         ixs.forEach(k => {
             const i = finData.investors[k]; if (!i || !i.active || i.nettedIn) return;
-            if (b.dataset.psync !== undefined) { if (i.paidUntil) return; const p = finInvPeriods(i, today, ''); if (p.length) i.paidUntil = p[p.length - 1].date; return; }
-            if (!i.paidUntil) return;
-            const p = finInvPeriods(i, today, i.paidUntil); if (!p.length) return;
-            i.payments = (i.payments || []).concat({ date: today, amount: finSum(p), through: p[p.length - 1].date }).slice(-100);
-            i.paidUntil = p[p.length - 1].date;
+            if (b.dataset.psync !== undefined) { if (finTracked(i)) return; const p = finInvPeriods(i, today, ''); if (p.length) i.paidUntil = p[p.length - 1].date; return; }
+            finMarkPaid(i, finDueList(i, today), today);
         });
         finRenderAll(); finTouch(); return;
     }
@@ -198,9 +195,7 @@ function finClickFund(b) {
     const today = finSrv.today;
     if (b.dataset.invsync !== undefined) { const p = finInvPeriods(i, today, ''); if (!p.length) return; i.paidUntil = p[p.length - 1].date; }
     else if (b.dataset.invpay !== undefined) {
-        const p = finInvPeriods(i, today, i.paidUntil); if (!p.length) return;
-        i.payments = (i.payments || []).concat({ date: today, amount: finSum(p), through: p[p.length - 1].date }).slice(-100);
-        i.paidUntil = p[p.length - 1].date;
+        finMarkPaid(i, finDueList(i, today), today);
     } else return;
     finRenderAll(); finTouch();
 }
@@ -284,13 +279,13 @@ function finParseSheet(text, markPaid) {
         if (blanks.length && backBlank > 0) blanks.forEach(r => { r.amount = Math.round(backBlank / blanks.length); r.guessed = true; });
         const A = list.reduce((s, r) => s + r.amount, 0), W = list.reduce((s, r) => s + r.weekly, 0);
         const rate = W > 0 && fixed.length ? W / fixed.reduce((s, r) => s + r.amount, 0) : A > 0 ? finRoi(A, finData.roi) / A : 0;
-        const modeOf = (list.find(r => r.mode) || {}).mode || 'weekly';
+        const modeOf = (list.find(r => r.weekly > 0 && r.mode) || list.find(r => r.mode) || {}).mode || 'weekly'; // one way of being paid per person, as in the pay calendar: the line that carries the weekly amount decides
         for (const r of list) {
             const gone = !r.amount; // withdrew, and the sheet has no amount for it
             const ended = r.back > 0 || r.guessed || gone, termEnd = latest([r.first, r.n1, r.n2]);
             const renewals = []; if (r.n1 && r.n1 !== r.first) renewals.push({ from: r.first, to: r.n1 }); if (r.n2 && r.n2 !== r.n1) renewals.push({ from: r.n1 || r.first, to: r.n2 });
             const word = [r.r1, r.r2].filter(x => x && !/^\d+$/.test(x)).join(', ');
-            const row = { id: finId(), fundId: r.sheetId, name: r.name, tornId: '', amount: r.amount || 0, payout: Math.round((r.amount || 0) * rate), mode: r.mode || modeOf, start: r.start, active: !ended, nettedIn: '', note: `${word}${r.guessed ? ' · amount split from the total paid back' : ''}${gone ? ' · withdrew, amount not in the sheet' : ''}`.slice(0, 120),
+            const row = { id: finId(), fundId: r.sheetId, name: r.name, tornId: '', amount: r.amount || 0, payout: Math.round((r.amount || 0) * rate), mode: modeOf, start: r.start, active: !ended, nettedIn: '', note: `${word}${r.guessed ? ' · amount split from the total paid back' : ''}${gone ? ' · withdrew, amount not in the sheet' : ''}`.slice(0, 120),
                 paidUntil: '', payments: [], termEnd, returnedOn: ended ? termEnd : '', renewals };
             if (!ended && markPaid) { const dow = new Date(finD(r.start)).getUTCDay(), first = finAdd(r.start, dow === 0 ? 7 : 7 - dow); if (first <= sun) row.paidUntil = sun; }
             if (r.guessed && r === list.find(x => x.guessed)) warnings.push(`${r.name} (#${r.sheetId}): ${finShort(backBlank)} paid back, divided equally over ${blanks.length} line${blanks.length === 1 ? '' : 's'}; the term end is taken as the day the money was returned.`);
