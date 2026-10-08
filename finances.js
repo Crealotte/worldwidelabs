@@ -84,6 +84,12 @@ function finInvPeriods(i, upTo, from) {
     return out;
 }
 const finSum = a => a.reduce((s, p) => s + p.amount, 0);
+// One person = one ID in the fund (her InvestorID: all the lines of an investor who invested more than once share it); without it the Torn ID, else the name.
+const finPersonKey = i => (i.fundId ? `f${i.fundId}` : i.tornId ? `t${i.tornId}` : `n${String(i.name || '').trim().toLowerCase()}`);
+// What was paid out to an investment: the payouts of the schedule up to "paid through" (for one that ended without it: up to the last Sunday before the money was returned).
+const finPaidThrough = i => i.paidUntil || (i.returnedOn ? finAdd(i.returnedOn, -new Date(finD(i.returnedOn)).getUTCDay()) : '');
+const finPaidList = i => { const t = finPaidThrough(i); return t ? finInvPeriods(i, t, '') : []; };
+const finPaidTotal = i => finSum(finPaidList(i));
 
 // ---- the timeline: weeks end on Sunday; 8 weeks back, 52 ahead ----
 function finModel(plan, planStart) {
@@ -150,6 +156,15 @@ function finModel(plan, planStart) {
         if (i.paidUntil) { const old = finInvPeriods(i, finAdd(week0, -1), i.paidUntil); if (old.length) { place(S.today, finSum(old), 'inv'); const j = idx(S.today); if (j >= 0) weeks[j].invParts.push(`${i.name}: ${finMoney(finSum(old))} (still due)`); } }
     }
     for (const o of D.outlays) place(o.date, o.amount, 'out');
+    // investors who leave at the end of their term (approved) or asked to (open request): the money goes back on the term end; the summary says whether it is there then
+    const withdrawals = [];
+    for (const i of D.investors) {
+        if (!i.active || !i.termEnd || !i.amount) continue;
+        const asked = (D.invRequests || []).some(q => q.status === 'open' && q.type === 'withdraw' && q.rowId === i.id);
+        if (!i.leaving && !asked) continue;
+        const date = i.termEnd < S.today ? S.today : i.termEnd;
+        place(date, i.amount, 'out'); withdrawals.push({ name: i.name, amount: i.amount, date, pending: !i.leaving });
+    }
     // buddy banking: the cash leaves on the day it is given (if that is still ahead) and comes back, plus her share of the profit, when the term ends; a late one counts in the current week
     for (const b of D.buddies) {
         if (b.status !== 'active' || !b.amount) continue;
@@ -176,7 +191,8 @@ function finModel(plan, planStart) {
         wk.net = wk.co + wk.rto + wk.inc + wk.loan + wk.bb - wk.inv - wk.out;
         if (wk.w >= 0) { bal += wk.net - wk.plan; wk.bal = bal; } else wk.bal = null;
     }
-    return { weeks, funds, cur, coAvg };
+    withdrawals.forEach(w => { const j = idx(w.date); const wk = j >= 0 ? weeks[j] : null; w.after = wk && wk.bal !== null ? wk.bal : null; w.ok = w.after === null ? null : w.after >= D.reserve; });
+    return { weeks, funds, cur, coAvg, withdrawals };
 }
 
 // the earliest week a plan can start so that every step is paid and the balance never drops below the reserve afterwards
@@ -245,8 +261,8 @@ function finInvestorCost() {
 
 // ---- drawing ----
 const FIN_LISTS = {
-    investors: { title: 'Investors', add: '+ Investor', fresh: () => ({ id: finId(), name: '', amount: 0, payout: null, mode: 'weekly', start: new Date().toISOString().slice(0, 10), active: true, nettedIn: '', note: '', tornId: '', paidUntil: '', payments: [], termEnd: '', returnedOn: '', renewals: [] }), cols: [
-        { f: 'active', l: 'On', t: 'bool' }, { f: 'name', l: 'Name', t: 'text', w: 120 }, { f: 'tornId', l: 'Torn ID', t: 'text', w: 80 }, { f: 'amount', l: 'Invested', t: 'money', w: 110 }, { f: 'payout', l: 'Paid a week (empty = by the table)', t: 'money', w: 130, nullable: true },
+    investors: { title: 'Investors', add: '+ Investor', fresh: () => ({ id: finId(), fundId: String(Math.max(0, ...finData.investors.map(x => parseInt(x.fundId, 10) || 0)) + 1), name: '', amount: 0, payout: null, mode: 'weekly', start: new Date().toISOString().slice(0, 10), active: true, nettedIn: '', note: '', tornId: '', paidUntil: '', payments: [], termEnd: '', returnedOn: '', renewals: [], leaving: false, noticeOn: '' }), cols: [
+        { f: 'active', l: 'On', t: 'bool' }, { f: 'fundId', l: 'ID', t: 'text', w: 46 }, { f: 'name', l: 'Name', t: 'text', w: 120 }, { f: 'tornId', l: 'Torn ID', t: 'text', w: 80 }, { f: 'amount', l: 'Invested', t: 'money', w: 110 }, { f: 'payout', l: 'Paid a week (empty = by the table)', t: 'money', w: 130, nullable: true },
         { f: 'mode', l: 'Paid', t: 'sel', opts: [['weekly', 'Every Sunday'], ['monthly', 'Last Sunday of the month']] }, { f: 'start', l: 'Since', t: 'date' }, { f: 'termEnd', l: 'Term ends', t: 'date' }, { f: 'returnedOn', l: 'Money returned on', t: 'date' }, { f: 'paidUntil', l: 'Paid through', t: 'date' }, { f: 'nettedIn', l: 'Already netted in the send of', t: 'company' }] },
     income: { title: 'Other income', add: '+ Income', fresh: () => ({ id: finId(), name: '', amount: 0, freq: 'weekly', date: new Date().toISOString().slice(0, 10), active: true }), cols: [
         { f: 'active', l: 'On', t: 'bool' }, { f: 'name', l: 'What', t: 'text', w: 160 }, { f: 'amount', l: 'Amount', t: 'money', w: 120 }, { f: 'freq', l: 'How often', t: 'sel', opts: [['weekly', 'Every week'], ['monthly', 'Every month'], ['once', 'Once']] }, { f: 'date', l: 'From / on', t: 'date' }] },
@@ -315,7 +331,7 @@ async function loadFinances() {
     if (r.error) { st.className = 'status err'; st.textContent = r.error; return; }
     st.textContent = ''; st.className = 'status';
     finSrv = { cash: r.cash, companies: r.companies || [], rto: r.rto || { rtoItems: [], pis: [], defaults: { rent: { 4100: 27000000, 3600: 15000000, 2600: 12000000 }, equity: { 4100: 81000000, 3600: 45000000, 2600: 36000000 }, goals: { 4100: 1701000000, 3600: 855000000, 2600: 612000000 }, cost: { 4100: 1482500000, 3600: 757500000, 2600: 557500000 } } }, today: r.today };
-    finData = { fundsMode: r.fundsMode, fundsManual: r.fundsManual, reserve: r.reserve, investors: r.investors, income: r.income, outlays: r.outlays, plans: r.plans, roi: r.roi, ventures: r.ventures, capitals: r.capitals, coEst: r.coEst || {}, loans: r.loans || [], buddies: r.buddies || [] };
+    finData = { fundsMode: r.fundsMode, fundsManual: r.fundsManual, reserve: r.reserve, investors: r.investors, income: r.income, outlays: r.outlays, plans: r.plans, roi: r.roi, ventures: r.ventures, capitals: r.capitals, coEst: r.coEst || {}, invRequests: r.invRequests || [], loans: r.loans || [], buddies: r.buddies || [] };
     finRenderAll();
 }
 function finRenderAll() { FIN_PAGES[finPage].render(); }
@@ -364,6 +380,7 @@ function finRefreshMain() {
         <div><div style="color:var(--muted);font-size:11px;">Lent out, still to come back</div><b style="font-family:var(--mono);">${finShort(loanOut)}</b></div>
         <div><div style="color:var(--muted);font-size:11px;">Invested by others</div><b style="font-family:var(--mono);">${finShort(cost.invested)}</b></div>
         <div><div style="color:var(--muted);font-size:11px;">They cost you a year</div><b style="color:${cost.pct !== null && cost.pct > 35.05 ? 'var(--danger)' : 'inherit'};">${cost.pct === null ? '—' : `${cost.pct.toFixed(1)}%`}</b> <span style="color:var(--muted);font-size:11px;">(max 35%)</span></div>
+        ${m.withdrawals.length ? `<div style="flex-basis:100%;font-size:12px;"><b>Investors leaving at the end of their term</b> (the money has to be there):${m.withdrawals.map(w => `<div style="color:${w.ok === false ? 'var(--danger)' : 'inherit'};">${esc(w.name)}: ${finShort(w.amount)} on ${esc(finDate(w.date))}${w.pending ? ' (asked, not approved yet)' : ''} — ${w.ok === null ? 'too far ahead to tell' : w.ok ? `the money is there (${finShort(w.after)} left after paying)` : `⚠ short: ${finShort(w.after)} left after paying, below your reserve`}</div>`).join('')}</div>` : ''}
         ${dip ? `<div style="color:var(--danger);">⚠ The balance drops below your reserve in the week of ${esc(finDate(dip.end))}.</div>` : ''}</div>`;
     // the timeline
     const shown = m.weeks.filter(w => w.w < finAhead);
@@ -433,7 +450,7 @@ async function finSaveNow() {
     const P = FIN_PAGES[finPage];
     // the Finances page saves everything except the lists of the investment fund and buddy banking pages; those pages save only their own lists
     const r = P.parts ? await finFetch({ action: 'fin-part-save', parts: Object.fromEntries(P.parts.map(k => [k, finData[k]])) })
-        : await finFetch({ action: 'fin-save', data: Object.fromEntries(Object.entries(finData).filter(([k]) => !['investors', 'buddies', 'roi'].includes(k))) });
+        : await finFetch({ action: 'fin-save', data: Object.fromEntries(Object.entries(finData).filter(([k]) => !['investors', 'buddies', 'roi', 'invRequests'].includes(k))) });
     finSaving = false;
     const st = finStatusEl();
     if (r.error) { st.className = 'status err'; st.textContent = `Not saved: ${r.error}`; return; }

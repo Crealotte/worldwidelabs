@@ -10,7 +10,7 @@ async function finLoadLight(page, statusId) {
     if (r.error) { st.className = 'status err'; st.textContent = r.error; return; }
     st.textContent = ''; st.className = 'status';
     finSrv = { cash: null, companies: r.companies || [], rto: null, today: r.today };
-    finData = { fundsMode: r.fundsMode, fundsManual: r.fundsManual, reserve: r.reserve, investors: r.investors, income: r.income, outlays: r.outlays, plans: r.plans, roi: r.roi, ventures: r.ventures, capitals: r.capitals, coEst: r.coEst || {}, loans: r.loans || [], buddies: r.buddies || [] };
+    finData = { fundsMode: r.fundsMode, fundsManual: r.fundsManual, reserve: r.reserve, investors: r.investors, income: r.income, outlays: r.outlays, plans: r.plans, roi: r.roi, ventures: r.ventures, capitals: r.capitals, coEst: r.coEst || {}, invRequests: r.invRequests || [], loans: r.loans || [], buddies: r.buddies || [] };
     finRenderAll();
 }
 const loadInvestFund = () => finLoadLight('fund', 'fund-status');
@@ -19,7 +19,7 @@ const loadBuddyBank = () => finLoadLight('buddy', 'bb-status');
 
 // ---- Investment fund ----
 function finRenderFund() {
-    $('fund-body').innerHTML = `<div id="fund-summary"></div>${finListEditor('investors')}<div id="fund-people"></div><div id="fund-history"></div>${finListEditor('roi')}${finImportPanel()}`;
+    $('fund-body').innerHTML = `<div id="fund-summary"></div><div id="fund-requests"></div>${finListEditor('investors')}<div id="fund-people"></div><div id="fund-history"></div>${finListEditor('roi')}${finImportPanel()}`;
     finWire('fund-body');
     finRefresh();
 }
@@ -28,13 +28,13 @@ function finRefreshFund() {
     const own = act.filter(i => !i.nettedIn && i.paidUntil);
     const dueNow = own.reduce((s, i) => s + finSum(finInvPeriods(i, today, i.paidUntil)), 0);
     const sun = finSun(today), nextAmt = act.filter(i => !i.nettedIn).reduce((s, i) => s + finSum(finInvPeriods(i, sun, finAdd(sun, -1))), 0);
-    const paidOut = finData.investors.reduce((s, i) => s + (i.payments || []).reduce((a, p) => a + p.amount, 0), 0);
+    const paidOut = finData.investors.reduce((s, i) => s + finPaidTotal(i), 0);
     const over = act.filter(i => i.amount > 0 && finPayout(i) * 52 / i.amount * 100 > 35.05).length;
     const box = (l, v, extra = '') => `<div><div style="color:var(--muted);font-size:11px;">${l}</div><b style="font-family:var(--mono);${extra}">${v}</b></div>`;
     $('fund-summary').innerHTML = `<div class="panel" style="display:flex;gap:26px;flex-wrap:wrap;font-size:13px;">
-        ${box('Investors', act.length)}${box('Invested', finShort(cost.invested))}${box('Paid out a week', finShort(cost.weekly))}
+        ${box('Investors', new Set(act.map(finPersonKey)).size)}${box('Invested', finShort(cost.invested))}${box('Paid out a week', finShort(cost.weekly))}
         <div><div style="color:var(--muted);font-size:11px;">Costs you a year</div><b style="color:${cost.pct !== null && cost.pct > 35.05 ? 'var(--danger)' : 'inherit'};">${cost.pct === null ? '—' : `${cost.pct.toFixed(1)}%`}</b> <span style="color:var(--muted);font-size:11px;">(max 35%)</span></div>
-        ${box('Payouts due now', finShort(dueNow), dueNow > 0 ? 'color:#e0a030;' : '')}${box(`Next payouts (Sunday ${esc(finDate(sun))})`, finShort(nextAmt))}${box('Paid out so far (recorded)', finShort(paidOut))}
+        ${box('Payouts due now', finShort(dueNow), dueNow > 0 ? 'color:#e0a030;' : '')}${box(`Next payouts (Sunday ${esc(finDate(sun))})`, finShort(nextAmt))}${box('Paid out so far (all investments)', finShort(paidOut))}
         ${over ? `<div style="color:var(--danger);">⚠ ${over} investor${over === 1 ? ' is' : 's are'} above 35% a year.</div>` : ''}</div>
         <div style="font-size:12px;color:var(--muted);margin:-4px 0 10px;">Fill in "Paid through" (the last Sunday that is already paid out) for each investor once; after that the page tells you what is due, and "Mark paid" moves it forward and keeps a history. An investor whose pay is netted in a company send is not counted here.</div>`;
     document.querySelectorAll('[data-invdue]').forEach(el => {
@@ -57,12 +57,27 @@ function finRefreshFund() {
         if (!i.active) { el.innerHTML = i.returnedOn ? `<span style="color:var(--muted);">returned ${esc(finDate(i.returnedOn))}</span>` : ''; return; }
         const n = (i.renewals || []).length;
         el.innerHTML = i.termEnd ? `${i.termEnd < today ? '<span style="color:var(--danger);">ended ' : '<span>until '}${esc(finDate(i.termEnd))}</span> <button class="ghost small" data-invrenew="${el.dataset.invterm}" type="button" title="${n ? `Renewed ${n} time${n === 1 ? '' : 's'}` : 'Not renewed yet'}">Renewed${n ? ` (${n})` : ''}</button>` : '<span style="color:var(--muted);">no end date</span>';
+        if (i.termEnd && i.leaving) el.innerHTML += ' <span style="color:#e0a030;font-size:11px;">leaving at the end</span>';
     });
+    // requests from investors: renew, add money, withdraw at the end of the term (4 weeks notice, and the money has to be there: the Finances page counts an asked or approved withdrawal in its balance)
+    const rq = (finData.invRequests || []), openQ = rq.filter(q => q.status === 'open'), doneQ = rq.filter(q => q.status !== 'open').slice(-8).reverse();
+    const rowOf = q => finData.investors.find(i => i.id === q.rowId);
+    const reqLine = q => {
+        const r = rowOf(q), who = `<b>${esc(q.name)}</b>`;
+        if (q.type === 'renew') { const from = r && r.termEnd && r.termEnd > today ? r.termEnd : today; return `${who} wants to renew ${r ? finShort(r.amount) : ''} for ${q.days} days (new end ${esc(finDate(finAdd(from, q.days)))})`; }
+        if (q.type === 'topup') return `${who} wants to add <b>${finShort(q.amount)}</b>`;
+        return `${who} wants <b>${finShort(q.amount)}</b> back at the end of the term (${esc(finDate(q.termEnd || (r && r.termEnd) || today))}), asked ${esc(finDate(q.createdOn))}${q.late ? ' <span style="color:var(--danger);">— late: less than 4 weeks before the end</span>' : ''}`;
+    };
+    const btns = q => q.type === 'topup' ? `<button class="small" data-reqres="${esc(q.id)}" data-dec="received" type="button">Money received</button>` : `<button class="small" data-reqres="${esc(q.id)}" data-dec="approve" type="button">Approve</button>`;
+    $('fund-requests').innerHTML = openQ.length || doneQ.length ? `<div class="panel"><h3 style="margin-top:0;">Requests from investors${openQ.length ? ` <span style="font-size:13px;color:#e0a030;">(${openQ.length} open)</span>` : ''}</h3>
+        ${openQ.map(q => `<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:5px 0;border-top:1px solid var(--line);font-size:13px;"><span style="flex:1;min-width:220px;">${reqLine(q)}</span>${btns(q)}<button class="ghost small" data-reqres="${esc(q.id)}" data-dec="decline" type="button">Decline</button></div>`).join('') || '<div style="font-size:12px;color:var(--muted);">Nothing waiting.</div>'}
+        ${openQ.some(q => q.type === 'withdraw') ? '<div style="font-size:12px;color:var(--muted);margin-top:6px;">A withdrawal is counted in the Finances week-by-week balance on the day the term ends: there you see whether the money is there before you approve. Approving marks the investment as leaving at its term end; when you pay it back, fill in "Money returned on".</div>' : ''}
+        ${doneQ.length ? `<details style="margin-top:8px;"><summary class="av-sum" style="font-size:12px;color:var(--muted);">Handled (${doneQ.length})</summary>${doneQ.map(q => `<div style="font-size:12px;padding:2px 0;color:var(--muted);">${reqLine(q)} · ${q.status} ${esc(finDate(q.resolvedOn || q.createdOn))}</div>`).join('')}</details>` : ''}</div>` : '';
     // everyone who ever invested, with every investment (a person who got the money back and joined again keeps the whole history)
-    const key = i => (i.tornId || String(i.name || '').trim().toLowerCase());
+    const key = finPersonKey;
     const people = {};
     finData.investors.forEach(i => { (people[key(i)] = people[key(i)] || []).push(i); });
-    const paidOf = i => ((i.payments || []).length ? (i.payments || []).reduce((a, p) => a + p.amount, 0) : (i.paidUntil ? finSum(finInvPeriods(i, i.paidUntil, '')) : 0));
+    const paidOf = i => finPaidTotal(i);
     const rows = Object.values(people).map(list => { list.sort((a, b) => (a.start < b.start ? -1 : 1)); return { name: list[list.length - 1].name, list, now: list.filter(i => i.active).reduce((s, i) => s + i.amount, 0), paid: list.reduce((s, i) => s + paidOf(i), 0) }; }).sort((a, b) => b.now - a.now || (a.name < b.name ? -1 : 1));
     $('fund-people').innerHTML = rows.length ? `<div class="panel"><h3 style="margin-top:0;">People and their history</h3><div style="font-size:12px;color:var(--muted);margin:-4px 0 8px;">Grouped by Torn ID (or the name when there is none). Money that was given back stays here, so a person who joins again still has the whole history.</div>${rows.map(r => `<details style="border-top:1px solid var(--line);padding:5px 0;"><summary class="av-sum"><b>${esc(r.name)}</b> <span style="color:var(--muted);font-size:12px;">· in now ${finShort(r.now)} · ${r.list.length} investment${r.list.length === 1 ? '' : 's'} · paid out ${finShort(r.paid)}</span></summary>
         ${r.list.map(i => `<div style="font-size:12px;padding:2px 0 2px 14px;"><span style="font-family:var(--mono);">${finShort(i.amount)}</span> · ${esc(finDate(i.start))} → ${i.returnedOn ? `money returned ${esc(finDate(i.returnedOn))}` : i.termEnd ? `until ${esc(finDate(i.termEnd))}` : 'ongoing'}${(i.renewals || []).length ? ` · renewed ${(i.renewals || []).map(x => `${esc(finDate(x.from))} → ${esc(finDate(x.to))}`).join(', ')}` : ''} · ${i.active ? 'active' : 'ended'} · paid out ${finShort(paidOf(i))}</div>`).join('')}</details>`).join('')}</div>` : '';
@@ -70,6 +85,11 @@ function finRefreshFund() {
     $('fund-history').innerHTML = hist.length ? `<div class="panel"><h3 style="margin-top:0;">Payout history</h3><table style="border-collapse:collapse;font-size:13px;">${hist.map(p => `<tr><td style="padding:2px 10px 2px 0;font-family:var(--mono);">${esc(p.date)}</td><td style="padding:2px 14px 2px 0;">${esc(p.name)}</td><td style="padding:2px 14px 2px 0;font-family:var(--mono);text-align:right;">${finMoney(p.amount)}</td><td style="padding:2px 0;color:var(--muted);font-size:12px;">${p.through ? `through ${esc(finDate(p.through))}` : ''}</td></tr>`).join('')}</table></div>` : '';
 }
 function finClickFund(b) {
+    if (b.dataset.reqres !== undefined) { // the owner decides on a request: the server changes the investment, then the page is read again
+        b.disabled = true;
+        finFetch({ action: 'fin-req-resolve', id: b.dataset.reqres, decision: b.dataset.dec }).then(r => { if (r.error) { toast(r.error); b.disabled = false; return; } toast('Done'); loadInvestFund(); });
+        return;
+    }
     if (b.dataset.impprev !== undefined || b.dataset.impgo !== undefined) { finClickImport(b); return; }
     if (b.dataset.invrenew !== undefined) { // the investor renewed: a new end date; the old one is kept in the history
         const i = finData.investors[+b.dataset.invrenew]; if (!i) return;
@@ -176,7 +196,7 @@ function finParseSheet(text, markPaid) {
             const ended = r.back > 0 || r.guessed || gone, termEnd = latest([r.first, r.n1, r.n2]);
             const renewals = []; if (r.n1 && r.n1 !== r.first) renewals.push({ from: r.first, to: r.n1 }); if (r.n2 && r.n2 !== r.n1) renewals.push({ from: r.n1 || r.first, to: r.n2 });
             const word = [r.r1, r.r2].filter(x => x && !/^\d+$/.test(x)).join(', ');
-            const row = { id: finId(), name: r.name, tornId: '', amount: r.amount || 0, payout: Math.round((r.amount || 0) * rate), mode: r.mode || modeOf, start: r.start, active: !ended, nettedIn: '', note: `#${r.sheetId}${word ? ` · ${word}` : ''}${r.guessed ? ' · amount split from the total paid back' : ''}${gone ? ' · withdrew, amount not in the sheet' : ''}`.slice(0, 120),
+            const row = { id: finId(), fundId: r.sheetId, name: r.name, tornId: '', amount: r.amount || 0, payout: Math.round((r.amount || 0) * rate), mode: r.mode || modeOf, start: r.start, active: !ended, nettedIn: '', note: `${word}${r.guessed ? ' · amount split from the total paid back' : ''}${gone ? ' · withdrew, amount not in the sheet' : ''}`.slice(0, 120),
                 paidUntil: '', payments: [], termEnd, returnedOn: ended ? termEnd : '', renewals };
             if (!ended && markPaid) { const dow = new Date(finD(r.start)).getUTCDay(), first = finAdd(r.start, dow === 0 ? 7 : 7 - dow); if (first <= sun) row.paidUntil = sun; }
             if (r.guessed && r === list.find(x => x.guessed)) warnings.push(`${r.name} (#${r.sheetId}): ${finShort(backBlank)} paid back, divided equally over ${blanks.length} line${blanks.length === 1 ? '' : 's'}; the term end is taken as the day the money was returned.`);

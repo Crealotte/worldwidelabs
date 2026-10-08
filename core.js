@@ -147,18 +147,29 @@
     // ================= LOGIN =================
     async function login(key) {
         apiKey = key;
-        const data = await tornV1('profile,bars,cooldowns,notifications,gym,personalstats');
+        let data, limitedErr = null; // a key with a lower access level can only read the profile: enough for an investor's or a director's own page, not for the rest of WWL
+        try { data = await tornV1('profile,bars,cooldowns,notifications,gym,personalstats'); }
+        catch (e) { limitedErr = e; try { data = await tornV1('profile'); } catch (e2) { throw e; } }
         profile = data;
         // Only factions the owner has put on the list may use WWL: ask the server before showing anything. (Opened as a local file there is no server: no check.)
         const acc = await fetch('/api/war-payout', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key, action: 'access-check' }) }).then(r => r.json()).catch(() => null);
         if (typeof checkCompanyAccess === 'function') checkCompanyAccess(acc); // shows "My company" for directors and "Companies" for the owner
-        if (acc && acc.allowed === false && acc.director) { // a company director outside the allowed factions: WWL is just their company page
+        if (typeof checkInvestorAccess === 'function') checkInvestorAccess(acc); // shows "My investments" for investors of the fund
+        if (acc && acc.director && (acc.allowed === false || limitedErr)) { // a company director outside the allowed factions: WWL is just their company page
             localStorage.setItem(KEY_STORAGE, key);
             $('login-view').style.display = 'none';
             $('app-view').style.display = 'block';
             if (typeof enterDirectorMode === 'function') enterDirectorMode();
             return;
         }
+        if (acc && acc.investor && !acc.owner && (limitedErr || acc.allowed === false)) { // an investor of the fund outside the allowed factions (or with a small key): WWL is just their investments page
+            localStorage.setItem(KEY_STORAGE, key);
+            $('login-view').style.display = 'none';
+            $('app-view').style.display = 'block';
+            if (typeof enterInvestorMode === 'function') enterInvestorMode();
+            return;
+        }
+        if (limitedErr) { apiKey = ''; throw limitedErr; } // a small key is only enough for the pages above
         if (acc && acc.allowed === false) { const denied = new Error('Your faction is not on the list of factions that can use WWL yet. Ask the WWL owner to add it.'); denied.denied = true; apiKey = ''; throw denied; }
         localStorage.setItem(KEY_STORAGE, key);
         $('login-view').style.display = 'none';
@@ -431,6 +442,7 @@
         if (page === 'labstracking') loadLabstracking();
         if (page === 'finances') loadFinances();
         if (page === 'fund') loadInvestFund();
+        if (page === 'investor') loadInvestor();
         if (page === 'buddybank') loadBuddyBank();
         if (page === 'bug-report') loadBugReport();
         if (page === 'labs-funds') loadLabsFunds();
