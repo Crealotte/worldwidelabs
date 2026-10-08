@@ -19,7 +19,7 @@ const loadBuddyBank = () => finLoadLight('buddy', 'bb-status');
 
 // ---- Investment fund ----
 function finRenderFund() {
-    $('fund-body').innerHTML = `<div id="fund-summary"></div>${finListEditor('investors')}<div id="fund-people"></div><div id="fund-history"></div>${finListEditor('roi')}`;
+    $('fund-body').innerHTML = `<div id="fund-summary"></div>${finListEditor('investors')}<div id="fund-people"></div><div id="fund-history"></div>${finListEditor('roi')}${finImportPanel()}`;
     finWire('fund-body');
     finRefresh();
 }
@@ -70,6 +70,7 @@ function finRefreshFund() {
     $('fund-history').innerHTML = hist.length ? `<div class="panel"><h3 style="margin-top:0;">Payout history</h3><table style="border-collapse:collapse;font-size:13px;">${hist.map(p => `<tr><td style="padding:2px 10px 2px 0;font-family:var(--mono);">${esc(p.date)}</td><td style="padding:2px 14px 2px 0;">${esc(p.name)}</td><td style="padding:2px 14px 2px 0;font-family:var(--mono);text-align:right;">${finMoney(p.amount)}</td><td style="padding:2px 0;color:var(--muted);font-size:12px;">${p.through ? `through ${esc(finDate(p.through))}` : ''}</td></tr>`).join('')}</table></div>` : '';
 }
 function finClickFund(b) {
+    if (b.dataset.impprev !== undefined || b.dataset.impgo !== undefined) { finClickImport(b); return; }
     if (b.dataset.invrenew !== undefined) { // the investor renewed: a new end date; the old one is kept in the history
         const i = finData.investors[+b.dataset.invrenew]; if (!i) return;
         const to = prompt('New end date of the investment (YYYY-MM-DD):', i.termEnd ? finAdd(i.termEnd, 30) : '');
@@ -122,6 +123,101 @@ function finClickBuddy(btn) {
     else if (btn.dataset.bbnew !== undefined) finData.buddies.splice(idx + 1, 0, { ...b, id: finId(), status: 'active', given: finSrv.today, profit: 0, returnedOn: '' });
     else return;
     finRenderAll(); finTouch();
+}
+
+// ---- import of the investor sheet (the list of investors with the date the money was sent, the end of the first 6 months, the renewals and what was paid back) ----
+// How the sheet is read: every line is one deposit (an investor who invests again later gets an extra line). An investor's weekly amount is the sum of the weekly cells of their lines and is divided over
+// their lines by amount (so 2 x 500m = 6,731,000 together, 3,365,500 each). A line with a "pay back" amount has ended, and so has an investor whose lines have no amount (the red ones in the sheet: they
+// took their money out); for those the total paid back is divided equally over their lines. The day the money was returned is not in the sheet: it is estimated from the term end and can be corrected.
+// The sheet's own numbering is kept in the note.
+const FIN_MON = { jan: 1, feb: 2, mar: 3, apr: 4, may: 5, jun: 6, jul: 7, aug: 8, sep: 9, oct: 10, nov: 11, dec: 12 };
+function finSheetDate(s) {
+    const t = String(s || '').trim(); if (!t) return '';
+    let m = t.match(/^(\d{1,2})[-\/ .]([A-Za-z]{3})[A-Za-z]*[-\/ .](\d{4})$/);
+    if (m && FIN_MON[m[2].toLowerCase()]) return `${m[3]}-${String(FIN_MON[m[2].toLowerCase()]).padStart(2, '0')}-${m[1].padStart(2, '0')}`;
+    if (/^\d{4}-\d{2}-\d{2}$/.test(t)) return t;
+    m = t.match(/^(\d{1,2})[\/.](\d{1,2})[\/.](\d{4})$/);
+    return m ? `${m[3]}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}` : '';
+}
+function finParseSheet(text, markPaid) {
+    const lines = String(text || '').split(/\r?\n/).filter(l => l.trim());
+    const hi = lines.findIndex(l => /investorid|amount invested/i.test(l));
+    if (hi < 0) return { error: 'The first line (InvestorID, Name, Amount invested, ...) is missing: copy the sheet including its top row.' };
+    const head = lines[hi].split('\t').map(h => h.trim().toLowerCase());
+    const col = re => head.findIndex(h => re.test(h));
+    const ix = { id: col(/investorid|^id$/), name: col(/^name/), amount: col(/amount invested/), weekly: col(/weekly/), sent: col(/sent on/), first: col(/first.*end/), pay: col(/pay.?back/) };
+    const ren = head.map((h, i) => (/days renewal/.test(h) ? i : -1)).filter(i => i >= 0), nd = head.map((h, i) => (/new date/.test(h) ? i : -1)).filter(i => i >= 0);
+    ix.mode = ix.weekly >= 0 ? ix.weekly + 1 : -1;
+    if (ix.name < 0 || ix.sent < 0 || ix.amount < 0) return { error: 'I could not find the Name, Amount invested and Sent on columns in the first line.' };
+    const money = x => { const v = finParse(String(x || '')); return v && v > 0 ? v : 0; };
+    const raw = [];
+    for (const l of lines.slice(hi + 1)) {
+        const c = l.split('\t'), name = (c[ix.name] || '').trim(), start = finSheetDate(c[ix.sent]);
+        if (!name || !start) continue; // empty lines and the totals line
+        const mode = (c[ix.mode] || '').trim().toLowerCase();
+        raw.push({ sheetId: (c[ix.id] || '').trim(), name, amount: money(c[ix.amount]), weekly: money(c[ix.weekly]), mode: mode === 'monthly' ? 'monthly' : mode === 'weekly' ? 'weekly' : '', start, first: finSheetDate(c[ix.first]),
+            r1: (c[ren[0]] || '').trim(), n1: finSheetDate(c[nd[0]]), r2: (c[ren[1]] || '').trim(), n2: finSheetDate(c[nd[1]]), back: money(c[ix.pay]) });
+    }
+    if (!raw.length) return { error: 'No investor lines found below the first line.' };
+    const people = {};
+    raw.forEach(r => { const k = `${r.sheetId}|${r.name.toLowerCase()}`; (people[k] = people[k] || []).push(r); });
+    const today = finSrv.today, sun = finAdd(today, -new Date(finD(today)).getUTCDay());
+    const rows = [], warnings = [], latest = a => a.filter(Boolean).sort().pop() || '';
+    for (const list of Object.values(people)) {
+        list.sort((a, b) => (a.start < b.start ? -1 : 1));
+        const fixed = list.filter(r => r.amount > 0), blanks = list.filter(r => !r.amount);
+        const backAll = list.reduce((s, r) => s + r.back, 0), backFixed = fixed.reduce((s, r) => s + r.back, 0), backBlank = Math.max(0, backAll - backFixed);
+        if (blanks.length && backBlank > 0) blanks.forEach(r => { r.amount = Math.round(backBlank / blanks.length); r.guessed = true; });
+        const A = list.reduce((s, r) => s + r.amount, 0), W = list.reduce((s, r) => s + r.weekly, 0);
+        const rate = W > 0 && fixed.length ? W / fixed.reduce((s, r) => s + r.amount, 0) : A > 0 ? finRoi(A, finData.roi) / A : 0;
+        const modeOf = (list.find(r => r.mode) || {}).mode || 'weekly';
+        for (const r of list) {
+            const gone = !r.amount; // withdrew, and the sheet has no amount for it
+            const ended = r.back > 0 || r.guessed || gone, termEnd = latest([r.first, r.n1, r.n2]);
+            const renewals = []; if (r.n1 && r.n1 !== r.first) renewals.push({ from: r.first, to: r.n1 }); if (r.n2 && r.n2 !== r.n1) renewals.push({ from: r.n1 || r.first, to: r.n2 });
+            const word = [r.r1, r.r2].filter(x => x && !/^\d+$/.test(x)).join(', ');
+            const row = { id: finId(), name: r.name, tornId: '', amount: r.amount || 0, payout: Math.round((r.amount || 0) * rate), mode: r.mode || modeOf, start: r.start, active: !ended, nettedIn: '', note: `#${r.sheetId}${word ? ` · ${word}` : ''}${r.guessed ? ' · amount split from the total paid back' : ''}${gone ? ' · withdrew, amount not in the sheet' : ''}`.slice(0, 120),
+                paidUntil: '', payments: [], termEnd, returnedOn: ended ? termEnd : '', renewals };
+            if (!ended && markPaid) { const dow = new Date(finD(r.start)).getUTCDay(), first = finAdd(r.start, dow === 0 ? 7 : 7 - dow); if (first <= sun) row.paidUntil = sun; }
+            if (r.guessed) warnings.push(`${r.name} (#${r.sheetId}): ${finShort(backBlank)} paid back, divided equally over ${blanks.length} line${blanks.length === 1 ? '' : 's'}; the term end is taken as the day the money was returned.`);
+            if (gone) warnings.push(`${r.name} (#${r.sheetId}): withdrew but the sheet has no amount for this line (kept as amount 0).`);
+            rows.push(row);
+        }
+    }
+    const act = rows.filter(r => r.active);
+    return { rows, warnings, stats: { people: new Set(act.map(r => r.name.toLowerCase())).size, invested: act.reduce((s, r) => s + r.amount, 0), weekly: act.reduce((s, r) => s + r.payout, 0), ended: rows.length - act.length } };
+}
+let finImpPending = null;
+function finImportPanel() {
+    return `<details class="panel"><summary class="av-sum"><h3 style="display:inline;margin:0;">Import the investor sheet</h3></summary>
+        <p style="font-size:12px;color:var(--muted);margin:8px 0;">Select the cells of your investor sheet (including its top row), copy them and paste them here. First look at the preview; nothing is changed until you press Import.</p>
+        <textarea id="fund-imp-text" rows="6" style="width:100%;font-family:var(--mono);font-size:11px;" placeholder="InvestorID, Name, Amount invested, weekly amount, ..."></textarea>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:6px;font-size:13px;">
+            <label style="display:flex;gap:6px;align-items:center;cursor:pointer;"><input type="checkbox" id="fund-imp-paid" checked style="width:auto;"> Everything up to the last Sunday is already paid out</label>
+            <select id="fund-imp-mode"><option value="replace">Replace the list above</option><option value="add">Add to the list above</option></select>
+            <button class="ghost small" data-impprev="1" type="button">Preview</button><button class="small" data-impgo="1" type="button">Import</button></div>
+        <div id="fund-imp-out" style="margin-top:8px;font-size:12px;"></div></details>`;
+}
+function finClickImport(b) {
+    const out = $('fund-imp-out');
+    if (b.dataset.impprev !== undefined) {
+        const r = finParseSheet($('fund-imp-text').value, $('fund-imp-paid').checked);
+        if (r.error) { finImpPending = null; out.innerHTML = `<span style="color:var(--danger);">${esc(r.error)}</span>`; return; }
+        finImpPending = r;
+        const s = r.stats;
+        out.innerHTML = `<div><b>${r.rows.length}</b> investments from <b>${new Set(r.rows.map(x => x.name.toLowerCase())).size}</b> people. Active now: <b>${s.people}</b> people, <b>${finMoney(s.invested)}</b> invested, <b>${finMoney(s.weekly)}</b> a week; ${s.ended} investments already ended.</div>
+            ${r.warnings.length ? `<details style="margin:6px 0;"><summary style="cursor:pointer;color:#e0a030;">${r.warnings.length} remark${r.warnings.length === 1 ? '' : 's'}</summary>${r.warnings.map(w => `<div>${esc(w)}</div>`).join('')}</details>` : ''}
+            <div style="max-height:260px;overflow:auto;margin-top:6px;"><table style="border-collapse:collapse;">${r.rows.map(x => `<tr style="${x.active ? '' : 'opacity:.6;'}"><td style="padding:1px 10px 1px 0;">${esc(x.name)}</td><td style="padding:1px 10px;text-align:right;font-family:var(--mono);">${finShort(x.amount)}</td><td style="padding:1px 10px;text-align:right;font-family:var(--mono);">${finShort(x.payout)}</td><td style="padding:1px 10px;">${x.mode}</td><td style="padding:1px 10px;">${esc(x.start)}</td><td style="padding:1px 10px;">${x.active ? `until ${esc(x.termEnd)}` : `returned ${esc(x.returnedOn)}`}</td><td style="padding:1px 0;color:var(--muted);">${esc(x.note)}</td></tr>`).join('')}</table></div>`;
+    } else if (b.dataset.impgo !== undefined) {
+        if (!finImpPending) { out.innerHTML = '<span style="color:var(--danger);">Press Preview first.</span>'; return; }
+        const replace = $('fund-imp-mode').value === 'replace';
+        if (replace && finData.investors.length && !confirm(`Replace the ${finData.investors.length} investors in the list with the ${finImpPending.rows.length} from the sheet?`)) return;
+        const keyOf = x => `${x.name.toLowerCase()}|${x.start}|${x.amount}`, have = new Set(finData.investors.map(keyOf));
+        finData.investors = replace ? finImpPending.rows : finData.investors.concat(finImpPending.rows.filter(x => !have.has(keyOf(x))));
+        finImpPending = null;
+        finRenderAll(); finTouch();
+        toast('Imported');
+    }
 }
 
 FIN_PAGES.fund = { status: 'fund-status', render: finRenderFund, refresh: finRefreshFund, click: finClickFund, parts: ['investors', 'roi'] };
