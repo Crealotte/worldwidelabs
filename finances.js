@@ -41,13 +41,13 @@ function finRoi(amount, tbl) {
     return Math.round(lower.weekly * amount / lower.amount);
 }
 const finPayout = i => (i.payout !== null && i.payout !== undefined ? i.payout : finRoi(i.amount, finData.roi));
-const finFunds = () => (finData.fundsMode === 'manual' || !finSrv.cash || finSrv.cash.error) ? finData.fundsManual : (finSrv.cash.onHand + finSrv.cash.vault);
+const finFunds = () => finData.fundsManual; // the amount she types: her money sits in cash, stocks, a faction vault and more, so Torn's cash alone says little
 
 // ---- the timeline: weeks end on Sunday; 8 weeks back, 52 ahead ----
 function finModel(plan, planStart) {
     const D = finData, S = finSrv, cur = finSun(S.today);
     const weeks = [];
-    for (let w = -FIN_PAST; w < FIN_HORIZON; w++) weeks.push({ w, end: finAdd(cur, 7 * w), co: 0, coParts: [], rto: 0, inc: 0, inv: 0, invParts: [], out: 0, plan: 0 });
+    for (let w = -FIN_PAST; w < FIN_HORIZON; w++) weeks.push({ w, end: finAdd(cur, 7 * w), co: 0, coParts: [], rto: 0, inc: 0, inv: 0, invParts: [], out: 0, plan: 0, loan: 0, loanParts: [] });
     const idx = iso => { const w = Math.ceil(Math.round((finD(iso) - finD(cur)) / 86400000) / 7); return w >= -FIN_PAST && w < FIN_HORIZON ? w + FIN_PAST : -1; };
     const place = (iso, amt, key) => { const j = idx(iso); if (j >= 0) weeks[j][key] += amt; };
     const firstDay = finAdd(weeks[0].end, -6), lastDay = weeks[weeks.length - 1].end;
@@ -115,11 +115,23 @@ function finModel(plan, planStart) {
         }
     }
     for (const o of D.outlays) place(o.date, o.amount, 'out');
+    // loans given to people: what is still to come back arrives on the repayment dates; a loan that is not given yet leaves on its date. An overdue payment counts in the current week.
+    for (const L of D.loans) {
+        if (!L.active) continue;
+        if (L.date > S.today) place(L.date, L.lent, 'out');
+        let rest = Math.max(0, (L.owed > 0 ? L.owed : L.lent) - L.repaid);
+        if (!rest || L.freq === 'open') continue;
+        const put = (iso, amt) => { const a = Math.min(amt, rest); if (a <= 0) return; rest -= a; const j = idx(iso < S.today ? S.today : iso); if (j >= 0) { weeks[j].loan += a; weeks[j].loanParts.push(`${L.name}: ${finMoney(a)}`); } };
+        const pay = L.freq === 'once' || !(L.payment > 0) ? rest : L.payment;
+        if (L.freq === 'once') put(L.from, rest);
+        else if (L.freq === 'weekly') { for (let n = 0; n < 400 && rest > 0; n++) { const iso = finAdd(L.from, 7 * n); if (iso > lastDay) break; if (iso >= S.today) put(iso, pay); } }
+        else monthly(L.from, iso => { if (rest > 0 && iso >= S.today) put(iso, pay); });
+    }
     if (plan && planStart != null) for (const s of plan.steps) { const j = FIN_PAST + planStart + s.afterWeeks; if (s.amount > 0 && j < weeks.length) weeks[j].plan += s.amount; }
     // the balance runs forward from the money available now
     const funds = finFunds(); let bal = funds;
     for (const wk of weeks) {
-        wk.net = wk.co + wk.rto + wk.inc - wk.inv - wk.out;
+        wk.net = wk.co + wk.rto + wk.inc + wk.loan - wk.inv - wk.out;
         if (wk.w >= 0) { bal += wk.net - wk.plan; wk.bal = bal; } else wk.bal = null;
     }
     return { weeks, funds, cur, coAvg };
@@ -179,6 +191,9 @@ const FIN_LISTS = {
         { f: 'active', l: 'On', t: 'bool' }, { f: 'name', l: 'What', t: 'text', w: 160 }, { f: 'amount', l: 'Amount', t: 'money', w: 120 }, { f: 'freq', l: 'How often', t: 'sel', opts: [['weekly', 'Every week'], ['monthly', 'Every month'], ['once', 'Once']] }, { f: 'date', l: 'From / on', t: 'date' }] },
     outlays: { title: 'Planned spending (one time)', add: '+ Spending', fresh: () => ({ id: finId(), name: '', amount: 0, date: new Date().toISOString().slice(0, 10) }), cols: [
         { f: 'name', l: 'What', t: 'text', w: 180 }, { f: 'amount', l: 'Amount', t: 'money', w: 120 }, { f: 'date', l: 'On', t: 'date' }] },
+    loans: { title: 'Loans I gave', add: '+ Loan', fresh: () => ({ id: finId(), name: '', lent: 0, owed: 0, repaid: 0, freq: 'open', payment: 0, date: new Date().toISOString().slice(0, 10), from: new Date().toISOString().slice(0, 10), active: true, note: '' }), cols: [
+        { f: 'active', l: 'On', t: 'bool' }, { f: 'name', l: 'Who', t: 'text', w: 120 }, { f: 'lent', l: 'Lent', t: 'money', w: 110 }, { f: 'owed', l: 'To get back (0 = same as lent)', t: 'money', w: 120 }, { f: 'repaid', l: 'Paid back so far', t: 'money', w: 110 },
+        { f: 'freq', l: 'Pays back', t: 'sel', opts: [['open', 'No fixed plan'], ['weekly', 'Every week'], ['monthly', 'Every month'], ['once', 'All at once']] }, { f: 'payment', l: 'Per payment', t: 'money', w: 100 }, { f: 'from', l: 'First / due on', t: 'date' }, { f: 'date', l: 'Lent on', t: 'date' }, { f: 'note', l: 'Note', t: 'text', w: 120 }] },
     ventures: { title: 'Other ways you earn', add: '+ Venture', fresh: () => ({ id: finId(), name: '', type: '', capital: 0, weekly: 0, note: '', active: true }), cols: [
         { f: 'active', l: 'On', t: 'bool' }, { f: 'name', l: 'Name', t: 'text', w: 150 }, { f: 'type', l: 'Kind (market, stocks, buddy bank…)', t: 'text', w: 130 }, { f: 'capital', l: 'Capital in it', t: 'money', w: 120 }, { f: 'weekly', l: 'Earns a week', t: 'money', w: 120 }, { f: 'note', l: 'Note', t: 'text', w: 170 }] },
     roi: { title: 'Investor pay table', add: '+ Row', fresh: () => ({ amount: 0, weekly: 0 }), cols: [{ f: 'amount', l: 'Invested', t: 'money', w: 130 }, { f: 'weekly', l: 'Paid a week', t: 'money', w: 130 }] },
@@ -195,10 +210,10 @@ function finCell(list, i, col, row, extra = '') {
 }
 function finListEditor(list) {
     const L = FIN_LISTS[list], rows = finData[list];
-    const extra = list === 'investors' ? ['Yearly'] : [];
+    const extra = list === 'investors' ? ['Yearly'] : list === 'loans' ? ['Still to come back'] : [];
     return `<div class="panel"><h3 style="margin-top:0;">${L.title}</h3>${list === 'roi' ? '<p style="font-size:12px;color:var(--muted);margin:0 0 8px;">From the top row up, an investor is paid per billion the same as the top row. In between rows it is scaled from the row below it. At most 35% a year.</p>' : ''}
         <div style="overflow-x:auto;"><table style="border-collapse:collapse;font-size:13px;"><thead><tr>${L.cols.map(c => `<th style="text-align:left;padding:4px 8px;font-size:11px;color:var(--muted);font-weight:600;">${c.l}</th>`).join('')}${extra.map(x => `<th style="padding:4px 8px;font-size:11px;color:var(--muted);font-weight:600;text-align:left;">${x}</th>`).join('')}<th></th></tr></thead>
-        <tbody>${rows.map((r, i) => `<tr>${L.cols.map(c => `<td style="padding:3px 6px;">${finCell(list, i, c, r)}</td>`).join('')}${list === 'investors' ? `<td style="padding:3px 8px;white-space:nowrap;" data-pct="${i}"></td>` : ''}<td><button class="ghost small" data-del="${list}" data-i="${i}" type="button" title="Remove">✕</button></td></tr>`).join('') || `<tr><td colspan="${L.cols.length + 2}" style="color:var(--muted);padding:6px 8px;">Nothing yet.</td></tr>`}</tbody></table></div>
+        <tbody>${rows.map((r, i) => `<tr>${L.cols.map(c => `<td style="padding:3px 6px;">${finCell(list, i, c, r)}</td>`).join('')}${list === 'investors' ? `<td style="padding:3px 8px;white-space:nowrap;" data-pct="${i}"></td>` : list === 'loans' ? `<td style="padding:3px 8px;white-space:nowrap;font-family:var(--mono);" data-loanleft="${i}"></td>` : ''}<td><button class="ghost small" data-del="${list}" data-i="${i}" type="button" title="Remove">✕</button></td></tr>`).join('') || `<tr><td colspan="${L.cols.length + 2}" style="color:var(--muted);padding:6px 8px;">Nothing yet.</td></tr>`}</tbody></table></div>
         <button class="ghost small" data-add="${list}" type="button" style="margin-top:8px;">${L.add}</button></div>`;
 }
 function finPlansPanel() {
@@ -228,7 +243,7 @@ async function loadFinances() {
     if (r.error) { st.className = 'status err'; st.textContent = r.error; return; }
     st.textContent = ''; st.className = 'status';
     finSrv = { cash: r.cash, companies: r.companies || [], rto: r.rto || { rtoItems: [], pis: [], defaults: { rent: { 4100: 27000000, 3600: 15000000, 2600: 12000000 }, equity: { 4100: 81000000, 3600: 45000000, 2600: 36000000 }, goals: { 4100: 1701000000, 3600: 855000000, 2600: 612000000 }, cost: { 4100: 1482500000, 3600: 757500000, 2600: 557500000 } } }, today: r.today };
-    finData = { fundsMode: r.fundsMode, fundsManual: r.fundsManual, reserve: r.reserve, investors: r.investors, income: r.income, outlays: r.outlays, plans: r.plans, roi: r.roi, ventures: r.ventures, capitals: r.capitals };
+    finData = { fundsMode: r.fundsMode, fundsManual: r.fundsManual, reserve: r.reserve, investors: r.investors, income: r.income, outlays: r.outlays, plans: r.plans, roi: r.roi, ventures: r.ventures, capitals: r.capitals, loans: r.loans || [] };
     finRenderAll();
 }
 function finRenderAll() {
@@ -237,12 +252,10 @@ function finRenderAll() {
         <div id="fin-summary"></div>
         <div class="panel"><h3 style="margin-top:0;">Money available now</h3>
             <div style="display:flex;gap:18px;flex-wrap:wrap;align-items:flex-end;font-size:13px;">
-                <div>${c && !c.error ? `<div style="color:var(--muted);font-size:11px;">In Torn right now</div><b style="font-family:var(--mono);">${finMoney(c.onHand + c.vault)}</b> <span style="color:var(--muted);font-size:12px;">(${finShort(c.onHand)} on hand + ${finShort(c.vault)} in the vault)</span>` : `<span style="color:var(--danger);">Could not read your cash from Torn${c && c.error ? `: ${esc(c.error)}` : ''}.</span>`}</div>
-                <label style="display:flex;gap:6px;align-items:center;cursor:pointer;"><input type="radio" name="fin-mode" data-s="fundsMode" value="auto" ${D.fundsMode === 'auto' ? 'checked' : ''} style="width:auto;"> Use my Torn cash</label>
-                <label style="display:flex;gap:6px;align-items:center;cursor:pointer;"><input type="radio" name="fin-mode" data-s="fundsMode" value="manual" ${D.fundsMode === 'manual' ? 'checked' : ''} style="width:auto;"> Use this amount:</label>
-                <input type="text" inputmode="decimal" data-s="fundsManual" data-t="money" value="${finFull(D.fundsManual)}" style="width:140px;text-align:right;font-family:var(--mono);">
-                <div class="field" style="margin:0;"><label>Keep at least (reserve)</label><input type="text" inputmode="decimal" data-s="reserve" data-t="money" value="${finFull(D.reserve)}" style="width:140px;text-align:right;font-family:var(--mono);"></div></div>
-            <div style="font-size:11px;color:var(--muted);margin-top:6px;">Only cash and the vault count; points, the city bank and anything in stocks or items do not.</div></div>
+                <div class="field" style="margin:0;"><label>The money I have to work with</label><input type="text" inputmode="decimal" data-s="fundsManual" data-t="money" value="${finFull(D.fundsManual)}" style="width:170px;text-align:right;font-family:var(--mono);"></div>
+                <div class="field" style="margin:0;"><label>Keep at least (reserve)</label><input type="text" inputmode="decimal" data-s="reserve" data-t="money" value="${finFull(D.reserve)}" style="width:140px;text-align:right;font-family:var(--mono);"></div>
+                ${c && !c.error ? `<div style="color:var(--muted);font-size:12px;">In Torn right now: ${finShort(c.onHand + c.vault)} (cash + vault) <button class="ghost small" data-usetorn="${c.onHand + c.vault}" type="button">Use this</button></div>` : ''}</div>
+            <div style="font-size:11px;color:var(--muted);margin-top:6px;">Type what you can actually spend, wherever it sits (cash, vault, stocks, faction). Everything below is worked out from this amount forward, so update it now and then. Money you lent out is not part of it: add it under "Loans I gave".</div></div>
         <div class="panel"><div style="display:flex;gap:14px;flex-wrap:wrap;align-items:center;margin-bottom:8px;"><h3 style="margin:0;">📅 Week by week</h3>
             <label style="font-size:13px;">Weeks ahead <select id="fin-ahead">${[8, 16, 26, 52].map(n => `<option value="${n}" ${finAhead === n ? 'selected' : ''}>${n}</option>`).join('')}</select></label>
             <label style="font-size:13px;">Show a plan <select id="fin-overlay"><option value="">none</option>${D.plans.map(p => `<option value="${esc(p.id)}" ${finShowPlan === p.id ? 'selected' : ''}>${esc(p.name)}</option>`).join('')}</select></label></div>
@@ -250,7 +263,7 @@ function finRenderAll() {
             <p style="font-size:11px;color:var(--muted);margin:8px 0 0;">Weeks end on Sunday. In past weeks the companies column is what they really sent (from the saved days with a bank amount); the rest is what your settings say should have happened. From now on the companies column is the average of the last four known weeks.</p></div>
         ${finPlansPanel()}
         <div class="panel"><h3 style="margin-top:0;">🏆 What earns the most on its capital</h3><div id="fin-vent" style="overflow-x:auto;"></div></div>
-        ${finListEditor('investors')}${finListEditor('income')}${finListEditor('outlays')}${finListEditor('ventures')}${finCapitalsPanel()}${finListEditor('roi')}`;
+        ${finListEditor('investors')}${finListEditor('income')}${finListEditor('outlays')}${finListEditor('loans')}${finListEditor('ventures')}${finCapitalsPanel()}${finListEditor('roi')}`;
     finWire();
     finRefresh();
 }
@@ -265,13 +278,15 @@ function finRefresh() {
     const cost = finInvestorCost();
     const dip = fut.find(w => w.bal < reserve);
     const noCo = finSrv.companies.filter(c => !c.weeks.some(x => x.send != null)).map(c => c.name);
-    const inAvg = avg('co') + avg('rto') + avg('inc');
+    const inAvg = avg('co') + avg('rto') + avg('inc') + avg('loan');
+    const loanOut = finData.loans.filter(l => l.active).reduce((s, l) => s + Math.max(0, (l.owed > 0 ? l.owed : l.lent) - l.repaid), 0);
     $('fin-summary').innerHTML = `<div class="panel" style="display:flex;gap:26px;flex-wrap:wrap;font-size:13px;">
         <div><div style="color:var(--muted);font-size:11px;">Available now</div><b style="font-family:var(--mono);">${finShort(m.funds)}</b></div>
         <div><div style="color:var(--muted);font-size:11px;">Coming in a week (average of the next 12 weeks)</div><b style="font-family:var(--mono);color:var(--success,#35d99b);">${finShort(inAvg)}</b>
-            <div style="font-size:11px;color:var(--muted);">companies ${finShort(avg('co'))} · rent-to-own ${finShort(avg('rto'))} · other ${finShort(avg('inc'))}</div>${noCo.length ? `<div style="font-size:11px;color:#e0a030;">No weekly send known yet for ${esc(noCo.join(', '))}, so that part is counted as 0.</div>` : ''}</div>
+            <div style="font-size:11px;color:var(--muted);">companies ${finShort(avg('co'))} · rent-to-own ${finShort(avg('rto'))} · other ${finShort(avg('inc'))} · loans ${finShort(avg('loan'))}</div>${noCo.length ? `<div style="font-size:11px;color:#e0a030;">No weekly send known yet for ${esc(noCo.join(', '))}, so that part is counted as 0.</div>` : ''}</div>
         <div><div style="color:var(--muted);font-size:11px;">Paid to investors a week</div><b style="font-family:var(--mono);">${finShort(avg('inv'))}</b></div>
         <div><div style="color:var(--muted);font-size:11px;">Left over a week (before one-time spending)</div><b style="font-family:var(--mono);">${finShort(inAvg - avg('inv'))}</b></div>
+        <div><div style="color:var(--muted);font-size:11px;">Lent out, still to come back</div><b style="font-family:var(--mono);">${finShort(loanOut)}</b></div>
         <div><div style="color:var(--muted);font-size:11px;">Invested by others</div><b style="font-family:var(--mono);">${finShort(cost.invested)}</b></div>
         <div><div style="color:var(--muted);font-size:11px;">They cost you a year</div><b style="color:${cost.pct !== null && cost.pct > 35.05 ? 'var(--danger)' : 'inherit'};">${cost.pct === null ? '—' : `${cost.pct.toFixed(1)}%`}</b> <span style="color:var(--muted);font-size:11px;">(max 35%)</span></div>
         ${dip ? `<div style="color:var(--danger);">⚠ The balance drops below your reserve in the week of ${esc(finDate(dip.end))}.</div>` : ''}</div>`;
@@ -279,11 +294,11 @@ function finRefresh() {
     const shown = m.weeks.filter(w => w.w < finAhead);
     const th = (t, r) => `<th style="padding:5px 9px;font-size:11px;color:var(--muted);font-weight:600;text-align:${r ? 'right' : 'left'};white-space:nowrap;">${t}</th>`;
     const td = (v, o = {}) => `<td style="padding:4px 9px;text-align:right;font-family:var(--mono);white-space:nowrap;${o.color ? `color:${o.color};` : ''}${o.b ? 'font-weight:700;' : ''}" ${o.title ? `title="${esc(o.title)}"` : ''}>${v}</td>`;
-    $('fin-timeline').innerHTML = `<table style="width:100%;border-collapse:collapse;font-size:13px;"><thead><tr>${th('Week ending')}${th('Companies', 1)}${th('Rent-to-own', 1)}${th('Other income', 1)}${th('Investors', 1)}${th('Planned', 1)}${sel && res[sel.id] && res[sel.id].start != null ? th(esc(sel.name), 1) : ''}${th('Net', 1)}${th('Balance', 1)}</tr></thead>
+    $('fin-timeline').innerHTML = `<table style="width:100%;border-collapse:collapse;font-size:13px;"><thead><tr>${th('Week ending')}${th('Companies', 1)}${th('Rent-to-own', 1)}${th('Other income', 1)}${th('Loans back', 1)}${th('Investors', 1)}${th('Planned', 1)}${sel && res[sel.id] && res[sel.id].start != null ? th(esc(sel.name), 1) : ''}${th('Net', 1)}${th('Balance', 1)}</tr></thead>
         <tbody>${shown.map(w => {
             const past = w.w < 0, now = w.w === 0;
             return `<tr style="${past ? 'opacity:.6;' : ''}${now ? 'background:rgba(53,217,155,.10);' : ''}border-top:1px solid var(--border,rgba(255,255,255,.08));"><td style="padding:4px 9px;white-space:nowrap;">${esc(finDate(w.end))}${now ? ' <span style="font-size:11px;color:var(--muted);">this week</span>' : ''}</td>
-            ${td(w.co ? finShort(w.co) : '—', { title: w.coParts.join('\n') })}${td(w.rto ? finShort(w.rto) : '—')}${td(w.inc ? finShort(w.inc) : '—')}${td(w.inv ? '-' + finShort(w.inv) : '—', { title: w.invParts.join('\n') })}${td(w.out ? '-' + finShort(w.out) : '—')}
+            ${td(w.co ? finShort(w.co) : '—', { title: w.coParts.join('\n') })}${td(w.rto ? finShort(w.rto) : '—')}${td(w.inc ? finShort(w.inc) : '—')}${td(w.loan ? finShort(w.loan) : '—', { title: w.loanParts.join('\n') })}${td(w.inv ? '-' + finShort(w.inv) : '—', { title: w.invParts.join('\n') })}${td(w.out ? '-' + finShort(w.out) : '—')}
             ${sel && res[sel.id] && res[sel.id].start != null ? td(w.plan ? '-' + finShort(w.plan) : '—', { color: '#e0a030' }) : ''}${td(finShort(w.net), { color: w.net < 0 ? 'var(--danger)' : '' })}${td(w.bal === null ? '—' : finShort(w.bal), { b: 1, color: w.bal !== null && w.bal < reserve ? 'var(--danger)' : '' })}</tr>`;
         }).join('')}</tbody></table>`;
     // plan results
@@ -314,6 +329,11 @@ function finRefresh() {
         el.innerHTML = `<span style="color:${y > 35.05 ? 'var(--danger)' : 'var(--muted)'};">${y.toFixed(1)}%${y > 35.05 ? ' ⚠' : ''}</span>`;
     });
     document.querySelectorAll('[data-phinv]').forEach(el => { const i = finData.investors[+el.dataset.phinv]; if (i) el.placeholder = finFull(finRoi(i.amount, finData.roi)); });
+    document.querySelectorAll('[data-loanleft]').forEach(el => {
+        const l = finData.loans[+el.dataset.loanleft]; if (!l) return;
+        const left = Math.max(0, (l.owed > 0 ? l.owed : l.lent) - l.repaid);
+        el.innerHTML = left ? finShort(left) : '<span style="color:var(--muted);">paid back</span>';
+    });
 }
 
 // ---- saving: a moment after the last change, never while typing ----
@@ -374,5 +394,6 @@ function finWire() {
         else if (b.dataset.addstep !== undefined) { finData.plans[+b.dataset.addstep].steps.push({ label: '', amount: 0, afterWeeks: 4 }); finRenderAll(); finTouch(); }
         else if (b.dataset.delstep !== undefined) { finData.plans[+b.dataset.delstep].steps.splice(+b.dataset.i, 1); finRenderAll(); finTouch(); }
         else if (b.dataset.show) { finShowPlan = finShowPlan === b.dataset.show ? '' : b.dataset.show; finRenderAll(); }
+        else if (b.dataset.usetorn) { finData.fundsManual = Math.round(Number(b.dataset.usetorn)); finRenderAll(); finTouch(); }
     });
 }
