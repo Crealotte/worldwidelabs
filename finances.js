@@ -77,11 +77,16 @@ function finModel(plan, planStart) {
     for (const r of (S.rto.rtoItems || [])) {
         if (!r.startDate) continue;
         const eq = Number(r.cycleEquity) || 0, rent = Number(r.monthlyRent) || 0, goal = Number(r.totalEquityNeeded) || Infinity;
+        // a typed-in "paid so far" wins over the calendar: only the payments still needed are planned, from today on
+        const typed = r.manualEquityPaid !== null && r.manualEquityPaid !== undefined && r.manualEquityPaid !== '';
+        let left = typed && eq ? Math.max(0, Math.ceil((goal - Number(r.manualEquityPaid)) / eq)) : Infinity;
         for (let n = 0; n < 200; n++) {
-            if (eq && n * eq >= goal) break;
+            if (typed ? left <= 0 : (eq && n * eq >= goal)) break;
             const iso = finAdd(r.startDate, 30 * n);
             if (iso > lastDay) break;
+            if (typed && iso < S.today) continue;
             if (iso >= firstDay) place(iso, rent + eq, 'rto');
+            if (typed) left--;
         }
     }
     for (const i of D.income) {
@@ -256,14 +261,17 @@ function finRefresh() {
     const m = sel && res[sel.id] && res[sel.id].start != null ? finModel(sel, res[sel.id].start) : base;
     const reserve = finData.reserve, fut = m.weeks.filter(w => w.w >= 0);
     // top numbers
-    const next4 = fut.slice(0, 4), avg = k => next4.reduce((s, w) => s + w[k], 0) / 4;
+    const next = fut.slice(0, 12), avg = k => next.reduce((s, w) => s + w[k], 0) / next.length; // 12 weeks: rent-to-own pays once per 30 days, so a short window would jump around
     const cost = finInvestorCost();
     const dip = fut.find(w => w.bal < reserve);
+    const noCo = finSrv.companies.filter(c => !c.weeks.some(x => x.send != null)).map(c => c.name);
+    const inAvg = avg('co') + avg('rto') + avg('inc');
     $('fin-summary').innerHTML = `<div class="panel" style="display:flex;gap:26px;flex-wrap:wrap;font-size:13px;">
         <div><div style="color:var(--muted);font-size:11px;">Available now</div><b style="font-family:var(--mono);">${finShort(m.funds)}</b></div>
-        <div><div style="color:var(--muted);font-size:11px;">In a week (average, next 4)</div><b style="font-family:var(--mono);color:var(--success,#35d99b);">${finShort(avg('co') + avg('rto') + avg('inc'))}</b></div>
-        <div><div style="color:var(--muted);font-size:11px;">Out a week (investors + planned)</div><b style="font-family:var(--mono);">${finShort(avg('inv') + avg('out'))}</b></div>
-        <div><div style="color:var(--muted);font-size:11px;">Left over a week</div><b style="font-family:var(--mono);">${finShort(avg('net'))}</b></div>
+        <div><div style="color:var(--muted);font-size:11px;">Coming in a week (average of the next 12 weeks)</div><b style="font-family:var(--mono);color:var(--success,#35d99b);">${finShort(inAvg)}</b>
+            <div style="font-size:11px;color:var(--muted);">companies ${finShort(avg('co'))} · rent-to-own ${finShort(avg('rto'))} · other ${finShort(avg('inc'))}</div>${noCo.length ? `<div style="font-size:11px;color:#e0a030;">No weekly send known yet for ${esc(noCo.join(', '))}, so that part is counted as 0.</div>` : ''}</div>
+        <div><div style="color:var(--muted);font-size:11px;">Paid to investors a week</div><b style="font-family:var(--mono);">${finShort(avg('inv'))}</b></div>
+        <div><div style="color:var(--muted);font-size:11px;">Left over a week (before one-time spending)</div><b style="font-family:var(--mono);">${finShort(inAvg - avg('inv'))}</b></div>
         <div><div style="color:var(--muted);font-size:11px;">Invested by others</div><b style="font-family:var(--mono);">${finShort(cost.invested)}</b></div>
         <div><div style="color:var(--muted);font-size:11px;">They cost you a year</div><b style="color:${cost.pct !== null && cost.pct > 35.05 ? 'var(--danger)' : 'inherit'};">${cost.pct === null ? '—' : `${cost.pct.toFixed(1)}%`}</b> <span style="color:var(--muted);font-size:11px;">(max 35%)</span></div>
         ${dip ? `<div style="color:var(--danger);">⚠ The balance drops below your reserve in the week of ${esc(finDate(dip.end))}.</div>` : ''}</div>`;
