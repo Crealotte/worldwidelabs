@@ -49,6 +49,14 @@ function finRoi(amount, tbl) {
     return Math.round(lower.weekly * amount / lower.amount);
 }
 const finPayout = i => (i.payout !== null && i.payout !== undefined ? i.payout : finRoi(i.amount, finData.roi));
+// Companies: until a company has real weeks, an estimate stands in (her numbers, October 2026: the 16-person mines CreaLabs 20.66m and CreaLabs1 21m a day net, the 14-person ones CreaLabs4 15m, CreaLabs5 19.2m
+// and CreaLabs6 21.77m; CreaLabs3 was sold to its director). A 14-person mine costs about 9b to get, a 16-person one 12b; optimized they make about 25m / 35m a day, but these ones are no longer optimized.
+// The numbers are net profit of the company; the director cut of that company is taken off (what is left is hers). All of it can be changed per company on the page.
+const FIN_CO_DEFAULTS = { crealabs: { staff: 16, daily: 20660000 }, crealabs1: { staff: 16, daily: 21000000 }, crealabs3: { staff: 16, daily: 0, sold: true }, crealabs4: { staff: 14, daily: 15000000 }, crealabs5: { staff: 14, daily: 19200000 }, crealabs6: { staff: 14, daily: 21770000 } };
+const FIN_STAFF_COST = { 14: 9000000000, 16: 12000000000 }, FIN_STAFF_OPT = { 14: 25000000, 16: 35000000 };
+const finCoKey = n => String(n || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+const finEstOf = c => (finData.coEst || {})[c.id] || FIN_CO_DEFAULTS[finCoKey(c.name)] || { daily: 0, staff: 0, sold: false };
+const finEstWeekly = c => finEstOf(c).daily * 7 * (1 - (c.cutPct ?? 30) / 100);
 const finFunds = () => finData.fundsManual; // the amount she types: her money sits in cash, stocks, a faction vault and more, so Torn's cash alone says little
 
 // ---- investor payouts ----
@@ -99,12 +107,13 @@ function finModel(plan, planStart) {
     const coAvg = {};
     for (const c of S.companies) {
         const known = c.weeks.filter(x => x.send != null).sort((a, b) => (a.weekEnd < b.weekEnd ? 1 : -1)).slice(0, 4);
-        coAvg[c.id] = known.length ? known.reduce((s, x) => s + x.send, 0) / known.length : 0;
+        // a sold company brings nothing more; one without a known week yet uses the estimate (see FIN_CO_DEFAULTS) until real weeks exist
+        coAvg[c.id] = finEstOf(c).sold ? 0 : known.length ? known.reduce((s, x) => s + x.send, 0) / known.length : finEstWeekly(c);
         for (const wk of weeks) {
             const rec = c.weeks.find(x => x.weekEnd === wk.end);
             const real = rec && rec.send != null;
             const v = real ? rec.send : (wk.w >= 0 ? coAvg[c.id] : null);
-            if (v) { wk.co += v; wk.coParts.push(`${c.name}: ${finMoney(v)}${real ? '' : ' (average)'}`); }
+            if (v) { wk.co += v; wk.coParts.push(`${c.name}: ${finMoney(v)}${real ? '' : known.length ? ' (average)' : ' (estimate)'}`); }
         }
     }
     // rent-to-own: a payment (rent + equity) each time the lease runs out, until the full price is paid. Past weeks: the payments that were recorded (or, without a record, the 30-day dates from the start as an estimate).
@@ -193,10 +202,14 @@ function finFind(plan, m) {
 function finVentures(m) {
     const D = finData, S = finSrv, rows = [];
     for (const c of S.companies) {
-        const w = c.weeks.filter(x => x.days >= 5).sort((a, b) => (a.weekEnd < b.weekEnd ? 1 : -1)).slice(0, 4);
-        const weekly = w.length ? w.reduce((s, x) => s + x.profit - x.cut, 0) / w.length : 0;
-        rows.push({ name: c.name, type: 'Company', capital: D.capitals[`co:${c.id}`] || 0, weekly, note: w.length ? `profit after the director cut, average of ${w.length} week${w.length > 1 ? 's' : ''}` : 'no full weeks saved yet' });
+        const est = finEstOf(c); if (est.sold) continue; // sold to its director: no longer earns
+        const w = c.weeks.filter(x => x.days >= 5).sort((a, b) => (a.weekEnd < b.weekEnd ? 1 : -1)).slice(0, 4), cut = c.cutPct ?? 30;
+        const real = w.length >= 3; // until 3 full weeks are saved the estimate stands in
+        const weekly = real ? w.reduce((s, x) => s + x.profit - x.cut, 0) / w.length : est.daily ? finEstWeekly(c) : (w.length ? w.reduce((s, x) => s + x.profit - x.cut, 0) / w.length : 0);
+        rows.push({ name: c.name + (!real && est.daily ? ' (estimate)' : ''), type: est.staff ? `Company, ${est.staff} people` : 'Company', capital: D.capitals[`co:${c.id}`] ?? FIN_STAFF_COST[est.staff] ?? 0, weekly,
+            note: real ? `profit after the director cut, average of ${w.length} weeks` : est.daily ? `estimate: ${finShort(est.daily)} a day net, minus the ${cut}% director cut; the real average takes over after 3 full weeks (${w.length} so far)` : 'no full weeks saved yet' });
     }
+    for (const staff of [16, 14]) rows.push({ name: `A new ${staff}-person mine, optimized`, type: 'Company, benchmark', capital: FIN_STAFF_COST[staff], weekly: FIN_STAFF_OPT[staff] * 7 * 0.7, note: `about ${finShort(FIN_STAFF_OPT[staff])} a day net when optimized, 30% director cut taken off` });
     const rent = S.rto.defaults.rent, eqs = S.rto.defaults.equity;
     for (const tier of [4100, 3600, 2600]) {
         const cap = D.capitals[`pi:${tier}`] ?? S.rto.defaults.cost[tier], eq = eqs[tier];
@@ -281,10 +294,17 @@ function finPlansPanel() {
 }
 function finCapitalsPanel() {
     const S = finSrv, D = finData;
-    const row = (key, label, val, note) => `<tr><td style="padding:3px 8px;">${esc(label)}${note ? `<div style="font-size:11px;color:var(--muted);">${esc(note)}</div>` : ''}</td><td style="padding:3px 8px;"><input type="text" inputmode="decimal" data-cap="${key}" data-t="money" value="${finFull(val)}" style="width:140px;text-align:right;font-family:var(--mono);"></td></tr>`;
-    return `<div class="panel"><h3 style="margin-top:0;">Capital behind each venture</h3><p style="font-size:12px;color:var(--muted);margin:0 0 8px;">What you put into a company, or what you paid for an island (the buying prices are filled in). The return table needs it to work out the percentage a year.</p>
-        <table style="border-collapse:collapse;font-size:13px;"><tbody>${S.companies.map(c => row(`co:${c.id}`, c.name, D.capitals[`co:${c.id}`] || 0, 'company')).join('')}
-        ${[4100, 3600, 2600].map(t => row(`pi:${t}`, `Island ${t}`, D.capitals[`pi:${t}`] ?? S.rto.defaults.cost[t], 'per island')).join('')}</tbody></table></div>`;
+    const inp = (attrs, val, w = 130) => `<input type="text" inputmode="decimal" ${attrs} data-t="money" value="${finFull(val)}" style="width:${w}px;text-align:right;font-family:var(--mono);">`;
+    const coRows = S.companies.map(c => {
+        const e = finEstOf(c), cap = D.capitals[`co:${c.id}`] ?? FIN_STAFF_COST[e.staff] ?? 0;
+        return `<tr><td style="padding:3px 8px;">${esc(c.name)}</td><td style="padding:3px 8px;"><select data-est="${esc(String(c.id))}" data-f="staff" data-t="staff"><option value="0" ${!e.staff ? 'selected' : ''}>?</option><option value="14" ${e.staff === 14 ? 'selected' : ''}>14 people</option><option value="16" ${e.staff === 16 ? 'selected' : ''}>16 people</option></select></td>
+            <td style="padding:3px 8px;">${inp(`data-est="${esc(String(c.id))}" data-f="daily"`, e.daily)}</td><td style="padding:3px 8px;">${inp(`data-cap="co:${esc(String(c.id))}"`, cap)}</td>
+            <td style="padding:3px 8px;text-align:center;"><input type="checkbox" data-est="${esc(String(c.id))}" data-f="sold" data-t="bool" ${e.sold ? 'checked' : ''} style="width:auto;"></td></tr>`;
+    }).join('');
+    return `<div class="panel"><h3 style="margin-top:0;">Companies: estimate and capital</h3><p style="font-size:12px;color:var(--muted);margin:0 0 8px;">Until a company has 3 full weeks of saved numbers, the earnings table and the week-by-week page use your estimate: the net profit a day, with the company's director cut taken off. A 14-person mine costs about 9b to get and a 16-person one 12b (filled in when the capital is not set). A company that was sold earns nothing more.</p>
+        <div style="overflow-x:auto;"><table style="border-collapse:collapse;font-size:13px;"><thead><tr>${['Company', 'Size', 'Net profit a day (estimate)', 'Capital in it', 'Sold'].map(h => `<th style="text-align:left;padding:4px 8px;font-size:11px;color:var(--muted);font-weight:600;">${h}</th>`).join('')}</tr></thead><tbody>${coRows}</tbody></table></div></div>
+        <div class="panel"><h3 style="margin-top:0;">Capital per island</h3><p style="font-size:12px;color:var(--muted);margin:0 0 8px;">What you paid for an island (the buying prices are filled in). The return table needs it to work out the percentage a year.</p>
+        <table style="border-collapse:collapse;font-size:13px;"><tbody>${[4100, 3600, 2600].map(t => `<tr><td style="padding:3px 8px;">Island ${t}</td><td style="padding:3px 8px;">${inp(`data-cap="pi:${t}"`, D.capitals[`pi:${t}`] ?? S.rto.defaults.cost[t], 140)}</td></tr>`).join('')}</tbody></table></div>`;
 }
 
 async function loadFinances() {
@@ -295,7 +315,7 @@ async function loadFinances() {
     if (r.error) { st.className = 'status err'; st.textContent = r.error; return; }
     st.textContent = ''; st.className = 'status';
     finSrv = { cash: r.cash, companies: r.companies || [], rto: r.rto || { rtoItems: [], pis: [], defaults: { rent: { 4100: 27000000, 3600: 15000000, 2600: 12000000 }, equity: { 4100: 81000000, 3600: 45000000, 2600: 36000000 }, goals: { 4100: 1701000000, 3600: 855000000, 2600: 612000000 }, cost: { 4100: 1482500000, 3600: 757500000, 2600: 557500000 } } }, today: r.today };
-    finData = { fundsMode: r.fundsMode, fundsManual: r.fundsManual, reserve: r.reserve, investors: r.investors, income: r.income, outlays: r.outlays, plans: r.plans, roi: r.roi, ventures: r.ventures, capitals: r.capitals, loans: r.loans || [], buddies: r.buddies || [] };
+    finData = { fundsMode: r.fundsMode, fundsManual: r.fundsManual, reserve: r.reserve, investors: r.investors, income: r.income, outlays: r.outlays, plans: r.plans, roi: r.roi, ventures: r.ventures, capitals: r.capitals, coEst: r.coEst || {}, loans: r.loans || [], buddies: r.buddies || [] };
     finRenderAll();
 }
 function finRenderAll() { FIN_PAGES[finPage].render(); }
@@ -431,6 +451,7 @@ function finWire(bodyId) {
         if (el.id === 'fin-overlay') { finShowPlan = el.value; finRefresh(); return; }
         const read = () => {
             if (el.dataset.t === 'bool') return el.checked;
+            if (el.dataset.t === 'staff') return Number(el.value) || 0;
             if (el.dataset.t === 'money') { const n = finParse(el.value); return n; }
             if (el.dataset.t === 'int') return Math.max(0, Math.min(51, parseInt(el.value, 10) || 0));
             return el.value;
@@ -438,6 +459,7 @@ function finWire(bodyId) {
         let target = null, field = el.dataset.f;
         if (el.dataset.s) { target = finData; field = el.dataset.s; }
         else if (el.dataset.cap) { target = finData.capitals; field = el.dataset.cap; }
+        else if (el.dataset.est) { const c = finSrv.companies.find(x => String(x.id) === el.dataset.est); finData.coEst = finData.coEst || {}; target = finData.coEst[el.dataset.est] = finData.coEst[el.dataset.est] || { ...finEstOf(c || {}) }; field = el.dataset.f; }
         else if (el.dataset.p !== undefined) target = (finData.plans[+el.dataset.p] || {}).steps?.[+el.dataset.i];
         else if (el.dataset.pl !== undefined) target = finData.plans[+el.dataset.pl];
         else if (el.dataset.l) target = (finData[el.dataset.l] || [])[+el.dataset.i];
@@ -450,6 +472,7 @@ function finWire(bodyId) {
         }
         if (el.dataset.s === 'fundsMode') v = el.value;
         target[field] = v;
+        if (el.dataset.est && (field === 'staff' || field === 'sold')) finRenderAll();
         if (el.dataset.l === 'investors' && field === 'returnedOn') { target.active = !v; finRenderAll(); } // the money was given back: stops the payouts after that date; clearing the date (they came back) switches it on again
         if (el.dataset.l === 'buddies' && field === 'tier' && FIN_TIERS[v]) { target.amount = FIN_TIERS[v].amount; target.term = FIN_TIERS[v].days; finRenderAll(); } // a tier brings its usual amount and term
         finTouch();
