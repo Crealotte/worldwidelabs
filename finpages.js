@@ -179,7 +179,7 @@ function finParseSheet(text, markPaid) {
             const row = { id: finId(), name: r.name, tornId: '', amount: r.amount || 0, payout: Math.round((r.amount || 0) * rate), mode: r.mode || modeOf, start: r.start, active: !ended, nettedIn: '', note: `#${r.sheetId}${word ? ` · ${word}` : ''}${r.guessed ? ' · amount split from the total paid back' : ''}${gone ? ' · withdrew, amount not in the sheet' : ''}`.slice(0, 120),
                 paidUntil: '', payments: [], termEnd, returnedOn: ended ? termEnd : '', renewals };
             if (!ended && markPaid) { const dow = new Date(finD(r.start)).getUTCDay(), first = finAdd(r.start, dow === 0 ? 7 : 7 - dow); if (first <= sun) row.paidUntil = sun; }
-            if (r.guessed) warnings.push(`${r.name} (#${r.sheetId}): ${finShort(backBlank)} paid back, divided equally over ${blanks.length} line${blanks.length === 1 ? '' : 's'}; the term end is taken as the day the money was returned.`);
+            if (r.guessed && r === list.find(x => x.guessed)) warnings.push(`${r.name} (#${r.sheetId}): ${finShort(backBlank)} paid back, divided equally over ${blanks.length} line${blanks.length === 1 ? '' : 's'}; the term end is taken as the day the money was returned.`);
             if (gone) warnings.push(`${r.name} (#${r.sheetId}): withdrew but the sheet has no amount for this line (kept as amount 0).`);
             rows.push(row);
         }
