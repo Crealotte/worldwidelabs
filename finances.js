@@ -190,9 +190,10 @@ function finVentures(m) {
     for (const tier of [4100, 3600, 2600]) {
         const cap = D.capitals[`pi:${tier}`] ?? S.rto.defaults.cost[tier], eq = eqs[tier];
         rows.push({ name: `Island ${tier} rented out`, type: 'Private Island', capital: cap, weekly: rent[tier] * 7 / 30, note: 'rent only' });
-        // rent-to-own: the equity the tenant pays is the sale price coming in by instalments, so the gain is the rent over the whole contract plus (goal - capital), spread over its length
-        const goal = (S.rto.defaults.goals || {})[tier] || 0, cycles = goal && eq ? goal / eq : 0, gain = cycles * rent[tier] + goal - cap;
-        rows.push({ name: `Island ${tier} rent-to-own`, type: 'Private Island', capital: cap, weekly: cycles ? gain / (cycles * 30 / 7) : (rent[tier] + eq) * 7 / 30, noPayback: true, note: cycles ? `rent plus the sale at ${finShort(goal)}, over about ${(cycles * 30 / 365).toFixed(1)} years` : 'rent + the equity the tenant builds up' });
+        // rent-to-own: the equity the tenant pays is the sale price coming in by instalments, and every month a part of the money is back (and can be reinvested)
+        const goal = (S.rto.defaults.goals || {})[tier] || 0, st = goal && eq ? finRtoStats(cap, rent[tier], eq, goal) : null;
+        rows.push(st ? { name: `Island ${tier} rent-to-own`, type: 'Private Island', capital: cap, weekly: st.weeklyEquiv, irr: st.irr, payMonths: st.payMonths, note: `${st.months.toFixed(1)} months: rent plus the sale at ${finShort(goal)}; after ${st.payMonths} months the money is back and the rest is profit (still tied up after 6 months: ${finShort(Math.max(0, cap - st.back6))})` }
+            : { name: `Island ${tier} rent-to-own`, type: 'Private Island', capital: cap, weekly: (rent[tier] + eq) * 7 / 30, note: 'rent + the equity the tenant builds up' });
     }
     for (const [tier, t] of Object.entries(FIN_TIERS)) { // buddy banking: her share of the bank's profit on the cash she puts up
         const weekly = t.amount * finBankRate(t.days) * 0.7 / (t.days / 7);
@@ -201,6 +202,17 @@ function finVentures(m) {
     for (const v of D.ventures) if (v.active) rows.push({ name: v.name, type: v.type || 'Other', capital: v.capital, weekly: v.weekly, note: v.note });
     return rows.map(r => ({ ...r, roi: r.capital > 0 ? r.weekly * 52 / r.capital * 100 : null }))
         .sort((a, b) => (b.roi ?? -1e9) - (a.roi ?? -1e9));
+}
+// A rent-to-own island as cash flows: a payment of rent + equity at the start and then every month until the sale price is paid. Her simple yearly return is the profit over the capital,
+// spread over the months it lasts (profit / capital x 12 / months); the IRR counts that a part of the money is back every month (a monthly rate, times 12).
+function finRtoStats(cost, rent, eq, goal) {
+    const months = goal / eq, n = Math.ceil(months - 1e-9), flows = []; let rem = goal;
+    for (let k = 0; k < n; k++) { const e = Math.min(eq, rem); rem -= e; flows.push(rent + e); }
+    const profit = flows.reduce((s, x) => s + x, 0) - cost;
+    let lo = 0, hi = 1; const npv = r => flows.reduce((s, x, k) => s + x / Math.pow(1 + r, k), 0) - cost;
+    for (let i = 0; i < 80; i++) { const mid = (lo + hi) / 2; if (npv(mid) > 0) lo = mid; else hi = mid; }
+    let cum = 0, payMonths = n; for (let k = 0; k < n; k++) { cum += flows[k]; if (cum >= cost) { payMonths = k + 1; break; } }
+    return { months, profit, irr: lo * 12 * 100, payMonths, back6: flows.slice(0, 6).reduce((s, x) => s + x, 0), weeklyEquiv: profit / (months * 52 / 12) };
 }
 function finInvestorCost() {
     const act = finData.investors.filter(i => i.active && i.amount > 0);
@@ -344,15 +356,15 @@ function finRefresh() {
     });
     // ventures ranked by return
     const rows = finVentures(m), pct = cost.pct;
-    $('fin-vent').innerHTML = `<table style="width:100%;border-collapse:collapse;font-size:13px;"><thead><tr>${th('Venture')}${th('Kind')}${th('Capital', 1)}${th('Earns a week', 1)}${th('Return a year', 1)}${th('Pays back in', 1)}${th(pct === null ? 'After investor cost, a week' : `After paying investors ${pct.toFixed(0)}%, a week`, 1)}</tr></thead>
+    $('fin-vent').innerHTML = `<table style="width:100%;border-collapse:collapse;font-size:13px;"><thead><tr>${th('Venture')}${th('Kind')}${th('Capital', 1)}${th('Earns a week', 1)}${th('Return a year', 1)}${th('Counting money coming back', 1)}${th('Pays back in', 1)}${th(pct === null ? 'After investor cost, a week' : `After paying investors ${pct.toFixed(0)}%, a week`, 1)}</tr></thead>
         <tbody>${rows.map(r => {
             const margin = r.capital > 0 ? r.weekly - r.capital * (pct ?? 35) / 100 / 52 : null;
             const good = r.roi !== null && pct !== null && r.roi > pct;
             return `<tr style="border-top:1px solid var(--border,rgba(255,255,255,.08));"><td style="padding:4px 9px;">${esc(r.name)}${r.note ? `<div style="font-size:11px;color:var(--muted);">${esc(r.note)}</div>` : ''}</td><td style="padding:4px 9px;color:var(--muted);">${esc(r.type)}</td>
             ${td(r.capital ? finShort(r.capital) : '<span style="color:var(--muted);">set it</span>')}${td(finShort(r.weekly))}${td(r.roi === null ? '—' : `${r.roi.toFixed(1)}%`, { b: 1, color: r.roi === null ? '' : good ? 'var(--success,#35d99b)' : pct === null ? '' : 'var(--danger)' })}
-            ${td(!r.noPayback && r.capital > 0 && r.weekly > 0 ? `${(r.capital / r.weekly / 52 * 12).toFixed(1)} months` : '—')}${td(margin === null ? '—' : finShort(margin), { color: margin !== null && margin < 0 ? 'var(--danger)' : '' })}</tr>`;
+            ${td(r.irr == null ? '—' : `${r.irr.toFixed(0)}%`)}${td(r.payMonths ? `${r.payMonths} months` : r.capital > 0 && r.weekly > 0 ? `${(r.capital / r.weekly / 52 * 12).toFixed(1)} months` : '—')}${td(margin === null ? '—' : finShort(margin), { color: margin !== null && margin < 0 ? 'var(--danger)' : '' })}</tr>`;
         }).join('')}</tbody></table>
-        <p style="font-size:11px;color:var(--muted);margin:8px 0 0;">Green earns more a year than your investors cost you; red earns less, so money borrowed for it would cost more than it brings in. Companies use the profit after the director cut; islands use the rent from your rental terms; rent-to-own also counts the sale at the end (the price minus the capital), spread over the contract. The capital per island is set below.</p>`;
+        <p style="font-size:11px;color:var(--muted);margin:8px 0 0;">Green earns more a year than your investors cost you; red earns less, so money borrowed for it would cost more than it brings in. Companies use the profit after the director cut; islands use the rent from your rental terms; rent-to-own counts the rent plus the sale at the end (price minus capital), spread over the months it lasts. "Counting money coming back" is the monthly return when the part of the money that returns every month is taken into account: you can reinvest it, so the money is not stuck for the whole contract. The capital per island is set below.</p>`;
     // the yearly percentage and the placeholder (what the table pays) in the investor list
     document.querySelectorAll('[data-pct]').forEach(el => {
         const i = finData.investors[+el.dataset.pct]; if (!i) return;
