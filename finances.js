@@ -488,6 +488,8 @@ function finWire(bodyId) {
         if (el.id === 'fin-overlay') { finShowPlan = el.value; finRefresh(); return; }
         if (el.id === 'pay-sheet') { finPaySheet = el.value; finRefreshPay(); return; }
         if (el.id === 'pay-weeks') { finPayWeeks = +el.value; finRefreshPay(); return; }
+        if (el.id === 'pay-ahead') { finPayAhead = +el.value; finRefreshPay(); return; }
+        if (el.id === 'pay-sort') { finPaySort = el.value; finRefreshPay(); return; }
         if (el.id === 'pay-week') { finPayWeek = el.value; finRefreshPay(); return; }
         if (el.id === 'fund-f') { finFundFilter = el.value; finRenderFundTable(); finRefreshFund(); return; }
         if (el.id === 'fund-s') { finFundSort = el.value; finRenderFundTable(); finRefreshFund(); return; }
