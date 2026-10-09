@@ -351,7 +351,7 @@ async function loadFinances() {
     if (r.error) { st.className = 'status err'; st.textContent = r.error; return; }
     st.textContent = ''; st.className = 'status';
     finSrv = { cash: r.cash, companies: r.companies || [], rto: r.rto || { rtoItems: [], pis: [], defaults: { rent: { 4100: 27000000, 3600: 15000000, 2600: 12000000 }, equity: { 4100: 81000000, 3600: 45000000, 2600: 36000000 }, goals: { 4100: 1701000000, 3600: 855000000, 2600: 612000000 }, cost: { 4100: 1482500000, 3600: 757500000, 2600: 557500000 } } }, today: r.today };
-    finData = { fundsMode: r.fundsMode, fundsManual: r.fundsManual, reserve: r.reserve, investors: r.investors, income: r.income, outlays: r.outlays, plans: r.plans, roi: r.roi, ventures: r.ventures, capitals: r.capitals, coEst: r.coEst || {}, paidOffset: r.paidOffset || 0, invRequests: r.invRequests || [], loans: r.loans || [], buddies: r.buddies || [] };
+    finData = { fundsMode: r.fundsMode, fundsManual: r.fundsManual, reserve: r.reserve, investors: r.investors, income: r.income, outlays: r.outlays, plans: r.plans, roi: r.roi, ventures: r.ventures, capitals: r.capitals, coEst: r.coEst || {}, paidOffset: r.paidOffset || 0, terms: r.terms || {}, invRequests: r.invRequests || [], loans: r.loans || [], buddies: r.buddies || [] };
     finRenderAll();
 }
 function finRenderAll() { FIN_PAGES[finPage].render(); }
@@ -470,7 +470,7 @@ async function finSaveNow() {
     const P = FIN_PAGES[finPage];
     // the Finances page saves everything except the lists of the investment fund and buddy banking pages; those pages save only their own lists
     const r = P.parts ? await finFetch({ action: 'fin-part-save', parts: Object.fromEntries(P.parts.map(k => [k, finData[k]])) })
-        : await finFetch({ action: 'fin-save', data: Object.fromEntries(Object.entries(finData).filter(([k]) => !['investors', 'buddies', 'roi', 'invRequests', 'paidOffset'].includes(k))) });
+        : await finFetch({ action: 'fin-save', data: Object.fromEntries(Object.entries(finData).filter(([k]) => !['investors', 'buddies', 'roi', 'invRequests', 'paidOffset', 'terms'].includes(k))) });
     finSaving = false;
     const st = finStatusEl();
     if (r.error) { st.className = 'status err'; st.textContent = `Not saved: ${r.error}`; return; }

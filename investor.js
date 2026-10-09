@@ -15,12 +15,13 @@ function checkInvestorAccess(acc) {
     if (el) el.style.display = acc && acc.investor ? '' : 'none';
 }
 // An investor who is not in one of the allowed factions (or whose key is too small for the rest of WWL): WWL is just their investments page.
-function enterInvestorMode() {
+function enterInvestorMode(acc) { // the portal of an investor and/or a tenant: only their own pages
     invMode = true;
     document.querySelectorAll('nav.side .nav-item, nav.side .nav-group').forEach(el => { el.style.display = 'none'; });
-    const mine = document.querySelector('.nav-item[data-page="investor"]');
-    if (mine) mine.style.display = '';
-    goToPage('investor');
+    const show = p => { const el = document.querySelector(`.nav-item[data-page="${p}"]`); if (el) el.style.display = ''; };
+    if (!acc || acc.investor) show('investor');
+    if (acc && acc.tenant) show('tenant');
+    goToPage(!acc || acc.investor ? 'investor' : 'tenant');
 }
 
 async function loadInvestor() {
@@ -51,7 +52,7 @@ function invHtml(r) {
     next.sort((a, b) => (a.date < b.date ? 1 : -1)).reverse();
     const card = i => {
         const left = i.termEnd ? Math.round((finD(i.termEnd) - finD(today)) / 86400000) : null, reqs = reqOf(i), list = finPaidList(i);
-        const reqLine = q => `<div style="font-size:12px;color:#e0a030;">Asked ${esc(finDate(q.createdOn))}: ${q.type === 'renew' ? `renew for ${q.days} days` : q.type === 'topup' ? `add ${finShort(q.amount)}` : 'withdraw at the end of the term'}${q.late ? ' (less than 4 weeks before the end)' : ''}, waiting for the fund owner <a href="#" class="inv-cancel" data-id="${esc(q.id)}" style="color:var(--danger);">cancel</a></div>`;
+        const reqLine = q => `<div style="font-size:12px;color:#e0a030;">Asked ${esc(finDate(q.createdOn))}: ${q.type === 'renew' ? `renew for ${q.days} days` : q.type === 'topup' ? `add ${finShort(q.amount)}` : 'withdraw at the end of the term'}${q.late ? ' (less than 30 days before the end)' : ''}, waiting for the fund owner <a href="#" class="inv-cancel" data-id="${esc(q.id)}" style="color:var(--danger);">cancel</a></div>`;
         const nx = finInvPeriods(i, finAdd(today, 400), finAdd(today, -1))[0];
         return `<div class="panel" style="margin:0 0 12px;"><div style="display:flex;gap:18px;flex-wrap:wrap;align-items:baseline;"><h3 style="margin:0;font-family:var(--mono);">${finMoney(i.amount)}</h3><span style="color:var(--muted);font-size:12px;">since ${esc(finDate(i.start))}</span>${i.leaving ? '<span style="color:#e0a030;font-size:12px;font-weight:700;">You will get this money back at the end of the term.</span>' : ''}</div>
             <div style="font-size:13px;line-height:1.7;margin-top:6px;">Payout: ${modeText(i)}<br>${nx ? `Next payout: <b>${esc(finDate(nx.date))}</b> (${finMoney(nx.amount)})<br>` : ''}Term ends: <b>${i.termEnd ? esc(finDate(i.termEnd)) : 'not set'}</b>${left !== null ? ` <span style="color:${left < 28 ? '#e0a030' : 'var(--muted)'};">(${left < 0 ? 'ended' : `in ${left} days`})</span>` : ''}<br>Paid out to you on this investment: <b>${finMoney(finPaidTotal(i))}</b>${(i.renewals || []).length ? `<br><span style="color:var(--muted);font-size:12px;">Renewed: ${i.renewals.map(x => `${esc(finDate(x.from))} → ${esc(finDate(x.to))}`).join(', ')}</span>` : ''}</div>
@@ -60,19 +61,20 @@ function invHtml(r) {
                 <select class="inv-days" data-row="${esc(i.id)}"><option value="180">180 days</option><option value="90">90 days</option></select><button class="ghost small inv-req" data-type="renew" data-row="${esc(i.id)}" type="button">Ask to renew</button>
                 <input class="inv-amt" data-row="${esc(i.id)}" type="text" inputmode="decimal" placeholder="Amount to add (500m)" style="width:150px;"><button class="ghost small inv-req" data-type="topup" data-row="${esc(i.id)}" type="button">Ask to add money</button>
                 ${i.leaving ? '' : `<button class="ghost small inv-req" data-type="withdraw" data-row="${esc(i.id)}" type="button">Ask to withdraw at the end of the term</button>`}</div>
-            <div style="font-size:11px;color:var(--muted);margin-top:6px;">You can renew or add money at any time. To withdraw at the end of your term you give ${r.notice / 7} weeks notice (before ${i.termEnd ? esc(finDate(finAdd(i.termEnd, -r.notice))) : 'the end'}); the money goes back when the term ends, if the fund owner has it available. The fund owner approves every request.</div>
+            <div style="font-size:11px;color:var(--muted);margin-top:6px;">You can renew or add money at any time. To withdraw at the end of your term you give ${r.notice} days notice (before ${i.termEnd ? esc(finDate(finAdd(i.termEnd, -r.notice))) : 'the end'}); the money goes back when the term ends, if the fund owner has it available. The fund owner approves every request.</div>
             ${list.length ? `<details style="margin-top:8px;"><summary class="av-sum" style="font-size:12px;color:var(--muted);">Payouts so far (${list.length})</summary><div style="max-height:220px;overflow:auto;">${list.slice().reverse().map(p => `<div style="display:flex;gap:14px;font-size:12px;padding:1px 0;"><span style="font-family:var(--mono);">${esc(p.date)}</span><span style="font-family:var(--mono);">${finMoney(p.amount)}</span></div>`).join('')}</div></details>` : ''}</div>`;
     };
     const old = i => { const list = finPaidList(i); return `<details style="border-top:1px solid var(--line);padding:6px 0;"><summary class="av-sum"><b style="font-family:var(--mono);">${finMoney(i.amount)}</b> <span style="color:var(--muted);font-size:13px;">· ${esc(finDate(i.start))} → ${i.returnedOn ? esc(finDate(i.returnedOn)) : 'ended'} · paid out ${finMoney(finPaidTotal(i))}</span></summary>
         <div style="font-size:12px;padding:4px 0 2px 14px;color:var(--muted);">${i.returnedOn ? `The money was returned on ${esc(finDate(i.returnedOn))}. ` : ''}${(i.renewals || []).length ? `Renewed: ${i.renewals.map(x => `${esc(finDate(x.from))} → ${esc(finDate(x.to))}`).join(', ')}.` : ''}</div>
         ${list.length ? `<div style="max-height:200px;overflow:auto;padding-left:14px;">${list.slice().reverse().map(p => `<div style="display:flex;gap:14px;font-size:12px;padding:1px 0;"><span style="font-family:var(--mono);">${esc(p.date)}</span><span style="font-family:var(--mono);">${finMoney(p.amount)}</span></div>`).join('')}</div>` : ''}</details>`; };
-    return `<div class="panel" style="display:flex;gap:26px;flex-wrap:wrap;font-size:13px;">${box('Invested now', finMoney(inNow))}${box('Paid to you a week', finMoney(weekNow))}${box('Paid out to you in total', finMoney(paidAll))}${box('Invested over time (all investments)', finMoney(everIn))}</div>
+    return `${termsPanel('invest', r.terms)}<div class="panel" style="display:flex;gap:26px;flex-wrap:wrap;font-size:13px;">${box('Invested now', finMoney(inNow))}${box('Paid to you a week', finMoney(weekNow))}${box('Paid out to you in total', finMoney(paidAll))}${box('Invested over time (all investments)', finMoney(everIn))}</div>
         ${active.length ? `<h3 style="margin:14px 0 8px;">Your investments now</h3>${active.map(card).join('')}` : `<div class="panel" style="color:var(--muted);">You have no active investment at the moment. Everything you had before is listed below. Ask the fund owner if you want to invest again.</div>`}
         ${next.length ? `<div class="panel"><h3 style="margin-top:0;">Next payouts</h3>${next.slice(0, 6).map(p => `<div style="display:flex;gap:16px;font-size:13px;padding:2px 0;"><span style="font-family:var(--mono);min-width:96px;">${esc(finDate(p.date))}</span><span style="font-family:var(--mono);">${finMoney(p.amount)}</span></div>`).join('')}</div>` : ''}
         ${ended.length ? `<div class="panel"><h3 style="margin-top:0;">Earlier investments</h3><div style="font-size:12px;color:var(--muted);margin:-4px 0 6px;">Everything you invested before, from when to when, and what was paid out to you.</div>${ended.slice().reverse().map(old).join('')}</div>` : ''}
         <div style="font-size:11px;color:var(--muted);">Payouts are shown as worked out from the schedule up to the date they were marked as paid.</div>`;
 }
 function invWire() {
+    termsWire(loadInvestor);
     document.querySelectorAll('.inv-req').forEach(b => b.addEventListener('click', async () => {
         const row = b.dataset.row, type = b.dataset.type, body = { action: 'inv-request', type, rowId: row };
         if (type === 'renew') body.days = Number(document.querySelector(`.inv-days[data-row="${row}"]`).value);

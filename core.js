@@ -155,6 +155,7 @@
         const acc = await fetch('/api/war-payout', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key, action: 'access-check' }) }).then(r => r.json()).catch(() => null);
         if (typeof checkCompanyAccess === 'function') checkCompanyAccess(acc); // shows "My company" for directors and "Companies" for the owner
         if (typeof checkInvestorAccess === 'function') checkInvestorAccess(acc); // shows "My investments" for investors of the fund
+        if (typeof checkTenantAccess === 'function') checkTenantAccess(acc); // shows "My rental" for tenants of a Labs island
         if (acc && acc.director && (acc.allowed === false || limitedErr)) { // a company director outside the allowed factions: WWL is just their company page
             localStorage.setItem(KEY_STORAGE, key);
             $('login-view').style.display = 'none';
@@ -162,11 +163,11 @@
             if (typeof enterDirectorMode === 'function') enterDirectorMode();
             return;
         }
-        if (acc && acc.investor && !acc.owner && (limitedErr || acc.allowed === false)) { // an investor of the fund outside the allowed factions (or with a small key): WWL is just their investments page
+        if (acc && (acc.investor || acc.tenant) && !acc.owner && (limitedErr || acc.allowed === false)) { // an investor of the fund outside the allowed factions (or with a small key): WWL is just their investments page
             localStorage.setItem(KEY_STORAGE, key);
             $('login-view').style.display = 'none';
             $('app-view').style.display = 'block';
-            if (typeof enterInvestorMode === 'function') enterInvestorMode();
+            if (typeof enterInvestorMode === 'function') enterInvestorMode(acc);
             return;
         }
         if (limitedErr) { apiKey = ''; throw limitedErr; } // a small key is only enough for the pages above
@@ -444,6 +445,7 @@
         if (page === 'fund') loadInvestFund();
         if (page === 'payouts') loadPayouts();
         if (page === 'investor') loadInvestor();
+        if (page === 'tenant') loadTenant();
         if (page === 'buddybank') loadBuddyBank();
         if (page === 'bug-report') loadBugReport();
         if (page === 'labs-funds') loadLabsFunds();

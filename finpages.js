@@ -10,7 +10,7 @@ async function finLoadLight(page, statusId) {
     if (r.error) { st.className = 'status err'; st.textContent = r.error; return; }
     st.textContent = ''; st.className = 'status';
     finSrv = { cash: null, companies: r.companies || [], rto: null, today: r.today };
-    finData = { fundsMode: r.fundsMode, fundsManual: r.fundsManual, reserve: r.reserve, investors: r.investors, income: r.income, outlays: r.outlays, plans: r.plans, roi: r.roi, ventures: r.ventures, capitals: r.capitals, coEst: r.coEst || {}, paidOffset: r.paidOffset || 0, invRequests: r.invRequests || [], loans: r.loans || [], buddies: r.buddies || [] };
+    finData = { fundsMode: r.fundsMode, fundsManual: r.fundsManual, reserve: r.reserve, investors: r.investors, income: r.income, outlays: r.outlays, plans: r.plans, roi: r.roi, ventures: r.ventures, capitals: r.capitals, coEst: r.coEst || {}, paidOffset: r.paidOffset || 0, terms: r.terms || {}, invRequests: r.invRequests || [], loans: r.loans || [], buddies: r.buddies || [] };
     finRenderAll();
 }
 const loadInvestFund = () => finLoadLight('fund', 'fund-status');
@@ -38,6 +38,12 @@ let finFundQ = '', finFundFilter = 'live', finFundSort = 'id'; const finFundOpen
 const FIN_FUND_FILTERS = [['live', 'With money in now'], ['all', 'Everyone'], ['due', 'Payout due'], ['soon', 'Term ends within 30 days'], ['leaving', 'Leaving at the end of the term'], ['gone', 'Earlier investors']];
 const FIN_FUND_SORTS = [['id', 'ID'], ['name', 'Name'], ['inNow', 'Invested (high first)'], ['week', 'A week (high first)'], ['ends', 'Term ends (soonest first)'], ['paid', 'Paid out (high first)']];
 
+// whether an investor accepted the current terms (only people who have logged in have a Torn ID here)
+function finTermsBadge(tornId) {
+    if (!tornId) return '';
+    const t = (finData.terms || {})[String(tornId)];
+    return t && t.v === TERMS_VERSION.invest ? ` <span title="Accepted the terms on ${esc(t.on)}" style="color:var(--success,#35d99b);font-size:11px;">✓ terms</span>` : ' <span title="Has not accepted the current terms yet" style="color:var(--muted);font-size:11px;">terms ✗</span>';
+}
 // what one person gets and is owed, from all their lines
 function finPersonStats(ix) {
     const today = finSrv.today, rows = ix.map(k => finData.investors[k]).filter(Boolean), act = rows.filter(r => r.active), own = act.filter(r => !r.nettedIn);
@@ -57,7 +63,7 @@ function finPersonCells(s, ixs, open) {
     const dim = s.act.length ? '' : 'color:var(--muted);';
     return [
         `${finIdClash(s.rows[0].fundId) ? '<span title="Another investor has the same ID: change one of them" style="color:#e0a030;">⚠ </span>' : ''}<span style="color:var(--muted);">${esc(s.rows[0].fundId || '')}</span>`,
-        `<b style="${dim}">${esc(s.rows[s.rows.length - 1].name)}</b>${s.lines > 1 ? ` <span style="color:var(--muted);font-size:11px;">${s.lines} lines</span>` : ''}${s.leaving ? ' <span style="color:#e0a030;font-size:11px;">leaving</span>' : ''}`,
+        `<b style="${dim}">${esc(s.rows[s.rows.length - 1].name)}</b>${s.lines > 1 ? ` <span style="color:var(--muted);font-size:11px;">${s.lines} lines</span>` : ''}${s.leaving ? ' <span style="color:#e0a030;font-size:11px;">leaving</span>' : ''}${finTermsBadge(s.rows[0].tornId)}`,
         s.act.length ? finShort(s.inNow) : '<span style="color:var(--muted);">—</span>',
         s.act.length ? `<b>${finShort(s.week)}</b>` : '<span style="color:var(--muted);">—</span>',
         s.act.length ? `<span style="color:var(--muted);">${s.mode}</span>` : '',
@@ -146,7 +152,7 @@ function finRefreshFund() {
         const r = rowOf(q), who = `<b>${esc(q.name)}</b>`;
         if (q.type === 'renew') { const from = r && r.termEnd && r.termEnd > today ? r.termEnd : today; return `${who} wants to renew ${r ? finShort(r.amount) : ''} for ${q.days} days (new end ${esc(finDate(finAdd(from, q.days)))})`; }
         if (q.type === 'topup') return `${who} wants to add <b>${finShort(q.amount)}</b>`;
-        return `${who} wants <b>${finShort(q.amount)}</b> back at the end of the term (${esc(finDate(q.termEnd || (r && r.termEnd) || today))}), asked ${esc(finDate(q.createdOn))}${q.late ? ' <span style="color:var(--danger);">— late: less than 4 weeks before the end</span>' : ''}`;
+        return `${who} wants <b>${finShort(q.amount)}</b> back at the end of the term (${esc(finDate(q.termEnd || (r && r.termEnd) || today))}), asked ${esc(finDate(q.createdOn))}${q.late ? ' <span style="color:var(--danger);">— late: less than 30 days before the end</span>' : ''}`;
     };
     const btns = q => q.type === 'topup' ? `<button class="small" data-reqres="${esc(q.id)}" data-dec="received" type="button">Money received</button>` : `<button class="small" data-reqres="${esc(q.id)}" data-dec="approve" type="button">Approve</button>`;
     $('fund-requests').innerHTML = openQ.length || doneQ.length ? `<div class="panel"><h3 style="margin-top:0;">Requests from investors${openQ.length ? ` <span style="font-size:13px;color:#e0a030;">(${openQ.length} open)</span>` : ''}</h3>
@@ -236,6 +242,7 @@ function finRenderBuddy() {
         <p style="font-size:13px;margin:0 0 8px;">You put up the cash. The buddy invests it in their City Bank and earns the interest. When the term ends they keep 30% of the profit and send you back the principal plus 70% of the profit. The profit is whatever Torn's bank gives them, so it depends on their bank merits (they need 10/10 for this).</p>
         <div style="display:flex;gap:10px;flex-wrap:wrap;">${t('🥉 Bronze', finShort(FIN_TIERS.bronze.amount), `${FIN_TIERS.bronze.days} days`)}${t('🥈 Silver', finShort(FIN_TIERS.silver.amount), `${FIN_TIERS.silver.days} days, after a promotion`)}${t('🥇 Gold', finShort(FIN_TIERS.gold.amount), `${FIN_TIERS.gold.days} days, after a promotion`)}</div>
         <div style="font-size:11px;color:var(--muted);margin-top:8px;">Everyone starts at Bronze. When you leave the expected profit at 0, the page estimates it from Torn's bank rate for 10/10 merits (5.14% for 1 month, 11.93% for 2 months); type the real profit in when you know it.</div></div>
+        <details class="panel"><summary class="av-sum"><b>📜 ${esc(TERMS.buddy.title)}</b> <span style="font-size:12px;color:var(--muted);">(the terms of the program, as written)</span></summary><div style="margin-top:8px;">${termsHtml('buddy')}</div></details>
         <div id="bb-summary"></div>${finListEditor('buddies')}`;
     finWire('bb-body');
     finRefresh();
