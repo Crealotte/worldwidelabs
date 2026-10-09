@@ -301,13 +301,13 @@ function finParseSheet(text, markPaid) {
         const rate = W > 0 && fixed.length ? W / fixed.reduce((s, r) => s + r.amount, 0) : A > 0 ? finRoi(A, finData.roi) / A : 0;
         const modeOf = (list.find(r => r.weekly > 0 && r.mode) || list.find(r => r.mode) || {}).mode || 'weekly'; // one way of being paid per person, as in the pay calendar: the line that carries the weekly amount decides
         const fixedA = fixed.reduce((s, r) => s + r.amount, 0), expectW = finRoi(fixedA, finData.roi); // the sheet's weekly amount against the pay table: a difference is worth a look
-        if (W > 0 && fixedA > 0 && expectW > 0 && Math.abs(W - expectW) / expectW > 0.02) warnings.push(`${list[0].name} (#${list[0].sheetId}): the sheet says ${finMoney(W)} a week for ${finMoney(fixedA)}, the pay table gives ${finMoney(expectW)}. The sheet's amount is used.`);
+        if (W > 0 && fixedA > 0 && expectW > 0 && Math.abs(W - expectW) / expectW > 0.02) warnings.push(`${list[0].name} (#${list[0].sheetId}): the sheet says ${finMoney(W)} a week for ${finMoney(fixedA)}, the pay table gives ${finMoney(expectW)}. The pay table is used (as in your calendar).`);
         for (const r of list) {
             const gone = !r.amount; // withdrew, and the sheet has no amount for it
             const ended = r.back > 0 || r.guessed || gone, termEnd = latest([r.first, r.n1, r.n2]);
             const renewals = []; if (r.n1 && r.n1 !== r.first) renewals.push({ from: r.first, to: r.n1 }); if (r.n2 && r.n2 !== r.n1) renewals.push({ from: r.n1 || r.first, to: r.n2 });
             const word = [r.r1, r.r2].filter(x => x && !/^\d+$/.test(x)).join(', ');
-            const row = { id: finId(), fundId: r.sheetId, name: r.name, tornId: '', amount: r.amount || 0, payout: (W > 0 && fixedA > 0 && !(expectW > 0 && Math.abs(W - expectW) / expectW <= 0.02)) ? Math.round((r.amount || 0) * rate) : null, mode: modeOf, start: r.start, active: !ended, nettedIn: '', note: `${word}${r.guessed ? ' · amount split from the total paid back' : ''}${gone ? ' · withdrew, amount not in the sheet' : ''}`.slice(0, 120),
+            const row = { id: finId(), fundId: r.sheetId, name: r.name, tornId: '', amount: r.amount || 0, payout: null, mode: modeOf, start: r.start, active: !ended, nettedIn: '', note: `${word}${r.guessed ? ' · amount split from the total paid back' : ''}${gone ? ' · withdrew, amount not in the sheet' : ''}`.slice(0, 120),
                 paidUntil: '', payments: [], termEnd, returnedOn: ended ? termEnd : '', renewals };
             if (!ended && markPaid) { const dow = new Date(finD(r.start)).getUTCDay(), first = finAdd(r.start, dow === 0 ? 7 : 7 - dow); if (first <= sun) row.paidUntil = sun; }
             if (r.guessed && r === list.find(x => x.guessed)) warnings.push(`${r.name} (#${r.sheetId}): ${finShort(backBlank)} paid back, divided equally over ${blanks.length} line${blanks.length === 1 ? '' : 's'}; the term end is taken as the day the money was returned.`);
@@ -316,7 +316,10 @@ function finParseSheet(text, markPaid) {
         }
     }
     const act = rows.filter(r => r.active);
-    return { rows, warnings, stats: { people: new Set(act.map(r => r.name.toLowerCase())).size, invested: act.reduce((s, r) => s + r.amount, 0), weekly: act.reduce((s, r) => s + r.payout, 0), ended: rows.length - act.length } };
+    const keep = finData.investors; finData.investors = rows; // what they are paid a week follows the pay table for the whole list, so work it out on the list that would be imported
+    const weekNow = act.reduce((s, r) => s + finPayout(r), 0);
+    finData.investors = keep;
+    return { rows, warnings, stats: { people: new Set(act.map(r => r.name.toLowerCase())).size, invested: act.reduce((s, r) => s + r.amount, 0), weekly: weekNow, ended: rows.length - act.length } };
 }
 let finImpPending = null;
 function finImportPanel() {
