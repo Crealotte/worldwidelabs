@@ -57,13 +57,12 @@ function finRefreshPay() {
     const grp = []; if (finPaySort === 'amount') people.forEach((p, n) => { const g = grp[grp.length - 1]; if (g && g.week === p.week) { g.count++; g.ix.push(...p.ix); } else grp.push({ week: p.week, count: 1, start: n, ix: p.ix.slice() }); });
     const gStart = new Set(grp.map(g => g.start));
     const cell = (p, n, d) => {
-        const c = p.days[d], bl = gStart.has(n) && n > 0 ? 'border-left:2px solid var(--muted);' : '', pb = p.back[d], te = p.ends[d];
-        if (!c && !pb && !te) return `<td style="padding:0;border:1px solid var(--line);${bl}"></td>`;
+        const c = p.days[d], bl = gStart.has(n) && n > 0 ? 'border-left:2px solid var(--muted);' : '', pb = p.back[d];
+        if (!c && !pb) return `<td style="padding:0;border:1px solid var(--line);${bl}"></td>`;
         const st = c ? finCellState(p, d) : null, bg = st === 'paid' ? 'rgba(53,217,155,.28)' : st === 'due' ? 'rgba(240,180,50,.30)' : 'transparent';
         const btn = c ? `<button type="button" data-pc="${c.lines.join(',')}" data-d="${d}" style="all:unset;display:block;cursor:pointer;padding:3px 8px;text-align:right;font-family:var(--mono);font-size:12px;white-space:nowrap;min-width:84px;${st === 'later' ? 'opacity:.75;' : ''}" title="${esc(p.name)}: click when paid">${finFull(c.amount)}</button>` : '';
         const late = pb && d <= today, back = pb ? `<button type="button" data-payback="${pb.lines.join(',')}" data-d="${d}" style="all:unset;display:block;cursor:pointer;padding:2px 8px;text-align:right;font-size:11px;font-weight:700;white-space:nowrap;background:${late ? 'rgba(224,85,85,.45)' : 'rgba(155,89,182,.40)'};" title="${esc(p.name)} withdraws: pay the money back, then click to mark it returned">↩ pay back ${finFull(pb.amount)}</button>` : '';
-        const tend = !pb && te ? `<div style="padding:1px 8px;text-align:right;font-size:10px;color:var(--muted);white-space:nowrap;" title="The term of ${esc(p.name)} ends: renewed or not?">⏳ term ends</div>` : '';
-        return `<td style="padding:0;border:1px solid var(--line);${bl}background:${bg};">${btn}${back}${tend}</td>`;
+        return `<td style="padding:0;border:1px solid var(--line);${bl}background:${bg};">${btn}${back}</td>`;
     };
     const sticky = 'position:sticky;left:0;background:var(--bench-2,#1b212b);z-index:1;';
     const th = 'padding:3px 8px;font-size:11px;font-weight:600;white-space:nowrap;border:1px solid var(--line);';
