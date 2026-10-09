@@ -100,7 +100,7 @@ const finPaidThrough = i => i.paidUntil || (i.returnedOn ? finAdd(i.returnedOn, 
 // A payout is paid when it is on or before "paid through" (unless it is in `skip`: a week that was left unpaid), or when it was marked paid on its own (`extra`: paid after "paid through"). The payout calendar colours the cells that way.
 const finIsPaid = (i, d) => { const t = finPaidThrough(i); return (!!t && d <= t && !(i.skip || []).includes(d)) || (i.extra || []).includes(d); };
 const finTracked = i => !!(i.paidUntil || (i.extra || []).length || i.returnedOn); // payouts are followed for this line (otherwise nothing is known about what was paid)
-const finDueList = (i, upTo) => (finTracked(i) ? finInvPeriods(i, upTo, '').filter(p => !finIsPaid(i, p.date)) : []);
+const finDueList = (i, upTo) => (finTracked(i) ? finInvPeriods(i, upTo, '').filter(p => !finIsPaid(i, p.date) && !(i.paused || []).includes(p.date)) : []); // a paused (held) payout is not due: it is released in full when the investor is back
 const finPaidList = i => { const end = [finPaidThrough(i)].concat(i.extra || []).filter(Boolean).sort().pop(); return end ? finInvPeriods(i, end, '').filter(p => finIsPaid(i, p.date)) : []; };
 const finPaidTotal = i => finSum(finPaidList(i)) + (i.paidAdj || 0); // plus the correction the calendar import keeps on a person's first line
 // the Paid buttons: everything due up to now is paid: remember it as a payment and move "paid through" forward (older skips and single marks are then part of it)
@@ -281,7 +281,7 @@ function finInvestorCost() {
 
 // ---- drawing ----
 const FIN_LISTS = {
-    investors: { title: 'Investors', add: '+ Investor', fresh: () => ({ id: finId(), fundId: String(Math.max(0, ...finData.investors.map(x => parseInt(x.fundId, 10) || 0)) + 1), name: '', amount: 0, payout: null, mode: 'weekly', start: new Date().toISOString().slice(0, 10), active: true, nettedIn: '', note: '', tornId: '', paidUntil: '', payments: [], termEnd: '', returnedOn: '', renewals: [], leaving: false, noticeOn: '', switches: [], skip: [], extra: [] }), cols: [
+    investors: { title: 'Investors', add: '+ Investor', fresh: () => ({ id: finId(), fundId: String(Math.max(0, ...finData.investors.map(x => parseInt(x.fundId, 10) || 0)) + 1), name: '', amount: 0, payout: null, mode: 'weekly', start: new Date().toISOString().slice(0, 10), active: true, nettedIn: '', note: '', tornId: '', paidUntil: '', payments: [], termEnd: '', returnedOn: '', renewals: [], leaving: false, noticeOn: '', switches: [], paused: [], skip: [], extra: [] }), cols: [
         { f: 'active', l: 'On', t: 'bool' }, { f: 'fundId', l: 'ID', t: 'text', w: 46 }, { f: 'name', l: 'Name', t: 'text', w: 120 }, { f: 'tornId', l: 'Torn ID', t: 'text', w: 80 }, { f: 'amount', l: 'Invested', t: 'money', w: 110 }, { f: 'payout', l: 'Paid a week (empty = by the table)', t: 'money', w: 130, nullable: true },
         { f: 'mode', l: 'Paid', t: 'sel', opts: [['weekly', 'Every Sunday'], ['monthly', 'Last Sunday of the month']] }, { f: 'start', l: 'Since', t: 'date' }, { f: 'termEnd', l: 'Term ends', t: 'date' }, { f: 'returnedOn', l: 'Money returned on', t: 'date' }, { f: 'paidUntil', l: 'Paid through', t: 'date' }, { f: 'nettedIn', l: 'Already netted in the send of', t: 'company' }] },
     income: { title: 'Other income', add: '+ Income', fresh: () => ({ id: finId(), name: '', amount: 0, freq: 'weekly', date: new Date().toISOString().slice(0, 10), active: true }), cols: [
@@ -490,6 +490,7 @@ function finWire(bodyId) {
         if (el.id === 'pay-weeks') { finPayWeeks = +el.value; finRefreshPay(); return; }
         if (el.id === 'pay-ahead') { finPayAhead = +el.value; finRefreshPay(); return; }
         if (el.id === 'pay-sort') { finPaySort = el.value; finRefreshPay(); return; }
+        if (el.id === 'pay-tool') { finPayTool = el.value; return; }
         if (el.id === 'pay-week') { finPayWeek = el.value; finRefreshPay(); return; }
         if (el.id === 'fund-f') { finFundFilter = el.value; finRenderFundTable(); finRefreshFund(); return; }
         if (el.id === 'fund-s') { finFundSort = el.value; finRenderFundTable(); finRefreshFund(); return; }

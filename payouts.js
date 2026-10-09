@@ -3,7 +3,7 @@
 // Under the calendar: the Discord weekly update for a chosen week, ready to copy. It shares the data and the helpers of finances.js (the same wwl:finances record, only the investors are saved).
 'use strict';
 
-let finPaySheet = 'weekly', finPayWeeks = 8, finPayAhead = 8, finPaySort = 'amount', finPayWeek = '';
+let finPaySheet = 'weekly', finPayWeeks = 8, finPayAhead = 8, finPaySort = 'amount', finPayWeek = '', finPayTool = 'paid';
 const loadPayouts = () => finLoadLight('pay', 'pay-status');
 
 const finPayShortAmt = a => (a >= 1e9 ? `${+(a / 1e9).toFixed(2)}b` : `${+(a / 1e6).toFixed(0)}m`); // 1b, 500m, 1.5b, as in the sheet
@@ -23,6 +23,8 @@ function finPayPeople(upTo, fromIso) {
 }
 const finCellState = (p, date) => {
     const d = p.days[date]; if (!d) return null;
+    const lines0 = d.lines.map(k => finData.investors[k]);
+    if (lines0.every(i => !finIsPaid(i, date) && (i.paused || []).includes(date))) return 'paused'; // held: the investor is on pause mode, released in full when they are back
     if (date > finSrv.today) return 'later'; // a payout of a coming Sunday: nothing to colour yet
     const lines = d.lines.map(k => finData.investors[k]);
     if (lines.every(i => finIsPaid(i, date))) return 'paid';
@@ -34,8 +36,9 @@ function finRenderPay() {
     $('pay-body').innerHTML = `<div class="panel" style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;padding:8px 12px;margin-bottom:8px;"><select id="pay-sheet">${opt([['weekly', 'Weekly investors'], ['monthly', 'Monthly investors (last Sunday of the month)']], finPaySheet)}</select>
             <label style="font-size:12px;color:var(--muted);">Weeks back <select id="pay-weeks">${opt([[4, '4'], [8, '8'], [13, '13'], [26, '26']], finPayWeeks)}</select></label>
             <label style="font-size:12px;color:var(--muted);">Weeks ahead <select id="pay-ahead">${opt([[0, '0'], [4, '4'], [8, '8'], [13, '13']], finPayAhead)}</select></label>
+            <label style="font-size:12px;color:var(--muted);">A click marks <select id="pay-tool">${opt([['paid', 'paid (green)'], ['pause', 'paused (blue)']], finPayTool)}</select></label>
             <label style="font-size:12px;color:var(--muted);">Order <select id="pay-sort">${opt([['amount', 'What they get a week (groups)'], ['id', 'ID'], ['invested', 'Invested (high first)'], ['name', 'Name']], finPaySort)}</select></label><span id="pay-count" style="font-size:12px;color:var(--muted);"></span><span style="flex:1;"></span>
-            <span style="font-size:12px;"><span style="background:rgba(53,217,155,.28);padding:1px 8px;border-radius:4px;">paid</span> <span style="background:rgba(240,180,50,.30);padding:1px 8px;border-radius:4px;">still to pay</span> <span style="padding:1px 8px;border:1px solid var(--line);border-radius:4px;">not followed / later</span></span></div>
+            <span style="font-size:12px;"><span style="background:rgba(53,217,155,.28);padding:1px 8px;border-radius:4px;">paid</span> <span style="background:rgba(240,180,50,.30);padding:1px 8px;border-radius:4px;">still to pay</span> <span style="background:rgba(70,140,255,.38);padding:1px 8px;border-radius:4px;">paused (held)</span> <span style="padding:1px 8px;border:1px solid var(--line);border-radius:4px;">not followed / later</span></span></div>
         <div id="pay-grid" class="panel" style="padding:0;overflow:auto;max-height:72vh;"></div>
         <div style="font-size:12px;color:var(--muted);margin:-4px 0 10px;">With the order on "what they get a week", people who get the same amount stand together; press the amount at the top of a group to mark this week's payout of the whole group as paid.</div>
         <div class="panel"><h3 style="margin-top:0;">Weekly update for Discord</h3><div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px;"><label style="font-size:13px;">Week ending <select id="pay-week"></select></label><button class="small" data-paycopy="1" type="button">Copy</button></div>
@@ -59,7 +62,7 @@ function finRefreshPay() {
     const cell = (p, n, d) => {
         const c = p.days[d], bl = gStart.has(n) && n > 0 ? 'border-left:2px solid var(--muted);' : '', pb = p.back[d];
         if (!c && !pb) return `<td style="padding:0;border:1px solid var(--line);${bl}"></td>`;
-        const st = c ? finCellState(p, d) : null, bg = st === 'paid' ? 'rgba(53,217,155,.28)' : st === 'due' ? 'rgba(240,180,50,.30)' : 'transparent';
+        const st = c ? finCellState(p, d) : null, bg = st === 'paid' ? 'rgba(53,217,155,.28)' : st === 'due' ? 'rgba(240,180,50,.30)' : st === 'paused' ? 'rgba(70,140,255,.38)' : 'transparent';
         const btn = c ? `<button type="button" data-pc="${c.lines.join(',')}" data-d="${d}" style="all:unset;display:block;cursor:pointer;padding:3px 8px;text-align:right;font-family:var(--mono);font-size:12px;white-space:nowrap;min-width:84px;${st === 'later' ? 'opacity:.75;' : ''}" title="${esc(p.name)}: click when paid">${finFull(c.amount)}</button>` : '';
         const late = pb && d <= today, back = pb ? `<button type="button" data-payback="${pb.lines.join(',')}" data-d="${d}" style="all:unset;display:block;cursor:pointer;padding:2px 8px;text-align:right;font-size:11px;font-weight:700;white-space:nowrap;background:${late ? 'rgba(224,85,85,.45)' : 'rgba(155,89,182,.40)'};" title="${esc(p.name)} withdraws: pay the money back, then click to mark it returned">↩ pay back ${finFull(pb.amount)}</button>` : '';
         return `<td style="padding:0;border:1px solid var(--line);${bl}background:${bg};">${btn}${back}</td>`;
@@ -125,7 +128,7 @@ function finClickPay(b) {
     if (b.dataset.calprev !== undefined || b.dataset.calgo !== undefined) { finClickCal(b); return; }
     if (b.dataset.paygroup !== undefined) { // the payout of the Sunday being paid, for a whole group of investors who get the same amount
         const d = b.dataset.d;
-        b.dataset.paygroup.split(',').forEach(k => { const i = finData.investors[+k]; if (i && i.active && !finIsPaid(i, d) && finInvPeriods(i, d, finAdd(d, -1)).some(p => p.date === d)) finTogglePaid(i, d); });
+        b.dataset.paygroup.split(',').forEach(k => { const i = finData.investors[+k]; if (i && i.active && !finIsPaid(i, d) && !(i.paused || []).includes(d) && finInvPeriods(i, d, finAdd(d, -1)).some(p => p.date === d)) finTogglePaid(i, d); });
         finTouch(); return;
     }
     if (b.dataset.paymatch !== undefined) { // make the total of the selected week equal to the sheet's: the difference is kept as a correction (the lines of people who left are only estimates)
@@ -134,10 +137,24 @@ function finClickPay(b) {
         finData.paidOffset = v - finPaidUpTo(finPayWeek);
         finTouch(); return;
     }
-    if (b.dataset.pc !== undefined) { b.dataset.pc.split(',').forEach(k => { const i = finData.investors[+k]; if (i) finTogglePaid(i, b.dataset.d); }); finTouch(); return; }
+    if (b.dataset.pc !== undefined) {
+        const d = b.dataset.d, lines = b.dataset.pc.split(',').map(k => finData.investors[+k]).filter(Boolean);
+        if (finPayTool === 'pause') { // a payout is held (blue) or taken back: only when it is not paid
+            lines.forEach(i => { if (finIsPaid(i, d)) return; i.paused = (i.paused || []).includes(d) ? i.paused.filter(x => x !== d) : (i.paused || []).concat(d); });
+            finTouch(); return;
+        }
+        const held = lines.filter(i => (i.paused || []).includes(d));
+        if (held.length && !lines.some(i => finIsPaid(i, d))) { // a click on a held payout: released in full, together with all the others that were held for this person
+            const all = held.flatMap(i => (i.paused || []).map(x => ({ i, x }))), sum = all.reduce((s, { i, x }) => s + finSum(finInvPeriods(i, x, finAdd(x, -1)).filter(p => p.date === x)), 0);
+            if (all.length > 1 && confirm(`Release all ${all.length} held payouts of ${lines[0].name} (${finMoney(sum)}) now?`)) { all.forEach(({ i, x }) => { i.paused = i.paused.filter(y => y !== x); if (!finIsPaid(i, x)) finTogglePaid(i, x); }); finTouch(); return; }
+            held.forEach(i => { i.paused = i.paused.filter(y => y !== d); });
+        }
+        lines.forEach(i => finTogglePaid(i, d));
+        finTouch(); return;
+    }
     if (b.dataset.payrow !== undefined) { // every payout of this Sunday that is still to pay
         const d = b.dataset.payrow;
-        finData.investors.forEach(i => { if (i.active && finTracked(i) && !finIsPaid(i, d) && finInvPeriods(i, d, finAdd(d, -1)).some(p => p.date === d)) finTogglePaid(i, d); });
+        finData.investors.forEach(i => { if (i.active && finTracked(i) && !finIsPaid(i, d) && !(i.paused || []).includes(d) && finInvPeriods(i, d, finAdd(d, -1)).some(p => p.date === d)) finTogglePaid(i, d); });
         finTouch(); return;
     }
     if (b.dataset.paycopy !== undefined) {
