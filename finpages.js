@@ -26,6 +26,7 @@ function finRenderFund() {
         <details class="panel"><summary class="av-sum"><b>Payout history</b> <span style="font-size:12px;color:var(--muted);">(the payouts you marked as paid)</span></summary><div id="fund-history" style="margin-top:6px;"></div></details>
         <details class="panel"><summary class="av-sum"><b>Pay table</b> <span style="font-size:12px;color:var(--muted);">(what an investor is paid a week for an amount)</span></summary>${finListEditor('roi')}</details>
         <details class="panel"><summary class="av-sum"><b>Every stored line</b> <span style="font-size:12px;color:var(--muted);">(plain list, in case a line is hard to find in the table)</span></summary><div style="margin-top:6px;"><input id="fund-rawq" type="search" placeholder="Name or ID (empty = all)" style="width:200px;"> <button class="ghost small" data-rawlist="1" type="button">Show</button><div id="fund-raw" style="margin-top:6px;font-size:12px;overflow-x:auto;"></div></div></details>
+        <div style="font-size:10px;color:var(--muted);text-align:right;">page build: plan change next to Paid + in the row (⇄)</div>
         <details class="panel"><summary class="av-sum"><b>Backups</b> <span style="font-size:12px;color:var(--muted);">(a copy of your data is kept every hour for 14 days, in case a save ever loses something)</span></summary><div style="margin-top:6px;"><button class="ghost small" data-baklist="1" type="button">Show the backups</button><div id="fund-bak" style="margin-top:6px;font-size:13px;"></div></div></details>
         ${finImportPanel()}`;
     finWire('fund-body');
@@ -66,7 +67,7 @@ function finPersonCells(s, ixs, open) {
         `<b style="${dim}">${esc(s.rows[s.rows.length - 1].name)}</b>${s.lines > 1 ? ` <span style="color:var(--muted);font-size:11px;">${s.lines} lines</span>` : ''}${s.leaving ? ' <span style="color:#e0a030;font-size:11px;">leaving</span>' : ''}${finTermsBadge(s.rows[0].tornId)}`,
         s.act.length ? finShort(s.inNow) : '<span style="color:var(--muted);">—</span>',
         s.act.length ? `<b>${finShort(s.week)}</b>` : '<span style="color:var(--muted);">—</span>',
-        s.act.length ? `<span style="color:var(--muted);">${s.mode}</span>` : '',
+        s.act.length ? `<span style="color:var(--muted);">${s.mode}</span> <button class="ghost small" data-modechange="${ixs.split(',')[Math.max(0, s.rows.findIndex(r => r.active))]}" type="button" title="Pay plan changes on a date: weekly to monthly, or back" style="padding:0 5px;">⇄</button>` : '',
         s.next ? `${esc(finDate(s.next.date))} <span style="color:var(--muted);">${finShort(s.next.amount)}</span>` : '<span style="color:var(--muted);">—</span>',
         s.due > 0 ? `<b style="color:#e0a030;">${finShort(s.due)}</b> <button class="small" data-pmark="${ixs}" type="button">Paid</button>` : s.unsynced ? `<button class="ghost small" data-psync="${ixs}" type="button" title="Everything up to the last Sunday is already paid">Set paid through</button>` : '<span style="color:var(--muted);">—</span>',
         s.ends ? `<span style="color:${left < 0 ? 'var(--danger)' : left < 30 ? '#e0a030' : 'inherit'};">${esc(finDate(s.ends))}</span> <span style="color:var(--muted);font-size:11px;">${left < 0 ? 'ended' : `${left}d`}</span>` : '<span style="color:var(--muted);">—</span>',
