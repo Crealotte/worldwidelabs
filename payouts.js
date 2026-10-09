@@ -37,7 +37,8 @@ function finRenderPay() {
         <div style="font-size:12px;color:var(--muted);margin:-4px 0 10px;">With the order on "what they get a week", people who get the same amount stand together; press the amount at the top of a group to mark this week's payout of the whole group as paid.</div>
         <div class="panel"><h3 style="margin-top:0;">Weekly update for Discord</h3><div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px;"><label style="font-size:13px;">Week ending <select id="pay-week"></select></label><button class="small" data-paycopy="1" type="button">Copy</button></div>
             <div style="font-size:12px;color:var(--muted);margin-bottom:6px;">It counts what you marked as paid in the calendar (green): mark the week first, then copy.</div><textarea id="pay-text" rows="13" readonly style="width:100%;font-family:var(--mono);font-size:12px;"></textarea>
-            <div style="margin-top:10px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:13px;"><span>Total paid out in your sheet for this week:</span><input id="pay-sheet-total" type="text" inputmode="decimal" placeholder="18,342,463,300" style="width:170px;text-align:right;font-family:var(--mono);"><button class="ghost small" data-paymatch="1" type="button">Match my total</button></div><div id="pay-offset-note" style="font-size:12px;color:var(--muted);margin-top:4px;"></div></div>`;
+            <div style="margin-top:10px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:13px;"><span>Total paid out in your sheet for this week:</span><input id="pay-sheet-total" type="text" inputmode="decimal" placeholder="18,342,463,300" style="width:170px;text-align:right;font-family:var(--mono);"><button class="ghost small" data-paymatch="1" type="button">Match my total</button></div><div id="pay-offset-note" style="font-size:12px;color:var(--muted);margin-top:4px;"></div></div>
+        ${finCalPanel()}`;
     finWire('pay-body');
     finRefresh();
 }
@@ -78,7 +79,7 @@ function finRefreshPay() {
     $('pay-offset-note').textContent = `WWL works out ${finMoney(finPaidUpTo(finPayWeek))} for this week; correction ${finData.paidOffset ? (finData.paidOffset > 0 ? '+' : '') + finMoney(finData.paidOffset) : 'none'}.`;
 }
 // everything paid out up to a Sunday, as WWL works it out from the lines (without the correction)
-const finPaidUpTo = sun => finData.investors.reduce((s, i) => s + finSum(finPaidList(i).filter(p => p.date <= sun)), 0);
+const finPaidUpTo = sun => finData.investors.reduce((s, i) => s + finSum(finPaidList(i).filter(p => p.date <= sun)) + (i.paidAdj || 0), 0);
 // the weekly update, in the shape of the Discord post. It counts what was PAID (the cells marked green in the calendar): the weekly investors paid that Sunday; on the monthly payday the monthly investors paid, on other
 // weeks the date of the next monthly payday; the active money and investors now; and everything paid out since the start up to that Sunday.
 function finWeeklyText(sun) {
@@ -108,6 +109,7 @@ function finTogglePaid(i, date) {
     }
 }
 function finClickPay(b) {
+    if (b.dataset.calprev !== undefined || b.dataset.calgo !== undefined) { finClickCal(b); return; }
     if (b.dataset.paygroup !== undefined) { // the payout of the Sunday being paid, for a whole group of investors who get the same amount
         const d = b.dataset.d;
         b.dataset.paygroup.split(',').forEach(k => { const i = finData.investors[+k]; if (i && i.active && !finIsPaid(i, d) && finInvPeriods(i, d, finAdd(d, -1)).some(p => p.date === d)) finTogglePaid(i, d); });

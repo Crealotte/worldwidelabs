@@ -102,7 +102,7 @@ const finIsPaid = (i, d) => { const t = finPaidThrough(i); return (!!t && d <= t
 const finTracked = i => !!(i.paidUntil || (i.extra || []).length || i.returnedOn); // payouts are followed for this line (otherwise nothing is known about what was paid)
 const finDueList = (i, upTo) => (finTracked(i) ? finInvPeriods(i, upTo, '').filter(p => !finIsPaid(i, p.date)) : []);
 const finPaidList = i => { const end = [finPaidThrough(i)].concat(i.extra || []).filter(Boolean).sort().pop(); return end ? finInvPeriods(i, end, '').filter(p => finIsPaid(i, p.date)) : []; };
-const finPaidTotal = i => finSum(finPaidList(i));
+const finPaidTotal = i => finSum(finPaidList(i)) + (i.paidAdj || 0); // plus the correction the calendar import keeps on a person's first line
 // the Paid buttons: everything due up to now is paid: remember it as a payment and move "paid through" forward (older skips and single marks are then part of it)
 function finMarkPaid(i, due, today) {
     if (!due.length) return;
