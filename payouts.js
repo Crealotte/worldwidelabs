@@ -27,7 +27,8 @@ function finRenderPay() {
             <span style="font-size:12px;"><span style="background:rgba(53,217,155,.28);padding:1px 8px;border-radius:4px;">paid</span> <span style="background:rgba(240,180,50,.30);padding:1px 8px;border-radius:4px;">still to pay</span> <span style="padding:1px 8px;border:1px solid var(--line);border-radius:4px;">not followed / later</span></span></div>
         <div id="pay-grid" class="panel" style="padding:0;overflow:auto;max-height:70vh;"></div>
         <div class="panel"><h3 style="margin-top:0;">Weekly update for Discord</h3><div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px;"><label style="font-size:13px;">Week ending <select id="pay-week"></select></label><button class="small" data-paycopy="1" type="button">Copy</button></div>
-            <div style="font-size:12px;color:var(--muted);margin-bottom:6px;">It counts what you marked as paid in the calendar (green): mark the week first, then copy.</div><textarea id="pay-text" rows="13" readonly style="width:100%;font-family:var(--mono);font-size:12px;"></textarea></div>`;
+            <div style="font-size:12px;color:var(--muted);margin-bottom:6px;">It counts what you marked as paid in the calendar (green): mark the week first, then copy.</div><textarea id="pay-text" rows="13" readonly style="width:100%;font-family:var(--mono);font-size:12px;"></textarea>
+            <div style="margin-top:10px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:13px;"><span>Total paid out in your sheet for this week:</span><input id="pay-sheet-total" type="text" inputmode="decimal" placeholder="18,342,463,300" style="width:170px;text-align:right;font-family:var(--mono);"><button class="ghost small" data-paymatch="1" type="button">Match my total</button></div><div id="pay-offset-note" style="font-size:12px;color:var(--muted);margin-top:4px;"></div></div>`;
     finWire('pay-body');
     finRefresh();
 }
@@ -55,7 +56,10 @@ function finRefreshPay() {
     if (!finPayWeek || !weeks.includes(finPayWeek)) finPayWeek = weeks.find(d => d <= today) || weeks[0];
     sel.innerHTML = weeks.map(d => `<option value="${d}" ${d === finPayWeek ? 'selected' : ''}>${esc(finDate(d))}</option>`).join('');
     $('pay-text').value = finWeeklyText(finPayWeek);
+    $('pay-offset-note').textContent = `WWL works out ${finMoney(finPaidUpTo(finPayWeek))} for this week; correction ${finData.paidOffset ? (finData.paidOffset > 0 ? '+' : '') + finMoney(finData.paidOffset) : 'none'}.`;
 }
+// everything paid out up to a Sunday, as WWL works it out from the lines (without the correction)
+const finPaidUpTo = sun => finData.investors.reduce((s, i) => s + finSum(finPaidList(i).filter(p => p.date <= sun)), 0);
 // the weekly update, in the shape of the Discord post. It counts what was PAID (the cells marked green in the calendar): the weekly investors paid that Sunday; on the monthly payday the monthly investors paid, on other
 // weeks the date of the next monthly payday; the active money and investors now; and everything paid out since the start up to that Sunday.
 function finWeeklyText(sun) {
@@ -68,7 +72,7 @@ function finWeeklyText(sun) {
     const dateText = `${last.slice(8, 10)}${new Date(finD(last)).toLocaleDateString('en-US', { month: 'short', timeZone: 'UTC' })}${last.slice(0, 4)}`; // 25Oct2026
     const act = finData.investors.filter(i => i.active);
     const people = new Set(act.map(finPersonKey)).size, capital = act.reduce((s, i) => s + i.amount, 0);
-    const paid = finData.investors.reduce((s, i) => s + finSum(finPaidList(i).filter(p => p.date <= sun)), 0);
+    const paid = finPaidUpTo(sun) + (finData.paidOffset || 0); // plus the correction that makes the total match the sheet (the lines of people who left are only estimates)
     return ['@everyone', '💰 CreaLabs Weekly Update', `[${fmt(finAdd(sun, -6))} → ${fmt(sun)}]`, '', 'Investor Payouts', `💵 Weekly investors paid: ${finMoney(weekly)}`, `🗓️ Monthly investors paid: ${payday ? finMoney(monthly) : dateText}`, '', 'Fund Overview',
         `💎 Total investment capital: ${finMoney(capital)}`, `🤝 Number of investors: ${people}`, `💰 Total paid out since start: ${finMoney(paid)}`].join('\n');
 }
@@ -85,6 +89,12 @@ function finTogglePaid(i, date) {
     }
 }
 function finClickPay(b) {
+    if (b.dataset.paymatch !== undefined) { // make the total of the selected week equal to the sheet's: the difference is kept as a correction (the lines of people who left are only estimates)
+        const v = finParse($('pay-sheet-total').value);
+        if (v === null) { toast('Write the total as 18,342,463,300'); return; }
+        finData.paidOffset = v - finPaidUpTo(finPayWeek);
+        finTouch(); return;
+    }
     if (b.dataset.pc !== undefined) { b.dataset.pc.split(',').forEach(k => { const i = finData.investors[+k]; if (i) finTogglePaid(i, b.dataset.d); }); finTouch(); return; }
     if (b.dataset.payrow !== undefined) { // every payout of this Sunday that is still to pay
         const d = b.dataset.payrow;
@@ -96,4 +106,4 @@ function finClickPay(b) {
         (navigator.clipboard ? navigator.clipboard.writeText(v) : Promise.reject()).catch(() => { $('pay-text').select(); try { document.execCommand('copy'); } catch (e) { /* select by hand */ } }).then(() => toast('Copied'));
     }
 }
-FIN_PAGES.pay = { status: 'pay-status', render: finRenderPay, refresh: finRefreshPay, click: finClickPay, parts: ['investors'] };
+FIN_PAGES.pay = { status: 'pay-status', render: finRenderPay, refresh: finRefreshPay, click: finClickPay, parts: ['investors', 'paidOffset'] };
