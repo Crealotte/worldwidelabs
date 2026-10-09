@@ -73,8 +73,8 @@ function finFundDetail(ix) {
     const hdr = (f, v, w, ph, bold) => `<input type="text" data-pers="${ids}" data-f="${f}" data-t="text" value="${esc(v || '')}" placeholder="${ph}" style="width:${w}px;${bold ? 'font-weight:700;' : ''}">`;
     const th = t => `<th style="text-align:left;padding:2px 6px;font-size:10.5px;color:var(--muted);font-weight:600;white-space:nowrap;">${t}</th>`;
     return `<div style="padding:8px 12px 10px;background:rgba(127,127,127,.06);"><div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:6px;"><span style="color:var(--muted);font-size:12px;">ID</span>${hdr('fundId', r0.fundId, 46, '#')}${hdr('name', finData.investors[ix[ix.length - 1]].name, 170, 'Name', true)}${hdr('tornId', r0.tornId, 90, 'Torn ID')}<button class="ghost small" data-addline="${ix[0]}" type="button">+ Investment</button></div>
-        <div style="overflow-x:auto;"><table style="border-collapse:collapse;font-size:12.5px;"><thead><tr><th></th>${cols.map(c => th(c.l)).join('')}${th('Yearly')}${th('Payout due')}${th('Term')}<th></th></tr></thead>
-        <tbody>${ix.map((k, n) => `<tr style="border-top:1px solid var(--line);"><td style="padding:2px 6px;color:var(--muted);font-size:11px;white-space:nowrap;">line ${n + 1}</td>${cols.map(c => `<td style="padding:2px 5px;">${finCell('investors', k, c, finData.investors[k])}</td>`).join('')}<td style="padding:2px 6px;white-space:nowrap;" data-pct="${k}"></td><td style="padding:2px 6px;font-size:12px;" data-invdue="${k}"></td><td style="padding:2px 6px;font-size:12px;white-space:nowrap;" data-invterm="${k}"></td><td><button class="ghost small" data-del="investors" data-i="${k}" type="button" title="Remove this line">✕</button></td></tr>`).join('')}</tbody></table></div></div>`;
+        <div style="overflow-x:auto;"><table style="border-collapse:collapse;font-size:12.5px;"><thead><tr><th></th>${cols.map(c => th(c.l)).join('')}${th('Yearly')}${th('Payout due')}${th('Term')}${th('Plan change')}<th></th></tr></thead>
+        <tbody>${ix.map((k, n) => `<tr style="border-top:1px solid var(--line);"><td style="padding:2px 6px;color:var(--muted);font-size:11px;white-space:nowrap;">line ${n + 1}</td>${cols.map(c => `<td style="padding:2px 5px;">${finCell('investors', k, c, finData.investors[k])}</td>`).join('')}<td style="padding:2px 6px;white-space:nowrap;" data-pct="${k}"></td><td style="padding:2px 6px;font-size:12px;" data-invdue="${k}"></td><td style="padding:2px 6px;font-size:12px;white-space:nowrap;" data-invterm="${k}"></td><td style="padding:2px 6px;font-size:11px;white-space:nowrap;">${(finData.investors[k].switches || []).map(w => `<span style="color:var(--muted);">${w.from} → ${w.to} from ${esc(finDate(w.date))}</span>`).join("<br>")}${(finData.investors[k].switches || []).length ? " " : ""}<button class="ghost small" data-modechange="${k}" type="button" title="The pay plan of this person changes on a date (weekly to monthly, or back)">⇄ date</button></td><td><button class="ghost small" data-del="investors" data-i="${k}" type="button" title="Remove this line">✕</button></td></tr>`).join('')}</tbody></table></div></div>`;
 }
 function finRenderFundTable() {
     const box = $('fund-tablebox'); if (!box) return;
@@ -163,6 +163,15 @@ function finRefreshFund() {
     $('fund-history').innerHTML = hist.length ? `<div><table style="border-collapse:collapse;font-size:13px;">${hist.map(p => `<tr><td style="padding:2px 10px 2px 0;font-family:var(--mono);">${esc(p.date)}</td><td style="padding:2px 14px 2px 0;">${esc(p.name)}</td><td style="padding:2px 14px 2px 0;font-family:var(--mono);text-align:right;">${finMoney(p.amount)}</td><td style="padding:2px 0;color:var(--muted);font-size:12px;">${p.through ? `through ${esc(finDate(p.through))}` : ''}</td></tr>`).join('')}</table></div>` : '';
 }
 function finClickFund(b) {
+    if (b.dataset.modechange !== undefined) { // the pay plan changes on a date: payouts before it follow the old plan, from it the new one (all lines of the person)
+        const base = finData.investors[+b.dataset.modechange]; if (!base) return;
+        const to = base.mode === 'weekly' ? 'monthly' : 'weekly';
+        const date = prompt(`From which date does ${base.name} get paid ${to} instead of ${base.mode}? (YYYY-MM-DD)`, finSrv.today);
+        if (!date) return;
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) { toast('Write the date as YYYY-MM-DD'); return; }
+        finPeersOf(base).forEach(l => { if (l.mode === base.mode) { l.switches = (l.switches || []).concat({ date, from: l.mode, to }).slice(-10); l.mode = to; } });
+        finRenderAll(); finTouch(); return;
+    }
     if (b.dataset.rawlist !== undefined) { // every line exactly as stored, no grouping, no filter
         const q = ($('fund-rawq').value || '').trim().toLowerCase();
         const rows = finData.investors.map((x, k) => ({ x, k })).filter(({ x }) => !q || String(x.name).toLowerCase().includes(q) || String(x.fundId) === q || String(x.tornId) === q);

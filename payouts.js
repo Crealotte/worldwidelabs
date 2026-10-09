@@ -12,13 +12,13 @@ function finPayPeople(upTo, fromIso) {
     const groups = {};
     finData.investors.forEach((x, idx) => { if (x.active) (groups[finPersonKey(x)] = groups[finPersonKey(x)] || []).push(idx); });
     return Object.entries(groups).map(([key, ix]) => {
-        const days = {};
-        ix.forEach(k => finInvPeriods(finData.investors[k], upTo, fromIso).forEach(p => { const d = (days[p.date] = days[p.date] || { amount: 0, lines: [] }); d.amount += p.amount; d.lines.push(k); }));
+        const daysBy = { weekly: {}, monthly: {} }; // the payouts per pay plan: a person whose plan changed shows on both sheets
+        ix.forEach(k => finInvPeriods(finData.investors[k], upTo, fromIso).forEach(p => { const m = daysBy[p.mode], d = (m[p.date] = m[p.date] || { amount: 0, lines: [] }); d.amount += p.amount; d.lines.push(k); }));
         // when the money goes back (an approved withdrawal at the end of the term) and when a term simply ends, on the Sunday of that week
         const back = {}, ends = {};
         ix.forEach(k => { const l = finData.investors[k]; if (!l.termEnd) return; const d = finSun(l.termEnd), target = l.leaving ? back : ends; (target[d] = target[d] || { amount: 0, lines: [] }); target[d].amount += l.amount; target[d].lines.push(k); });
         const first = finData.investors[ix[0]];
-        return { key, ix, days, back, ends, name: finData.investors[ix[ix.length - 1]].name, id: parseInt(first.fundId, 10) || 1e9, mode: first.mode, invested: ix.reduce((s, k) => s + finData.investors[k].amount, 0), week: ix.reduce((s, k) => s + finPayout(finData.investors[k]), 0), nettedIn: ix.every(k => finData.investors[k].nettedIn) };
+        return { key, ix, daysBy, changed: ix.some(k => (finData.investors[k].switches || []).length), back, ends, name: finData.investors[ix[ix.length - 1]].name, id: parseInt(first.fundId, 10) || 1e9, mode: first.mode, invested: ix.reduce((s, k) => s + finData.investors[k].amount, 0), week: ix.reduce((s, k) => s + finPayout(finData.investors[k]), 0), nettedIn: ix.every(k => finData.investors[k].nettedIn) };
     });
 }
 const finCellState = (p, date) => {
@@ -49,7 +49,7 @@ function finRefreshPay() {
     const today = finSrv.today, cur = finSun(today), start = finAdd(cur, -7 * (finPayWeeks - 1)), end = finAdd(cur, 7 * finPayAhead), dates = [];
     for (let d = start; d <= end; d = finAdd(d, 7)) dates.push(d);
     const payDay = dates.filter(d => d <= today).pop() || dates[0]; // the Sunday that is being paid now
-    const people = finPayPeople(end, finAdd(start, -1)).filter(p => p.mode === finPaySheet); // every active contract of this sheet, also when nothing falls in these weeks
+    const people = finPayPeople(end, finAdd(start, -1)).map(p => ({ ...p, days: p.daysBy[finPaySheet] })).filter(p => Object.keys(p.days).length || (p.mode === finPaySheet && !p.changed)); // the people of this sheet (also when nothing falls in these weeks); someone who changed plan is on both sheets
     people.forEach(p => { Object.keys(p.back).filter(d => d < start).forEach(d => { const e = p.back[d], t = (p.back[payDay] = p.back[payDay] || { amount: 0, lines: [] }); t.amount += e.amount; t.lines.push(...e.lines); delete p.back[d]; }); }); // a payback that is overdue before the first week shown is placed on the Sunday being paid
     const cmp = { amount: (a, b) => (a.week - b.week) || (a.id - b.id), id: (a, b) => a.id - b.id, invested: (a, b) => (b.invested - a.invested) || (a.id - b.id), name: (a, b) => (a.name.toLowerCase() < b.name.toLowerCase() ? -1 : 1) }[finPaySort];
     people.sort(cmp);
@@ -92,10 +92,10 @@ const finPaidUpTo = sun => finData.investors.reduce((s, i) => s + finSum(finPaid
 function finWeeklyText(sun) {
     const fmt = d => new Date(finD(d)).toLocaleDateString('en-US', { month: 'short', day: '2-digit', timeZone: 'UTC' });
     const live = finData.investors.filter(i => i.active || i.returnedOn);
-    const paidOn = i => finSum(finInvPeriods(i, sun, finAdd(sun, -1)).filter(p => p.date === sun && finIsPaid(i, sun)));
-    const weekly = live.filter(i => i.mode === 'weekly').reduce((s, i) => s + paidOn(i), 0);
+    const paidOn = (i, mode) => finSum(finInvPeriods(i, sun, finAdd(sun, -1)).filter(p => p.date === sun && p.mode === mode && finIsPaid(i, sun)));
+    const weekly = live.reduce((s, i) => s + paidOn(i, 'weekly'), 0);
     const last = finMonthLastSunday(+sun.slice(0, 4), +sun.slice(5, 7) - 1), payday = sun === last;
-    const monthly = live.filter(i => i.mode === 'monthly').reduce((s, i) => s + paidOn(i), 0);
+    const monthly = live.reduce((s, i) => s + paidOn(i, 'monthly'), 0);
     const dateText = `${last.slice(8, 10)}${new Date(finD(last)).toLocaleDateString('en-US', { month: 'short', timeZone: 'UTC' })}${last.slice(0, 4)}`; // 25Oct2026
     const act = finData.investors.filter(i => i.active);
     const people = new Set(act.map(finPersonKey)).size, capital = act.reduce((s, i) => s + i.amount, 0);

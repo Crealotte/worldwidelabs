@@ -31,6 +31,7 @@ function finParseCalendar(text) {
             const a = num(c[p.col]); if (!a) continue;
             const e = (byNorm[finCalNorm(p.name)] = byNorm[finCalNorm(p.name)] || { name: p.name, norm: finCalNorm(p.name), byDate: {}, latest: { date: '', sheet: p.sheet } });
             e.byDate[date] = (e.byDate[date] || 0) + a;
+            (e.sheets = e.sheets || { weekly: {}, monthly: {} })[p.sheet][date] = a; // per sheet: someone who moved from the weekly to the monthly sheet has both
             if (date >= e.latest.date) e.latest = { date, sheet: p.sheet };
         }
     }
@@ -49,10 +50,16 @@ function finCalAnalyze(parsed) {
         if (!key) { const near = norms.filter(n => finLev(n, p.norm) <= 2 && !used.has(n)); if (near.length === 1) { key = near[0]; fuzzy = finData.investors[idxByNorm[key][0]].name; } }
         const entries = Object.entries(p.byDate), actual = entries.filter(([d]) => d <= T).reduce((s, [, a]) => s + a, 0);
         const future = entries.some(([d]) => d > T), lastPaid = entries.map(([d]) => d).filter(d => d <= T).sort().pop() || '';
+        // on both sheets: the plan changed. From the Sunday after the last weekly payout the payouts are monthly (or the other way round), so the change date is kept
+        let sw = null;
+        if (p.sheets && Object.keys(p.sheets.weekly).length && Object.keys(p.sheets.monthly).length) {
+            const lw = Object.keys(p.sheets.weekly).sort().pop(), lm = Object.keys(p.sheets.monthly).sort().pop(), fw = Object.keys(p.sheets.weekly).sort()[0], fm = Object.keys(p.sheets.monthly).sort()[0];
+            if (lm > lw) sw = { date: finAdd(lw, 7), from: 'weekly', to: 'monthly' }; else if (lw > lm && fw > fm) sw = { date: finAdd(lm, 7), from: 'monthly', to: 'weekly' };
+        }
         if (!key) { unmatched.push({ name: p.name, actual }); continue; }
         used.add(key);
         const ix = idxByNorm[key], lines = ix.map(k => finData.investors[k]);
-        plans.push({ name: finData.investors[ix[ix.length - 1]].name, calName: p.name, fuzzy, ix, actual, future, lastPaid, mode: p.latest.sheet, wasActive: lines.some(l => l.active), modeChange: lines.some(l => l.mode !== p.latest.sheet) });
+        plans.push({ sw, name: finData.investors[ix[ix.length - 1]].name, calName: p.name, fuzzy, ix, actual, future, lastPaid, mode: p.latest.sheet, wasActive: lines.some(l => l.active), modeChange: lines.some(l => l.mode !== p.latest.sheet) });
     }
     const missing = Object.entries(idxByNorm).filter(([n, ix]) => !used.has(n) && ix.some(k => finData.investors[k].active)).map(([n, ix]) => finData.investors[ix[0]].name);
     return { T, plans, unmatched, missing, accumT: parsed.accum[T] || parsed.accum[parsed.dates.filter(d => d <= T).pop()] || 0 };
@@ -77,7 +84,7 @@ function finClickCal(b) {
             ${a.unmatched.length ? `<div style="color:#e0a030;margin-top:4px;">In the calendar but no investor with that name: ${a.unmatched.map(u => `${esc(u.name)} (${finMoney(u.actual)})`).join(', ')}. Their money stays in the total as a correction; add them as investors if they are active.</div>` : ''}
             ${a.missing.length ? `<div style="color:#e0a030;margin-top:4px;">Active here but not in the calendar: ${a.missing.map(esc).join(', ')}.</div>` : ''}
             ${stops.length ? `<div style="margin-top:4px;">No longer paid in the calendar, they will be ended on their last payout day: ${stops.map(p => `${esc(p.name)} (${p.lastPaid ? esc(finDate(p.lastPaid)) : 'never paid'})`).join(', ')}.</div>` : ''}
-            ${changes.length ? `<div style="margin-top:4px;">Paid on the other sheet than I have now: ${changes.map(p => `${esc(p.name)} → ${p.mode}`).join(', ')}.</div>` : ''}
+            ${changes.length ? `<div style="margin-top:4px;">Paid on the other sheet than I have now: ${changes.map(p => `${esc(p.name)} → ${p.mode}${p.sw ? ` (changed on ${esc(finDate(p.sw.date))})` : ''}`).join(', ')}.</div>` : ''}
             ${a.plans.some(p => p.fuzzy) ? `<div style="margin-top:4px;color:var(--muted);">Matched by a slightly different spelling: ${a.plans.filter(p => p.fuzzy).map(p => `${esc(p.calName)} = ${esc(p.fuzzy)}`).join(', ')}.</div>` : ''}
             <details style="margin-top:6px;"><summary style="cursor:pointer;">What was paid per person (calendar) against what WWL works out now</summary><table style="border-collapse:collapse;margin-top:4px;">${a.plans.map(p => { const c = calc(p); return `<tr><td style="padding:1px 10px 1px 0;">${esc(p.name)}</td><td style="padding:1px 10px;text-align:right;font-family:var(--mono);">${finFull(p.actual)}</td><td style="padding:1px 10px;text-align:right;font-family:var(--mono);">${finFull(c)}</td><td style="padding:1px 10px;text-align:right;font-family:var(--mono);color:${p.actual === c ? 'var(--muted)' : '#e0a030'};">${finFull(p.actual - c)}</td></tr>`; }).join('')}</table></details>`;
         return;
@@ -87,7 +94,7 @@ function finClickCal(b) {
     const T = a.T;
     for (const p of a.plans) { // 1. the way they are paid and who is still paid
         const lines = p.ix.map(k => finData.investors[k]);
-        lines.forEach(l => { if (l.mode !== p.mode) l.mode = p.mode; });
+        lines.forEach(l => { if (l.mode !== p.mode) l.mode = p.mode; l.switches = p.sw ? [p.sw] : []; });
         if (p.wasActive && !p.future) lines.forEach(l => { if (l.active) { l.active = false; l.returnedOn = p.lastPaid || l.start; l.paidUntil = ''; } });
         else lines.forEach(l => { if (l.active && finInvPeriods(l, T, '').length) { l.paidUntil = T; l.skip = []; l.extra = []; } });
     }

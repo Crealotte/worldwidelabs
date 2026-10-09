@@ -78,16 +78,16 @@ function finInvPeriods(i, upTo, from) {
     const peers = finPeersOf(i); let cap = upTo; if (i.returnedOn && i.returnedOn < cap) cap = i.returnedOn; if (i.leaving && i.termEnd && i.termEnd < cap) cap = i.termEnd; // the money was returned, or it leaves at the end of the term: no payouts after that
     const dow = new Date(finD(i.start)).getUTCDay(), off = dow === 0 ? 7 : 7 - dow, first = finAdd(i.start, off);
     const amt = s => { const p = finPayAt(i, s, peers); return s === first && off < 7 ? Math.round(p / 7 * off / 100) * 100 : p; };
-    if (i.mode === 'weekly') { for (let s = first, n = 0; s <= cap && n < 800; s = finAdd(s, 7), n++) if (s > from) { const a = amt(s); if (a > 0) out.push({ date: s, amount: a }); } }
-    else {
-        const y0 = +first.slice(0, 4), m0 = +first.slice(5, 7) - 1;
-        for (let k = 0; k < 800; k++) {
-            const y = y0 + Math.floor((m0 + k) / 12), m = (m0 + k) % 12, L = finMonthLastSunday(y, m);
-            if (L > cap) break;
-            if (L <= from) continue;
-            let sum = 0, cnt = 0; for (let s = L; new Date(finD(s)).getUTCMonth() === m && s >= first; s = finAdd(s, -7)) { sum += amt(s); cnt++; }
-            if (cnt) out.push({ date: L, amount: sum, weeks: cnt });
-        }
+    // the pay plan can change on a date (weekly -> monthly or back): `switches` = [{ date, from, to }]; `mode` is the plan now
+    const sw = (i.switches || []).slice().sort((a, b) => (a.date < b.date ? -1 : 1));
+    const modeAt = s => { let m = sw.length ? sw[0].from : i.mode; for (const w of sw) if (w.date <= s) m = w.to; return m; };
+    let acc = 0, cnt = 0;
+    for (let s = first, n = 0; s <= cap && n < 800; s = finAdd(s, 7), n++) {
+        const a = amt(s); if (a <= 0) continue;
+        if (modeAt(s) === 'weekly') { if (s > from) out.push({ date: s, amount: a, mode: 'weekly' }); continue; }
+        acc += a; cnt++; // monthly: the Sundays of the month are paid together on the last Sunday of it (or on the last monthly Sunday before the plan changes back to weekly)
+        const next = finAdd(s, 7);
+        if (new Date(finD(next)).getUTCMonth() !== new Date(finD(s)).getUTCMonth() || modeAt(next) === 'weekly') { if (s > from) out.push({ date: s, amount: acc, weeks: cnt, mode: 'monthly' }); acc = 0; cnt = 0; }
     }
     return out;
 }
@@ -281,7 +281,7 @@ function finInvestorCost() {
 
 // ---- drawing ----
 const FIN_LISTS = {
-    investors: { title: 'Investors', add: '+ Investor', fresh: () => ({ id: finId(), fundId: String(Math.max(0, ...finData.investors.map(x => parseInt(x.fundId, 10) || 0)) + 1), name: '', amount: 0, payout: null, mode: 'weekly', start: new Date().toISOString().slice(0, 10), active: true, nettedIn: '', note: '', tornId: '', paidUntil: '', payments: [], termEnd: '', returnedOn: '', renewals: [], leaving: false, noticeOn: '', skip: [], extra: [] }), cols: [
+    investors: { title: 'Investors', add: '+ Investor', fresh: () => ({ id: finId(), fundId: String(Math.max(0, ...finData.investors.map(x => parseInt(x.fundId, 10) || 0)) + 1), name: '', amount: 0, payout: null, mode: 'weekly', start: new Date().toISOString().slice(0, 10), active: true, nettedIn: '', note: '', tornId: '', paidUntil: '', payments: [], termEnd: '', returnedOn: '', renewals: [], leaving: false, noticeOn: '', switches: [], skip: [], extra: [] }), cols: [
         { f: 'active', l: 'On', t: 'bool' }, { f: 'fundId', l: 'ID', t: 'text', w: 46 }, { f: 'name', l: 'Name', t: 'text', w: 120 }, { f: 'tornId', l: 'Torn ID', t: 'text', w: 80 }, { f: 'amount', l: 'Invested', t: 'money', w: 110 }, { f: 'payout', l: 'Paid a week (empty = by the table)', t: 'money', w: 130, nullable: true },
         { f: 'mode', l: 'Paid', t: 'sel', opts: [['weekly', 'Every Sunday'], ['monthly', 'Last Sunday of the month']] }, { f: 'start', l: 'Since', t: 'date' }, { f: 'termEnd', l: 'Term ends', t: 'date' }, { f: 'returnedOn', l: 'Money returned on', t: 'date' }, { f: 'paidUntil', l: 'Paid through', t: 'date' }, { f: 'nettedIn', l: 'Already netted in the send of', t: 'company' }] },
     income: { title: 'Other income', add: '+ Income', fresh: () => ({ id: finId(), name: '', amount: 0, freq: 'weekly', date: new Date().toISOString().slice(0, 10), active: true }), cols: [
