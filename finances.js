@@ -75,7 +75,7 @@ const finMonthLastSunday = (y, m) => { const last = Date.UTC(y, m + 1, 0); retur
 function finInvPeriods(i, upTo, from) {
     const out = [];
     if (!i.start) return out;
-    const peers = finPeersOf(i), cap = i.returnedOn && i.returnedOn < upTo ? i.returnedOn : upTo;
+    const peers = finPeersOf(i); let cap = upTo; if (i.returnedOn && i.returnedOn < cap) cap = i.returnedOn; if (i.leaving && i.termEnd && i.termEnd < cap) cap = i.termEnd; // the money was returned, or it leaves at the end of the term: no payouts after that
     const dow = new Date(finD(i.start)).getUTCDay(), off = dow === 0 ? 7 : 7 - dow, first = finAdd(i.start, off);
     const amt = s => { const p = finPayAt(i, s, peers); return s === first && off < 7 ? Math.round(p / 7 * off / 100) * 100 : p; };
     if (i.mode === 'weekly') { for (let s = first, n = 0; s <= cap && n < 800; s = finAdd(s, 7), n++) if (s > from) { const a = amt(s); if (a > 0) out.push({ date: s, amount: a }); } }

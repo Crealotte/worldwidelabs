@@ -14,8 +14,11 @@ function finPayPeople(upTo, fromIso) {
     return Object.entries(groups).map(([key, ix]) => {
         const days = {};
         ix.forEach(k => finInvPeriods(finData.investors[k], upTo, fromIso).forEach(p => { const d = (days[p.date] = days[p.date] || { amount: 0, lines: [] }); d.amount += p.amount; d.lines.push(k); }));
+        // when the money goes back (an approved withdrawal at the end of the term) and when a term simply ends, on the Sunday of that week
+        const back = {}, ends = {};
+        ix.forEach(k => { const l = finData.investors[k]; if (!l.termEnd) return; const d = finSun(l.termEnd), target = l.leaving ? back : ends; (target[d] = target[d] || { amount: 0, lines: [] }); target[d].amount += l.amount; target[d].lines.push(k); });
         const first = finData.investors[ix[0]];
-        return { key, ix, days, name: finData.investors[ix[ix.length - 1]].name, id: parseInt(first.fundId, 10) || 1e9, mode: first.mode, invested: ix.reduce((s, k) => s + finData.investors[k].amount, 0), week: ix.reduce((s, k) => s + finPayout(finData.investors[k]), 0), nettedIn: ix.every(k => finData.investors[k].nettedIn) };
+        return { key, ix, days, back, ends, name: finData.investors[ix[ix.length - 1]].name, id: parseInt(first.fundId, 10) || 1e9, mode: first.mode, invested: ix.reduce((s, k) => s + finData.investors[k].amount, 0), week: ix.reduce((s, k) => s + finPayout(finData.investors[k]), 0), nettedIn: ix.every(k => finData.investors[k].nettedIn) };
     });
 }
 const finCellState = (p, date) => {
@@ -47,16 +50,20 @@ function finRefreshPay() {
     for (let d = start; d <= end; d = finAdd(d, 7)) dates.push(d);
     const payDay = dates.filter(d => d <= today).pop() || dates[0]; // the Sunday that is being paid now
     const people = finPayPeople(end, finAdd(start, -1)).filter(p => p.mode === finPaySheet); // every active contract of this sheet, also when nothing falls in these weeks
+    people.forEach(p => { Object.keys(p.back).filter(d => d < start).forEach(d => { const e = p.back[d], t = (p.back[payDay] = p.back[payDay] || { amount: 0, lines: [] }); t.amount += e.amount; t.lines.push(...e.lines); delete p.back[d]; }); }); // a payback that is overdue before the first week shown is placed on the Sunday being paid
     const cmp = { amount: (a, b) => (a.week - b.week) || (a.id - b.id), id: (a, b) => a.id - b.id, invested: (a, b) => (b.invested - a.invested) || (a.id - b.id), name: (a, b) => (a.name.toLowerCase() < b.name.toLowerCase() ? -1 : 1) }[finPaySort];
     people.sort(cmp);
     // groups of people who get the same amount a week (only when ordered by amount)
     const grp = []; if (finPaySort === 'amount') people.forEach((p, n) => { const g = grp[grp.length - 1]; if (g && g.week === p.week) { g.count++; g.ix.push(...p.ix); } else grp.push({ week: p.week, count: 1, start: n, ix: p.ix.slice() }); });
     const gStart = new Set(grp.map(g => g.start));
     const cell = (p, n, d) => {
-        const c = p.days[d], bl = gStart.has(n) && n > 0 ? 'border-left:2px solid var(--muted);' : '';
-        if (!c) return `<td style="padding:0;border:1px solid var(--line);${bl}"></td>`;
-        const st = finCellState(p, d), bg = st === 'paid' ? 'rgba(53,217,155,.28)' : st === 'due' ? 'rgba(240,180,50,.30)' : 'transparent';
-        return `<td style="padding:0;border:1px solid var(--line);${bl}background:${bg};"><button type="button" data-pc="${c.lines.join(',')}" data-d="${d}" style="all:unset;display:block;cursor:pointer;padding:3px 8px;text-align:right;font-family:var(--mono);font-size:12px;white-space:nowrap;min-width:84px;${st === 'later' ? 'opacity:.75;' : ''}" title="${esc(p.name)}: click when paid">${finFull(c.amount)}</button></td>`;
+        const c = p.days[d], bl = gStart.has(n) && n > 0 ? 'border-left:2px solid var(--muted);' : '', pb = p.back[d], te = p.ends[d];
+        if (!c && !pb && !te) return `<td style="padding:0;border:1px solid var(--line);${bl}"></td>`;
+        const st = c ? finCellState(p, d) : null, bg = st === 'paid' ? 'rgba(53,217,155,.28)' : st === 'due' ? 'rgba(240,180,50,.30)' : 'transparent';
+        const btn = c ? `<button type="button" data-pc="${c.lines.join(',')}" data-d="${d}" style="all:unset;display:block;cursor:pointer;padding:3px 8px;text-align:right;font-family:var(--mono);font-size:12px;white-space:nowrap;min-width:84px;${st === 'later' ? 'opacity:.75;' : ''}" title="${esc(p.name)}: click when paid">${finFull(c.amount)}</button>` : '';
+        const late = pb && d <= today, back = pb ? `<button type="button" data-payback="${pb.lines.join(',')}" data-d="${d}" style="all:unset;display:block;cursor:pointer;padding:2px 8px;text-align:right;font-size:11px;font-weight:700;white-space:nowrap;background:${late ? 'rgba(224,85,85,.45)' : 'rgba(155,89,182,.40)'};" title="${esc(p.name)} withdraws: pay the money back, then click to mark it returned">↩ pay back ${finFull(pb.amount)}</button>` : '';
+        const tend = !pb && te ? `<div style="padding:1px 8px;text-align:right;font-size:10px;color:var(--muted);white-space:nowrap;" title="The term of ${esc(p.name)} ends: renewed or not?">⏳ term ends</div>` : '';
+        return `<td style="padding:0;border:1px solid var(--line);${bl}background:${bg};">${btn}${back}${tend}</td>`;
     };
     const sticky = 'position:sticky;left:0;background:var(--bench-2,#1b212b);z-index:1;';
     const th = 'padding:3px 8px;font-size:11px;font-weight:600;white-space:nowrap;border:1px solid var(--line);';
@@ -109,6 +116,13 @@ function finTogglePaid(i, date) {
     }
 }
 function finClickPay(b) {
+    if (b.dataset.payback !== undefined) { // the money of a withdrawing investor was paid back: the investment ends
+        const idx = b.dataset.payback.split(',').map(Number), lines = idx.map(k => finData.investors[k]).filter(Boolean);
+        const amount = lines.reduce((s, l) => s + l.amount, 0);
+        if (!confirm(`Mark ${finMoney(amount)} as paid back to ${lines[0].name}? The investment ends and the payouts stop.`)) return;
+        lines.forEach(l => { l.returnedOn = l.termEnd && l.termEnd <= finSrv.today ? l.termEnd : finSrv.today; l.active = false; l.leaving = false; });
+        finTouch(); return;
+    }
     if (b.dataset.calprev !== undefined || b.dataset.calgo !== undefined) { finClickCal(b); return; }
     if (b.dataset.paygroup !== undefined) { // the payout of the Sunday being paid, for a whole group of investors who get the same amount
         const d = b.dataset.d;
