@@ -288,6 +288,20 @@ function renderEvaluation() {
             } catch (e) { cb.checked = !cb.checked; toast(e.message); }
         });
     });
+    $('ev-sent-bulk').onclick = async () => {
+        const todo = below.filter(r => !evSent[r.id]);
+        if (!todo.length) { toast('Everybody below requirement is already marked as sent'); return; }
+        const d = prompt(`${todo.length} members below requirement are not marked as sent. How many days ago did you send them the message?`, '6');
+        if (d === null) return;
+        const days = Math.max(0, Math.min(60, parseInt(d, 10) || 0));
+        $('ev-sent-bulk').disabled = true;
+        try {
+            for (const r of todo) { const res = await moFetch({ action: 'ev-sent-set', period: evPeriod().start, id: r.id, sent: true, daysAgo: days }); if (res.error) throw new Error(res.error); evSent[r.id] = { at: Date.now() - days * 86400000, by: 'you' }; }
+            toast(`${todo.length} marked as sent ${days} day${days === 1 ? '' : 's'} ago`);
+        } catch (e) { toast(e.message); }
+        $('ev-sent-bulk').disabled = false;
+        renderEvaluation();
+    };
     $('ev-copy-noreply').onclick = () => {
         const names = rows.filter(evNoReply).map(r => r.name);
         if (!names.length) { toast('Everybody who was sent the message has replied'); return; }
