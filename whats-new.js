@@ -12,6 +12,15 @@
 
 const WHATS_NEW = [
     {
+        version: '1.20', date: '2026-10-10',
+        title: 'Monthly evaluation: who never replied',
+        everyone: [],
+        leaders: [
+            'Monthly evaluation: a new Reply column. Tick "replied" when a member answers the evaluation message, and "stacking" when they tell you they are stacking. A row turns red when the message was sent and nobody has replied yet (with the number of days they have been waiting), and the summary now counts who never replied, and who never replied AND is below requirement and not stacking.',
+            'Monthly evaluation: the new box "Only who never replied" shows just those members, and "Copy names: never replied" copies their names. If you sent the messages outside WWL, "Mark below requirement as sent..." marks everyone below requirement as sent some days ago, so the waiting time is right.',
+        ],
+    },
+    {
         version: '1.19', date: '2026-09-26',
         title: 'War & chain register for the war rule',
         everyone: [
