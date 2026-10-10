@@ -176,7 +176,7 @@
         $('login-view').style.display = 'none';
         $('app-view').style.display = 'block';
         renderDashboard();
-        fetch('/api/war-payout', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key, action: 'bars-push' }) }).catch(() => {}); // lets Member Overview show this member's energy and cooldowns (read with their own key; skipped when read in the last 25 minutes)
+        fetch('/api/war-payout', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key, action: 'bars-push' }) }).catch(() => {}); // lets Member Overview show this member's energy and cooldowns (read with their own key; skipped when read in the last 10 minutes)
         renderLinks();
         await pingTracker();
         checkFactionAccess();

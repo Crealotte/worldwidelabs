@@ -260,7 +260,7 @@ function moBarsCell(id) {
     if (!b) return '<span style="color:var(--muted);" title="WWL has not read the bars of this member yet: it learns them when they open WWL or the script">—</span>';
     const age = (Date.now() - b.at) / 1000, old = age > 12 * 3600, left = s => { const r = Math.max(0, s - age); if (r < 1) return '<span style="color:#35d99b;">ready</span>'; const h = Math.floor(r / 3600), m = Math.floor(r % 3600 / 60); return `<span style="color:#e0a030;">${h ? h + 'h ' : ''}${m}m</span>`; };
     const stack = moStacking(b);
-    return `<div style="font-family:var(--mono);font-size:12px;line-height:1.5;" title="Read ${esc(moAgo(Math.floor(b.at / 1000)))}${old ? ' (old)' : ''}"><div style="color:${stack ? '#f0b432' : 'inherit'};font-weight:${stack ? 700 : 400};">⚡ ${b.e === null ? '?' : Math.round(b.e).toLocaleString()}/${b.em || '?'}${stack ? ' stacking' : ''}</div><div style="color:var(--muted);">nerve ${b.n === null ? '?' : b.n}/${b.nm || '?'}</div><div>💊 ${left(b.d)} · 🩹 ${left(b.m)}</div></div>`;
+    return `<div style="font-family:var(--mono);font-size:12px;line-height:1.5;" title="Read ${esc(moAgo(Math.floor(b.at / 1000)))}${old ? ' (old)' : ''}"><div style="color:${stack ? '#f0b432' : 'inherit'};font-weight:${stack ? 700 : 400};">⚡ ${b.e === null ? '?' : Math.round(b.e).toLocaleString()}/${b.em || '?'}${stack ? ' stacking' : ''} <span style="color:var(--muted);font-weight:400;">· ${age < 90 ? 'now' : age < 3600 ? Math.round(age / 60) + 'm' : age < 86400 ? Math.round(age / 3600) + 'h' : Math.round(age / 86400) + 'd'}</span></div><div style="color:var(--muted);">nerve ${b.n === null ? '?' : b.n}/${b.nm || '?'}</div><div>💊 ${left(b.d)} · 🩹 ${left(b.m)}</div></div>`;
 }
 function renderMemberOverview() {
     if (!moData) return;
