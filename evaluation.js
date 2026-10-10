@@ -25,8 +25,8 @@ const EV_KIND_COLOR = { warning: '#f0b432', probation: '#f0b432', remove: '#e055
 const evKey = name => String(name || '').trim().toLowerCase();
 const evDate = d => { const t = Date.parse(`${d}T00:00:00Z`); return Number.isFinite(t) ? new Date(t).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' }) : d; };
 const evNum = n => Math.round(n).toLocaleString();
-// sent the message and not replied: red. Whether they answered and whether they said they are stacking are ticked by hand (the reply comes by mail or Discord).
-const evNoReply = r => !!evSent[r.id] && !(evReplied[r.id] && evReplied[r.id].replied);
+// sent the message to someone below requirement and not replied: red. Whether they answered and whether they said they are stacking are ticked by hand (the reply comes by mail or Discord).
+const evNoReply = r => r.fails > 0 && !!evSent[r.id] && !(evReplied[r.id] && evReplied[r.id].replied); // only members below requirement were asked what they will do to improve, so only they can owe a reply
 const evStacking = r => !!(evReplied[r.id] && evReplied[r.id].stacking);
 const evWaitDays = r => (evSent[r.id] ? Math.floor((Date.now() - evSent[r.id].at) / 86400000) : 0);
 
@@ -181,7 +181,6 @@ function renderEvaluation() {
         <div><div style="color:var(--muted);font-size:11px;">Below AND warned before</div><div style="font-weight:700;">${rows.filter(r => r.fails && r.warned).length}</div></div>
         <div><div style="color:var(--muted);font-size:11px;">Message sent</div><div style="font-weight:700;">${rows.filter(r => evSent[r.id]).length} of ${rows.length}</div></div>
         <div><div style="color:var(--muted);font-size:11px;">Never replied</div><div style="font-weight:700;color:#e05555;">${rows.filter(evNoReply).length}</div></div>
-        <div><div style="color:var(--muted);font-size:11px;">Never replied AND below requirement</div><div style="font-weight:700;color:#e05555;">${rows.filter(r => evNoReply(r) && !evStacking(r) && r.fails).length}</div></div>
         <div><div style="color:var(--muted);font-size:11px;">Stacking (told you)</div><div style="font-weight:700;">${rows.filter(evStacking).length}</div></div>`;
     // the Xanax bar above the table: what is loaded for this period's wars, and the button that loads / refreshes it
     if (!evXan.busy) {
@@ -260,7 +259,7 @@ function renderEvaluation() {
                     <td style="padding:6px 8px;white-space:nowrap;font-family:var(--mono);">${r.xanax.known ? (r.xanax.outstanding > 0 ? `<span style="color:${MO_LIGHT.red};font-weight:700;" title="Took more Xanax than the hits covered and has not put it back">${r.xanax.outstanding} to return</span>` : r.xanax.owed > 0 ? `<span style="color:${MO_LIGHT.green};" title="Put it all back">✓ returned</span>` : `<span style="color:${MO_LIGHT.green};">✓</span>`) : `<span style="color:var(--muted);" title="Press Load Xanax data above the table">…</span>`}${r.xanax.known && !r.xanax.depKnown && r.xanax.owed > 0 ? ' <span style="color:var(--muted);" title="Deposits not checked yet">?</span>' : ''}</td>
                     <td style="padding:6px 8px;white-space:nowrap;font-size:12px;">${evSent[r.id] ? `<span style="color:${MO_LIGHT.green};" title="Sent by ${esc(evSent[r.id].by || '?')} on ${esc(new Date(evSent[r.id].at).toLocaleString())}">✓ ${esc(new Date(evSent[r.id].at).toLocaleDateString(undefined, { day: 'numeric', month: 'short' }))}</span>` : '<span style="color:var(--muted);">—</span>'}</td>
                     ${repl}
-                    <td style="padding:6px 8px;white-space:nowrap;color:${stColor};font-weight:600;">${stLabel}${evNoReply(r) && !evStacking(r) && r.fails ? ' <span title="Never replied and below requirement" style="color:#e05555;">· no reply + below</span>' : ''}${r.fails && r.warned ? ' <span title="Below requirement and has an earlier warning/probation" style="color:var(--danger);">· repeat</span>' : ''}</td>
+                    <td style="padding:6px 8px;white-space:nowrap;color:${stColor};font-weight:600;">${stLabel}${evNoReply(r) && !evStacking(r) ? ' <span title="Below requirement, was asked for a plan and never replied" style="color:#e05555;">· no reply</span>' : ''}${r.fails && r.warned ? ' <span title="Below requirement and has an earlier warning/probation" style="color:var(--danger);">· repeat</span>' : ''}</td>
                     <td style="padding:6px 8px;white-space:nowrap;">${last ? `<span style="color:${EV_KIND_COLOR[last.kind]};">${esc(EV_KIND_LABEL[last.kind])}</span> <span style="color:var(--muted);">${esc(evDate(last.date))}${r.history.length > 1 ? ` · ${r.history.length} entries` : ''}</span>` : '<span style="color:var(--muted);">—</span>'}</td>
                 </tr>
                 ${open ? `<tr class="ev-detail" data-id="${esc(r.id)}"><td colspan="9" style="padding:10px 12px;background:var(--bench-2);white-space:normal;">${evDetailHtml(r)}</td></tr>` : ''}`;
