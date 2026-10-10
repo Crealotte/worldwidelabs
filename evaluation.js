@@ -13,6 +13,8 @@ let evEnergy = null;
 let evLog = {};
 let evSent = {}; // who has been sent this period's message: member id -> { at, by } (shared by every leader)
 let evOnlyUnsent = false;
+let evReplied = {}; // who answered this period's message / said they are stacking: member id -> { replied, stacking, at, by }
+let evOnlyNoReply = false;
 let evBusy = false;
 let evOnlyBelow = false;
 let evOpen = new Set();
@@ -23,6 +25,10 @@ const EV_KIND_COLOR = { warning: '#f0b432', probation: '#f0b432', remove: '#e055
 const evKey = name => String(name || '').trim().toLowerCase();
 const evDate = d => { const t = Date.parse(`${d}T00:00:00Z`); return Number.isFinite(t) ? new Date(t).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' }) : d; };
 const evNum = n => Math.round(n).toLocaleString();
+// sent the message and not replied: red. Whether they answered and whether they said they are stacking are ticked by hand (the reply comes by mail or Discord).
+const evNoReply = r => !!evSent[r.id] && !(evReplied[r.id] && evReplied[r.id].replied);
+const evStacking = r => !!(evReplied[r.id] && evReplied[r.id].stacking);
+const evWaitDays = r => (evSent[r.id] ? Math.floor((Date.now() - evSent[r.id].at) / 86400000) : 0);
 
 function evPeriods() {
     return moPeriods().filter(p => p.id === 'now' || p.id.startsWith('p'));
@@ -173,7 +179,10 @@ function renderEvaluation() {
         <div><div style="color:var(--muted);font-size:11px;">New, settling in</div><div style="font-weight:700;color:${EV_STATUS.new[1]};">${count('new')}</div></div>
         <div><div style="color:var(--muted);font-size:11px;">At risk</div><div style="font-weight:700;color:${EV_STATUS.risk[1]};">${count('risk')}</div></div>
         <div><div style="color:var(--muted);font-size:11px;">Below AND warned before</div><div style="font-weight:700;">${rows.filter(r => r.fails && r.warned).length}</div></div>
-        <div><div style="color:var(--muted);font-size:11px;">Message sent</div><div style="font-weight:700;">${rows.filter(r => evSent[r.id]).length} of ${rows.length}</div></div>`;
+        <div><div style="color:var(--muted);font-size:11px;">Message sent</div><div style="font-weight:700;">${rows.filter(r => evSent[r.id]).length} of ${rows.length}</div></div>
+        <div><div style="color:var(--muted);font-size:11px;">Never replied</div><div style="font-weight:700;color:#e05555;">${rows.filter(evNoReply).length}</div></div>
+        <div><div style="color:var(--muted);font-size:11px;">Never replied AND below requirement</div><div style="font-weight:700;color:#e05555;">${rows.filter(r => evNoReply(r) && !evStacking(r) && r.fails).length}</div></div>
+        <div><div style="color:var(--muted);font-size:11px;">Stacking (told you)</div><div style="font-weight:700;">${rows.filter(evStacking).length}</div></div>`;
     // the Xanax bar above the table: what is loaded for this period's wars, and the button that loads / refreshes it
     if (!evXan.busy) {
         const wars = evXan.wars, loaded = wars.filter(w => evXan.byWar[w.id]).length, all = loaded === wars.length;
@@ -204,15 +213,18 @@ function renderEvaluation() {
     $('ev-notes').innerHTML = notes.map(esc).join('<br>');
     $('ev-below').checked = evOnlyBelow;
     $('ev-unsent').checked = evOnlyUnsent;
+    $('ev-noreply').checked = evOnlyNoReply;
 
     let shown = evOnlyBelow ? below : rows;
     if (evOnlyUnsent) shown = shown.filter(r => !evSent[r.id]);
+    if (evOnlyNoReply) shown = shown.filter(evNoReply);
     const accessors = {
         name: r => r.name.toLowerCase(),
         war: r => (r.counted ? r.okWars / r.counted : -1),
         train: r => (r.pct === null ? -1 : r.pct),
         xan: r => (r.xanax.known ? r.xanax.outstanding : -1),
         sent: r => (evSent[r.id] ? evSent[r.id].at : 0),
+        reply: r => (evNoReply(r) ? 2 : (evReplied[r.id] && evReplied[r.id].replied) ? 1 : 0),
         status: r => r.severity,
         prev: r => r.history[0]?.date || '',
     };
@@ -228,6 +240,7 @@ function renderEvaluation() {
                 <th data-sort="train" style="padding:4px 8px;">Training</th>
                 <th data-sort="xan" style="padding:4px 8px;">Xanax</th>
                 <th data-sort="sent" style="padding:4px 8px;">Sent</th>
+                <th data-sort="reply" style="padding:4px 8px;">Reply</th>
                 <th data-sort="status" style="padding:4px 8px;">Suggested</th>
                 <th data-sort="prev" style="padding:4px 8px;">Earlier</th>
             </tr></thead>
@@ -237,18 +250,20 @@ function renderEvaluation() {
                 const perWar = r.perWar.map((x, i) => !x ? '<span style="color:var(--muted);">·</span>' : x.notIn ? '<span style="color:#666;" title="not in the faction yet">–</span>'
                     : `<span style="color:${x.skipped ? '#8b98a8' : x.ok ? MO_LIGHT.green : MO_LIGHT.red};" title="${esc(`${wars[i]?.opponent || ''}${x.excused ? ` — ${moExcuseTitle(x.excused)}` : ''}`)}">${x.war}${x.chain ? `+${x.chain}` : ''}${x.excused ? ' 🚫' : ''}</span>`).join(' <span style="color:var(--line);">|</span> ');
                 const [stLabel, stColor] = EV_STATUS[r.status];
+                const repl = `<td style="padding:6px 8px;white-space:nowrap;font-size:12px;"><label style="display:inline-flex;gap:4px;align-items:center;cursor:pointer;"><input type="checkbox" class="ev-replied" data-id="${esc(r.id)}" ${evReplied[r.id] && evReplied[r.id].replied ? 'checked' : ''} style="width:auto;"> replied</label> <label style="display:inline-flex;gap:4px;align-items:center;cursor:pointer;" title="They told you they are stacking"><input type="checkbox" class="ev-stacking" data-id="${esc(r.id)}" ${evStacking(r) ? 'checked' : ''} style="width:auto;"> stacking</label>${evNoReply(r) ? `<div style="color:#e05555;font-weight:700;">no reply · ${evWaitDays(r)} day${evWaitDays(r) === 1 ? '' : 's'}</div>` : ''}</td>`;
                 return `
-                <tr class="ev-row" data-id="${esc(r.id)}" style="border-top:1px solid var(--line);cursor:pointer;">
+                <tr class="ev-row" data-id="${esc(r.id)}" style="border-top:1px solid var(--line);cursor:pointer;${evNoReply(r) ? 'background:rgba(224,85,85,.16);' : ''}">
                     <td style="padding:6px 8px;white-space:nowrap;"><span style="color:var(--muted);">${open ? '▾' : '▸'}</span> ${esc(r.name)}</td>
                     <td style="padding:6px 8px;white-space:nowrap;font-family:var(--mono);color:${MO_LIGHT[r.light]};">${dot(MO_LIGHT[r.light])}${r.counted ? `${r.okWars}/${r.counted} (need ${r.need})` : 'new'}</td>
                     <td style="padding:6px 8px;white-space:nowrap;font-family:var(--mono);">${perWar}</td>
                     <td style="padding:6px 8px;white-space:nowrap;font-family:var(--mono);color:${r.pct === null ? 'var(--muted)' : r.trainBelow ? MO_LIGHT.red : MO_LIGHT.green};">${r.pct === null ? (r.tierEff ? '…' : 'no tier') : `${evNum(r.trained)} / ${evNum(r.energyNeed)} (${Math.round(r.pct * 100)}%)`}</td>
                     <td style="padding:6px 8px;white-space:nowrap;font-family:var(--mono);">${r.xanax.known ? (r.xanax.outstanding > 0 ? `<span style="color:${MO_LIGHT.red};font-weight:700;" title="Took more Xanax than the hits covered and has not put it back">${r.xanax.outstanding} to return</span>` : r.xanax.owed > 0 ? `<span style="color:${MO_LIGHT.green};" title="Put it all back">✓ returned</span>` : `<span style="color:${MO_LIGHT.green};">✓</span>`) : `<span style="color:var(--muted);" title="Press Load Xanax data above the table">…</span>`}${r.xanax.known && !r.xanax.depKnown && r.xanax.owed > 0 ? ' <span style="color:var(--muted);" title="Deposits not checked yet">?</span>' : ''}</td>
                     <td style="padding:6px 8px;white-space:nowrap;font-size:12px;">${evSent[r.id] ? `<span style="color:${MO_LIGHT.green};" title="Sent by ${esc(evSent[r.id].by || '?')} on ${esc(new Date(evSent[r.id].at).toLocaleString())}">✓ ${esc(new Date(evSent[r.id].at).toLocaleDateString(undefined, { day: 'numeric', month: 'short' }))}</span>` : '<span style="color:var(--muted);">—</span>'}</td>
-                    <td style="padding:6px 8px;white-space:nowrap;color:${stColor};font-weight:600;">${stLabel}${r.fails && r.warned ? ' <span title="Below requirement and has an earlier warning/probation" style="color:var(--danger);">· repeat</span>' : ''}</td>
+                    ${repl}
+                    <td style="padding:6px 8px;white-space:nowrap;color:${stColor};font-weight:600;">${stLabel}${evNoReply(r) && !evStacking(r) && r.fails ? ' <span title="Never replied and below requirement" style="color:#e05555;">· no reply + below</span>' : ''}${r.fails && r.warned ? ' <span title="Below requirement and has an earlier warning/probation" style="color:var(--danger);">· repeat</span>' : ''}</td>
                     <td style="padding:6px 8px;white-space:nowrap;">${last ? `<span style="color:${EV_KIND_COLOR[last.kind]};">${esc(EV_KIND_LABEL[last.kind])}</span> <span style="color:var(--muted);">${esc(evDate(last.date))}${r.history.length > 1 ? ` · ${r.history.length} entries` : ''}</span>` : '<span style="color:var(--muted);">—</span>'}</td>
                 </tr>
-                ${open ? `<tr class="ev-detail" data-id="${esc(r.id)}"><td colspan="8" style="padding:10px 12px;background:var(--bench-2);white-space:normal;">${evDetailHtml(r)}</td></tr>` : ''}`;
+                ${open ? `<tr class="ev-detail" data-id="${esc(r.id)}"><td colspan="9" style="padding:10px 12px;background:var(--bench-2);white-space:normal;">${evDetailHtml(r)}</td></tr>` : ''}`;
             }).join('')}</tbody>
         </table>`;
     wireSort($('ev-table'), evSort, shown, accessors, renderEvaluation);
@@ -260,6 +275,25 @@ function renderEvaluation() {
         renderEvaluation();
     }));
     $('ev-table').querySelectorAll('tr.ev-detail').forEach(tr => wireEvDetail(tr, rowById[tr.dataset.id]));
+    $('ev-table').querySelectorAll('input.ev-replied, input.ev-stacking').forEach(cb => {
+        cb.addEventListener('click', e => e.stopPropagation()); // a tick must not open the member's details
+        cb.addEventListener('change', async () => {
+            const id = cb.dataset.id, cur = evReplied[id] || {}, next = { replied: !!cur.replied, stacking: !!cur.stacking };
+            next[cb.classList.contains('ev-replied') ? 'replied' : 'stacking'] = cb.checked;
+            try {
+                const res = await moFetch({ action: 'ev-reply-set', period: evPeriod().start, id, replied: next.replied, stacking: next.stacking });
+                if (res.error) throw new Error(res.error);
+                if (next.replied || next.stacking) evReplied[id] = { ...next, at: Date.now(), by: 'you' }; else delete evReplied[id];
+                renderEvaluation();
+            } catch (e) { cb.checked = !cb.checked; toast(e.message); }
+        });
+    });
+    $('ev-copy-noreply').onclick = () => {
+        const names = rows.filter(evNoReply).map(r => r.name);
+        if (!names.length) { toast('Everybody who was sent the message has replied'); return; }
+        evCopyMessage(names.join('
+'), `${names.length} name${names.length === 1 ? '' : 's'} copied`);
+    };
     $('ev-copy-all').onclick = () => {
         if (!below.length) { toast('Nobody is below requirement'); return; }
         const text = below.map(r => `===== ${r.name} =====\n${evMessage(r)}`).join('\n\n');
@@ -366,6 +400,7 @@ $('ev-period').addEventListener('change', async () => {
 });
 $('ev-below').addEventListener('change', () => { evOnlyBelow = $('ev-below').checked; renderEvaluation(); });
 $('ev-unsent').addEventListener('change', () => { evOnlyUnsent = $('ev-unsent').checked; renderEvaluation(); });
+$('ev-noreply').addEventListener('change', () => { evOnlyNoReply = $('ev-noreply').checked; renderEvaluation(); });
 $('ev-import-btn').addEventListener('click', async () => {
     const btn = $('ev-import-btn'), out = $('ev-import-status');
     btn.disabled = true; out.className = 'status ok'; out.textContent = 'Importing…';
@@ -558,5 +593,6 @@ async function evLoadSent() {
     try {
         const r = await moFetch({ action: 'ev-sent-get', period: evPeriod().start });
         evSent = r.error ? {} : (r.sent || {});
-    } catch (e) { evSent = {}; }
+        evReplied = r.error ? {} : (r.replied || {});
+    } catch (e) { evSent = {}; evReplied = {}; }
 }

@@ -1781,8 +1781,10 @@
                         <select id="ev-period" style="width:auto;max-width:100%;font-size:13px;"></select>
                         <label style="display:inline-flex;gap:6px;align-items:center;font-size:13px;"><input type="checkbox" id="ev-below" style="width:auto;"> Only members below requirement</label>
                         <label style="display:inline-flex;gap:6px;align-items:center;font-size:13px;"><input type="checkbox" id="ev-unsent" style="width:auto;"> Only not sent yet</label>
+                        <label style="display:inline-flex;gap:6px;align-items:center;font-size:13px;color:var(--danger);font-weight:600;"><input type="checkbox" id="ev-noreply" style="width:auto;"> Only who never replied</label>
                         <button class="ghost small" id="ev-refresh">Reload</button>
                         <button class="small" id="ev-copy-all">Copy all messages</button>
+                        <button class="ghost small" id="ev-copy-noreply" title="Copies the names of everyone who was sent the message and never replied">Copy names: never replied</button>
                     </div>
                     <div id="ev-summary" style="display:flex;gap:24px;flex-wrap:wrap;margin-bottom:10px;"></div>
                     <div id="ev-notes" style="color:var(--muted);font-size:12px;margin-bottom:10px;"></div>
