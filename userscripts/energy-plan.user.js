@@ -2,7 +2,7 @@
 // @name         World Wide Labs
 // @namespace    https://worldwidelabs.vercel.app
 // @author       CreaLotte
-// @version      1.38.1
+// @version      1.39
 // @updateURL    __WWL_BASE__/worldwidelabs.user.js
 // @downloadURL  __WWL_BASE__/worldwidelabs.user.js
 // @description  Shows your WorldWideLabs weekly energy plan (the checklist from the Energy planner) inside Torn, a To do tab with small personal reminders (revive setting, feedback, timezone map, availability, Discord/Intel/CAT), your My Targets list, a simplified energy/war standing strip, and — if you are in the Mentoring Platform — your mentoring checklist too. Also shows faction banners at the top of every Torn page. A small ⚙ in the header shows the installed version, flags when a newer one is out, lets you set/replace your API key, and — for a leader — add or remove your faction's banners right from Torn. On a computer it is a small window you can drag around and close; in TornPDA it is a menu. Ticks are shared with the WWL site.
@@ -26,7 +26,7 @@
     const KEY_NAME = 'wwl_api_key', POS_NAME = 'wwl_plan_pos', STATE_NAME = 'wwl_plan_state';
     // GM_info gives the version Tampermonkey actually has installed right now — falls back to a
     // hardcoded copy (kept in sync with @version above) for TornPDA, which doesn't grant GM_info.
-    const SCRIPT_VERSION = (typeof GM_info !== 'undefined' && GM_info.script?.version) || '1.38.1';
+    const SCRIPT_VERSION = (typeof GM_info !== 'undefined' && GM_info.script?.version) || '1.39';
     const versionGreater = (a, b) => {
         const pa = String(a).split('.').map(Number), pb = String(b).split('.').map(Number);
         for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
@@ -151,7 +151,7 @@
         <div id="wwl-body" style="overflow:auto;padding:8px 12px 12px;"></div>`;
     root.appendChild(win);
     const body = win.querySelector('#wwl-body'), prog2 = win.querySelector('#wwl-prog2'), head = win.querySelector('#wwl-head');
-    let plan = null, mtPairs = null, mtTodos = [], todoItems = null, tab = 'todo', lastTab = 'todo'; // tab: 'energy' | 'mentoring' | 'todo' | 'settings' | 'targets' — the mentoring tab only appears once we know there's something to show there
+    let plan = null, mtPairs = null, mtTodos = [], mtIsPupil = false, welMine = null, welPupils = {}, welInsights = {}, welOpen = {}, todoItems = null, tab = 'todo', lastTab = 'todo'; // tab: 'energy' | 'mentoring' | 'todo' | 'settings' | 'targets' — the mentoring tab only appears once we know there's something to show there
     let settingsData = null, updateAvailable = null; // settingsData: { banners, leader, owner } once the Settings tab has been opened
     let standing = null; // from 'mo-me' — the same numbers the site's "Your standing" dashboard card shows
     let myTargets = null, targetStatus = {}; // My Targets list + live status, fetched separately (status can lag behind the list)
@@ -165,7 +165,7 @@
         try { const d = JSON.parse(store.get(DAILY_CHECK_NAME) || 'null'); return !!(d && d.date === todayStr() && d.checked); } catch (e) { return false; }
     }
     function setDailyChecked(v) { store.set(DAILY_CHECK_NAME, JSON.stringify({ date: todayStr(), checked: v })); }
-    function todoCount() { return (todoItems ? todoItems.filter(t => !t.notice).length : 0) + (getDailyChecked() ? 0 : 1); } // a notice (like the Xanax stacking reminder) is not something to do, so it is not counted
+    function todoCount() { return (todoItems ? todoItems.filter(t => !t.notice && !t.done).length : 0) + (getDailyChecked() ? 0 : 1); } // a notice (like the Xanax stacking reminder) is not something to do, so it is not counted
 
     // position (PC): remembered, and always kept inside the screen
     const place = (x, y) => {
@@ -201,7 +201,7 @@
     async function refreshTodoItems(force = false) {
         if (win.style.display === 'none' || (!force && Date.now() - lastTodoFetch < 30000)) return;
         lastTodoFetch = Date.now();
-        try { const r = await api({ action: 'member-todo' }); todoItems = r.items || []; if (tab === 'todo') render(); }
+        try { const r = await api({ action: 'member-todo' }); todoItems = r.items || []; if (tab === 'todo' || tab === 'settings') render(); }
         catch (e) { /* keep showing what we already had */ }
     }
     document.addEventListener('visibilitychange', () => { if (!document.hidden) refreshTodoItems(); });
@@ -256,7 +256,8 @@
     function tabBar() {
         const n = todoCount();
         const tabs = [['todo', `✅ To do${n ? ` (${n})` : ''}`], ['energy', '⚡ Energy'], ['targets', '🎯 Targets']];
-        if (mtPairs && mtPairs.length) tabs.push(['mentoring', '🎓 Mentoring']);
+        if ((mtPairs && mtPairs.length) || mtIsPupil) tabs.push(['mentoring', '🎓 Mentoring']);
+        tabs.push(['labnotes', '🧪 Notes']);
         tabs.push(['bank', '💰 Bank']);
         if (tabs.length < 2) return '';
         return `<div style="display:flex;gap:6px;margin-bottom:10px;">${tabs.map(([id, label]) =>
@@ -269,6 +270,7 @@
             if (tab === 'todo') refreshTodoItems();
             if (tab === 'targets') loadTargets();
             if (tab === 'bank') loadBankInfo();
+            if (tab === 'labnotes') loadLab();
         }));
     }
     function renderEnergyTab() {
@@ -338,16 +340,90 @@
         }
         if (Date.now() - targetsFetchedAt > 60000) return refreshTargetStatus(); // statuses go stale fast, but not that fast
     }
+    // ---- welcome chapters (the pupil's missions, and what the mentor sees of their pupil) — from lib/welcome.js ----
+    const weRich = t => esc(String(t || '')).replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g, (m, label, url) => `<a href="${url}" target="_blank" rel="noopener" style="color:#35d99b;">${label}</a>`);
+    const weLink = t => { const l = String(t.link || '').trim(); if (!l) return ''; const h = /^https?:\/\//i.test(l) ? l : `${WWL}/${l.replace(/^\/+/, '')}`; return ` <a href="${esc(h)}" target="_blank" rel="noopener" style="color:#35d99b;white-space:nowrap;">${esc(t.label || 'Open')}</a>`; };
+    const weTask = (t, cls, extra) => `<label style="display:flex;gap:8px;align-items:flex-start;padding:${IS_PDA ? 8 : 4}px 0;${t.waiting ? 'opacity:.6;' : ''}"><input type="checkbox" class="${cls}" ${extra} data-id="${esc(t.id)}" ${t.done ? 'checked' : ''} ${t.auto || t.waiting ? 'disabled' : ''}><span style="flex:1;">${weRich(t.text)}${t.auto ? ' <span style="color:#9aa4b5;font-size:11px;">· ticks itself</span>' : ''}${t.waiting ? ` <span style="color:#f0b432;font-size:11px;">· from day ${t.fromDay + 1}</span>` : ''}${weLink(t)}</span></label>`;
+    // the role path: where they are on the faction ladder and what the next role still needs
+    function weRole(role) {
+        if (!role) return '';
+        if (role.current < 0) return `<div style="color:#9aa4b5;margin-bottom:6px;">Role: <b style="color:#e8ecf3;">${esc(role.position || 'none')}</b></div>`;
+        const mark = ok => ok === true ? '<span style="color:#35d99b;">✓</span>' : ok === false ? '<span style="color:#9aa4b5;">○</span>' : '<span style="color:#9aa4b5;">?</span>';
+        const chips = role.steps.map((s, i) => `<span style="font-size:11px;border:1px solid ${i === role.current ? '#35d99b' : '#3a4352'};border-radius:10px;padding:1px 7px;color:${i <= role.current ? '#e8ecf3' : '#9aa4b5'};">${i < role.current ? '✓ ' : ''}${esc(s.name)}</span>`).join(' → ');
+        const next = role.next != null ? role.steps[role.next] : null;
+        return `<div style="margin:4px 0 8px;"><div style="font-size:11px;color:#9aa4b5;">Role path</div><div style="display:flex;gap:3px;flex-wrap:wrap;align-items:center;">${chips}</div>${next ? `<div style="margin-top:4px;">Next: <b>${esc(next.name)}</b>${next.gives ? ` <span style="color:#9aa4b5;">(${esc(next.gives)})</span>` : ''}${next.reqs.map(r => `<div style="padding-left:8px;">${r.appointed ? '•' : mark(r.ok)} ${esc(r.text)}${r.detail ? ` <span style="color:#9aa4b5;font-size:11px;">(${esc(r.detail)})</span>` : ''}</div>`).join('')}</div>` : `<div style="color:#35d99b;margin-top:4px;">You are at the top of the ladder 🎉</div>${role.keep ? `<div style="margin-top:3px;">${role.keep.ok === false ? '<span style="color:#e05555;">⚠</span>' : mark(role.keep.ok)} ${esc(role.keep.text)}${role.keep.detail ? ` <span style="color:#9aa4b5;font-size:11px;">(${esc(role.keep.detail)})</span>` : ''}</div>` : ''}`}</div>`;
+    }
+    function renderWelcomeMine() {
+        const r = welMine;
+        if (!r || !r.pupil) return '';
+        const c = r.chapters[r.current];
+        const total = r.chapters.reduce((s, x) => s + x.total, 0), done = r.chapters.reduce((s, x) => s + x.doneCount, 0);
+        return `<div style="margin-bottom:14px;padding-bottom:10px;border-bottom:1px solid #3a4352;">
+            <div style="font-weight:700;margin-bottom:4px;">👋 Your welcome missions <span style="font-weight:400;color:#9aa4b5;font-size:12px;">${r.allDone ? 'all done 🎉' : `${done} of ${total} steps`}</span></div>
+            ${weRole(r.role)}
+            <div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:6px;">${r.chapters.map((x, i) => `<span style="font-size:11px;border:1px solid ${i === r.current && !r.allDone ? '#35d99b' : '#3a4352'};border-radius:10px;padding:1px 7px;color:${x.complete ? '#35d99b' : x.locked ? '#9aa4b5' : '#e8ecf3'};">${x.complete ? '✓' : x.locked ? '🔒' : ''} ${i + 1}${x.locked ? '' : ` ${esc(x.title)}`}</span>`).join('')}</div>
+            ${r.allDone ? '<div style="color:#35d99b;">You finished everything. Well done! 🎉</div>' : `<details class="wwl-w-det" data-k="me:${r.current}" ${welOpen[`me:${r.current}`] ? 'open' : ''} style="margin:3px 0;border:1px solid #3a4352;border-radius:6px;padding:3px 8px;"><summary style="cursor:pointer;font-weight:700;">${r.current + 1}. ${esc(c.title)} <span style="font-weight:400;color:#9aa4b5;font-size:11px;">${c.doneCount}/${c.total} · you are here</span></summary><div style="color:#9aa4b5;font-size:12px;white-space:pre-wrap;margin:4px 0;">${weRich(c.intro)}</div>${c.tasks.map(t => weTask(t, 'wwl-w-check', '')).join('')}</details>`}
+        </div>`;
+    }
+    // a mentor's closed-by-default look at their pupil's training per week and the energy plan they picked (from the site's own numbers)
+    function renderInsight(pupilId) {
+        const r = welInsights[pupilId];
+        if (!r || r.error) return '';
+        const n = v => Math.round(v).toLocaleString();
+        const max = Math.max(1, r.weekly || 0, ...r.weeks.map(w => w.total));
+        const day = iso => new Date(`${iso}T00:00:00Z`).toLocaleDateString(undefined, { day: 'numeric', month: 'short', timeZone: 'UTC' });
+        const plan = r.plan ? `<div><b>⚡ Plan:</b> ${esc(r.plan.method || 'a plan')}${r.plan.stat ? ` (${esc(r.plan.stat)})` : ''}<div style="color:#9aa4b5;font-size:12px;">${esc(r.plan.summary || '')}</div><div style="color:#9aa4b5;font-size:12px;">This week: ${r.plan.done} of ${r.plan.total} steps${r.plan.weekly ? ` · minimum ${n(r.plan.weekly)} E` : ''}</div></div>`
+            : '<div style="color:#f0b432;">⚠ No energy plan set yet: a good moment to help them choose one on the Energy planner.</div>';
+        const rows = r.tracked ? r.weeks.map(w => `<div style="display:flex;align-items:center;gap:6px;font-size:11px;margin:2px 0;"><span style="width:84px;color:#9aa4b5;">${day(w.from)}–${day(w.to)}</span><span style="flex:1;background:#39414f;border-radius:3px;height:9px;display:block;"><span style="display:block;height:9px;border-radius:3px;width:${(w.total / max * 100).toFixed(1)}%;background:${r.weekly && w.total < r.weekly ? '#f0b432' : '#35d99b'};"></span></span><span style="width:62px;text-align:right;">${n(w.total)} E</span></div>`).join('') : '<div style="color:#9aa4b5;font-size:12px;">No energy recorded for them yet.</div>';
+        return `<details class="wwl-w-det" data-k="${esc(pupilId)}:ins" ${welOpen[`${pupilId}:ins`] ? 'open' : ''} style="margin:3px 0;border:1px solid #3a4352;border-radius:6px;padding:3px 8px;"><summary style="cursor:pointer;font-weight:700;">📈 Their training and energy plan</summary>${plan}<div style="color:#9aa4b5;font-size:11px;margin:4px 0 2px;">Energy trained per week${r.weekly ? ' (amber = under the weekly minimum)' : ''}</div>${rows}</details>`;
+    }
+    // the mentor sees every chapter in full with what is ticked (the pupil only gets the chapter they are on)
+    function renderWelcomePupil(pupilId) {
+        const r = welPupils[pupilId];
+        if (!r || r.error) return '';
+        const total = r.chapters.reduce((s, x) => s + x.total, 0), done = r.chapters.reduce((s, x) => s + x.doneCount, 0);
+        return `<div style="margin:6px 0 10px;"><div style="font-size:12px;font-weight:700;">${r.allDone ? '👋 Finished all welcome chapters 🎉' : `👋 Their welcome chapters: ${r.current + 1} of ${r.chapters.length}, ${done} of ${total} steps`}</div>
+            ${weRole(r.role)}
+            ${renderInsight(pupilId)}
+            <div style="color:#9aa4b5;font-size:12px;margin-bottom:4px;">Tick a step for them if they showed you it is done.</div>
+            ${r.chapters.map((x, i) => { const k = `${pupilId}:${i}`; return `<details class="wwl-w-det" data-k="${esc(k)}" ${(welOpen[k] ?? false) ? 'open' : ''} style="margin:3px 0;border:1px solid #3a4352;border-radius:6px;padding:3px 8px;"><summary style="cursor:pointer;color:${x.complete ? '#35d99b' : '#e8ecf3'};">${x.complete ? '✓' : x.locked ? '🔒' : '○'} ${i + 1}. ${esc(x.title)} <span style="color:#9aa4b5;font-size:11px;">${x.doneCount}/${x.total}${x.locked ? ' · not open for them yet' : ''}</span></summary>${x.tasks.map(t => weTask(t, 'wwl-w-mtick', `data-pupil="${esc(pupilId)}"`)).join('')}</details>`; }).join('')}</div>`;
+    }
+    // ---- Lab Notes (every member): the role path, the welcome chapters and the extra cards from the site's Lab Notes page; a card's daily steps can be put on the own To do ----
+    let labData = null;
+    async function loadLab() {
+        try { labData = await api({ action: 'lab-get' }); } catch (e) { labData = { error: e.message === 'NO_KEY' ? 'No API key set yet.' : e.message }; }
+        if (tab === 'labnotes') render();
+    }
+    function renderLabTab() {
+        const r = labData;
+        if (!r) return '<div style="padding:6px 0;color:#9aa4b5;">Loading…</div>';
+        if (r.error) return `<div style="padding:6px 0;color:#e05555;">${esc(r.error)}</div>`;
+        const w = r.welcome;
+        let html = weRole(r.role);
+        if (w && w.chapters && w.chapters.length) {
+            const c = w.chapters[w.current];
+            const total = w.chapters.reduce((s, x) => s + x.total, 0), done = w.chapters.reduce((s, x) => s + x.doneCount, 0);
+            html += `<div style="margin:8px 0 12px;padding-bottom:10px;border-bottom:1px solid #3a4352;"><div style="font-weight:700;margin-bottom:4px;">👋 Welcome chapters <span style="font-weight:400;color:#9aa4b5;font-size:12px;">${w.allDone ? 'all done 🎉' : `${done} of ${total} steps`}</span></div>
+                <div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:6px;">${w.chapters.map((x, i) => `<span style="font-size:11px;border:1px solid ${i === w.current && !w.allDone ? '#35d99b' : '#3a4352'};border-radius:10px;padding:1px 7px;color:${x.complete ? '#35d99b' : x.locked ? '#9aa4b5' : '#e8ecf3'};">${x.complete ? '✓' : x.locked ? '🔒' : ''} ${i + 1}${x.locked ? '' : ` ${esc(x.title)}`}</span>`).join('')}</div>
+                ${w.allDone ? '<div style="color:#35d99b;">You finished all the chapters. Well done! 🎉</div>' : `<details class="wwl-w-det" data-k="lab:${w.current}" ${welOpen[`lab:${w.current}`] ? 'open' : ''} style="margin:3px 0;border:1px solid #3a4352;border-radius:6px;padding:3px 8px;"><summary style="cursor:pointer;font-weight:700;">${w.current + 1}. ${esc(c.title)} <span style="font-weight:400;color:#9aa4b5;font-size:11px;">${c.doneCount}/${c.total} · you are here</span></summary><div style="color:#9aa4b5;font-size:12px;white-space:pre-wrap;margin:4px 0;">${weRich(c.intro)}</div>${c.tasks.map(t => weTask(t, 'wwl-lab-check', '')).join('')}</details>`}
+            </div>`;
+        }
+        const cards = r.cards || [];
+        html += cards.length ? cards.map(c => `<details class="wwl-w-det" data-k="labcard:${esc(c.id)}" ${welOpen[`labcard:${c.id}`] ? 'open' : ''} style="margin:5px 0;border:1px solid #3a4352;border-radius:6px;padding:3px 8px;"><summary style="cursor:pointer;font-weight:700;">${esc(c.title)} <span style="font-weight:400;color:#9aa4b5;font-size:11px;">${c.doneCount}/${c.total}${c.complete ? ' · done ✓' : ''}</span></summary>
+            ${c.intro ? `<div style="color:#9aa4b5;font-size:12px;white-space:pre-wrap;margin:4px 0;">${weRich(c.intro)}</div>` : ''}${c.tasks.map(t => weTask(t, 'wwl-lab-check', '')).join('')}
+            ${c.canRemind ? `<label style="display:flex;gap:8px;align-items:center;margin-top:6px;padding-top:6px;border-top:1px solid #3a4352;font-size:12px;"><input type="checkbox" class="wwl-lab-remind" data-id="${esc(c.id)}" ${c.remindersOn ? 'checked' : ''}> Put the daily steps of this note on my To do</label>` : ''}</details>`).join('')
+            : `<div style="color:#9aa4b5;font-size:12px;padding:4px 0;">More notes will show up here when they are written.</div>`;
+        return html + `<div style="margin-top:10px;color:#9aa4b5;font-size:12px;">The same notes are on the site: <a href="${WWL}/lab-notes" target="_blank" rel="noopener" style="color:#35d99b;">${esc(WWL)}/lab-notes</a></div>`;
+    }
     // The mentoring to-dos: one section per pairing (a mentor with several pupils gets one each), each ticked
     // separately — same shared checklist the WWL page itself shows, just without the chat (open the site for that).
     function renderMentoringTab() {
-        if (!mtPairs.length) return '<div style="padding:6px 0;color:#9aa4b5;">Not in a mentoring pair right now.</div>';
-        return mtPairs.map(p => {
-            const items = mtTodos.filter(t => t.role === 'both' || t.role === p.role);
+        const mine = renderWelcomeMine();
+        if (!mtPairs.length) return mine + '<div style="padding:6px 0;color:#9aa4b5;">No mentor yet: a leader matches you with someone who is online at the same time as you. Make sure your usual online hours are set on the site.</div>';
+        return mine + mtPairs.map(p => {
             return `<div style="margin-bottom:14px;padding-bottom:10px;border-bottom:1px solid #3a4352;">
                 <div style="font-weight:700;margin-bottom:6px;">${p.role === 'mentor' ? `Mentoring ${esc(p.otherName)}` : `Your mentor: ${esc(p.otherName)}`}</div>
-                ${items.length ? items.map(t => `<label style="display:flex;gap:8px;align-items:flex-start;padding:${IS_PDA ? 8 : 4}px 0;cursor:pointer;"><input type="checkbox" class="wwl-m-check" data-pair="${esc(p.pairId)}" data-id="${esc(t.id)}" ${p.done.includes(t.id) ? 'checked' : ''} style="margin-top:2px;"><span>${esc(t.text)}</span></label>`).join('')
-                    : '<div style="color:#9aa4b5;">No checklist yet.</div>'}
+                ${p.role === 'mentor' ? renderWelcomePupil(p.otherId) : ''}
             </div>`;
         }).join('') + `<div style="color:#9aa4b5;">Chat with them on the site: <a href="${WWL}/mentoring" target="_blank" rel="noopener" style="color:#35d99b;">${esc(WWL)}/mentoring</a></div>`;
     }
@@ -372,10 +448,13 @@
         const submit = async () => {
             if (!input || !input.value.trim()) return;
             add.disabled = true;
-            try { await api({ action: 'mytodo-add', text: input.value }); await refreshTodoItems(true); } catch (e) { add.disabled = false; add.textContent = 'Failed'; }
+            try { await api({ action: 'mytodo-add', text: input.value, repeat: body.querySelector('#wwl-mt-repeat').value }); await refreshTodoItems(true); } catch (e) { add.disabled = false; add.textContent = 'Failed'; }
         };
         add?.addEventListener('click', submit);
         input?.addEventListener('keydown', e => { if (e.key === 'Enter') submit(); });
+        body.querySelectorAll('.wwl-mt-check').forEach(c => c.addEventListener('change', async () => {
+            try { await api({ action: 'mytodo-check', id: c.dataset.id, done: c.checked }); await refreshTodoItems(true); } catch (e) { c.checked = !c.checked; }
+        }));
         body.querySelectorAll('.wwl-mt-del').forEach(x => x.addEventListener('click', async () => {
             try { await api({ action: 'mytodo-delete', id: x.dataset.id }); await refreshTodoItems(true); } catch (e) { /* stays */ }
         }));
@@ -445,12 +524,16 @@
                 // a notice is just a reminder: a full-width amber box with the text, no button, not part of the count
                 ? `<div style="padding:8px 10px;margin:6px 0;border:1px solid #f0b432;border-radius:6px;background:#f0b43218;color:#f0b432;font-weight:600;line-height:1.4;">${esc(t.text)}</div>`
                 : `<div style="display:flex;gap:8px;align-items:center;padding:${IS_PDA ? 10 : 7}px 0;border-bottom:1px solid #3a4352;">
-                <span style="flex:1;">${esc(t.text)}</span>
-                ${t.mine ? `<span class="wwl-mt-del" data-id="${esc(t.myId)}" title="Delete this reminder" style="cursor:pointer;color:#e05555;">✕</span>` : ''}
-                ${t.url ? `<a href="${esc(t.url)}" target="_blank" rel="noopener" style="color:#35d99b;white-space:nowrap;text-decoration:none;border:1px solid #35d99b;border-radius:6px;padding:4px 8px;font-size:12px;">${esc(t.cta)}</a>` : ''}
+                ${t.mine ? `<input type="checkbox" class="wwl-mt-check" data-id="${esc(t.myId)}" ${t.done ? 'checked' : ''} style="width:auto;">` : ''}
+                <span style="flex:1;${t.mine && t.done ? 'text-decoration:line-through;color:#9aa4b5;' : ''}">${esc(t.text)}</span>
+                ${t.mine ? `<span style="font-size:10px;color:#9aa4b5;border:1px solid #3a4352;border-radius:8px;padding:0 6px;">${t.repeat === 'daily' ? 'daily' : 'once'}</span>` : ''}
+                ${t.scriptTab ? `<button type="button" class="wwl-t-go" data-tab="${esc(t.scriptTab)}" style="color:#35d99b;white-space:nowrap;background:transparent;border:1px solid #35d99b;border-radius:6px;padding:4px 8px;font-size:12px;cursor:pointer;">${esc(t.cta)}</button>` : t.url ? `<a href="${esc(t.url)}" target="_blank" rel="noopener" style="color:#35d99b;white-space:nowrap;text-decoration:none;border:1px solid #35d99b;border-radius:6px;padding:4px 8px;font-size:12px;">${esc(t.cta)}</a>` : ''}
+                ${t.lease ? `<span style="display:flex;gap:6px;flex-wrap:wrap;">
+                    <button type="button" class="wwl-lease-copy" data-amount="${esc(String(t.lease.amount))}" style="background:transparent;border:1px solid #3a4352;border-radius:6px;padding:4px 8px;font-size:12px;color:#e6e9ef;cursor:pointer;">Copy amount</button>
+                    ${t.lease.status === 'due' ? `<button type="button" class="wwl-lease" data-act="offer" data-id="${esc(t.lease.id)}" style="background:transparent;border:1px solid #f0b432;border-radius:6px;padding:4px 8px;font-size:12px;color:#f0b432;cursor:pointer;">Offered ✓</button>` : ''}
+                    <button type="button" class="wwl-lease" data-act="pay" data-id="${esc(t.lease.id)}" style="background:transparent;border:1px solid #35d99b;border-radius:6px;padding:4px 8px;font-size:12px;color:#35d99b;cursor:pointer;">Paid ✓</button></span>` : ''}
             </div>${t.id === 'oc' ? ocRequestHtml(t) : ''}`).join('');
-        const addRow = `<div style="display:flex;gap:6px;margin-top:10px;"><input id="wwl-mt-input" maxlength="100" placeholder="Add a reminder of your own…" style="flex:1;min-width:0;background:#12161c;color:#e6e9ef;border:1px solid #3a4352;border-radius:6px;padding:6px;"><button type="button" id="wwl-mt-add" style="padding:6px 10px;border-radius:6px;border:1px solid #35d99b;background:transparent;color:#35d99b;cursor:pointer;">Add</button></div><div style="color:#9aa4b5;font-size:11px;margin-top:4px;">Leaders can see what people add, to find reminders worth building for everyone.</div>`;
-        return daily + rest + addRow;
+        return daily + rest;
     }
     // The ⚙ view: version + update flag + API key, and — for a leader — the faction's own banners
     // (add/delete), reusing the exact same banners-get/save/delete actions Leader settings on the
@@ -465,6 +548,15 @@
             <span class="wwl-ban-del" data-id="${esc(b.id)}" title="Delete" style="cursor:pointer;color:#e05555;">✕</span>
         </div>`).join('');
     }
+    // "My own reminders" lives in ⚙ Settings (to keep the To do tab short): the list with a delete mark each, and the add row. The reminders
+    // themselves show in the To do tab with a checkbox.
+    function myRemindersBlock() {
+        const mine = (todoItems || []).filter(t => t.mine);
+        const addRow = `<div style="display:flex;gap:6px;margin-top:8px;"><input id="wwl-mt-input" maxlength="100" placeholder="Add a reminder of your own…" style="flex:1;min-width:0;background:#12161c;color:#e6e9ef;border:1px solid #3a4352;border-radius:6px;padding:6px;"><select id="wwl-mt-repeat" style="background:#12161c;color:#e6e9ef;border:1px solid #3a4352;border-radius:6px;padding:4px;"><option value="once">Once</option><option value="daily">Daily</option></select><button type="button" id="wwl-mt-add" style="padding:6px 10px;border-radius:6px;border:1px solid #35d99b;background:transparent;color:#35d99b;cursor:pointer;">Add</button></div><div style="color:#9aa4b5;font-size:11px;margin-top:4px;">Leaders can see what people add, to find reminders worth building for everyone.</div>`;
+        return `<div style="margin-top:14px;padding-top:10px;border-top:1px solid #3a4352;"><div style="font-weight:700;margin-bottom:4px;">My own reminders</div>
+            ${mine.length ? mine.map(t => `<div style="display:flex;gap:8px;align-items:center;padding:4px 0;font-size:12px;"><span style="flex:1;">${esc(t.text)}</span><span style="font-size:10px;color:#9aa4b5;border:1px solid #3a4352;border-radius:8px;padding:0 6px;">${t.repeat === 'daily' ? 'daily' : 'once'}</span><span class="wwl-mt-del" data-id="${esc(t.myId)}" title="Delete this reminder" style="cursor:pointer;color:#e05555;">✕</span></div>`).join('') : '<div style="color:#9aa4b5;font-size:12px;">None yet. They show in the To do tab with a checkbox.</div>'}
+            ${addRow}</div>`;
+    }
     function renderSettingsTab() {
         const updateHtml = updateAvailable ? `<div style="color:#f0b432;margin:6px 0;">⬆ Update available: v${esc(updateAvailable)} — <a href="${WWL}/worldwidelabs.user.js" target="_blank" rel="noopener" style="color:#f0b432;">open the install link</a> and Tampermonkey will offer to update.</div>` : '';
         // Closing a banner's × dismisses it in this browser forever (see renderTornBanner) — a leader
@@ -477,6 +569,7 @@
             ${updateHtml}
             <button type="button" id="wwl-change-key" style="margin-top:4px;padding:6px 12px;border-radius:6px;border:1px solid #3a4352;background:transparent;color:#e6e9ef;cursor:pointer;">Change API key</button>
             ${undismissHtml}`;
+        html += myRemindersBlock();
         if (settingsData === null) {
             html += '<div style="padding:10px 0;color:#9aa4b5;">Loading…</div>';
         } else if (settingsData.leader) {
@@ -558,8 +651,8 @@
         </div>`;
     }
     function render() {
-        if (tab === 'settings') { body.innerHTML = renderSettingsTab(); wireSettingsTab(); try { checkForUpdate(true); } catch (e) { /* the script is still starting up - the passive check will run */ } return; }
-        const tabContent = tab === 'mentoring' ? renderMentoringTab() : tab === 'bank' ? renderBankTab() : tab === 'targets' ? renderTargetsTab() : tab === 'todo' ? renderTodoTab() : renderEnergyTab();
+        if (tab === 'settings') { body.innerHTML = renderSettingsTab(); wireSettingsTab(); wireMyTodo(); try { checkForUpdate(true); } catch (e) { /* the script is still starting up - the passive check will run */ } return; }
+        const tabContent = tab === 'labnotes' ? renderLabTab() : tab === 'mentoring' ? renderMentoringTab() : tab === 'bank' ? renderBankTab() : tab === 'targets' ? renderTargetsTab() : tab === 'todo' ? renderTodoTab() : renderEnergyTab();
         body.innerHTML = updateBanner() + renderStandingStrip() + tabBar() + tabContent;
         showProgress();
         wireTabs();
@@ -579,6 +672,30 @@
             if (cb.checked) p.done = [...new Set([...p.done, cb.dataset.id])]; else p.done = p.done.filter(id => id !== cb.dataset.id);
             try { await api({ action: 'mentor-todo-toggle', mentorId, pupilId, todoId: cb.dataset.id, checked: cb.checked }); } catch (e) { /* shown on next load */ }
         }));
+        body.querySelectorAll('.wwl-w-det').forEach(d => d.addEventListener('toggle', () => { welOpen[d.dataset.k] = d.open; }));
+        body.querySelectorAll('.wwl-t-go').forEach(b => b.addEventListener('click', () => { tab = lastTab = b.dataset.tab; render(); }));
+        // the owner's lease lines: copy the amount, mark "I offered the lease" or "the tenant paid" (each click is one request; the To do list is re-read afterwards)
+        body.querySelectorAll('.wwl-lease-copy').forEach(b => b.addEventListener('click', () => { const v = b.dataset.amount; (navigator.clipboard ? navigator.clipboard.writeText(v) : Promise.reject()).catch(() => { const ta = document.createElement('textarea'); ta.value = v; document.body.appendChild(ta); ta.select(); try { document.execCommand('copy'); } catch (e) { /* manual copy */ } ta.remove(); }); b.textContent = 'Copied'; }));
+        body.querySelectorAll('.wwl-lease').forEach(b => b.addEventListener('click', async () => {
+            b.disabled = true;
+            try { await api({ action: b.dataset.act === 'pay' ? 'lt-pay' : 'lt-offer', id: b.dataset.id }); await refreshTodoItems(true); } catch (e) { b.disabled = false; b.textContent = 'Failed'; }
+        }));
+        body.querySelectorAll('.wwl-w-check').forEach(cb => cb.addEventListener('change', async () => {
+            try { await api({ action: 'wel-done', id: cb.dataset.id, done: cb.checked }); welMine = await api({ action: 'wel-my' }); } catch (e) { /* shown on next load */ }
+            render();
+        }));
+        body.querySelectorAll('.wwl-lab-check').forEach(cb => cb.addEventListener('change', async () => {
+            try { await api({ action: 'wel-done', id: cb.dataset.id, done: cb.checked }); labData = await api({ action: 'lab-get' }); } catch (e) { /* shown on next load */ }
+            render();
+        }));
+        body.querySelectorAll('.wwl-lab-remind').forEach(cb => cb.addEventListener('change', async () => {
+            try { await api({ action: 'lab-reminders', cardId: cb.dataset.id, on: cb.checked }); labData = await api({ action: 'lab-get' }); await refreshTodoItems(true); } catch (e) { cb.checked = !cb.checked; }
+            render();
+        }));
+        body.querySelectorAll('.wwl-w-mtick').forEach(cb => cb.addEventListener('change', async () => {
+            try { welPupils[cb.dataset.pupil] = await api({ action: 'wel-mentor-tick', pupilId: cb.dataset.pupil, id: cb.dataset.id, done: cb.checked }); } catch (e) { /* shown on next load */ }
+            render();
+        }));
     }
     async function load() {
         body.innerHTML = '<div style="padding:6px 0;color:#9aa4b5;">Loading…</div>';
@@ -595,6 +712,13 @@
             ]);
             plan = planR.plan; store.set('wwl_plan_cache', JSON.stringify({ at: Date.now(), plan }));
             mtPairs = mtR?.pairs || []; mtTodos = mtR?.todos || [];
+            mtIsPupil = !!mtR?.isPupil;
+            welMine = null; welPupils = {}; welInsights = {};
+            const welJobs = []; // the welcome chapters: a pupil's own, and each pupil a mentor looks after (only for people in the program)
+            if (mtIsPupil) welJobs.push(api({ action: 'wel-my' }).then(r => { welMine = r; }).catch(() => { /* shows nothing */ }));
+            for (const p of mtPairs) if (p.role === 'mentor') welJobs.push(api({ action: 'wel-pupil', pupilId: p.otherId }).then(r => { welPupils[p.otherId] = r; }).catch(() => { /* shows nothing */ }));
+            for (const p of mtPairs) if (p.role === 'mentor') welJobs.push(api({ action: 'wel-pupil-insight', pupilId: p.otherId }).then(r => { welInsights[p.otherId] = r; }).catch(() => { /* shows nothing */ }));
+            await Promise.all(welJobs);
             todoItems = todoR?.items || [];
             standing = standingR;
             if (standingR && !standingFresh) store.set('wwl_standing_cache', JSON.stringify({ at: Date.now(), data: standingR }));

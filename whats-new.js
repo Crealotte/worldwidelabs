@@ -12,6 +12,18 @@
 
 const WHATS_NEW = [
     {
+        version: '1.21', date: '2026-10-10',
+        title: 'Userscript 1.39: Lab Notes in the script, own reminders, mentoring',
+        everyone: [
+            'Userscript 1.39 (update it when the banner shows, or with the button on your dashboard): a new Notes tab (the beaker) with your Lab Notes right inside Torn: your role path, the welcome chapters (one chapter at a time, in order) and the extra notes cards. Tick the steps there; the ones that can check themselves tick themselves. When a note has daily steps you can put them on your own To do with one tick, and take them off again the same way.',
+            'Userscript 1.39: your own reminders in the To do tab now have a checkbox each. A "once" reminder stays ticked, a "daily" one unticks itself every day, and ticked reminders no longer count in the To do number. The add box and the delete marks moved into the settings (the gear) to keep the To do tab short.',
+            'Userscript 1.39: for members in the mentoring program the Mentoring tab shows the welcome chapters and your role path; a mentor sees how far each pupil is, can tick a step for them and sees their training per week and their energy plan, all closed until opened.',
+        ],
+        leaders: [
+            'Userscript 1.39: the Mentoring tab also shows a mentor every chapter of their pupil with what is ticked, and the To do lines for a pupil open that tab.',
+        ],
+    },
+    {
         version: '1.20', date: '2026-10-10',
         title: 'Monthly evaluation: who never replied',
         everyone: [],

@@ -2,7 +2,7 @@
 // @name         World Wide Labs
 // @namespace    https://worldwidelabs.vercel.app
 // @author       CreaLotte
-// @version      1.38.12
+// @version      1.39
 // @updateURL    __WWL_BASE__/worldwidelabs.user.js
 // @downloadURL  __WWL_BASE__/worldwidelabs.user.js
 // @description  Shows your WorldWideLabs weekly energy plan (the checklist from the Energy planner) inside Torn, a To do tab with small personal reminders (revive setting, feedback, timezone map, availability, Discord/Intel/CAT), your My Targets list, a simplified energy/war standing strip, and — if you are in the Mentoring Platform — your mentoring checklist too. Also shows faction banners at the top of every Torn page. A small ⚙ in the header shows the installed version, flags when a newer one is out, lets you set/replace your API key, and — for a leader — add or remove your faction's banners right from Torn. On a computer it is a small window you can drag around and close; in TornPDA it is a menu. Ticks are shared with the WWL site.
@@ -26,7 +26,7 @@
     const KEY_NAME = 'wwl_api_key', POS_NAME = 'wwl_plan_pos', STATE_NAME = 'wwl_plan_state';
     // GM_info gives the version Tampermonkey actually has installed right now — falls back to a
     // hardcoded copy (kept in sync with @version above) for TornPDA, which doesn't grant GM_info.
-    const SCRIPT_VERSION = (typeof GM_info !== 'undefined' && GM_info.script?.version) || '1.38.12';
+    const SCRIPT_VERSION = (typeof GM_info !== 'undefined' && GM_info.script?.version) || '1.39';
     const versionGreater = (a, b) => {
         const pa = String(a).split('.').map(Number), pb = String(b).split('.').map(Number);
         for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
@@ -257,6 +257,7 @@
         const n = todoCount();
         const tabs = [['todo', `✅ To do${n ? ` (${n})` : ''}`], ['energy', '⚡ Energy'], ['targets', '🎯 Targets']];
         if ((mtPairs && mtPairs.length) || mtIsPupil) tabs.push(['mentoring', '🎓 Mentoring']);
+        tabs.push(['labnotes', '🧪 Notes']);
         tabs.push(['bank', '💰 Bank']);
         if (tabs.length < 2) return '';
         return `<div style="display:flex;gap:6px;margin-bottom:10px;">${tabs.map(([id, label]) =>
@@ -269,6 +270,7 @@
             if (tab === 'todo') refreshTodoItems();
             if (tab === 'targets') loadTargets();
             if (tab === 'bank') loadBankInfo();
+            if (tab === 'labnotes') loadLab();
         }));
     }
     function renderEnergyTab() {
@@ -385,6 +387,33 @@
             ${renderInsight(pupilId)}
             <div style="color:#9aa4b5;font-size:12px;margin-bottom:4px;">Tick a step for them if they showed you it is done.</div>
             ${r.chapters.map((x, i) => { const k = `${pupilId}:${i}`; return `<details class="wwl-w-det" data-k="${esc(k)}" ${(welOpen[k] ?? false) ? 'open' : ''} style="margin:3px 0;border:1px solid #3a4352;border-radius:6px;padding:3px 8px;"><summary style="cursor:pointer;color:${x.complete ? '#35d99b' : '#e8ecf3'};">${x.complete ? '✓' : x.locked ? '🔒' : '○'} ${i + 1}. ${esc(x.title)} <span style="color:#9aa4b5;font-size:11px;">${x.doneCount}/${x.total}${x.locked ? ' · not open for them yet' : ''}</span></summary>${x.tasks.map(t => weTask(t, 'wwl-w-mtick', `data-pupil="${esc(pupilId)}"`)).join('')}</details>`; }).join('')}</div>`;
+    }
+    // ---- Lab Notes (every member): the role path, the welcome chapters and the extra cards from the site's Lab Notes page; a card's daily steps can be put on the own To do ----
+    let labData = null;
+    async function loadLab() {
+        try { labData = await api({ action: 'lab-get' }); } catch (e) { labData = { error: e.message === 'NO_KEY' ? 'No API key set yet.' : e.message }; }
+        if (tab === 'labnotes') render();
+    }
+    function renderLabTab() {
+        const r = labData;
+        if (!r) return '<div style="padding:6px 0;color:#9aa4b5;">Loading…</div>';
+        if (r.error) return `<div style="padding:6px 0;color:#e05555;">${esc(r.error)}</div>`;
+        const w = r.welcome;
+        let html = weRole(r.role);
+        if (w && w.chapters && w.chapters.length) {
+            const c = w.chapters[w.current];
+            const total = w.chapters.reduce((s, x) => s + x.total, 0), done = w.chapters.reduce((s, x) => s + x.doneCount, 0);
+            html += `<div style="margin:8px 0 12px;padding-bottom:10px;border-bottom:1px solid #3a4352;"><div style="font-weight:700;margin-bottom:4px;">👋 Welcome chapters <span style="font-weight:400;color:#9aa4b5;font-size:12px;">${w.allDone ? 'all done 🎉' : `${done} of ${total} steps`}</span></div>
+                <div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:6px;">${w.chapters.map((x, i) => `<span style="font-size:11px;border:1px solid ${i === w.current && !w.allDone ? '#35d99b' : '#3a4352'};border-radius:10px;padding:1px 7px;color:${x.complete ? '#35d99b' : x.locked ? '#9aa4b5' : '#e8ecf3'};">${x.complete ? '✓' : x.locked ? '🔒' : ''} ${i + 1}${x.locked ? '' : ` ${esc(x.title)}`}</span>`).join('')}</div>
+                ${w.allDone ? '<div style="color:#35d99b;">You finished all the chapters. Well done! 🎉</div>' : `<details class="wwl-w-det" data-k="lab:${w.current}" ${welOpen[`lab:${w.current}`] ? 'open' : ''} style="margin:3px 0;border:1px solid #3a4352;border-radius:6px;padding:3px 8px;"><summary style="cursor:pointer;font-weight:700;">${w.current + 1}. ${esc(c.title)} <span style="font-weight:400;color:#9aa4b5;font-size:11px;">${c.doneCount}/${c.total} · you are here</span></summary><div style="color:#9aa4b5;font-size:12px;white-space:pre-wrap;margin:4px 0;">${weRich(c.intro)}</div>${c.tasks.map(t => weTask(t, 'wwl-lab-check', '')).join('')}</details>`}
+            </div>`;
+        }
+        const cards = r.cards || [];
+        html += cards.length ? cards.map(c => `<details class="wwl-w-det" data-k="labcard:${esc(c.id)}" ${welOpen[`labcard:${c.id}`] ? 'open' : ''} style="margin:5px 0;border:1px solid #3a4352;border-radius:6px;padding:3px 8px;"><summary style="cursor:pointer;font-weight:700;">${esc(c.title)} <span style="font-weight:400;color:#9aa4b5;font-size:11px;">${c.doneCount}/${c.total}${c.complete ? ' · done ✓' : ''}</span></summary>
+            ${c.intro ? `<div style="color:#9aa4b5;font-size:12px;white-space:pre-wrap;margin:4px 0;">${weRich(c.intro)}</div>` : ''}${c.tasks.map(t => weTask(t, 'wwl-lab-check', '')).join('')}
+            ${c.canRemind ? `<label style="display:flex;gap:8px;align-items:center;margin-top:6px;padding-top:6px;border-top:1px solid #3a4352;font-size:12px;"><input type="checkbox" class="wwl-lab-remind" data-id="${esc(c.id)}" ${c.remindersOn ? 'checked' : ''}> Put the daily steps of this note on my To do</label>` : ''}</details>`).join('')
+            : `<div style="color:#9aa4b5;font-size:12px;padding:4px 0;">More notes will show up here when they are written.</div>`;
+        return html + `<div style="margin-top:10px;color:#9aa4b5;font-size:12px;">The same notes are on the site: <a href="${WWL}/lab-notes" target="_blank" rel="noopener" style="color:#35d99b;">${esc(WWL)}/lab-notes</a></div>`;
     }
     // The mentoring to-dos: one section per pairing (a mentor with several pupils gets one each), each ticked
     // separately — same shared checklist the WWL page itself shows, just without the chat (open the site for that).
@@ -623,7 +652,7 @@
     }
     function render() {
         if (tab === 'settings') { body.innerHTML = renderSettingsTab(); wireSettingsTab(); wireMyTodo(); try { checkForUpdate(true); } catch (e) { /* the script is still starting up - the passive check will run */ } return; }
-        const tabContent = tab === 'mentoring' ? renderMentoringTab() : tab === 'bank' ? renderBankTab() : tab === 'targets' ? renderTargetsTab() : tab === 'todo' ? renderTodoTab() : renderEnergyTab();
+        const tabContent = tab === 'labnotes' ? renderLabTab() : tab === 'mentoring' ? renderMentoringTab() : tab === 'bank' ? renderBankTab() : tab === 'targets' ? renderTargetsTab() : tab === 'todo' ? renderTodoTab() : renderEnergyTab();
         body.innerHTML = updateBanner() + renderStandingStrip() + tabBar() + tabContent;
         showProgress();
         wireTabs();
@@ -653,6 +682,14 @@
         }));
         body.querySelectorAll('.wwl-w-check').forEach(cb => cb.addEventListener('change', async () => {
             try { await api({ action: 'wel-done', id: cb.dataset.id, done: cb.checked }); welMine = await api({ action: 'wel-my' }); } catch (e) { /* shown on next load */ }
+            render();
+        }));
+        body.querySelectorAll('.wwl-lab-check').forEach(cb => cb.addEventListener('change', async () => {
+            try { await api({ action: 'wel-done', id: cb.dataset.id, done: cb.checked }); labData = await api({ action: 'lab-get' }); } catch (e) { /* shown on next load */ }
+            render();
+        }));
+        body.querySelectorAll('.wwl-lab-remind').forEach(cb => cb.addEventListener('change', async () => {
+            try { await api({ action: 'lab-reminders', cardId: cb.dataset.id, on: cb.checked }); labData = await api({ action: 'lab-get' }); await refreshTodoItems(true); } catch (e) { cb.checked = !cb.checked; }
             render();
         }));
         body.querySelectorAll('.wwl-w-mtick').forEach(cb => cb.addEventListener('change', async () => {

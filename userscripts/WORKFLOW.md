@@ -15,10 +15,7 @@ Members get `energy-plan.user.js` (the **release** file). Every change from now 
 Queue changes below instead of releasing each one. Nothing here is live for members until a release.
 
 ### Queued for the next release
-- Own reminders: a checkbox on each (once = stays ticked, daily = unticks itself every day), ticked ones not counted in the To do number, and the add box + delete marks moved into the script's ⚙ Settings to keep the To do tab short (work file 1.38.3, not released). The server side and the dashboard panel are already live.
-- Mentoring tab for pupils in the program (even before they have a mentor): the welcome chapters (only the open chapter in detail, the others locked), ticking manual steps; and for a mentor, how far each pupil is with ticking steps for them (DEV 1.38.11; a mentor sees their pupil's training per week and energy plan, closed by default; Junior and Senior Researcher on the role path; a Chemist sees the war-rule line to keep the role; every chapter is a window that is closed to begin with; the role path (Recruit, Experiment A and B, Guinea Pig or Lab Rat, Chemist) with what the next role needs; the mentor sees every chapter of their pupil with the ticks, the To do lines open this tab; the old shared pair checklist is gone from the tab too). The To do lines for this are server-side and already live.
-- Owner only: lease lines in the To do tab (DEV 1.38.12): a rent-to-own lease with 5 days or less left on Torn (read live from Torn, not worked out from the contract dates; or ended) shows "Copy amount", "Offered ✓" and "Paid ✓"; each click is one request (`lt-offer` / `lt-pay`) and records the payment on the contract. The lines themselves (text, due dates) are server-side and already live; the buttons need this release. Nothing for members (no What's new entry needed).
-
+- Nothing queued. Last release: script 1.39 (2026-10-10): Lab Notes tab, own reminders with checkboxes, Mentoring tab for pupils and mentors, and the owner lease lines.
 
 ## Releasing (when the list is done and tested)
 1. Copy the work file over the release file: `cp userscripts/energy-plan.dev.user.js userscripts/energy-plan.user.js`.
