@@ -2,7 +2,7 @@
 // @name         World Wide Labs
 // @namespace    https://worldwidelabs.vercel.app
 // @author       CreaLotte
-// @version      1.39
+// @version      1.39.1
 // @updateURL    __WWL_BASE__/worldwidelabs.user.js
 // @downloadURL  __WWL_BASE__/worldwidelabs.user.js
 // @description  Shows your WorldWideLabs weekly energy plan (the checklist from the Energy planner) inside Torn, a To do tab with small personal reminders (revive setting, feedback, timezone map, availability, Discord/Intel/CAT), your My Targets list, a simplified energy/war standing strip, and — if you are in the Mentoring Platform — your mentoring checklist too. Also shows faction banners at the top of every Torn page. A small ⚙ in the header shows the installed version, flags when a newer one is out, lets you set/replace your API key, and — for a leader — add or remove your faction's banners right from Torn. On a computer it is a small window you can drag around and close; in TornPDA it is a menu. Ticks are shared with the WWL site.
@@ -26,7 +26,7 @@
     const KEY_NAME = 'wwl_api_key', POS_NAME = 'wwl_plan_pos', STATE_NAME = 'wwl_plan_state';
     // GM_info gives the version Tampermonkey actually has installed right now — falls back to a
     // hardcoded copy (kept in sync with @version above) for TornPDA, which doesn't grant GM_info.
-    const SCRIPT_VERSION = (typeof GM_info !== 'undefined' && GM_info.script?.version) || '1.39';
+    const SCRIPT_VERSION = (typeof GM_info !== 'undefined' && GM_info.script?.version) || '1.39.1';
     const versionGreater = (a, b) => {
         const pa = String(a).split('.').map(Number), pb = String(b).split('.').map(Number);
         for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
@@ -255,7 +255,7 @@
     }
     function tabBar() {
         const n = todoCount();
-        const tabs = [['todo', `✅ To do${n ? ` (${n})` : ''}`], ['energy', '⚡ Energy'], ['targets', '🎯 Targets']];
+        const tabs = [['energy', '⚡ Energy'], ['targets', '🎯 Targets']]; // the To do button sits in the top row next to the energy and the war numbers
         if ((mtPairs && mtPairs.length) || mtIsPupil) tabs.push(['mentoring', '🎓 Mentoring']);
         tabs.push(['labnotes', '🧪 Notes']);
         tabs.push(['bank', '💰 Bank']);
@@ -294,14 +294,18 @@
     // tracks a planned checklist of actions, this tracks what actually happened. Blank once 'mo-me'
     // hasn't answered yet (e.g. no key, or a hiccup) rather than showing stale/wrong numbers.
     function renderStandingStrip() {
-        if (!standing || standing.error) return '';
-        const s = standing;
-        const energyText = s.energy ? `${num(s.energy.month.trained)}${s.tier ? ` / ${num(s.energyNeeded)}` : ''}` : '—';
-        const warText = s.wars?.length && s.eligible ? `${s.okWars}/${s.eligible}` : '—';
-        return `<div style="display:flex;gap:16px;padding:6px 10px;margin-bottom:8px;background:#1b2029;border:1px solid #3a4352;border-radius:6px;font-size:12px;color:#9aa4b5;">
-            <span title="Energy trained this month, vs. your group's target">⚡ <span style="color:#e6e9ef;font-family:monospace;">${energyText}</span></span>
-            <span title="War participation, last 5 wars">⚔ <span style="color:#e6e9ef;font-family:monospace;">${warText}</span></span>
-        </div>`;
+        // the top row of the window: this month's energy and the war rule (when known) and, at the right, the To do button (it used to be one of the tabs, which made the tab row too crowded)
+        const s = standing && !standing.error ? standing : null;
+        const n = todoCount();
+        const todoBtn = `<button type="button" class="wwl-tab" data-tab="todo" style="margin-left:auto;padding:${IS_PDA ? 6 : 3}px 10px;border-radius:6px;border:1px solid #3a4352;cursor:pointer;background:${tab === 'todo' ? '#2a2f3a' : 'transparent'};color:#e6e9ef;font-size:12px;white-space:nowrap;">✅ To do${n ? ` (${n})` : ''}</button>`;
+        let strip = '';
+        if (s) {
+            const energyText = s.energy ? `${num(s.energy.month.trained)}${s.tier ? ` / ${num(s.energyNeeded)}` : ''}` : '—';
+            const warText = s.wars?.length && s.eligible ? `${s.okWars}/${s.eligible}` : '—';
+            strip = `<span title="Energy trained this month, vs. your group's target">⚡ <span style="color:#e6e9ef;font-family:monospace;">${energyText}</span></span>
+            <span title="War participation, last 5 wars">⚔ <span style="color:#e6e9ef;font-family:monospace;">${warText}</span></span>`;
+        }
+        return `<div style="display:flex;gap:16px;align-items:center;padding:6px 10px;margin-bottom:8px;background:#1b2029;border:1px solid #3a4352;border-radius:6px;font-size:12px;color:#9aa4b5;">${strip}${todoBtn}</div>`;
     }
     // My Targets: the same personal list a member builds on the site (star a target on Level targets /
     // Target finder / My targets and it shows up here) — deliberately not the full target finder (search

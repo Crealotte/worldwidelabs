@@ -15,7 +15,7 @@ Members get `energy-plan.user.js` (the **release** file). Every change from now 
 Queue changes below instead of releasing each one. Nothing here is live for members until a release.
 
 ### Queued for the next release
-- Tab row fix (DEV 1.39.1): the To do button moved out of the tab row to the top row, next to the energy and war numbers (the row had six buttons). Needs the release when she says.
+- Nothing queued. Last release: script 1.39.1 (2026-10-10): the To do button moved to the top row next to the energy and war numbers.
 
 ## Releasing (when the list is done and tested)
 1. Copy the work file over the release file: `cp userscripts/energy-plan.dev.user.js userscripts/energy-plan.user.js`.

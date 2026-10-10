@@ -12,6 +12,14 @@
 
 const WHATS_NEW = [
     {
+        version: '1.22', date: '2026-10-10',
+        title: 'Userscript 1.39.1: the To do button moved',
+        everyone: [
+            'Userscript 1.39.1 (update it when the banner shows, or with the button on your dashboard): the To do button moved out of the row of tabs to the top of the window, next to your energy and war numbers, because that row had become too crowded with the new Notes tab. Nothing else changed.',
+        ],
+        leaders: [],
+    },
+    {
         version: '1.21', date: '2026-10-10',
         title: 'Userscript 1.39: Lab Notes in the script, own reminders, mentoring',
         everyone: [
