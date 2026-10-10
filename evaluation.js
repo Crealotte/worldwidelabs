@@ -27,7 +27,9 @@ const evDate = d => { const t = Date.parse(`${d}T00:00:00Z`); return Number.isFi
 const evNum = n => Math.round(n).toLocaleString();
 // sent the message to someone below requirement and not replied: red. Whether they answered and whether they said they are stacking are ticked by hand (the reply comes by mail or Discord).
 const evNoReply = r => (r.warBelow || r.trainBelow) && !!evSent[r.id] && !(evReplied[r.id] && evReplied[r.id].replied); // only members below requirement were asked what they will do to improve, so only they can owe a reply
-const evStacking = r => !!(evReplied[r.id] && evReplied[r.id].stacking);
+const evStackingManual = r => !!(evReplied[r.id] && evReplied[r.id].stacking);
+const evStackingAuto = r => typeof moStacking === 'function' && typeof moBars !== 'undefined' && moBars && moStacking(moBars[r.id]); // energy above the maximum, from Member Overview's bars
+const evStacking = r => evStackingManual(r) || evStackingAuto(r);
 const evWaitDays = r => (evSent[r.id] ? Math.floor((Date.now() - evSent[r.id].at) / 86400000) : 0);
 
 function evPeriods() {
@@ -72,6 +74,7 @@ async function loadEvaluation() {
         evEnergy = en.error ? null : en;
         if (lg.error) throw new Error(lg.error);
         evLog = lg.log || {};
+        if (typeof moBars !== 'undefined' && moBars === null && typeof moLoadBars === 'function') await moLoadBars();
         await evXanLoadCached();
         await evLoadSent();
         st.textContent = '';
@@ -181,7 +184,7 @@ function renderEvaluation() {
         <div><div style="color:var(--muted);font-size:11px;">Below AND warned before</div><div style="font-weight:700;">${rows.filter(r => r.fails && r.warned).length}</div></div>
         <div><div style="color:var(--muted);font-size:11px;">Message sent</div><div style="font-weight:700;">${rows.filter(r => evSent[r.id]).length} of ${rows.length}</div></div>
         <div><div style="color:var(--muted);font-size:11px;">Never replied</div><div style="font-weight:700;color:#e05555;">${rows.filter(evNoReply).length}</div></div>
-        <div><div style="color:var(--muted);font-size:11px;">Stacking (told you)</div><div style="font-weight:700;">${rows.filter(evStacking).length}</div></div>`;
+        <div><div style="color:var(--muted);font-size:11px;">Stacking</div><div style="font-weight:700;">${rows.filter(evStacking).length}</div></div>`;
     // the Xanax bar above the table: what is loaded for this period's wars, and the button that loads / refreshes it
     if (!evXan.busy) {
         const wars = evXan.wars, loaded = wars.filter(w => evXan.byWar[w.id]).length, all = loaded === wars.length;
@@ -249,7 +252,7 @@ function renderEvaluation() {
                 const perWar = r.perWar.map((x, i) => !x ? '<span style="color:var(--muted);">·</span>' : x.notIn ? '<span style="color:#666;" title="not in the faction yet">–</span>'
                     : `<span style="color:${x.skipped ? '#8b98a8' : x.ok ? MO_LIGHT.green : MO_LIGHT.red};" title="${esc(`${wars[i]?.opponent || ''}${x.excused ? ` — ${moExcuseTitle(x.excused)}` : ''}`)}">${x.war}${x.chain ? `+${x.chain}` : ''}${x.excused ? ' 🚫' : ''}</span>`).join(' <span style="color:var(--line);">|</span> ');
                 const [stLabel, stColor] = EV_STATUS[r.status];
-                const repl = `<td style="padding:6px 8px;white-space:nowrap;font-size:12px;"><label style="display:inline-flex;gap:4px;align-items:center;cursor:pointer;"><input type="checkbox" class="ev-replied" data-id="${esc(r.id)}" ${evReplied[r.id] && evReplied[r.id].replied ? 'checked' : ''} style="width:auto;"> replied</label> <label style="display:inline-flex;gap:4px;align-items:center;cursor:pointer;" title="They told you they are stacking"><input type="checkbox" class="ev-stacking" data-id="${esc(r.id)}" ${evStacking(r) ? 'checked' : ''} style="width:auto;"> stacking</label>${evNoReply(r) ? `<div style="color:#e05555;font-weight:700;">no reply · ${evWaitDays(r)} day${evWaitDays(r) === 1 ? '' : 's'} <span style="font-weight:400;">(below: ${[r.warBelow && 'war rule', r.trainBelow && 'training'].filter(Boolean).join(' + ')})</span></div>` : ''}</td>`;
+                const repl = `<td style="padding:6px 8px;white-space:nowrap;font-size:12px;"><label style="display:inline-flex;gap:4px;align-items:center;cursor:pointer;"><input type="checkbox" class="ev-replied" data-id="${esc(r.id)}" ${evReplied[r.id] && evReplied[r.id].replied ? 'checked' : ''} style="width:auto;"> replied</label> <label style="display:inline-flex;gap:4px;align-items:center;cursor:pointer;" title="They told you they are stacking"><input type="checkbox" class="ev-stacking" data-id="${esc(r.id)}" ${evStackingManual(r) ? 'checked' : ''} style="width:auto;"> stacking</label>${typeof moBars !== 'undefined' && moBars && moBars[r.id] && moBars[r.id].e !== null ? `<div style="font-family:var(--mono);color:${evStackingAuto(r) ? '#f0b432' : 'var(--muted)'};" title="Energy now, from their own key when they last opened WWL or the script">⚡ ${Math.round(moBars[r.id].e).toLocaleString()}/${moBars[r.id].em || '?'}${evStackingAuto(r) ? ' stacking' : ''}</div>` : ''}${evNoReply(r) ? `<div style="color:#e05555;font-weight:700;">no reply · ${evWaitDays(r)} day${evWaitDays(r) === 1 ? '' : 's'} <span style="font-weight:400;">(below: ${[r.warBelow && 'war rule', r.trainBelow && 'training'].filter(Boolean).join(' + ')})</span></div>` : ''}</td>`;
                 return `
                 <tr class="ev-row" data-id="${esc(r.id)}" style="border-top:1px solid var(--line);cursor:pointer;${evNoReply(r) ? 'background:rgba(224,85,85,.16);' : ''}">
                     <td style="padding:6px 8px;white-space:nowrap;"><span style="color:var(--muted);">${open ? '▾' : '▸'}</span> ${esc(r.name)}</td>

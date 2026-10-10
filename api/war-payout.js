@@ -30,6 +30,7 @@ const { fetchWarBadgeStats } = require('../lib/warBadgeStats');
 const { tornToDiscordIds, resolveDiscordIds, discordStatus } = require('../lib/discordMap');
 const { moHandle, moMe, moStandings, moWarOk, xanaxOwedKey, loadExtra, isEventId } = require('../lib/memberOverview');
 const { evHandle } = require('../lib/evaluation');
+const { pushBars, getBars } = require('../lib/bars');
 const { gymHandle } = require('../lib/gymStats');
 const { warReports } = require('../lib/warReports');
 const { sendBugReport, bugsHandle, suggestHandle } = require('../lib/bugReport');
@@ -64,7 +65,7 @@ async function redis(command) {
 }
 
 const restockedKey = (factionId) => `wwl:restocked-wars:${factionId}`;
-const OWNER_VIEW_ACTIONS = new Set(['mo-get', 'mo-energy', 'mo-consumption', 'mo-war', 'mo-reg-get', 'verify-get', 'userscript-get', 'owner-roster']); // what the owner can read of another faction
+const OWNER_VIEW_ACTIONS = new Set(['mo-get', 'mo-energy', 'mo-consumption', 'mo-war', 'mo-bars', 'mo-reg-get', 'verify-get', 'userscript-get', 'owner-roster']); // what the owner can read of another faction
 const manualVerifyKey = (factionId) => `wwl:manual-verify:${factionId}`; // hash: playerId -> { intel, cat, updatedAt } — Torn Intel / CAT have no API to check, so a leader ticks it by hand
 const userscriptSeenKey = (factionId) => `wwl:userscript-seen:${factionId}`; // hash: playerId -> last-seen epoch ms, stamped by the userscript itself (see 'script-checkin') for Who's on board
 const userscriptInfoKey = (factionId) => `wwl:userscript-info:${factionId}`; // hash: playerId -> "version|pda" (or "version|pc"), sent by the script's own check-in
@@ -1466,6 +1467,7 @@ Cancel: ${cancelUrl}`, [], embeds, undefined, true);
                 }
             } catch (e) { /* skip */ }
 
+            try { await pushBars({ redis, key, factionId, playerId }); } catch (e) { /* the bars for Member Overview are a nice extra: never in the way of the to-do list */ }
             return res.status(200).json({ items });
         }
         // Names for the "who" lists only leaders see (reporters, "I have this too", thumbs): one roster read (cached), best effort.
@@ -1529,9 +1531,11 @@ Cancel: ${cancelUrl}`, [], embeds, undefined, true);
             return res.status(200).json(await labsHandle(action, req.body, { redis, key, playerId, playerName }));
         }
 
+        if (action === 'bars-push') return res.status(200).json(await pushBars({ redis, key, factionId, playerId })); // a member's own energy / cooldowns, read with their own key (see lib/bars.js)
         if (!(await isLeader(key))) return res.status(403).json({ error: 'Leaders only' });
 
         // Member Overview (who follows the rules / needs a push) — logic in lib/memberOverview.js.
+        if (action === 'mo-bars') return res.status(200).json({ bars: await getBars(redis, factionId) }); // the leaders' view of everybody's energy and cooldowns
         if (action.startsWith('mo-')) return res.status(200).json(await moHandle(action, req.body, { redis, key, factionId }));
         if (action.startsWith('ev-')) return res.status(200).json(await evHandle(action, req.body, { redis, factionId, name: playerName }));
         // The leaders' view of what members add to their own to-do: the ideas log grouped by meaning (same words in any order, small filler
