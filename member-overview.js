@@ -138,7 +138,6 @@ async function loadMemberOverview() {
             if (r.error) throw new Error(r.error);
             moData = r;
         }
-        if (moBars === null) await moLoadBars();
         renderMemberOverview();
         // finish any of the last 5 wars not counted yet — one at a time, each is saved for good. A big
         // war is read in pieces (the server remembers where it stopped), so keep asking until done.
@@ -248,20 +247,6 @@ function moWinners(rows) {
     }));
 }
 
-// Energy / nerve / drug and medical cooldown per member, as Intel shows them: read from each member's OWN key when they use WWL or the script (lib/bars.js), so a member WWL has not seen yet shows a dash.
-// "Stacking" = energy above the maximum (1000/150). Cooldowns are seconds left at the time of reading, so they are counted down here.
-let moBars = null;
-async function moLoadBars() {
-    try { const r = await moFetch({ action: 'mo-bars' }); moBars = r.error ? {} : (r.bars || {}); } catch (e) { moBars = {}; }
-}
-const moStacking = b => !!b && b.e !== null && b.em && b.e > b.em;
-function moBarsCell(id) {
-    const b = moBars && moBars[id];
-    if (!b) return '<span style="color:var(--muted);" title="WWL has not read the bars of this member yet: it learns them when they open WWL or the script">—</span>';
-    const age = (Date.now() - b.at) / 1000, old = age > 12 * 3600, left = s => { const r = Math.max(0, s - age); if (r < 1) return '<span style="color:#35d99b;">ready</span>'; const h = Math.floor(r / 3600), m = Math.floor(r % 3600 / 60); return `<span style="color:#e0a030;">${h ? h + 'h ' : ''}${m}m</span>`; };
-    const stack = moStacking(b);
-    return `<div style="font-family:var(--mono);font-size:12px;line-height:1.5;" title="Read ${esc(moAgo(Math.floor(b.at / 1000)))}${old ? ' (old)' : ''}"><div style="color:${stack ? '#f0b432' : 'inherit'};font-weight:${stack ? 700 : 400};">⚡ ${b.e === null ? '?' : Math.round(b.e).toLocaleString()}/${b.em || '?'}${stack ? ' stacking' : ''} <span style="color:var(--muted);font-weight:400;">· ${age < 90 ? 'now' : age < 3600 ? Math.round(age / 60) + 'm' : age < 86400 ? Math.round(age / 3600) + 'h' : Math.round(age / 86400) + 'd'}</span></div><div style="color:var(--muted);">nerve ${b.n === null ? '?' : b.n}/${b.nm || '?'}</div><div>💊 ${left(b.d)} · 🩹 ${left(b.m)}</div></div>`;
-}
 function renderMemberOverview() {
     if (!moData) return;
     renderPeriodBar();
@@ -275,7 +260,6 @@ function renderMemberOverview() {
         light: r => -({ red: 0, yellow: 1, green: 2, grey: 3 })[r.light],
         name: r => r.name.toLowerCase(),
         active: r => r.lastAction || 0,
-        energy: r => (moBars && moBars[r.id] && moBars[r.id].e !== null ? moBars[r.id].e : -1),
         warsok: r => (r.counted ? r.okWars / r.counted : -1),
         tier: r => ({ high: 2, low: 1 })[effTier(r)] || 0,
         war: r => r.war, chain: r => r.chain, pwar: r => r.periodWar, pchain: r => r.periodChain,
@@ -290,8 +274,7 @@ function renderMemberOverview() {
         <div><div style="color:var(--muted);font-size:11px;">On track</div><div style="font-weight:700;color:${MO_LIGHT.green};">${rows.filter(r => r.light === 'green').length}</div></div>
         
         <div><div style="color:var(--muted);font-size:11px;">Needs a push</div><div style="font-weight:700;color:${MO_LIGHT.red};">${red.length}</div></div>
-        <div><div style="color:var(--muted);font-size:11px;">Wars judged</div><div style="font-weight:700;">${moWarsInPeriod().length}</div></div>
-        <div title="Energy above the maximum, from each member's own key when they last opened WWL or the script"><div style="color:var(--muted);font-size:11px;">Stacking</div><div style="font-weight:700;color:#f0b432;">${rows.filter(r => moStacking(moBars && moBars[r.id])).length}</div></div>`;
+        <div><div style="color:var(--muted);font-size:11px;">Wars judged</div><div style="font-weight:700;">${moWarsInPeriod().length}</div></div>`;
     $('mo-push').innerHTML = ''; // the list of who needs a push is gone; the numbers above stay and the red lights in the table show who it is
 
     const winners = moWinners(rows);
@@ -319,7 +302,7 @@ function renderMemberOverview() {
     $('mo-table').innerHTML = `
         <table style="width:100%;font-size:13px;border-collapse:collapse;">
             <thead><tr style="color:var(--muted);text-align:left;">
-                ${th('light', '●')}${th('name', 'Member')}${th('active', 'Active')}${th('energy', 'Energy / Nerve<br><span style="font-size:10px;font-weight:400;">Drug · Med</span>')}
+                ${th('light', '●')}${th('name', 'Member')}${th('active', 'Active')}
                 ${warHead}
                 <th data-sort="warsok" style="padding:4px 8px;" title="Wars (of the last 5) where the war rule was met">Wars OK</th>
                 <th data-sort="tier" style="padding:4px 8px;" title="1.5m+ battle stats = ${moData.energyTarget.high} E/week, under = ${moData.energyTarget.low} E/week. Picked automatically from each member's own battle stats once they have opened the app; you can override it.">Energy tier</th>
@@ -331,7 +314,6 @@ function renderMemberOverview() {
                     <td style="padding:4px 8px;"><span title="${r.isNew && r.light === 'grey' ? 'Fewer than ' + moData.settings.needWars + ' wars since joining — judged on the wars they were here for' : r.light}" style="display:inline-block;width:12px;height:12px;border-radius:50%;background:${MO_LIGHT[r.light]};"></span></td>
                     <td style="padding:4px 8px;white-space:nowrap;"><a href="https://www.torn.com/profiles.php?XID=${esc(r.id)}" target="_blank" rel="noopener" style="color:var(--text);">${esc(r.name)}</a></td>
                     <td style="padding:4px 8px;color:var(--muted);white-space:nowrap;">${moAgo(r.lastAction)}</td>
-                    <td style="padding:4px 8px;white-space:nowrap;">${moBarsCell(r.id)}</td>
                     ${r.perWar.map(p => `<td style="padding:4px 8px;font-family:var(--mono);white-space:nowrap;${p ? `color:${p.notIn || p.skipped ? MO_LIGHT.grey : p.ok ? MO_LIGHT.green : MO_LIGHT.red};` : ''}" ${p?.notIn ? 'title="Not in the faction yet when this war started"' : p?.excused ? `title="${esc(moExcuseTitle(p.excused))}"` : ''}>${p ? (p.notIn ? '—' : `${p.war}${p.chain ? `<span style="color:var(--muted);">+${p.chain}</span>` : ''}${p.excused ? ' 🚫' : ''}`) : '…'}</td>`).join('')}
                     <td style="padding:4px 8px;font-family:var(--mono);font-weight:700;color:${MO_LIGHT[r.light]};">${r.counted ? `${r.okWars}/${r.counted}` : '…'}</td>
                     <td style="padding:4px 8px;white-space:nowrap;">${(() => {
@@ -473,7 +455,7 @@ $('mo-custom-weeks').addEventListener('change', () => {
 });
 $('mo-view-total').addEventListener('click', () => { moPerWeek = false; renderMemberOverview(); });
 $('mo-view-week').addEventListener('click', () => { moPerWeek = true; renderMemberOverview(); });
-$('mo-refresh').addEventListener('click', () => { moData = null; moBars = null; loadMemberOverview(); });
+$('mo-refresh').addEventListener('click', () => { moData = null; loadMemberOverview(); });
 
 $('mo-save-settings').addEventListener('click', async () => {
     const r = await moFetch({ action: 'mo-settings', minWarHits: $('mo-min').value, minChainHits: $('mo-minchain').value, needWars: $('mo-need').value });
