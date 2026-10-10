@@ -291,8 +291,7 @@ function renderEvaluation() {
     $('ev-copy-noreply').onclick = () => {
         const names = rows.filter(evNoReply).map(r => r.name);
         if (!names.length) { toast('Everybody who was sent the message has replied'); return; }
-        evCopyMessage(names.join('
-'), `${names.length} name${names.length === 1 ? '' : 's'} copied`);
+        evCopyMessage(names.join('\n'), `${names.length} name${names.length === 1 ? '' : 's'} copied`);
     };
     $('ev-copy-all').onclick = () => {
         if (!below.length) { toast('Nobody is below requirement'); return; }
