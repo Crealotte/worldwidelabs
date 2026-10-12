@@ -620,6 +620,7 @@ function devizeScript(src) {
 }
 module.exports = async function handler(req, res) {
     try {
+        if (require('../lib/env').blockUntilTestDb(req, res)) return; // a test site without its own test database stays closed (lib/env.js)
         // The WWL userscript runs on torn.com and reads/ticks the energy plan from here, so torn.com may call these actions.
         res.setHeader('Access-Control-Allow-Origin', 'https://www.torn.com');
         res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
@@ -756,6 +757,7 @@ module.exports = async function handler(req, res) {
         // serves, so it is the one source of truth. It sits ABOVE the key and profile checks on purpose: the version number
         // is public anyway, and answering it with no key means no Torn call and no database command at all — the cheapest
         // way to check for an update, so it can be asked as often as needed.
+        if (action === 'env-info') return res.status(200).json(require('../lib/env').envInfo()); // lets the site show the TEST banner on the dev site (no key, no database)
         if (action === 'script-version') {
             const src = require('fs').readFileSync(require('path').join(process.cwd(), 'userscripts', req.body?.channel === 'dev' ? 'energy-plan.dev.user.js' : 'energy-plan.user.js'), 'utf8');
             const m = /@version\s+([\d.]+)/.exec(src);

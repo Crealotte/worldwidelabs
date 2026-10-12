@@ -59,6 +59,7 @@ async function getItemDirectory(key) {
 
 module.exports = async function handler(req, res) {
     try {
+        if (require('../lib/env').blockUntilTestDb(req, res)) return; // a test site without its own test database stays closed (lib/env.js)
         if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
         const { key, action } = req.body || {};
         if (!key) return res.status(400).json({ error: 'Missing key' });

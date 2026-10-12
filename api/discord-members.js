@@ -42,6 +42,7 @@ async function getFactionId(key) {
 
 module.exports = async function handler(req, res) {
     try {
+        if (require('../lib/env').blockUntilTestDb(req, res)) return; // a test site without its own test database stays closed (lib/env.js)
         if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
         const BOT_TOKEN = process.env.DISCORD_BOT_TOKEN;

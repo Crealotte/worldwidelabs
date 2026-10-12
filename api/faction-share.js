@@ -105,6 +105,7 @@ async function buildSnapshot(key, factionId) {
 
 module.exports = async function handler(req, res) {
     try {
+        if (require('../lib/env').blockUntilTestDb(req, res)) return; // a test site without its own test database stays closed (lib/env.js)
         if (!REDIS_URL || !REDIS_TOKEN) {
             return res.status(500).json({ error: 'Database not connected. In Vercel: Storage -> Create Database -> Upstash Redis, and connect it to this project.' });
         }
