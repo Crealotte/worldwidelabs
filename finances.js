@@ -100,7 +100,18 @@ const finPaidThrough = i => i.paidUntil || (i.returnedOn ? finAdd(i.returnedOn, 
 // A payout is paid when it is on or before "paid through" (unless it is in `skip`: a week that was left unpaid), or when it was marked paid on its own (`extra`: paid after "paid through"). The payout calendar colours the cells that way.
 const finIsPaid = (i, d) => { const t = finPaidThrough(i); return (!!t && d <= t && !(i.skip || []).includes(d)) || (i.extra || []).includes(d); };
 const finTracked = i => !!(i.paidUntil || (i.extra || []).length || i.returnedOn); // payouts are followed for this line (otherwise nothing is known about what was paid)
-const finDueList = (i, upTo) => (finTracked(i) ? finInvPeriods(i, upTo, '').filter(p => !finIsPaid(i, p.date) && !(i.paused || []).includes(p.date)) : []); // a paused (held) payout is not due: it is released in full when the investor is back
+// A payout is held when the investor is on pause mode: from `pauseFrom` until `pauseTo` (empty = still paused), or when single weeks were held in the calendar (`paused`). Held payouts are not due; they are released in full when the investor is back.
+const finIsPausedAt = (i, d) => (!!i.pauseFrom && d >= i.pauseFrom && (!i.pauseTo || d < i.pauseTo)) || (i.paused || []).includes(d);
+const finOnPause = i => !!i.pauseFrom && !i.pauseTo;
+const finHeldList = i => (finTracked(i) ? finInvPeriods(i, finAdd(finSrv.today, 7), '').filter(p => p.date <= finSrv.today && finIsPausedAt(i, p.date) && !finIsPaid(i, p.date)) : []);
+// everything held for these lines is paid out now: the weeks turn green and the pause ends today
+function finReleaseHeld(lines, today) {
+    lines.forEach(i => {
+        finHeldList(i).forEach(p => { i.paused = (i.paused || []).filter(x => x !== p.date); if (!finIsPaid(i, p.date)) finTogglePaid(i, p.date); });
+        if (finOnPause(i)) i.pauseTo = today;
+    });
+}
+const finDueList = (i, upTo) => (finTracked(i) ? finInvPeriods(i, upTo, '').filter(p => !finIsPaid(i, p.date) && !finIsPausedAt(i, p.date)) : []); // a paused (held) payout is not due: it is released in full when the investor is back
 const finPaidList = i => { const end = [finPaidThrough(i)].concat(i.extra || []).filter(Boolean).sort().pop(); return end ? finInvPeriods(i, end, '').filter(p => finIsPaid(i, p.date)) : []; };
 const finPaidTotal = i => finSum(finPaidList(i)) + (i.paidAdj || 0); // plus the correction the calendar import keeps on a person's first line
 // the Paid buttons: everything due up to now is paid: remember it as a payment and move "paid through" forward (older skips and single marks are then part of it)
@@ -281,7 +292,7 @@ function finInvestorCost() {
 
 // ---- drawing ----
 const FIN_LISTS = {
-    investors: { title: 'Investors', add: '+ Investor', fresh: () => ({ id: finId(), fundId: String(Math.max(0, ...finData.investors.map(x => parseInt(x.fundId, 10) || 0)) + 1), name: '', amount: 0, payout: null, mode: 'weekly', start: new Date().toISOString().slice(0, 10), active: true, nettedIn: '', note: '', tornId: '', paidUntil: '', payments: [], termEnd: '', returnedOn: '', renewals: [], leaving: false, noticeOn: '', switches: [], paused: [], skip: [], extra: [] }), cols: [
+    investors: { title: 'Investors', add: '+ Investor', fresh: () => ({ id: finId(), fundId: String(Math.max(0, ...finData.investors.map(x => parseInt(x.fundId, 10) || 0)) + 1), name: '', amount: 0, payout: null, mode: 'weekly', start: new Date().toISOString().slice(0, 10), active: true, nettedIn: '', note: '', tornId: '', paidUntil: '', payments: [], termEnd: '', returnedOn: '', renewals: [], leaving: false, noticeOn: '', switches: [], paused: [], pauseFrom: '', pauseTo: '', skip: [], extra: [] }), cols: [
         { f: 'active', l: 'On', t: 'bool' }, { f: 'fundId', l: 'ID', t: 'text', w: 46 }, { f: 'name', l: 'Name', t: 'text', w: 120 }, { f: 'tornId', l: 'Torn ID', t: 'text', w: 80 }, { f: 'amount', l: 'Invested', t: 'money', w: 110 }, { f: 'payout', l: 'Paid a week (empty = by the table)', t: 'money', w: 130, nullable: true },
         { f: 'mode', l: 'Paid', t: 'sel', opts: [['weekly', 'Every Sunday'], ['monthly', 'Last Sunday of the month']] }, { f: 'start', l: 'Since', t: 'date' }, { f: 'termEnd', l: 'Term ends', t: 'date' }, { f: 'returnedOn', l: 'Money returned on', t: 'date' }, { f: 'paidUntil', l: 'Paid through', t: 'date' }, { f: 'nettedIn', l: 'Already netted in the send of', t: 'company' }] },
     income: { title: 'Other income', add: '+ Income', fresh: () => ({ id: finId(), name: '', amount: 0, freq: 'weekly', date: new Date().toISOString().slice(0, 10), active: true }), cols: [
@@ -302,7 +313,11 @@ function finCell(list, i, col, row, extra = '') {
     const a = `data-l="${list}" data-i="${i}" data-f="${col.f}" data-t="${col.t}" ${extra}`;
     const v = row[col.f], w = `width:${col.w || 110}px;`;
     if (col.t === 'bool') return `<input type="checkbox" ${a} ${v ? 'checked' : ''} style="width:auto;">`;
-    if (col.t === 'sel') return `<select ${a}>${col.opts.map(([k, l]) => `<option value="${esc(k)}" ${v === k ? 'selected' : ''}>${esc(l)}</option>`).join('')}</select>`;
+    if (col.t === 'sel') {
+        // the way an investor is paid: every Sunday, the last Sunday of the month, or paused (held until they are back); the pause choice only shows on the investor lines
+        const isPlan = list === 'investors' && col.f === 'mode', opts = isPlan ? col.opts.concat([['paused', 'Paused (held)']]) : col.opts, cur = isPlan && finOnPause(row) ? 'paused' : v;
+        return `<select ${a}>${opts.map(([k, l]) => `<option value="${esc(k)}" ${cur === k ? 'selected' : ''}>${esc(l)}</option>`).join('')}</select>${isPlan && finOnPause(row) ? `<div style="font-size:10.5px;color:#4da3ff;white-space:nowrap;">on hold since ${esc(finDate(row.pauseFrom))}</div>` : ''}`;
+    }
     if (col.t === 'company') return `<select ${a} style="max-width:150px;"><option value="">—</option>${finSrv.companies.map(c => `<option value="${esc(String(c.id))}" ${String(v) === String(c.id) ? 'selected' : ''}>${esc(c.name)}</option>`).join('')}</select>`;
     if (col.t === 'date') return `<input type="date" ${a} value="${esc(v || '')}">`;
     if (col.t === 'money') return `<input type="text" inputmode="decimal" ${a} ${list === 'investors' && col.f === 'payout' ? `data-phinv="${i}"` : ''} value="${v === null || v === undefined ? '' : finFull(v)}" style="${w}text-align:right;font-family:var(--mono);">`;
@@ -494,6 +509,22 @@ function finWire(bodyId) {
         if (el.id === 'pay-week') { finPayWeek = el.value; finRefreshPay(); return; }
         if (el.id === 'fund-f') { finFundFilter = el.value; finRenderFundTable(); finRefreshFund(); return; }
         if (el.id === 'fund-s') { finFundSort = el.value; finRenderFundTable(); finRefreshFund(); return; }
+        if (el.dataset.l === 'investors' && el.dataset.f === 'mode') { // the pay plan of a line, or pause mode for the whole person
+            const row = finData.investors[+el.dataset.i], v = el.value, peers = finPeersOf(row), today = finSrv.today || new Date().toISOString().slice(0, 10);
+            if (v === 'paused') {
+                const d = prompt(`From which date are the payouts of ${row.name} on hold? (YYYY-MM-DD)`, today);
+                if (d && /^\d{4}-\d{2}-\d{2}$/.test(d)) { peers.forEach(l => { l.pauseFrom = d; l.pauseTo = ''; }); finTouch(); }
+                finRenderAll(); return;
+            }
+            const wasPaused = finOnPause(row);
+            row.mode = v;
+            if (wasPaused) { // they are back: the held weeks are released in full (or stay held, to be paid from the calendar)
+                peers.forEach(l => { if (finOnPause(l)) l.pauseTo = today; });
+                const held = peers.flatMap(l => finHeldList(l)), sum = finSum(held);
+                if (held.length && confirm(`${row.name} is back. Release the ${held.length} held payout${held.length === 1 ? '' : 's'} (${finMoney(sum)}) now?`)) finReleaseHeld(peers, today);
+            }
+            finTouch(); finRenderAll(); return;
+        }
         if (el.dataset.pers) { // the ID, name or Torn ID in the top line of an investor card: it applies to every line of that investor
             const f = el.dataset.f, v = f === 'tornId' ? el.value.replace(/\D/g, '').slice(0, 10) : el.value.trim();
             el.dataset.pers.split(',').forEach(k => { if (finData.investors[+k]) finData.investors[+k][f] = v; });

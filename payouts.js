@@ -24,7 +24,7 @@ function finPayPeople(upTo, fromIso) {
 const finCellState = (p, date) => {
     const d = p.days[date]; if (!d) return null;
     const lines0 = d.lines.map(k => finData.investors[k]);
-    if (lines0.every(i => !finIsPaid(i, date) && (i.paused || []).includes(date))) return 'paused'; // held: the investor is on pause mode, released in full when they are back
+    if (lines0.every(i => !finIsPaid(i, date) && finIsPausedAt(i, date))) return 'paused'; // held: the investor is on pause mode, released in full when they are back
     if (date > finSrv.today) return 'later'; // a payout of a coming Sunday: nothing to colour yet
     const lines = d.lines.map(k => finData.investors[k]);
     if (lines.every(i => finIsPaid(i, date))) return 'paid';
@@ -128,7 +128,7 @@ function finClickPay(b) {
     if (b.dataset.calprev !== undefined || b.dataset.calgo !== undefined) { finClickCal(b); return; }
     if (b.dataset.paygroup !== undefined) { // the payout of the Sunday being paid, for a whole group of investors who get the same amount
         const d = b.dataset.d;
-        b.dataset.paygroup.split(',').forEach(k => { const i = finData.investors[+k]; if (i && i.active && !finIsPaid(i, d) && !(i.paused || []).includes(d) && finInvPeriods(i, d, finAdd(d, -1)).some(p => p.date === d)) finTogglePaid(i, d); });
+        b.dataset.paygroup.split(',').forEach(k => { const i = finData.investors[+k]; if (i && i.active && !finIsPaid(i, d) && !finIsPausedAt(i, d) && finInvPeriods(i, d, finAdd(d, -1)).some(p => p.date === d)) finTogglePaid(i, d); });
         finTouch(); return;
     }
     if (b.dataset.paymatch !== undefined) { // make the total of the selected week equal to the sheet's: the difference is kept as a correction (the lines of people who left are only estimates)
@@ -139,22 +139,23 @@ function finClickPay(b) {
     }
     if (b.dataset.pc !== undefined) {
         const d = b.dataset.d, lines = b.dataset.pc.split(',').map(k => finData.investors[+k]).filter(Boolean);
-        if (finPayTool === 'pause') { // a payout is held (blue) or taken back: only when it is not paid
+        if (finPayTool === 'pause') { // a single payout is held (blue) or taken back: only when it is not paid; a pause that comes from the pay plan is changed in the Investment fund
+            if (lines.some(i => finIsPausedAt(i, d) && !(i.paused || []).includes(d))) { toast('This week is on hold because of the pay plan: change that in the Investment fund (Paid choice).'); return; }
             lines.forEach(i => { if (finIsPaid(i, d)) return; i.paused = (i.paused || []).includes(d) ? i.paused.filter(x => x !== d) : (i.paused || []).concat(d); });
             finTouch(); return;
         }
-        const held = lines.filter(i => (i.paused || []).includes(d));
+        const held = lines.filter(i => finIsPausedAt(i, d));
         if (held.length && !lines.some(i => finIsPaid(i, d))) { // a click on a held payout: released in full, together with all the others that were held for this person
-            const all = held.flatMap(i => (i.paused || []).map(x => ({ i, x }))), sum = all.reduce((s, { i, x }) => s + finSum(finInvPeriods(i, x, finAdd(x, -1)).filter(p => p.date === x)), 0);
-            if (all.length > 1 && confirm(`Release all ${all.length} held payouts of ${lines[0].name} (${finMoney(sum)}) now?`)) { all.forEach(({ i, x }) => { i.paused = i.paused.filter(y => y !== x); if (!finIsPaid(i, x)) finTogglePaid(i, x); }); finTouch(); return; }
-            held.forEach(i => { i.paused = i.paused.filter(y => y !== d); });
+            const all = lines.flatMap(i => finHeldList(i).map(p => ({ i, x: p.date, a: p.amount }))), sum = all.reduce((s, h) => s + h.a, 0);
+            if (all.length > 1 && confirm(`Release all ${all.length} held payouts of ${lines[0].name} (${finMoney(sum)}) now?`)) { finReleaseHeld(lines, finSrv.today); finTouch(); return; }
+            held.forEach(i => { i.paused = (i.paused || []).filter(y => y !== d); });
         }
-        lines.forEach(i => finTogglePaid(i, d));
+        lines.forEach(i => finTogglePaid(i, d)); // a week held through the pay plan is simply paid: paid wins over held
         finTouch(); return;
     }
     if (b.dataset.payrow !== undefined) { // every payout of this Sunday that is still to pay
         const d = b.dataset.payrow;
-        finData.investors.forEach(i => { if (i.active && finTracked(i) && !finIsPaid(i, d) && !(i.paused || []).includes(d) && finInvPeriods(i, d, finAdd(d, -1)).some(p => p.date === d)) finTogglePaid(i, d); });
+        finData.investors.forEach(i => { if (i.active && finTracked(i) && !finIsPaid(i, d) && !finIsPausedAt(i, d) && finInvPeriods(i, d, finAdd(d, -1)).some(p => p.date === d)) finTogglePaid(i, d); });
         finTouch(); return;
     }
     if (b.dataset.paycopy !== undefined) {
