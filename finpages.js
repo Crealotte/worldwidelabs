@@ -25,7 +25,7 @@ function finRenderFund() {
         <div id="fund-tablebox" class="panel" style="padding:0;overflow-x:auto;"></div>
         <details class="panel"><summary class="av-sum"><b>Payout history</b> <span style="font-size:12px;color:var(--muted);">(the payouts you marked as paid)</span></summary><div id="fund-history" style="margin-top:6px;"></div></details>
         <details class="panel"><summary class="av-sum"><b>Pay table</b> <span style="font-size:12px;color:var(--muted);">(what an investor is paid a week for an amount)</span></summary>${finListEditor('roi')}</details>
-        <details class="panel"><summary class="av-sum"><b>Every stored line</b> <span style="font-size:12px;color:var(--muted);">(plain list, in case a line is hard to find in the table)</span></summary><div style="margin-top:6px;"><input id="fund-rawq" type="search" placeholder="Name or ID (empty = all)" style="width:200px;"> <button class="ghost small" data-rawlist="1" type="button">Show</button><div id="fund-raw" style="margin-top:6px;font-size:12px;overflow-x:auto;"></div></div></details>
+        <details class="panel"><summary class="av-sum"><b>Every stored line</b> <span style="font-size:12px;color:var(--muted);">(plain list, in case a line is hard to find in the table)</span></summary><div style="margin-top:6px;"><input id="fund-rawq" type="search" placeholder="Name or ID (empty = all)" style="width:200px;"> <button class="ghost small" data-rawlist="1" type="button">Show</button> <button class="ghost small" data-alignmodes="1" type="button" title="One person, one pay plan: all their lines follow the earliest line">Make every person's lines follow one pay plan</button><div id="fund-raw" style="margin-top:6px;font-size:12px;overflow-x:auto;"></div></div></details>
         <div style="font-size:10px;color:var(--muted);text-align:right;">page build: plan change next to Paid + in the row (⇄)</div>
         <details class="panel"><summary class="av-sum"><b>Backups</b> <span style="font-size:12px;color:var(--muted);">(a copy of your data is kept every hour for 14 days, in case a save ever loses something)</span></summary><div style="margin-top:6px;"><button class="ghost small" data-baklist="1" type="button">Show the backups</button><div id="fund-bak" style="margin-top:6px;font-size:13px;"></div></div></details>
         ${finImportPanel()}`;
@@ -175,6 +175,15 @@ function finRefreshFund() {
     $('fund-history').innerHTML = hist.length ? `<div><table style="border-collapse:collapse;font-size:13px;">${hist.map(p => `<tr><td style="padding:2px 10px 2px 0;font-family:var(--mono);">${esc(p.date)}</td><td style="padding:2px 14px 2px 0;">${esc(p.name)}</td><td style="padding:2px 14px 2px 0;font-family:var(--mono);text-align:right;">${finMoney(p.amount)}</td><td style="padding:2px 0;color:var(--muted);font-size:12px;">${p.through ? `through ${esc(finDate(p.through))}` : ''}</td></tr>`).join('')}</table></div>` : '';
 }
 function finClickFund(b) {
+    if (b.dataset.alignmodes !== undefined) { // every line of a person is paid the same way, as in the calendar: the plan of their earliest line (people with a plan change date are left alone)
+        const groups = {};
+        finData.investors.forEach(l => { (groups[finPersonKey(l)] = groups[finPersonKey(l)] || []).push(l); });
+        const todo = Object.values(groups).map(ls => { ls.sort((a, c) => (a.start < c.start ? -1 : 1)); return { ls, to: ls[0].mode }; }).filter(g => !g.ls.some(l => (l.switches || []).length) && g.ls.some(l => l.mode !== g.to));
+        if (!todo.length) { toast('Every person is already paid the same way on all their lines'); return; }
+        if (!confirm(`Set all lines of these ${todo.length} people to the plan of their earliest line?\n\n${todo.map(g => `${g.ls[0].name}: ${g.to}`).join('\n')}`)) return;
+        todo.forEach(g => g.ls.forEach(l => { l.mode = g.to; }));
+        finRenderAll(); finTouch(); toast(`${todo.length} people fixed`); return;
+    }
     if (b.dataset.modechange !== undefined) { // the pay plan changes on a date: payouts before it follow the old plan, from it the new one (all lines of the person)
         const base = finData.investors[+b.dataset.modechange]; if (!base) return;
         const to = base.mode === 'weekly' ? 'monthly' : 'weekly';
