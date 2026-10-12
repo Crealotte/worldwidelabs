@@ -64,6 +64,7 @@ async function redis(command) {
 }
 
 const restockedKey = (factionId) => `wwl:restocked-wars:${factionId}`;
+const SVC_BUG_ACTIONS = new Set(['bugs-list', 'bugs-metoo', 'bugs-shot', 'sug-list', 'sug-add', 'sug-vote', 'bug-report']); // what a service user (investor, tenant, director) can do on Bugs & suggestions
 const OWNER_VIEW_ACTIONS = new Set(['mo-get', 'mo-energy', 'mo-consumption', 'mo-war', 'mo-reg-get', 'verify-get', 'userscript-get', 'owner-roster']); // what the owner can read of another faction
 const manualVerifyKey = (factionId) => `wwl:manual-verify:${factionId}`; // hash: playerId -> { intel, cat, updatedAt } — Torn Intel / CAT have no API to check, so a leader ticks it by hand
 const userscriptSeenKey = (factionId) => `wwl:userscript-seen:${factionId}`; // hash: playerId -> last-seen epoch ms, stamped by the userscript itself (see 'script-checkin') for Who's on board
@@ -761,6 +762,24 @@ module.exports = async function handler(req, res) {
             return res.status(200).json({ version: m ? m[1] : null });
         }
         if (!key) return res.status(400).json({ error: 'Missing key' });
+        // "Bugs & suggestions" for people who only use a Labs service (an investor, a tenant, a company director) and are not in an allowed faction: they only see, vote on and send
+        // the bugs and ideas that belong to the pages they can visit (My investments, My rental, My company). Everybody else goes through the normal routes further down.
+        if (req.body && req.body.svc && SVC_BUG_ACTIONS.has(action)) {
+            const me = await (async () => {
+                const r = await tornFetch(`https://api.torn.com/user/?selections=profile&key=${encodeURIComponent(key)}`);
+                const p = await r.json();
+                return p.error || !p.player_id ? null : { playerId: String(p.player_id), name: p.name };
+            })();
+            if (!me) return res.status(403).json({ error: 'Could not read your profile from this key.' });
+            const areas = [];
+            if (await isInvestor(redis, me)) areas.push('investor');
+            if (await isTenant(redis, me)) areas.push('tenant');
+            if (await isDirector(redis, me.playerId)) areas.push('company');
+            if (!areas.length) return res.status(403).json({ error: 'This page is for the people who use the Labs services.' });
+            if (action === 'bug-report') return res.status(200).json(await sendBugReport({ redis, playerId: me.playerId, name: me.name, factionName: 'service user', body: { ...req.body, page: areas.includes(req.body.page) ? req.body.page : areas[0] } }));
+            if (action.startsWith('bugs-')) return res.status(200).json(await bugsHandle(action, req.body, { redis, playerId: me.playerId, leader: false, names: {}, areas }));
+            return res.status(200).json(await suggestHandle(action, req.body, { redis, playerId: me.playerId, name: me.name, isLeader: false, names: {}, areas }));
+        }
         // The login's access check and the company side (owner setup, directors) are answered BEFORE the faction lookup below: a company director does not
         // have to be in a faction at all, and a director only ever gets the co-* actions (see lib/company.js). Everyone else goes on to the faction checks.
         if (action === 'access-check' || action.startsWith('co-') || action.startsWith('lt-') || action.startsWith('fin-') || action.startsWith('inv-') || action.startsWith('ten-')) {

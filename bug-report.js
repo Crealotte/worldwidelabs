@@ -3,6 +3,7 @@
 // The screenshot is shrunk in the browser first (max 1600 px wide, JPEG) so it stays small and quick.
 'use strict';
 
+const brSvc = () => (typeof invMode !== 'undefined' && invMode) || (typeof directorMode !== 'undefined' && directorMode); // a service user (investor, tenant, director): the server then only shows them what belongs to their pages
 let brShot = null; // data URL of the resized screenshot, or null
 let brVideo = null; // data URL of a short screen recording (max about 3 MB), or null
 const BR_MAX_VIDEO = 3 * 1024 * 1024;
@@ -72,7 +73,7 @@ $('br-send').addEventListener('click', async () => {
     try {
         const res = await fetch('/api/war-payout', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ key: apiKey, action: 'bug-report', description, page: $('br-page').value, screenshot: brShot, video: brVideo }),
+            body: JSON.stringify({ key: apiKey, action: 'bug-report', description, page: $('br-page').value, screenshot: brShot, video: brVideo, svc: brSvc() }),
         });
         const text = await res.text();
         let r; try { r = JSON.parse(text); } catch (e) { throw new Error(`Server problem (${res.status}) — try a smaller screenshot.`); }
@@ -87,7 +88,7 @@ $('br-send').addEventListener('click', async () => {
 let kbBugs = [];
 const KB_STATUS = { review: ['To review', '#7aa2ff'], known: ['Known', 'var(--muted)'], fixing: ['Being fixed', '#f0b432'], fixed: ['Fixed', 'var(--reagent)'] };
 async function kbFetch(body) {
-    const res = await fetch('/api/war-payout', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key: apiKey, ...body }) });
+    const res = await fetch('/api/war-payout', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key: apiKey, ...(brSvc() ? { svc: true } : {}), ...body }) });
     const text = await res.text();
     try { return JSON.parse(text); } catch (e) { return { error: `Server problem (${res.status})` }; }
 }
@@ -208,7 +209,7 @@ function renderSuggestions() {
 $('sg-send').addEventListener('click', async () => {
     const st = $('sg-status'), btn = $('sg-send');
     btn.disabled = true;
-    const r = await kbFetch({ action: 'sug-add', text: $('sg-text').value });
+    const r = await kbFetch({ action: 'sug-add', text: $('sg-text').value, area: $('br-page').value });
     btn.disabled = false;
     if (r.error) { st.className = 'status err'; st.textContent = r.error; return; }
     st.className = 'status ok'; st.textContent = '✓ Thanks — your idea is on the list.';
