@@ -78,7 +78,7 @@ function finPersonCells(s, ixs, open) {
 // next to the "Paid" choice: the change of pay plan on a date (weekly <-> monthly), with the changes made so far
 function finPlanCell(k) {
     const l = finData.investors[k], sw = l.switches || [];
-    return ` <button class="ghost small" data-modechange="${k}" type="button" title="The pay plan of this person changes on a date (weekly to monthly, or back)" style="padding:0 6px;">⇄ date</button>${sw.map(w => `<div style="font-size:10.5px;color:var(--muted);white-space:nowrap;">${w.from} → ${w.to} from ${esc(finDate(w.date))}</div>`).join('')}`;
+    return ` <button class="ghost small" data-modechange="${k}" type="button" title="The pay plan of this person changes on a date (weekly to monthly, or back)" style="padding:0 6px;">⇄ date</button>${sw.map((w, n) => `<div style="font-size:10.5px;color:var(--muted);white-space:nowrap;">${w.from} → ${w.to} from ${esc(finDate(w.date))} <button class="ghost small" data-delswitch="${k}:${n}" type="button" title="Remove this plan change" style="padding:0 4px;">✕</button></div>`).join('')}`;
 }
 function finFundDetail(ix) {
     const cols = FIN_LISTS.investors.cols.filter(c => !['fundId', 'name', 'tornId'].includes(c.f)), r0 = finData.investors[ix[0]], ids = ix.join(',');
@@ -175,6 +175,17 @@ function finRefreshFund() {
     $('fund-history').innerHTML = hist.length ? `<div><table style="border-collapse:collapse;font-size:13px;">${hist.map(p => `<tr><td style="padding:2px 10px 2px 0;font-family:var(--mono);">${esc(p.date)}</td><td style="padding:2px 14px 2px 0;">${esc(p.name)}</td><td style="padding:2px 14px 2px 0;font-family:var(--mono);text-align:right;">${finMoney(p.amount)}</td><td style="padding:2px 0;color:var(--muted);font-size:12px;">${p.through ? `through ${esc(finDate(p.through))}` : ''}</td></tr>`).join('')}</table></div>` : '';
 }
 function finClickFund(b) {
+    if (b.dataset.delswitch !== undefined) { // a plan change that was made by mistake: removed, and the plan goes back to what it was before it (all lines of the person that have it)
+        const [k, n] = b.dataset.delswitch.split(':').map(Number), base = finData.investors[k], w = base && (base.switches || [])[n];
+        if (!w) return;
+        finPeersOf(base).forEach(l => {
+            const had = (l.switches || []).some(x => x.date === w.date && x.from === w.from && x.to === w.to);
+            if (!had) return;
+            l.switches = l.switches.filter(x => !(x.date === w.date && x.from === w.from && x.to === w.to));
+            l.mode = l.switches.length ? l.switches[l.switches.length - 1].to : w.from;
+        });
+        finRenderAll(); finTouch(); toast('Plan change removed'); return;
+    }
     if (b.dataset.alignmodes !== undefined) { // every line of a person is paid the same way, as in the calendar: the plan of their earliest line (people with a plan change date are left alone)
         const groups = {};
         finData.investors.forEach(l => { (groups[finPersonKey(l)] = groups[finPersonKey(l)] || []).push(l); });

@@ -517,6 +517,7 @@ function finWire(bodyId) {
                 finRenderAll(); return;
             }
             const wasPaused = finOnPause(row);
+            if ((row.switches || []).length) { row.switches = []; toast("The plan changes of this line were cleared: the choice applies to the whole line"); }
             row.mode = v;
             if (wasPaused) { // they are back: the held weeks are released in full (or stay held, to be paid from the calendar)
                 peers.forEach(l => { if (finOnPause(l)) l.pauseTo = today; });
