@@ -42,8 +42,8 @@ const { fetchWarHits } = require('../lib/warHits');
 const { moXanaxAll } = require('../lib/memberOverview');
 const { TRACKED_ITEMS, BLOOD_BAG_RE } = require('../lib/trackedItems');
 
-const REDIS_URL = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL;
-const REDIS_TOKEN = process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN;
+const REDIS_URL = require('../lib/env').redisUrl();
+const REDIS_TOKEN = require('../lib/env').redisToken();
 async function redis(command) {
     if (!REDIS_URL || !REDIS_TOKEN) throw new Error('Database not connected.');
     const res = await fetch(REDIS_URL, { method: 'POST', headers: { Authorization: `Bearer ${REDIS_TOKEN}`, 'Content-Type': 'application/json' }, body: JSON.stringify(command) });

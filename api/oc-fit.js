@@ -30,8 +30,8 @@
 
 const { tornFetch } = require('../lib/tornFetch');
 const { factionAllowed, DENIED: ACCESS_DENIED } = require('../lib/access');
-const REDIS_URL = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL;
-const REDIS_TOKEN = process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN;
+const REDIS_URL = require('../lib/env').redisUrl();
+const REDIS_TOKEN = require('../lib/env').redisToken();
 const ROLE_WEIGHTS_KEY = 'wwl:oc-role-weights';
 const ROLE_WEIGHTS_TTL_MS = 12 * 60 * 60 * 1000; // refresh community weight data at most every 12h
 

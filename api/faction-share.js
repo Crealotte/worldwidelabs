@@ -13,8 +13,8 @@
 const { tornFetch } = require('../lib/tornFetch');
 const { labsIsOwner } = require('../lib/labsLedger');
 const { factionAllowed, DENIED: ACCESS_DENIED } = require('../lib/access');
-const REDIS_URL = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL;
-const REDIS_TOKEN = process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN;
+const REDIS_URL = require('../lib/env').redisUrl();
+const REDIS_TOKEN = require('../lib/env').redisToken();
 const LOGINS_HASH = 'wwl:logins';
 const SHARE_INDEX = 'wwl:faction-share:index';
 

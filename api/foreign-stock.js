@@ -14,8 +14,8 @@
 // POST { key, action: 'read' } -> per-country stock lists with computed profit, and freshness
 
 const { tornFetch } = require('../lib/tornFetch');
-const REDIS_URL = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL;
-const REDIS_TOKEN = process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN;
+const REDIS_URL = require('../lib/env').redisUrl();
+const REDIS_TOKEN = require('../lib/env').redisToken();
 const ITEMS_CACHE_KEY = 'wwl:torn-items-cache';
 const ITEMS_CACHE_TTL_MS = 24 * 60 * 60 * 1000; // item market values don't need refreshing often
 

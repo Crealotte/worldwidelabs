@@ -5,8 +5,8 @@
 // visit, accumulating into a shared view over time.
 
 const { tornFetch } = require('../lib/tornFetch');
-const REDIS_URL = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL;
-const REDIS_TOKEN = process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN;
+const REDIS_URL = require('../lib/env').redisUrl();
+const REDIS_TOKEN = require('../lib/env').redisToken();
 const HONORS_CACHE_KEY = 'wwl:torn-honors-cache';
 const HONORS_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 
