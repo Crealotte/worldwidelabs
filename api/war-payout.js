@@ -45,7 +45,7 @@ const { factionAllowed, allowedList, resetCache: accessReset, LIST: ACCESS_LIST,
 const { companyHandle, isDirector, tornCompany: coTorn, normalize: coNormalize, getAll: coGetAll } = require('../lib/company');
 const { runCompanyReports } = require('../lib/companyReports');
 const { ltHandle, leaseTodos, tenHandle, isTenant } = require('../lib/labstracking');
-const { finHandle, invHandle, isInvestor } = require('../lib/finances');
+const { finHandle, invHandle, isInvestor, fundRequestTodos } = require('../lib/finances');
 const { ohHandle } = require('../lib/onlineHours');
 const { labsIsOwner, labsHasOwners, labsHandle, labsRecordReceipt } = require('../lib/labsLedger');
 
@@ -1318,7 +1318,9 @@ Cancel: ${cancelUrl}`, [], embeds, undefined, true);
         // The leader to-do card (dashboard) — leaders only.
         if (action === 'leader-todos') {
             if (!(await isLeader(key))) return res.status(403).json({ error: 'Leaders only' });
-            return res.status(200).json(await leaderTodos(key, factionId));
+            const lt = await leaderTodos(key, factionId);
+            try { if (await labsIsOwner(redis, playerId)) lt.todos.push(...(await fundRequestTodos(redis))); } catch (e) { /* the other to dos still show */ } // the owner also sees the investor requests that are waiting
+            return res.status(200).json(lt);
         }
         // The weekly energy plan, shared between the Energy planner page and the userscript in Torn.
         if (action === 'plan-get') {
@@ -1488,7 +1490,7 @@ Cancel: ${cancelUrl}`, [], embeds, undefined, true);
                     const ocsOpen = ocs.filter(q => q.status !== 'claimed'); if (ocsOpen.length) items.push({ id: 'oc-requests', text: `${ocsOpen.length} OC request${ocsOpen.length === 1 ? '' : 's'}: ${ocsOpen.slice(0, 4).map(r => `${r.name} (level ${r.level})`).join(', ')}${ocsOpen.length > 4 ? ` +${ocsOpen.length - 4} more` : ''}.`, cta: 'See requests', url: `${site}/oc-requests` });
                     const openBanks = banks.filter(r => r.status === 'open');
                     if (openBanks.length) items.push({ id: 'bank-requests', text: `${openBanks.length} bank request${openBanks.length === 1 ? '' : 's'}: ${openBanks.slice(0, 4).map(r => `${r.name} ($${Number(r.amount).toLocaleString('en-US')})`).join(', ')}${openBanks.length > 4 ? ` +${openBanks.length - 4} more` : ''}.`, cta: 'Open bank requests', url: `${site}/bank` });
-                    if (await labsIsOwner(redis, playerId)) items.push(...(await leaseTodos(redis, key))); // the owner's lease payments that are due (the script shows Offered / Paid buttons on them)
+                    if (await labsIsOwner(redis, playerId)) items.push(...(await leaseTodos(redis, key))); if (await labsIsOwner(redis, playerId)) items.push(...(await fundRequestTodos(redis))); // and the investor requests that are waiting // the owner's lease payments that are due (the script shows Offered / Paid buttons on them)
                 }
             } catch (e) { /* skip */ }
 

@@ -241,7 +241,7 @@ function finClickFund(b) {
     if (b.dataset.newinv !== undefined) { finData.investors.push(FIN_LISTS.investors.fresh()); finRenderAll(); finTouch(); return; }
     if (b.dataset.reqres !== undefined) { // the owner decides on a request: the server changes the investment, then the page is read again
         b.disabled = true;
-        finFetch({ action: 'fin-req-resolve', id: b.dataset.reqres, decision: b.dataset.dec }).then(r => { if (r.error) { toast(r.error); b.disabled = false; return; } toast('Done'); loadInvestFund(); });
+        finFetch({ action: 'fin-req-resolve', id: b.dataset.reqres, decision: b.dataset.dec }).then(r => { if (r.error) { toast(r.error); b.disabled = false; return; } toast('Done'); loadInvestFund(); if (typeof loadLeaderTodos === 'function') loadLeaderTodos(); });
         return;
     }
     if (b.dataset.impprev !== undefined || b.dataset.impgo !== undefined) { finClickImport(b); return; }

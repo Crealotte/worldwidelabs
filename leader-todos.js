@@ -33,6 +33,12 @@ function renderLeaderTodos(todos) {
         nav.querySelector('.todo-dot')?.remove();
         if (todos.length) { const s = document.createElement('span'); s.className = 'todo-dot'; s.textContent = todos.length; s.title = 'Things for leaders to do'; nav.appendChild(s); }
     }
+    // and the number of investor requests on the Investment fund item (the owner only gets that to do)
+    const fundNav = document.querySelector('.nav-item[data-page="fund"]'), fr = todos.find(t => t.id === 'fund-requests');
+    if (fundNav) {
+        fundNav.querySelector('.todo-dot')?.remove();
+        if (fr) { const s = document.createElement('span'); s.className = 'todo-dot'; s.textContent = fr.n || 1; s.title = 'Investor requests waiting'; fundNav.appendChild(s); }
+    }
 }
 
 // ---- Leader settings page: the Discord settings and the nightly saving live here (moved panels, same handlers) ----
