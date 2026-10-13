@@ -32,7 +32,7 @@ const TERMS = {
         ['Eligibility', ['1. Pair your Torn key with /pair (must include merits + money permissions).', '2. Bank Interest merit must be 10/10.', '3. You must NOT already have an active City Bank investment.', '4. You can only run one Buddy Banking plan at a time.']],
     ] },
 };
-const termsHtml = id => `<div style="font-size:13px;line-height:1.55;">${TERMS[id].sections.map(([h, lines]) => `${h ? `<div style="font-weight:700;margin-top:10px;">${esc(h)}</div>` : ''}${lines.map(l => `<div style="${/^[•🥉🥈🥇]|^\d\./.test(l) ? 'padding-left:10px;' : ''}">${esc(l)}</div>`).join('')}`).join('')}</div>`;
+const termsHtml = id => `<div style="font-size:13px;line-height:1.55;">${TERMS[id].sections.map(([h, lines]) => `${h ? `<div style="font-weight:700;margin-top:10px;">${esc(h)}</div>` : ''}${lines.map(l => `<div style="${/^(•|🥉|🥈|🥇|🟠|💎)|^\d\./.test(l) ? 'padding-left:10px;' : ''}">${esc(l)}</div>`).join('')}`).join('')}</div>`;
 // the panel for the people a program is for: open and with an accept button until they have accepted this version, folded away afterwards
 function termsPanel(id, accepted) {
     const ok = accepted && accepted.v === TERMS_VERSION[id];
