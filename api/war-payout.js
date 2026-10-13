@@ -784,7 +784,7 @@ module.exports = async function handler(req, res) {
         }
         // The login's access check and the company side (owner setup, directors) are answered BEFORE the faction lookup below: a company director does not
         // have to be in a faction at all, and a director only ever gets the co-* actions (see lib/company.js). Everyone else goes on to the faction checks.
-        if (action === 'access-check' || action.startsWith('co-') || action.startsWith('lt-') || action.startsWith('fin-') || action.startsWith('inv-') || action.startsWith('ten-')) {
+        if (action === 'access-check' || action.startsWith('co-') || action.startsWith('lt-') || action.startsWith('fin-') || action.startsWith('inv-') || action.startsWith('ten-') || action === 'test-seed') {
             const who = await (async () => {
                 const r = await tornFetch(`https://api.torn.com/user/?selections=profile&key=${encodeURIComponent(key)}`);
                 const p = await r.json();
@@ -794,6 +794,11 @@ module.exports = async function handler(req, res) {
             if (!who) return res.status(403).json({ error: 'Could not read your profile from this key.' });
             const owner = await labsIsOwner(redis, who.playerId);
             const director = await isDirector(redis, who.playerId);
+            if (action === 'test-seed') { // the test site only: the owner fills the test database with a test investor and a test tenant (lib/testseed.js)
+                if (!require('../lib/env').isPreview()) return res.status(404).json({ error: 'Not available.' });
+                if (!owner) return res.status(403).json({ error: 'Only the owner can fill the test data.' });
+                return res.status(200).json(await require('../lib/testseed').seed(redis));
+            }
             if (action === 'access-check') return res.status(200).json({ allowed: who.factionId ? await factionAllowed(who.factionId, who.playerId) : owner, director, owner, investor: await isInvestor(redis, who), tenant: await isTenant(redis, who) });
             if (action.startsWith('inv-')) return res.status(200).json(await invHandle(action, req.body, { redis, who })); // an investor sees only their own investments
             if (action.startsWith('ten-')) return res.status(200).json(await tenHandle(action, req.body, { redis, who })); // a tenant sees only their own rent-to-buy contract
