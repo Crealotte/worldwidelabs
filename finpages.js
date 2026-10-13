@@ -271,7 +271,12 @@ function finRenderBuddy() {
         <div style="display:flex;gap:10px;flex-wrap:wrap;">${t('🥉 Bronze', finShort(FIN_TIERS.bronze.amount), `${FIN_TIERS.bronze.days} days`)}${t('🥈 Silver', finShort(FIN_TIERS.silver.amount), `${FIN_TIERS.silver.days} days, after a promotion`)}${t('🥇 Gold', finShort(FIN_TIERS.gold.amount), `${FIN_TIERS.gold.days} days, after a promotion`)}</div>
         <div style="font-size:11px;color:var(--muted);margin-top:8px;">Everyone starts at Bronze. When you leave the expected profit at 0, the page estimates it from Torn's bank rate for 10/10 merits (5.14% for 1 month, 11.93% for 2 months); type the real profit in when you know it.</div></div>
         <details class="panel"><summary class="av-sum"><b>📜 ${esc(TERMS.buddy.title)}</b> <span style="font-size:12px;color:var(--muted);">(the terms of the program, as written)</span></summary><div style="margin-top:8px;">${termsHtml('buddy')}</div></details>
+        <div class="panel"><h3 style="margin-top:0;">🔎 City Bank check</h3>
+            <div style="font-size:13px;margin-bottom:8px;">See what Torn tells WWL about a City Bank investment with the key you are logged in with: the key's access level, and the amount and time left of an active investment. The same check can verify a buddy's investment when they log in with their own key.</div>
+            <button class="ghost small" id="bb-check-btn" type="button">Check my City Bank</button>
+            <div id="bb-check-out" style="font-size:13px;margin-top:8px;line-height:1.7;"></div></div>
         <div id="bb-summary"></div>${finListEditor('buddies')}`;
+    $('bb-check-btn').addEventListener('click', finBankCheck);
     finWire('bb-body');
     finRefresh();
 }
@@ -401,3 +406,24 @@ function finClickImport(b) {
 
 FIN_PAGES.fund = { status: 'fund-status', render: finRenderFund, refresh: finRefreshFund, click: finClickFund, rowclick: finFundRowClick, parts: ['investors', 'roi'] };
 FIN_PAGES.buddy = { status: 'bb-status', render: finRenderBuddy, refresh: finRefreshBuddy, click: finClickBuddy, parts: ['buddies'] };
+
+// The City Bank check on the Buddy banking page: asks Torn straight from the browser (the key never goes through the server for this) what the key can see of the City Bank, and shows it as it comes back.
+async function finBankCheck() {
+    const out = $('bb-check-out'), money = n => `$${Math.round(Number(n) || 0).toLocaleString('en-US')}`;
+    if (/^test:/.test(apiKey)) { out.textContent = 'You are using a test person: choose Me (your own key) in the orange bar first.'; return; }
+    out.textContent = 'Asking Torn…';
+    try {
+        const [m, k] = await Promise.all([
+            fetch(`https://api.torn.com/user/?selections=money&key=${encodeURIComponent(apiKey)}`).then(r => r.json()),
+            fetch(`https://api.torn.com/key/?selections=info&key=${encodeURIComponent(apiKey)}`).then(r => r.json()).catch(() => null),
+        ]);
+        const keyLine = k && !k.error ? `Key access level: <b>${esc(String(k.access_level ?? '?'))}</b>${k.access_type ? ` (${esc(String(k.access_type))})` : ''}.` : 'Torn did not say what access level this key has.';
+        if (m.error) { out.innerHTML = `${keyLine}<br><span style="color:var(--danger);">Torn refused the money check: ${esc(m.error.error || `error ${m.error.code}`)}.</span> A key that can read money is needed for this.`; return; }
+        const cb = m.city_bank || (m.money && m.money.city_bank) || null, rows = [];
+        if (cb && typeof cb === 'object') Object.keys(cb).forEach(f => { const v = cb[f]; rows.push(`<tr><td style="padding:1px 14px 1px 0;color:var(--muted);">${esc(f)}</td><td style="font-family:var(--mono);">${/amount|profit|interest/i.test(f) && Number(v) > 100 ? money(v) : esc(String(v))}</td></tr>`); });
+        const has = cb && Number(cb.amount) > 0;
+        out.innerHTML = `${keyLine}<br>${has ? `<b style="color:var(--success,#35d99b);">✅ This key can see an active City Bank investment of ${money(cb.amount)}.</b>` : '<b>Torn shows no active City Bank investment for this key.</b>'}
+            ${rows.length ? `<table style="border-collapse:collapse;margin-top:4px;">${rows.join('')}</table>` : ''}
+            <details style="margin-top:6px;"><summary class="av-sum" style="font-size:12px;color:var(--muted);">What Torn sent (the bank part only)</summary><pre style="font-size:11px;white-space:pre-wrap;margin:4px 0 0;">${esc(JSON.stringify(cb, null, 2))}</pre></details>`;
+    } catch (e) { out.textContent = `Could not reach Torn: ${e.message}`; }
+}
