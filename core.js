@@ -105,6 +105,11 @@
     }
 
     async function tornV1(selections) {
+        const tp = /^test:(\d{1,10}):(.{1,40})$/.exec(apiKey); // the test site's "log in as a test person" key: no call to Torn, only a profile
+        if (tp) {
+            if (selections === 'profile') return { player_id: Number(tp[1]), name: tp[2], level: 1, faction: { faction_id: 0, faction_name: '', position: '', days_in_faction: 0 } };
+            const lim = new Error(friendlyApiError({ code: 16, error: 'test' })); lim.tornCode = 16; throw lim;
+        }
         let res;
         try {
             res = await fetch(`https://api.torn.com/user/?selections=${selections}&key=${encodeURIComponent(apiKey)}`);

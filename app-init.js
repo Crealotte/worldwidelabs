@@ -40,7 +40,7 @@ fetch('/api/war-payout', { method: 'POST', headers: { 'Content-Type': 'applicati
     document.title = `[TEST] ${document.title}`;
     const bar = document.createElement('div');
     bar.style.cssText = `position:fixed;left:0;right:0;top:0;z-index:99999;text-align:center;font:700 12px/1.6 Arial,sans-serif;padding:2px 8px;color:#fff;background:${e.dbReady ? '#e0701a' : '#c0392b'};`;
-    bar.textContent = e.dbReady ? `TEST SITE (${e.branch || 'dev'}): separate test data, nothing here changes the real WWL` : 'TEST SITE: not connected to a test database yet, so it is closed on purpose';
+    bar.textContent = e.dbReady ? `TEST SITE (${e.branch || 'dev'}): separate test data, nothing here changes the real WWL. Log in as a test person with test:ID:Name instead of a key` : 'TEST SITE: not connected to a test database yet, so it is closed on purpose';
     document.body.appendChild(bar);
     document.body.style.paddingTop = '24px';
 }).catch(() => { /* the real site, or no network: nothing to show */ });
