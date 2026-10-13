@@ -195,7 +195,7 @@ function finModel(plan, planStart) {
     const withdrawals = [];
     for (const i of D.investors) {
         if (!i.active || !i.termEnd || !i.amount) continue;
-        const asked = (D.invRequests || []).some(q => q.status === 'open' && q.type === 'withdraw' && q.rowId === i.id);
+        const asked = (D.invRequests || []).some(q => { if (q.status !== 'open' || q.type !== 'withdraw') return false; const r0 = D.investors.find(x => x.id === q.rowId); return q.rowId === i.id || (!!r0 && r0.termEnd === i.termEnd && finPersonKey(r0) === finPersonKey(i)); }); // a deposit that ends on the same day as the asked one leaves with it
         if (!i.leaving && !asked) continue;
         const date = i.termEnd < S.today ? S.today : i.termEnd;
         place(date, i.amount, 'out'); withdrawals.push({ name: i.name, amount: i.amount, date, pending: !i.leaving });

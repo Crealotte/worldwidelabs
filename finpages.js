@@ -156,7 +156,7 @@ function finRefreshFund() {
     const rowOf = q => finData.investors.find(i => i.id === q.rowId);
     const reqLine = q => {
         const r = rowOf(q), who = `<b>${esc(q.name)}</b>`;
-        if (q.type === 'renew') { const from = r && r.termEnd && r.termEnd > today ? r.termEnd : today; return `${who} wants to renew ${r ? finShort(r.amount) : ''} for ${q.days} days (new end ${esc(finDate(finAdd(from, q.days)))})`; }
+        if (q.type === 'renew') { const from = r && r.termEnd && r.termEnd > today ? r.termEnd : today; return `${who} wants to renew ${r ? finShort(finPeersOf(r).filter(l => l.active && l.termEnd === r.termEnd).reduce((s, l) => s + l.amount, 0) || r.amount) : ''} for ${q.days} days (new end ${esc(finDate(finAdd(from, q.days)))})`; }
         if (q.type === 'topup') return `${who} wants to add <b>${finShort(q.amount)}</b>`;
         if (q.type === 'merge') return `${who} wants to merge their deposits onto the same end date (the latest one, ${esc(finDate(q.termEnd || today))}), ${finShort(q.amount)} in total`;
         return `${who} wants <b>${finShort(q.amount)}</b> back at the end of the term (${esc(finDate(q.termEnd || (r && r.termEnd) || today))}), asked ${esc(finDate(q.createdOn))}${q.late ? ' <span style="color:var(--danger);">— late: less than 30 days before the end, so the term renews first and the money goes back at the end of the next one</span>' : ''}`;
