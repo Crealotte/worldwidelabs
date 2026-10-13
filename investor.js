@@ -70,11 +70,12 @@ function invHtml(r) {
         ${list.length ? `<div style="max-height:200px;overflow:auto;padding-left:14px;">${list.slice().reverse().map(p => `<div style="display:flex;gap:14px;font-size:12px;padding:1px 0;"><span style="font-family:var(--mono);">${esc(p.date)}</span><span style="font-family:var(--mono);">${finMoney(p.amount)}</span></div>`).join('')}</div>` : ''}</details>`; };
     const tier = finTierOf(inNow), nxt = finTierNext(inNow), ends = new Set(active.filter(i => !i.leaving && i.termEnd).map(i => i.termEnd));
     const canMerge = active.filter(i => !i.leaving && i.termEnd).length > 1 && ends.size > 1, mergeAsked = r.requests.some(q => q.type === 'merge' && q.status === 'open');
+    const step = inNow < 500000000 ? 50000000 : 100000000; // the terms: grow gradually, in steps of 50m up to 500m and 100m from there
     const main = active.length ? `<div class="panel">
         <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:baseline;"><h3 style="margin:0;font-family:var(--mono);font-size:22px;">${finMoney(inNow)}</h3>${tier ? `<span style="font-weight:700;">${tier[2]} ${tier[1]}</span>` : ''}<span style="font-size:12px;color:var(--muted);">${active.length} deposit${active.length === 1 ? '' : 's'}</span></div>
         <div style="font-size:13px;line-height:1.7;margin-top:6px;">You are paid <b>${finMoney(weekNow)}</b> a week${monthly ? ', added up and paid on the last Sunday of the month' : ', every Sunday'}.${next[0] ? `<br>Next payout: <b>${esc(finDate(next[0].date))}</b> (${finMoney(next[0].amount)})` : ''}
             <br><span style="color:var(--muted);">Your total sets your tier, and the tier sets what you are paid. ${nxt ? `Add <b>${finMoney(nxt[0] - inNow)}</b> to reach <b>${nxt[2]} ${nxt[1]}</b> (from ${finMoney(nxt[0])}).` : 'You are in the top tier.'}</span></div>
-        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:10px;"><input class="inv-amt" data-row="${esc(active[0].id)}" type="text" inputmode="decimal" placeholder="Amount to add (100m or more)" style="width:170px;"><button class="ghost small inv-req" data-type="topup" data-row="${esc(active[0].id)}" type="button">Ask to add money</button>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:10px;"><input class="inv-amt" data-row="${esc(active[0].id)}" type="text" inputmode="decimal" placeholder="Amount to add (${step / 1000000}m steps)" style="width:170px;"><button class="ghost small inv-req" data-type="topup" data-step="${step}" data-row="${esc(active[0].id)}" type="button">Ask to add money</button><span style="font-size:11px;color:var(--muted);">you can add money in steps of ${step / 1000000}m (for example ${step / 1000000}m, ${step / 500000}m or ${step * 5 / 1000000}m)</span>
             ${canMerge ? `<button class="ghost small inv-req" data-type="merge" data-row="${esc(active[0].id)}" type="button" ${mergeAsked ? 'disabled' : ''}>${mergeAsked ? 'Merge asked, waiting for the fund owner' : 'Ask to merge my deposits onto one end date'}</button>` : ''}</div>
         <h4 style="margin:14px 0 2px;">Your deposits</h4>
         <div style="font-size:12px;color:var(--muted);margin-bottom:2px;">Every deposit keeps its own end date: you can take one out at the end of its term without touching the others.${canMerge ? ' If you prefer one date for everything you can merge them: they then all end on the latest date.' : ''}</div>
@@ -92,7 +93,7 @@ function invWire() {
     document.querySelectorAll('.inv-req').forEach(b => b.addEventListener('click', async () => {
         const row = b.dataset.row, type = b.dataset.type, body = { action: 'inv-request', type, rowId: row };
         if (type === 'renew') body.days = Number(document.querySelector(`.inv-days[data-row="${row}"]`).value);
-        if (type === 'topup') { const v = finParse(document.querySelector(`.inv-amt[data-row="${row}"]`).value); if (!v) { toast('Write the amount as 500m or 1.5b'); return; } body.amount = v; }
+        if (type === 'topup') { const v = finParse(document.querySelector(`.inv-amt[data-row="${row}"]`).value); if (!v) { toast('Write the amount as 500m or 1.5b'); return; } const stp = Number(b.dataset.step) || 0; if (stp && v % stp) { toast(`Add money in steps of ${stp / 1000000}m`); return; } body.amount = v; }
         if (type === 'withdraw' && !confirm('Ask to withdraw your money at the end of your term? The fund owner has to approve it and have the money available.')) return;
         b.disabled = true;
         const r = await invFetch(body);
