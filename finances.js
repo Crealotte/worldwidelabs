@@ -48,6 +48,10 @@ function finRoi(amount, tbl) {
     const lower = t.filter(r => r.amount < amount).pop() || t[0];
     return Math.round(lower.weekly * amount / lower.amount);
 }
+// The tiers of the fund: what a person has deposited in total decides the tier (it starts at the full amount: 499m is Bronze, 500m is Silver) and the tier decides the payout rate (see finRoi). Platinum pays like Gold.
+const FIN_TIER_NAMES = [[100000000, 'Copper', '🟠'], [250000000, 'Bronze', '🥉'], [500000000, 'Silver', '🥈'], [1000000000, 'Gold', '🥇'], [2000000000, 'Platinum', '💎']];
+const finTierOf = total => FIN_TIER_NAMES.filter(t => total >= t[0]).pop() || null;
+const finTierNext = total => FIN_TIER_NAMES.find(t => t[0] > total) || null;
 // What a line is paid a week at a date. An amount typed on the line wins. Otherwise the pay table decides for the TOTAL the person has in at that time (a second investment makes the whole worth more: 2 x 500m is paid
 // like 1b), divided over the person's lines by amount; so an investor who topped up later was paid less before the top-up.
 const finPayAt = (i, s, peers) => {
@@ -517,8 +521,8 @@ function finWire(bodyId) {
                 finRenderAll(); return;
             }
             const wasPaused = finOnPause(row);
-            if ((row.switches || []).length) { row.switches = []; toast("The plan changes of this line were cleared: the choice applies to the whole line"); }
-            row.mode = v;
+            if (peers.some(l => (l.switches || []).length)) { peers.forEach(l => { l.switches = []; }); toast("The plan changes of this person were cleared: a person is paid one way, on all their deposits"); }
+            peers.forEach(l => { l.mode = v; }); // one pay plan per person: weekly or monthly on every deposit
             if (wasPaused) { // they are back: the held weeks are released in full (or stay held, to be paid from the calendar)
                 peers.forEach(l => { if (finOnPause(l)) l.pauseTo = today; });
                 const held = peers.flatMap(l => finHeldList(l)), sum = finSum(held);

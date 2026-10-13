@@ -3,12 +3,14 @@
 // To change a text, change it here and raise the version: everyone is then asked to accept the new version.
 'use strict';
 
-const TERMS_VERSION = { invest: '2026-10-09', property: '2026-10-09', buddy: '2026-10-09' };
+const TERMS_VERSION = { invest: '2026-10-13', property: '2026-10-09', buddy: '2026-10-09' };
 const TERMS = {
     invest: { title: 'How the Labs Investment Fund works', sections: [
         ['1️⃣ Apply & Get Approved', ['Click 📥 Join Waitlist and submit your Torn Name and ID. An admin will review and notify you.']],
         ['2️⃣ Set Up via Waitlist', ['When applying via 📥 Join Waitlist, enter your investment amount and renewal preference directly in the form. An admin reviews your request and, when approved, you\'ll receive a DM with trade instructions to fund your contract. Do NOT send money directly — always use the in-game Trade system. Your contract locks for 6 months.']],
-        ['3️⃣ Receive Weekly Payouts', ['Every 7 days from your start date you earn a payout based on the Unit Rate Baseline:', '🥉 Bronze ~$1,442,000/wk per 250m invested', '🥈 Silver ~$3,125,000/wk per 500m invested', '🥇 Gold/Plat ~$6,731,000/wk per 1b invested', 'Payouts roll individually per investor — not global.']],
+        ['3️⃣ Receive Weekly Payouts', ['Every 7 days from your start date you earn a payout based on the Unit Rate Baseline:', '🟠 Copper ~$529,000/wk per 100m invested', '🥉 Bronze ~$1,442,000/wk per 250m invested', '🥈 Silver ~$3,125,000/wk per 500m invested', '🥇 Gold/Plat ~$6,731,000/wk per 1b invested', 'Payouts roll individually per investor — not global.']],
+        ['🧮 Your total sets your tier', ['All your deposits count together. The total you have in decides your tier, and each tier starts at its full amount: 499m is Bronze, 500m is Silver. The tier decides what you are paid per 1m invested, so a new deposit can lift your whole payout.', 'Example: 300m is Bronze, so you are paid 1,442,000 / 250m x 300m = 1,730,400 a week.', 'You are paid one way, weekly (every Sunday) or monthly (the last Sunday of the month), on all your deposits.']],
+        ['🔒 Every deposit has its own lock', ['Each deposit keeps its own start and end date. If you invest in January and again in May, you can still take out the January deposit when its own term ends.', 'If you prefer one date for everything, you can ask to merge your deposits: they all then end on the latest date.']],
         ['4️⃣ Pause Mode', ['Going on holiday? Enable pause mode. Payouts are held and released in full when you return. No compounding while held.']],
         ['5️⃣ Withdrawal', ['After your 6-month lock expires, you can request withdrawal. A 30-day notice is required.']],
         ['⚠️ Forfeiture Rules', ['• Federal Jail — balance wiped, contract terminated', '• 30 days inactive without activating Pause Mode — account forfeited', '• Abuse/foul play — admin discretion']],
