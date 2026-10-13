@@ -151,7 +151,7 @@ function finRefreshFund() {
         el.innerHTML = i.termEnd ? `${i.termEnd < today ? '<span style="color:var(--danger);">ended ' : '<span>until '}${esc(finDate(i.termEnd))}</span> <button class="ghost small" data-invrenew="${el.dataset.invterm}" type="button" title="${n ? `Renewed ${n} time${n === 1 ? '' : 's'}` : 'Not renewed yet'}">Renewed${n ? ` (${n})` : ''}</button>` : '<span style="color:var(--muted);">no end date</span>';
         if (i.termEnd && i.leaving) el.innerHTML += ' <span style="color:#e0a030;font-size:11px;">leaving at the end</span>';
     });
-    // requests from investors: renew, add money, withdraw at the end of the term (4 weeks notice, and the money has to be there: the Finances page counts an asked or approved withdrawal in its balance)
+    // requests from investors: renew, add money, withdraw at the end of the term (30 days notice, and the money has to be there: the Finances page counts an asked or approved withdrawal in its balance)
     const rq = (finData.invRequests || []), openQ = rq.filter(q => q.status === 'open'), doneQ = rq.filter(q => q.status !== 'open').slice(-8).reverse();
     const rowOf = q => finData.investors.find(i => i.id === q.rowId);
     const reqLine = q => {
@@ -159,7 +159,7 @@ function finRefreshFund() {
         if (q.type === 'renew') { const from = r && r.termEnd && r.termEnd > today ? r.termEnd : today; return `${who} wants to renew ${r ? finShort(r.amount) : ''} for ${q.days} days (new end ${esc(finDate(finAdd(from, q.days)))})`; }
         if (q.type === 'topup') return `${who} wants to add <b>${finShort(q.amount)}</b>`;
         if (q.type === 'merge') return `${who} wants to merge their deposits onto the same end date (the latest one, ${esc(finDate(q.termEnd || today))}), ${finShort(q.amount)} in total`;
-        return `${who} wants <b>${finShort(q.amount)}</b> back at the end of the term (${esc(finDate(q.termEnd || (r && r.termEnd) || today))}), asked ${esc(finDate(q.createdOn))}${q.late ? ' <span style="color:var(--danger);">— late: less than 4 weeks before the end, so the term renews first and the money goes back at the end of the next one</span>' : ''}`;
+        return `${who} wants <b>${finShort(q.amount)}</b> back at the end of the term (${esc(finDate(q.termEnd || (r && r.termEnd) || today))}), asked ${esc(finDate(q.createdOn))}${q.late ? ' <span style="color:var(--danger);">— late: less than 30 days before the end, so the term renews first and the money goes back at the end of the next one</span>' : ''}`;
     };
     const btns = q => q.type === 'topup' ? `<button class="small" data-reqres="${esc(q.id)}" data-dec="received" type="button">Money received</button>` : `<button class="small" data-reqres="${esc(q.id)}" data-dec="approve" type="button">Approve</button>`;
     $('fund-requests').innerHTML = openQ.length || doneQ.length ? `<div class="panel"><h3 style="margin-top:0;">Requests from investors${openQ.length ? ` <span style="font-size:13px;color:#e0a030;">(${openQ.length} open)</span>` : ''}</h3>
