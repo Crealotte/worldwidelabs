@@ -171,6 +171,7 @@ function finRefreshFund() {
         ${openQ.map(q => `<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:5px 0;border-top:1px solid var(--line);font-size:13px;"><span style="flex:1;min-width:220px;">${reqLine(q)}</span>${btns(q)}<button class="ghost small" data-reqres="${esc(q.id)}" data-dec="decline" type="button">Decline</button></div>`).join('') || '<div style="font-size:12px;color:var(--muted);">Nothing waiting.</div>'}
         ${openQ.some(q => q.type === 'withdraw') ? '<div style="font-size:12px;color:var(--muted);margin-top:6px;">A withdrawal is counted in the Finances week-by-week balance on the day the term ends: there you see whether the money is there before you approve. Approving marks the investment as leaving at its term end; when you pay it back, fill in "Money returned on".</div>' : ''}
         ${doneQ.length ? `<details style="margin-top:8px;"><summary class="av-sum" style="font-size:12px;color:var(--muted);">Handled (${doneQ.length})</summary>${doneQ.map(q => `<div style="font-size:12px;padding:2px 0;color:var(--muted);">${reqLine(q)} · ${q.status} ${esc(finDate(q.resolvedOn || q.createdOn))}</div>`).join('')}</details>` : ''}</div>` : '';
+    $('fund-requests').innerHTML += finAutoRenewPanel(); // deposits that renewed by themselves (no notice was given), with a way to say they left instead
     // the totals of each investor, in the top line of their card
     document.querySelectorAll('[data-persum]').forEach(el => {
         const rows = el.dataset.persum.split(',').map(k => finData.investors[+k]).filter(Boolean);
@@ -244,6 +245,11 @@ function finClickFund(b) {
         finRenderAll(); finTouch(); return;
     }
     if (b.dataset.newinv !== undefined) { finData.investors.push(FIN_LISTS.investors.fresh()); finRenderAll(); finTouch(); return; }
+    if (b.dataset.aundo !== undefined) { // a deposit that renewed by itself although the investor had left
+        if (!confirm('Mark this deposit as leaving at its old end date, and take the automatic renewal back?')) return;
+        finFetch({ action: 'fin-autorenew-undo', rowId: b.dataset.aundo }).then(r => { if (r.error) { toast(r.error); return; } toast('Done'); loadInvestFund(); if (typeof loadLeaderTodos === 'function') loadLeaderTodos(); });
+        return;
+    }
     if (b.dataset.reqres !== undefined) { // the owner decides on a request: the server changes the investment, then the page is read again
         b.disabled = true;
         finFetch({ action: 'fin-req-resolve', id: b.dataset.reqres, decision: b.dataset.dec }).then(r => { if (r.error) { toast(r.error); b.disabled = false; return; } toast('Done'); loadInvestFund(); if (typeof loadLeaderTodos === 'function') loadLeaderTodos(); });
@@ -431,4 +437,16 @@ async function finBankCheck() {
             ${rows.length ? `<table style="border-collapse:collapse;margin-top:4px;">${rows.join('')}</table>` : ''}
             <details style="margin-top:6px;"><summary class="av-sum" style="font-size:12px;color:var(--muted);">What Torn sent (the bank part only)</summary><pre style="font-size:11px;white-space:pre-wrap;margin:4px 0 0;">${esc(JSON.stringify(cb, null, 2))}</pre></details>`;
     } catch (e) { out.textContent = `Could not reach Torn: ${e.message}`; }
+}
+
+// Deposits that were renewed for 180 days because no notice was given (lib/finances.js autoRenew), from the last 45 days: if the investor had in fact left, "They are leaving" marks the deposit as leaving at the end date it had (and the renewal is taken back).
+function finAutoRenewPanel() {
+    const since = finAdd(finSrv.today, -45), byRow = {};
+    (finData.autoRenewed || []).filter(e => e.on >= since).forEach(e => { (byRow[e.id] = byRow[e.id] || { name: e.name, from: e.from, to: e.to, n: 0 }).n++; byRow[e.id].to = e.to > byRow[e.id].to ? e.to : byRow[e.id].to; byRow[e.id].from = e.from < byRow[e.id].from ? e.from : byRow[e.id].from; });
+    const list = Object.entries(byRow).filter(([id]) => finData.investors.some(i => i.id === id));
+    if (!list.length) return '';
+    const amt = id => (finData.investors.find(i => i.id === id) || {}).amount || 0;
+    return `<div class="panel" id="fund-autorenew"><h3 style="margin-top:0;">Renewed automatically <span style="font-size:13px;color:#e0a030;">(${list.length})</span></h3>
+        <div style="font-size:12px;color:var(--muted);margin-bottom:6px;">No notice was given before the end date, so these deposits renewed for another 180 days. If one of these investors has actually left, press "They are leaving": the deposit is marked as leaving at its old end date and shows in your To do until you mark the money as returned.</div>
+        ${list.map(([id, e]) => `<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:5px 0;border-top:1px solid var(--line);font-size:13px;"><span style="flex:1;min-width:220px;"><b>${esc(e.name)}</b> ${finShort(amt(id))}: ended ${esc(finDate(e.from))}, now ends ${esc(finDate(e.to))}${e.n > 1 ? ` (renewed ${e.n} times)` : ''}</span><button class="ghost small" data-aundo="${esc(id)}" type="button">They are leaving</button></div>`).join('')}</div>`;
 }
