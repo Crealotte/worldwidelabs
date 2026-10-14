@@ -12,6 +12,17 @@
 
 const WHATS_NEW = [
     {
+        version: '1.24', date: '2026-10-14',
+        title: 'Bugs & suggestions show their date, one amount for CreaLotte',
+        everyone: [
+            'Every bug and every suggestion on the Bugs & suggestions page now shows the date it was added.',
+        ],
+        leaders: [
+            'Bugs & suggestions: each item has a Copy button that copies everything about it (status, date, who reported it, who has it too, the full text) so it can be pasted in one go.',
+            'War payout for a sub-faction: next to your 5%, the mutual fund 10% and their leadership 5% there is now one box, Send to CreaLotte (15%), with the amount to send and a button that copies it without commas.',
+        ],
+    },
+    {
         version: '1.23', date: '2026-10-14',
         title: 'War hits: only successful attacks count',
         everyone: [
