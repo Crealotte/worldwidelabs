@@ -44,6 +44,12 @@ function budRender() {
         ${done.length ? `<div class="panel"><h3 style="margin-top:0;">Earlier plans</h3>${done.map(old).join('')}</div>` : ''}`;
     termsWire(loadBuddy);
     const run = async () => {
+        if (/^test:/.test(apiKey)) { // a test person has no Torn key: show what the real check looks like, marked as an example
+            const plan0 = act.reduce((s, b) => s + b.amount, 0);
+            $('bud-bank-out').innerHTML = `<span style="color:var(--muted);">This is a test person, so there is no real Torn bank to read. With a real key this part shows (example):</span><br><b style="color:var(--success,#35d99b);">✅ This key can see an active City Bank investment of ${m(plan0 || 500000000)}.</b><br><span style="color:var(--muted);">…and the other bank fields Torn sends, such as how long it still runs. To see the real thing, choose Me (my own key) in the orange bar and add yourself as a buddy on the Buddy banking page.</span>`;
+            $('bud-bank-cmp').innerHTML = '';
+            return;
+        }
         const cb = await finBankCheck($('bud-bank-out'));
         const cmp = $('bud-bank-cmp'), plan = act.reduce((s, b) => s + b.amount, 0);
         if (!cmp) return;
@@ -52,5 +58,5 @@ function budRender() {
         cmp.innerHTML = inBank >= plan * 0.95 ? `<b style="color:var(--success,#35d99b);">✅ Your bank holds ${m(inBank)}, in line with the ${m(plan)} you were given.</b>` : `<b style="color:#e0a030;">Your bank shows ${m(inBank)}, less than the ${m(plan)} you were given. If this is not right, tell the owner.</b>`;
     };
     $('bud-bank-btn').addEventListener('click', run);
-    if (!/^test:/.test(apiKey)) run();
+    run();
 }
