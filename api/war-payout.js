@@ -978,6 +978,42 @@ module.exports = async function handler(req, res) {
             return res.status(200).json(result);
         }
 
+        // "My usual week": a member saves the hours they ticked as a weekly pattern (weekday + hour) and, in a new plan, lays it down again with one click.
+        // Nothing is filled in by itself: the member decides, each week. Saving reads the plan, using reads one field of a small hash: no polling.
+        if (action === 'availability-preset') {
+            const { id: planId, data } = await resolvePlan(factionId, req.body.planId);
+            if (!data) return res.status(400).json({ error: 'No availability tracker is active for this faction right now — ask a leader to start one.' });
+            const [py, pm, pd] = String(data.startDate).split('-').map(Number), baseDow = new Date(Date.UTC(py, pm - 1, pd)).getUTCDay();
+            const hashKey = `wwl:av-preset:${factionId}`;
+            if (req.body.mode === 'save') {
+                const slots = (data.entries[playerId] || {}).slots || {}, pattern = {};
+                Object.keys(slots).map(k => k.split('-').map(Number)).filter(p => p.length === 2).sort((a, b) => a[0] - b[0] || a[1] - b[1]).forEach(([day, hour]) => {
+                    const k = `${(baseDow + day) % 7}-${hour}`;
+                    if (!(k in pattern)) pattern[k] = slots[`${day}-${hour}`] === 'maybe' ? 'maybe' : true; // the earliest day of a weekday wins
+                });
+                if (!Object.keys(pattern).length) return res.status(400).json({ error: 'Tick the hours you are usually available first, then save them as your usual week.' });
+                await redis(['HSET', hashKey, playerId, JSON.stringify({ slots: pattern, savedAt: Date.now() })]);
+                return res.status(200).json({ ok: true, hours: Object.keys(pattern).length });
+            }
+            const raw = await redis(['HGET', hashKey, playerId]);
+            if (!raw) return res.status(400).json({ error: 'You have not saved a usual week yet: tick your hours, then press Save.' });
+            const pattern = JSON.parse(raw).slots || {};
+            const entry = data.entries[playerId] || (data.entries[playerId] = { name: playerName, slots: {} });
+            entry.name = playerName; entry.slots = {};
+            for (let day = 0; day < (Number(data.days) || 0); day++) {
+                for (const [k, v] of Object.entries(pattern)) {
+                    const [dow, hour] = k.split('-').map(Number);
+                    if ((baseDow + day) % 7 !== dow) continue;
+                    const slotKey = `${day}-${hour}`;
+                    if (slotBeforeStart(data, slotKey)) continue;
+                    entry.slots[slotKey] = v === 'maybe' ? 'maybe' : true;
+                }
+            }
+            if (entry.watch) for (const wk of Object.keys(entry.watch)) if (!entry.slots[wk]) delete entry.watch[wk];
+            await redis(['SET', availabilityKey(factionId, planId), JSON.stringify(data)]);
+            return res.status(200).json({ ok: true, hours: Object.keys(entry.slots).length });
+        }
+
         if (action === 'availability-set') {
             const { day, hour, available } = req.body;
             if (day == null || hour == null) return res.status(400).json({ error: 'Missing day/hour' });
