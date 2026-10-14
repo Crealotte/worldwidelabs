@@ -286,7 +286,7 @@ function finClickFund(b) {
 function finRenderBuddy() {
     const t = (n, l, d) => `<div style="padding:6px 12px;border:1px solid var(--line);border-radius:8px;"><b>${n}</b><div style="font-size:12px;color:var(--muted);">${l} · ${d}</div></div>`;
     $('bb-body').innerHTML = `<div class="panel"><h3 style="margin-top:0;">How it works</h3>
-        <p style="font-size:13px;margin:0 0 8px;">You put up the cash. The buddy invests it in their City Bank and earns the interest. When the term ends they keep 30% of the profit and send you back the principal plus 70% of the profit. The profit is whatever Torn's bank gives them, so it depends on their bank merits (they need 10/10 for this).</p>
+        <p style="font-size:13px;margin:0 0 8px;">You put up the cash. The buddy invests it in their City Bank and earns the interest. When the term ends they keep 30% of the profit and send you 70% of the profit. They reinvest the money you gave for the next round (tick off "Principal stays invested" on a line when they send it all back). The profit is whatever Torn's bank gives them, so it depends on their bank merits (they need 10/10 for this).</p>
         <div style="display:flex;gap:10px;flex-wrap:wrap;">${t('🥉 Bronze', finShort(FIN_TIERS.bronze.amount), `${FIN_TIERS.bronze.days} days`)}${t('🥈 Silver', finShort(FIN_TIERS.silver.amount), `${FIN_TIERS.silver.days} days, after a promotion`)}${t('🥇 Gold', finShort(FIN_TIERS.gold.amount), `${FIN_TIERS.gold.days} days, after a promotion`)}</div>
         <div style="font-size:11px;color:var(--muted);margin-top:8px;">Everyone starts at Bronze. When you leave the expected profit at 0, the page estimates it from Torn's bank rate for 10/10 merits (5.14% for 1 month, 11.93% for 2 months); type the real profit in when you know it.</div></div>
         <details class="panel"><summary class="av-sum"><b>📜 ${esc(TERMS.buddy.title)}</b> <span style="font-size:12px;color:var(--muted);">(the terms of the program, as written)</span></summary><div style="margin-top:8px;">${termsHtml('buddy')}</div></details>
@@ -301,12 +301,12 @@ function finRenderBuddy() {
 }
 function finRefreshBuddy() {
     const today = finSrv.today, act = finData.buddies.filter(b => b.status === 'active'), done = finData.buddies.filter(b => b.status === 'returned');
-    const out = act.reduce((s, b) => s + b.amount, 0), back = act.reduce((s, b) => s + finBuddy(b).back, 0);
+    const out = act.reduce((s, b) => s + b.amount, 0), back = act.reduce((s, b) => s + finBuddy(b).cash, 0), share = act.reduce((s, b) => s + finBuddy(b).mine, 0);
     const late = act.filter(b => finBuddy(b).due < today).length;
-    const earned = done.reduce((s, b) => s + finBuddy(b).back - b.amount, 0);
+    const earned = done.reduce((s, b) => s + finBuddy(b).mine, 0);
     const box = (l, v, extra = '') => `<div><div style="color:var(--muted);font-size:11px;">${l}</div><b style="font-family:var(--mono);${extra}">${v}</b></div>`;
     $('bb-summary').innerHTML = `<div class="panel" style="display:flex;gap:26px;flex-wrap:wrap;font-size:13px;">
-        ${box('Out with buddies', finShort(out))}${box('Comes back (with your share)', finShort(back))}${box('Your share of the profit', finShort(back - out))}
+        ${box('Out with buddies', finShort(out))}${box('Comes to you this round', finShort(back))}${box('Your share of the profit', finShort(share))}
         ${box('Late', late, late ? 'color:var(--danger);' : '')}${box('Paid back so far', done.length)}${box('Earned so far (paid back)', finShort(earned))}</div>`;
     document.querySelectorAll('[data-bbact]').forEach(el => {
         const b = finData.buddies[+el.dataset.bbact]; if (!b) return;

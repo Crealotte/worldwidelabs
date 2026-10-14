@@ -11,7 +11,8 @@ const FIN_TIERS = { bronze: { amount: 500000000, days: 30 }, silver: { amount: 1
 const finBankRate = days => (days <= 45 ? 0.0514 : 0.1193);
 // the profit: a typed one wins; else, when the buddy's bank was read from Torn (its amount is what was given plus the interest), the real profit is that amount minus what was given; else an estimate from Torn's rate
 const finBankProfit = b => (b.status === 'active' && b.bank && b.bank.amount > b.amount ? b.bank.amount - b.amount : 0);
-const finBuddy = b => { const profit = b.profit > 0 ? b.profit : finBankProfit(b) || Math.round(b.amount * finBankRate(b.term)); return { profit, back: b.amount + Math.round(profit * b.share / 100), due: finAdd(b.given, b.term) }; };
+const finBuddy = b => { const profit = b.profit > 0 ? b.profit : finBankProfit(b) || Math.round(b.amount * finBankRate(b.term)); const mine = Math.round(profit * b.share / 100); // her share of the profit; the buddy reinvests the money given (unless the line says otherwise), so only her share comes to her at the end of a round
+    return { profit, mine, back: b.amount + mine, cash: b.reinvest !== false ? mine : b.amount + mine, due: finAdd(b.given, b.term) }; };
 let finData = null, finSrv = null, finAhead = 16, finShowPlan = '', finTimer = null, finSaving = false;
 let finPage = 'finances'; const FIN_PAGES = {}, finBound = {}; // the pages that share this file: Finances, Investment fund, Buddy banking (each registers itself with its render, status line and the lists it saves)
 
@@ -207,7 +208,7 @@ function finModel(plan, planStart) {
         if (b.status !== 'active' || !b.amount) continue;
         if (b.given > S.today) place(b.given, b.amount, 'out');
         const f = finBuddy(b), j = idx(f.due < S.today ? S.today : f.due);
-        if (j >= 0) { weeks[j].bb += f.back; weeks[j].bbParts.push(`${b.name}: ${finMoney(f.back)}`); }
+        if (j >= 0) { weeks[j].bb += f.cash; weeks[j].bbParts.push(`${b.name}: ${finMoney(f.cash)}`); }
     }
     // loans given to people: what is still to come back arrives on the repayment dates; a loan that is not given yet leaves on its date. An overdue payment counts in the current week.
     for (const L of D.loans) {
@@ -305,9 +306,9 @@ const FIN_LISTS = {
         { f: 'active', l: 'On', t: 'bool' }, { f: 'name', l: 'What', t: 'text', w: 160 }, { f: 'amount', l: 'Amount', t: 'money', w: 120 }, { f: 'freq', l: 'How often', t: 'sel', opts: [['weekly', 'Every week'], ['monthly', 'Every month'], ['once', 'Once']] }, { f: 'date', l: 'From / on', t: 'date' }] },
     outlays: { title: 'Planned spending (one time)', add: '+ Spending', fresh: () => ({ id: finId(), name: '', amount: 0, date: new Date().toISOString().slice(0, 10) }), cols: [
         { f: 'name', l: 'What', t: 'text', w: 180 }, { f: 'amount', l: 'Amount', t: 'money', w: 120 }, { f: 'date', l: 'On', t: 'date' }] },
-    buddies: { title: 'Buddy banking', add: '+ Buddy', fresh: () => ({ id: finId(), name: '', tornId: '', tier: 'bronze', amount: FIN_TIERS.bronze.amount, term: FIN_TIERS.bronze.days, given: new Date().toISOString().slice(0, 10), profit: 0, share: 70, status: 'active', note: '', returnedOn: '' }), cols: [
+    buddies: { title: 'Buddy banking', add: '+ Buddy', fresh: () => ({ id: finId(), name: '', tornId: '', tier: 'bronze', amount: FIN_TIERS.bronze.amount, term: FIN_TIERS.bronze.days, given: new Date().toISOString().slice(0, 10), profit: 0, share: 70, status: 'active', note: '', returnedOn: '', reinvest: true }), cols: [
         { f: 'name', l: 'Who', t: 'text', w: 120 }, { f: 'tornId', l: 'Torn ID', t: 'text', w: 80 }, { f: 'tier', l: 'Tier', t: 'sel', opts: [['bronze', 'Bronze'], ['silver', 'Silver'], ['gold', 'Gold'], ['', 'Other']] }, { f: 'amount', l: 'Given', t: 'money', w: 120 }, { f: 'term', l: 'Days', t: 'money', w: 60 },
-        { f: 'given', l: 'Given on', t: 'date' }, { f: 'profit', l: 'Expected profit (0 = estimate)', t: 'money', w: 120 }, { f: 'share', l: 'Your share %', t: 'money', w: 60 }, { f: 'status', l: 'Status', t: 'sel', opts: [['active', 'Invested'], ['returned', 'Paid back']] }, { f: 'note', l: 'Note', t: 'text', w: 110 }] },
+        { f: 'given', l: 'Given on', t: 'date' }, { f: 'profit', l: 'Expected profit (0 = estimate)', t: 'money', w: 120 }, { f: 'share', l: 'Your share %', t: 'money', w: 60 }, { f: 'status', l: 'Status', t: 'sel', opts: [['active', 'Invested'], ['returned', 'Paid back']] }, { f: 'reinvest', l: 'Principal stays invested', t: 'bool' }, { f: 'note', l: 'Note', t: 'text', w: 110 }] },
     loans: { title: 'Loans I gave', add: '+ Loan', fresh: () => ({ id: finId(), name: '', lent: 0, owed: 0, repaid: 0, freq: 'open', payment: 0, date: new Date().toISOString().slice(0, 10), from: new Date().toISOString().slice(0, 10), active: true, note: '' }), cols: [
         { f: 'active', l: 'On', t: 'bool' }, { f: 'name', l: 'Who', t: 'text', w: 120 }, { f: 'lent', l: 'Lent', t: 'money', w: 110 }, { f: 'owed', l: 'To get back (0 = same as lent)', t: 'money', w: 120 }, { f: 'repaid', l: 'Paid back so far', t: 'money', w: 110 },
         { f: 'freq', l: 'Pays back', t: 'sel', opts: [['open', 'No fixed plan'], ['weekly', 'Every week'], ['monthly', 'Every month'], ['once', 'All at once']] }, { f: 'payment', l: 'Per payment', t: 'money', w: 100 }, { f: 'from', l: 'First / due on', t: 'date' }, { f: 'date', l: 'Lent on', t: 'date' }, { f: 'note', l: 'Note', t: 'text', w: 120 }] },
@@ -410,14 +411,14 @@ function finRefreshMain() {
     const noCo = finSrv.companies.filter(c => !c.weeks.some(x => x.send != null)).map(c => c.name);
     const inAvg = avg('co') + avg('rto') + avg('inc') + avg('loan');
     const loanOut = finData.loans.filter(l => l.active).reduce((s, l) => s + Math.max(0, (l.owed > 0 ? l.owed : l.lent) - l.repaid), 0);
-    const bbOut = finData.buddies.filter(b => b.status === 'active'), bbBack = bbOut.reduce((s, b) => s + finBuddy(b).back, 0);
+    const bbOut = finData.buddies.filter(b => b.status === 'active'), bbBack = bbOut.reduce((s, b) => s + finBuddy(b).cash, 0);
     $('fin-summary').innerHTML = `<div class="panel" style="display:flex;gap:26px;flex-wrap:wrap;font-size:13px;">
         <div><div style="color:var(--muted);font-size:11px;">Available now</div><b style="font-family:var(--mono);">${finShort(m.funds)}</b></div>
         <div><div style="color:var(--muted);font-size:11px;">Coming in a week (average of the next 12 weeks)</div><b style="font-family:var(--mono);color:var(--success,#35d99b);">${finShort(inAvg)}</b>
             <div style="font-size:11px;color:var(--muted);">companies ${finShort(avg('co'))} · rent-to-own ${finShort(avg('rto'))} · other ${finShort(avg('inc'))} · loans ${finShort(avg('loan'))}</div><div style="font-size:11px;color:var(--muted);">Buddy banks paying back (${finShort(avg('bb'))} a week) is mostly your own cash returning, so it is not counted here.</div>${noCo.length ? `<div style="font-size:11px;color:#e0a030;">No weekly send known yet for ${esc(noCo.join(', '))}, so that part is counted as 0.</div>` : ''}</div>
         <div><div style="color:var(--muted);font-size:11px;">Paid to investors a week</div><b style="font-family:var(--mono);">${finShort(avg('inv'))}</b></div>
         <div><div style="color:var(--muted);font-size:11px;">Left over a week (before one-time spending)</div><b style="font-family:var(--mono);">${finShort(inAvg - avg('inv'))}</b></div>
-        <div><div style="color:var(--muted);font-size:11px;">In buddy banks</div><b style="font-family:var(--mono);">${finShort(bbOut.reduce((s, b) => s + b.amount, 0))}</b> <span style="color:var(--muted);font-size:11px;">(${bbOut.length}; back with profit ${finShort(bbBack)})</span></div>
+        <div><div style="color:var(--muted);font-size:11px;">In buddy banks</div><b style="font-family:var(--mono);">${finShort(bbOut.reduce((s, b) => s + b.amount, 0))}</b> <span style="color:var(--muted);font-size:11px;">(${bbOut.length}; to you ${finShort(bbBack)})</span></div>
         <div><div style="color:var(--muted);font-size:11px;">Lent out, still to come back</div><b style="font-family:var(--mono);">${finShort(loanOut)}</b></div>
         <div><div style="color:var(--muted);font-size:11px;">Invested by others</div><b style="font-family:var(--mono);">${finShort(cost.invested)}</b></div>
         <div><div style="color:var(--muted);font-size:11px;">They cost you a year</div><b style="color:${cost.pct !== null && cost.pct > 35.05 ? 'var(--danger)' : 'inherit'};">${cost.pct === null ? '—' : `${cost.pct.toFixed(1)}%`}</b> <span style="color:var(--muted);font-size:11px;">(max 35%)</span></div>
@@ -468,7 +469,7 @@ function finRefreshCells() {
     document.querySelectorAll('[data-bbinfo]').forEach(el => {
         const b = finData.buddies[+el.dataset.bbinfo]; if (!b) return;
         const f = finBuddy(b);
-        el.innerHTML = b.status === 'returned' ? `<span style="color:var(--muted);">paid back${b.returnedOn ? ` ${esc(finDate(b.returnedOn))}` : ''}</span>` : `${esc(finDate(f.due))}${f.due < finSrv.today ? ' <span style="color:var(--danger);">late</span>' : ''}<div style="font-family:var(--mono);color:var(--muted);">${finShort(f.back)} (profit ${finShort(f.profit)}${b.profit > 0 ? '' : finBankProfit(b) ? ', from the bank' : ', est.'})</div>${b.bank ? `<div style="font-size:11px;color:${b.bank.amount > 0 ? 'var(--success,#35d99b)' : '#e0a030'};" title="Read from Torn with the buddy's own key when they opened their page">bank ${esc(finDate(new Date(b.bank.at).toISOString().slice(0, 10)))}: ${b.bank.amount > 0 ? `${finShort(b.bank.amount)}${b.bank.endsAt ? `, ends ${esc(finDate(new Date(b.bank.endsAt).toISOString().slice(0, 10)))}` : ''}` : 'no investment'}</div>` : '<div style="font-size:11px;color:var(--muted);">bank not checked yet</div>'}`;
+        el.innerHTML = b.status === 'returned' ? `<span style="color:var(--muted);">paid back${b.returnedOn ? ` ${esc(finDate(b.returnedOn))}` : ''}</span>` : `${esc(finDate(f.due))}${f.due < finSrv.today ? ' <span style="color:var(--danger);">late</span>' : ''}<div style="font-family:var(--mono);color:var(--muted);">${finShort(f.cash)}${b.reinvest !== false ? ' to you (principal stays invested)' : ' back'} (profit ${finShort(f.profit)}${b.profit > 0 ? '' : finBankProfit(b) ? ', from the bank' : ', est.'})</div>${b.bank ? `<div style="font-size:11px;color:${b.bank.amount > 0 ? 'var(--success,#35d99b)' : '#e0a030'};" title="Read from Torn with the buddy's own key when they opened their page">bank ${esc(finDate(new Date(b.bank.at).toISOString().slice(0, 10)))}: ${b.bank.amount > 0 ? `${finShort(b.bank.amount)}${b.bank.endsAt ? `, ends ${esc(finDate(new Date(b.bank.endsAt).toISOString().slice(0, 10)))}` : ''}` : 'no investment'}</div>` : '<div style="font-size:11px;color:var(--muted);">bank not checked yet</div>'}`;
     });
     document.querySelectorAll('[data-loanleft]').forEach(el => {
         const l = finData.loans[+el.dataset.loanleft]; if (!l) return;

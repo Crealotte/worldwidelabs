@@ -3,7 +3,7 @@
 // To change a text, change it here and raise the version: everyone is then asked to accept the new version.
 'use strict';
 
-const TERMS_VERSION = { invest: '2026-10-14', property: '2026-10-09', buddy: '2026-10-09' };
+const TERMS_VERSION = { invest: '2026-10-14', property: '2026-10-09', buddy: '2026-10-14' };
 const TERMS = {
     invest: { title: 'How the Labs Investment Fund works', sections: [
         ['1️⃣ Apply & Get Approved', ['Click 📥 Join Waitlist and submit your Torn Name and ID. An admin will review and notify you.']],
@@ -27,7 +27,7 @@ const TERMS = {
         ['⚖️ General Rules', ['Labs and CreaLotte reserves the right to terminate a contract if a player is found to be acting maliciously.', 'Prices are subject to change based on market volatility and game updates, but existing contracts will have their "Full PI Price" locked in at the start of the 30-day cycle.', '2600 happy PI: 17 months', '3600 happy PI: 19 months', '4100 happy PI: 21 months']],
     ] },
     buddy: { title: 'Buddy Banking — Admin-funded Investments', sections: [
-        ['How it works', ['I (admin) put up the cash. You invest it in your City Bank and earn the interest. When the term ends, you keep 30% of the profit and send me back the principal + 70% of the profit.']],
+        ['How it works', ['I (admin) put up the cash. You invest it in your City Bank and earn the interest. When the term ends, you keep 30% of the profit and send me 70% of the profit. You reinvest the principal for the next round; if we agree to stop, you send the principal back too.']],
         ['Tiers', ['Everyone starts at Bronze so I can build trust. Successful Bronze cycles unlock Silver/Gold.', 'Bronze — $500,000,000 • 30 days', 'Silver — $1,000,000,000 • 30 days (promotion required)', 'Gold — $2,000,000,000 • 60 days (promotion required)']],
         ['Eligibility', ['1. Pair your Torn key with /pair (must include merits + money permissions).', '2. Bank Interest merit must be 10/10.', '3. You must NOT already have an active City Bank investment.', '4. You can only run one Buddy Banking plan at a time.']],
     ] },

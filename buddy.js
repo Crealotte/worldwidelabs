@@ -32,10 +32,10 @@ function budRender() {
             <div style="font-size:13px;line-height:1.7;margin-top:6px;">Due back: <b>${esc(finDate(f.due))}</b> <span style="color:${days < 0 ? 'var(--danger)' : days < 5 ? '#e0a030' : 'var(--muted)'};">(${days < 0 ? `${-days} days late` : days === 0 ? 'today' : `in ${days} days`})</span><br>
             Expected profit from your City Bank: <b>${m(f.profit)}</b>${b.profit > 0 ? '' : finBankProfit(b) ? ' <span style="color:var(--muted);font-size:12px;">(read from your bank: what it holds minus what you were given)</span>' : ' <span style="color:var(--muted);font-size:12px;">(an estimate from the Torn bank rate; your own bank gives the real number once this page has read it)</span>'}<br>
             You keep <b>${100 - b.share}%</b> of the profit: <b>${m(mine)}</b><br>
-            You send back <b>${m(f.back)}</b> <span style="color:var(--muted);font-size:12px;">(the ${m(b.amount)} you were given plus ${b.share}% of the profit)</span></div></div>`;
+            ${b.reinvest !== false ? `You send me <b>${m(f.mine)}</b> <span style="color:var(--muted);font-size:12px;">(${b.share}% of the profit). The ${m(b.amount)} you were given stays invested: put it in your next City Bank round.</span>` : `You send back <b>${m(f.back)}</b> <span style="color:var(--muted);font-size:12px;">(the ${m(b.amount)} you were given plus ${b.share}% of the profit)</span>`}</div></div>`;
     };
     const cards = () => (act.length ? `<h3 style="margin:14px 0 8px;">Your buddy plan now</h3>${act.map(card).join('')}` : `<div class="panel" style="color:var(--muted);">You have no active buddy banking plan at the moment.</div>`);
-    const old = b => { const f = finBuddy(b); return `<div style="font-size:13px;padding:4px 0;border-top:1px solid var(--line);color:var(--muted);"><b style="font-family:var(--mono);color:var(--text);">${m(b.amount)}</b> · ${esc(finDate(b.given))} → ${b.returnedOn ? `paid back ${esc(finDate(b.returnedOn))}` : 'paid back'} · you sent back ${m(f.back)}</div>`; };
+    const old = b => { const f = finBuddy(b); return `<div style="font-size:13px;padding:4px 0;border-top:1px solid var(--line);color:var(--muted);"><b style="font-family:var(--mono);color:var(--text);">${m(b.amount)}</b> · ${esc(finDate(b.given))} → ${b.returnedOn ? `paid back ${esc(finDate(b.returnedOn))}` : 'paid back'} · you sent ${m(f.cash)}</div>`; };
     $('bud-body').innerHTML = `${termsPanel('buddy', r.terms)}
         <div id="bud-cards">${cards()}</div>
         <div class="panel"><h3 style="margin-top:0;">🔎 Your City Bank, as Torn shows it</h3>
@@ -61,7 +61,7 @@ function budRender() {
         if (plan && inBank > plan) {
             const profit = inBank - plan, share = act[0].share, keep = Math.round(profit * (100 - share) / 100), back = plan + Math.round(profit * share / 100);
             lines.push(`<b style="color:var(--success,#35d99b);">✅ Your bank holds ${m(inBank)}: the ${m(plan)} you were given plus <b>${m(profit)}</b> profit.</b>`);
-            lines.push(`You keep ${100 - share}%: <b>${m(keep)}</b>. You send back <b>${m(back)}</b> (the ${m(plan)} plus ${share}% of the profit).`);
+            lines.push(act[0].reinvest !== false ? `You keep ${100 - share}%: <b>${m(keep)}</b>. You send me <b>${m(Math.round(profit * share / 100))}</b> (${share}% of the profit) and reinvest the ${m(plan)}.` : `You keep ${100 - share}%: <b>${m(keep)}</b>. You send back <b>${m(back)}</b> (the ${m(plan)} plus ${share}% of the profit).`);
         } else if (plan && inBank >= plan * 0.95) lines.push(`<b style="color:var(--success,#35d99b);">✅ Your bank holds ${m(inBank)}, in line with the ${m(plan)} you were given.</b> No interest shows yet.`);
         else lines.push(`<b style="color:#e0a030;">Your bank shows ${m(inBank)}, less than the ${m(plan)} you were given. If this is not right, tell the owner.</b>`);
         const due = act.map(b => finBuddy(b).due).sort()[0];
