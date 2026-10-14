@@ -364,7 +364,7 @@ function finPlansPanel() {
                 <td><button class="ghost small" data-delstep="${pi}" data-i="${si}" type="button">✕</button></td></tr>`).join('')}</tbody></table>
             <button class="ghost small" data-addstep="${pi}" type="button" style="margin-top:4px;">+ Step</button>
             <div class="fin-plan-res" data-res="${esc(p.id)}" style="margin-top:8px;font-size:13px;"></div></div>`).join('') || '<div style="color:var(--muted);font-size:13px;margin-bottom:8px;">No plans yet.</div>'}
-        <button class="ghost small" id="fin-addplan" type="button">+ Plan</button> <button class="ghost small" id="fin-addbuddyplan" type="button" title="500m now, 500m after 30 days, 1b after 60 days: the cash a new buddy needs over time">+ Buddy banking plan</button></div>`;
+        <button class="ghost small" id="fin-addplan" type="button">+ Plan</button> <select id="fin-buddystart" title="Somebody you know can skip the lower tiers"><option value="bronze">starts at Bronze (500m)</option><option value="silver">starts at Silver (1b)</option><option value="gold">starts at Gold (2b)</option></select> <button class="ghost small" id="fin-addbuddyplan" type="button" title="500m now, 500m after 30 days, 1b after 60 days: the cash a new buddy needs over time">+ Buddy banking plan</button></div>`;
 }
 function finCapitalsPanel() {
     const S = finSrv, D = finData;
@@ -594,7 +594,10 @@ function finWire(bodyId) {
         else if (b.dataset.del) { finData[b.dataset.del].splice(+b.dataset.i, 1); finRenderAll(); finTouch(); }
         else if (b.id === 'fin-addplan') { finData.plans.push({ id: finId(), name: 'New plan', steps: [{ label: '', amount: 0, afterWeeks: 0 }] }); finRenderAll(); finTouch(); }
         else if (b.id === 'fin-addbuddyplan') { // a new buddy: the money goes out in three rounds, 500m now, 500m after 30 days (about 4 weeks) and 1b after 60 days (about 9 weeks); the principal then stays invested, so each round only adds the new money
-            finData.plans.push({ id: finId(), name: 'New buddy (Bronze, Silver, Gold)', steps: [{ label: 'Round 1: Bronze 500m', amount: 500000000, afterWeeks: 0 }, { label: 'Round 2: Silver, 500m more (1b in total)', amount: 500000000, afterWeeks: 4 }, { label: 'Round 3: Gold, 1b more (2b in total)', amount: 1000000000, afterWeeks: 9 }] });
+            const order = ['bronze', 'silver', 'gold'], from = Math.max(0, order.indexOf($('fin-buddystart') ? $('fin-buddystart').value : 'bronze')); // somebody you know can start higher: the tiers before it are skipped
+            let prev = 0, days = 0; const steps = [];
+            order.slice(from).forEach((k, i) => { const t = FIN_TIERS[k], name = k.charAt(0).toUpperCase() + k.slice(1); steps.push({ label: `${i ? `Round ${i + 1}: ` : 'Start: '}${name}${prev ? `, ${finShort(t.amount - prev)} more (${finShort(t.amount)} in total)` : ` ${finShort(t.amount)}`}`, amount: t.amount - prev, afterWeeks: Math.round(days / 7) }); prev = t.amount; days += t.days; });
+            finData.plans.push({ id: finId(), name: `New buddy (starts at ${order[from].charAt(0).toUpperCase() + order[from].slice(1)})`, steps });
             finRenderAll(); finTouch();
         }
         else if (b.dataset.delplan !== undefined) { const p = finData.plans.splice(+b.dataset.delplan, 1)[0]; if (p && finShowPlan === p.id) finShowPlan = ''; finRenderAll(); finTouch(); }
