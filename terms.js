@@ -3,7 +3,7 @@
 // To change a text, change it here and raise the version: everyone is then asked to accept the new version.
 'use strict';
 
-const TERMS_VERSION = { invest: '2026-10-13', property: '2026-10-09', buddy: '2026-10-09' };
+const TERMS_VERSION = { invest: '2026-10-14', property: '2026-10-09', buddy: '2026-10-09' };
 const TERMS = {
     invest: { title: 'How the Labs Investment Fund works', sections: [
         ['1️⃣ Apply & Get Approved', ['Click 📥 Join Waitlist and submit your Torn Name and ID. An admin will review and notify you.']],
@@ -12,7 +12,7 @@ const TERMS = {
         ['🧮 Your total sets your tier', ['All your deposits count together. The total you have in decides your tier, and each tier starts at its full amount: 499m is Bronze, 500m is Silver. The tier decides what you are paid per 1m invested, so a new deposit can lift your whole payout.', 'Example: 300m is Bronze, so you are paid 1,442,000 / 250m x 300m = 1,730,400 a week.', 'You are paid one way, weekly (every Sunday) or monthly (the last Sunday of the month), on all your deposits.']],
         ['🔒 Every deposit has its own lock', ['Each deposit keeps its own start and end date. If you invest in January and again in May, you can still take out the January deposit when its own term ends.', 'If you prefer one date for everything, you can ask to merge your deposits: they all then end on the latest date.']],
         ['4️⃣ Pause Mode', ['Going on holiday? Enable pause mode. Payouts are held and released in full when you return. No compounding while held.']],
-        ['5️⃣ Withdrawal & automatic renewal', ['Your contract runs for 180 days. To withdraw when it ends, give notice at least 30 days before the end date.', 'Without notice, your contract renews automatically for another 180 days.']],
+        ['5️⃣ Withdrawal & automatic renewal', ['Your contract runs for 180 days. To withdraw when it ends, give notice at least 30 days before the end date.', 'Without notice, your contract renews automatically for another 180 days.', 'If you want to renew yourself, tell us at least 30 days before the end date and you can choose 90 or 180 days. After that, it renews for 180 days.']],
         ['⚠️ Forfeiture Rules', ['• Federal Jail — balance wiped, contract terminated', '• 30 days inactive without activating Pause Mode — account forfeited', '• Abuse/foul play — admin discretion']],
         ['📜 Terms & Conditions Summary', ['Duration: 180 days per deposit. Withdrawal requires notice at least 30 days before the end date, otherwise the deposit renews for another 180 days.', 'Risk: In-game market and management risks apply. No real-life compensation for losses.', 'Security: Multi-company structure spreads risk. Backup reserves protect payouts.', 'Fair Play: Bad-faith actors are removed permanently from the fund and director pool.', 'Transparency: All operations tracked via Discord and Torn mail.']],
         ['💎 Investor Increment Flexibility', ['Existing investors can gradually increase instead of jumping to the next tier.', '• 100m → 250m: steps of 25m', '• 250m → 500m: steps of 50m', '• 500m → 1b: steps of 100m', '• 1b and up: steps of 250m', 'ROI only changes when the next main tier is reached.']],

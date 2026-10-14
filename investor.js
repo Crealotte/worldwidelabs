@@ -69,7 +69,8 @@ function invHtml(r) {
             <div style="margin:6px 0;border-left:2px solid var(--line);padding-left:10px;">${g.lines.map(l => `<div style="font-size:12px;color:var(--muted);"><span style="font-family:var(--mono);color:var(--text);">${finMoney(l.amount)}</span> · deposited ${esc(finDate(l.start))}</div>`).join('')}</div>
             ${reqs.map(reqLine).join('')}
             <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:6px;">
-                <select class="inv-days" data-row="${esc(first)}"><option value="180">180 days</option><option value="90">90 days</option></select><button class="ghost small inv-req" data-type="renew" data-row="${esc(first)}" type="button">Ask to renew ${finMoney(total)}</button>
+                ${!g.leaving && left !== null && left >= r.notice ? `<select class="inv-days" data-row="${esc(first)}"><option value="180">180 days</option><option value="90">90 days</option></select><button class="ghost small inv-req" data-type="renew" data-row="${esc(first)}" type="button">Ask to renew ${finMoney(total)}</button>` : ''}
+                ${!g.leaving && left !== null && left < r.notice ? `<span style="font-size:12px;color:var(--muted);">The last ${r.notice} days before the end date have started: this deposit renews automatically for 180 days.</span>` : ''}
                 ${g.leaving ? '' : `<button class="ghost small inv-req" data-type="withdraw" data-row="${esc(first)}" type="button">Ask to withdraw ${finMoney(total)} at the end of the term</button>`}</div></div>`;
     };
     const old = i => { const list = finPaidList(i); return `<details style="border-top:1px solid var(--line);padding:6px 0;"><summary class="av-sum"><b style="font-family:var(--mono);">${finMoney(i.amount)}</b> <span style="color:var(--muted);font-size:13px;">· ${esc(finDate(i.start))} → ${i.returnedOn ? esc(finDate(i.returnedOn)) : 'ended'} · paid out ${finMoney(finPaidTotal(i))}</span></summary>
