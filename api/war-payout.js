@@ -2314,6 +2314,7 @@ Cancel: ${cancelUrl}`, [], embeds, undefined, true);
             for (const [id, entry] of Object.entries(warHitsResult.perAttacker)) {
                 if (!membersByAttacker[id]) membersByAttacker[id] = { warHits: 0, overflowHits: 0, perChain: {} };
                 membersByAttacker[id].warHits += entry.count;
+                membersByAttacker[id].assists = entry.assists || 0; membersByAttacker[id].failedHits = entry.failed || 0; // counted apart: wins are the hits, an assist can be paid for by choice
                 if (entry.name) nameFromAttacks[id] = entry.name;
             }
             // Did the direct war-hit fetch actually find anything? If it scanned real attacks but
@@ -2370,7 +2371,7 @@ Cancel: ${cancelUrl}`, [], embeds, undefined, true);
 
             const members = Object.entries(membersByAttacker).map(([id, counts]) => ({
                 id, name: nameFromAttacks[id] || nameById[id] || `Ex-member #${id}`,
-                warHits: counts.warHits, overflowHits: counts.overflowHits,
+                warHits: counts.warHits, assists: counts.assists || 0, failedHits: counts.failedHits || 0, overflowHits: counts.overflowHits,
                 totalHits: counts.warHits + counts.overflowHits,
                 perChain: counts.perChain,
             })).sort((a, b) => b.totalHits - a.totalHits);
@@ -2378,7 +2379,7 @@ Cancel: ${cancelUrl}`, [], embeds, undefined, true);
             // Lets the UI flag a suspicious result, or tell the leader the fallback kicked in
             // (meaning: only chain-covered hits are counted this time, same limits as before).
             const warHitsMeta = {
-                scanned: warHitsResult.scanned, matched: warHitsResult.ownAttacks, notCounted: warHitsResult.failed || 0,
+                scanned: warHitsResult.scanned, matched: warHitsResult.ownAttacks, notCounted: warHitsResult.failed || 0, assists: warHitsResult.assists || 0,
                 rateLimited: warHitsResult.rateLimited, pagesFetched: warHitsResult.pagesFetched,
                 usedFallback, brokenWithNoChains: warHitsLookedBroken && !chains.length,
             };

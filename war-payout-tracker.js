@@ -10,6 +10,7 @@ let wpShowAll = false, wpListOpen = false;
 let wpEvents = []; // chain events from the register: { id, name, start, end }
 let wpLinks = {}; // register: war or event id -> [chain ids]
 let wpCalcResult = null; // { members: [...] }
+let wpCountAssists = false; // wins are the hits; an assist is counted apart, and a faction that wants to pay for assists ticks this box
 let wpPenalties = {}; // memberId -> amount
 let wpPaidIds = new Set(); // memberId -> marked as paid this session
 let receiptSort = { key: null, dir: 'desc' }; // the shareable receipt viewer's own member-breakdown table
@@ -184,6 +185,7 @@ $('wp-calculate').addEventListener('click', async () => {
         });
         if (result.error) throw new Error(result.error);
         wpCalcResult = result;
+        wpApplyAssists();
         wpPenalties = {};
         wpPaidIds = new Set();
         if (result.chains) {
@@ -204,7 +206,7 @@ $('wp-calculate').addEventListener('click', async () => {
             st.className = 'status ok';
             st.textContent = `${result.members.length} hitter(s) found`
                 + (meta?.rateLimited ? ' (Torn rate-limited the war attack fetch partway through — counts may be incomplete, try again in a minute).' : '.')
-                + (meta?.notCounted ? ` ${meta.notCounted} unsuccessful war attack(s) (lost, stalemate, escaped) were not counted as hits.` : '');
+                + (meta?.assists ? ` ${meta.assists} assist(s) are counted apart (tick the box to pay for them).` : '') + (meta?.notCounted ? ` ${meta.notCounted} failed attack(s) (lost, stalemate, escaped) were not counted.` : '');
         }
         $('wp-results-panel').style.display = 'block';
         $('wp-config-panel').style.display = 'block';
@@ -217,9 +219,13 @@ $('wp-calculate').addEventListener('click', async () => {
     }
 });
 
+// the hits to pay for: the wins, plus the assists when the box is ticked (the count of wins is kept in baseWarHits)
+function wpApplyAssists() {
+    (wpCalcResult?.members || []).forEach(m => { if (m.baseWarHits === undefined) m.baseWarHits = m.warHits; m.warHits = m.baseWarHits + (wpCountAssists ? (m.assists || 0) : 0); m.totalHits = m.warHits + m.overflowHits; });
+}
 let wpResultsSort = { key: null, dir: 'desc' };
 function wpResultsAccessors() {
-    const acc = { name: m => m.name.toLowerCase(), warHits: m => m.warHits, overflowHits: m => m.overflowHits, totalHits: m => m.totalHits };
+    const acc = { name: m => m.name.toLowerCase(), warHits: m => m.warHits, assists: m => m.assists || 0, failedHits: m => m.failedHits || 0, overflowHits: m => m.overflowHits, totalHits: m => m.totalHits };
     wpChains.forEach(c => { acc[`chain_${c.id}`] = m => m.perChain?.[c.id] ?? -1; });
     return acc;
 }
@@ -235,24 +241,29 @@ function renderWpResultsPreview() {
         <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:12px;color:var(--muted);margin-bottom:8px;">
             <input type="checkbox" id="wp-hide-zero" style="width:auto;" ${hideZero ? 'checked' : ''}> Hide members with 0 hits
         </label>
+        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:12px;color:var(--muted);margin-bottom:8px;" title="By default only successful attacks (wins) count as hits. Assists are counted apart so a faction that wants to pay for them can.">
+            <input type="checkbox" id="wp-count-assists" style="width:auto;" ${wpCountAssists ? 'checked' : ''}> Also count assists as hits (wins only by default)
+        </label>
         <table style="width:100%;font-size:13px;border-collapse:collapse;">
             <thead><tr style="color:var(--muted);text-align:left;">
                 <th data-sort="name" style="padding:4px 8px;">Member</th>
                 ${multi ? wpChains.map(c => `<th data-sort="chain_${esc(c.id)}" style="padding:4px 8px;">#${esc(c.id)}</th>`).join('') : ''}
                 <th data-sort="warHits" style="padding:4px 8px;">War hits</th>
-                <th data-sort="overflowHits" style="padding:4px 8px;">Chain-only hits</th><th data-sort="totalHits" style="padding:4px 8px;">Total</th>
+                <th data-sort="assists" style="padding:4px 8px;color:var(--muted);" title="Assists, counted apart">Assists</th><th data-sort="failedHits" style="padding:4px 8px;color:var(--muted);" title="Lost, stalemate, escaped: never counted">Failed</th><th data-sort="overflowHits" style="padding:4px 8px;">Chain-only hits</th><th data-sort="totalHits" style="padding:4px 8px;">Total</th>
             </tr></thead>
             <tbody>${sorted.map(m => `
                 <tr style="border-top:1px solid var(--line);${m.totalHits === 0 ? 'opacity:.45;' : ''}">
                     <td style="padding:4px 8px;">${esc(m.name)}</td>
                     ${multi ? wpChains.map(c => `<td style="padding:4px 8px;font-family:var(--mono);color:var(--muted);">${m.perChain?.[c.id] ?? '—'}</td>`).join('') : ''}
                     <td style="padding:4px 8px;font-family:var(--mono);">${m.warHits}</td>
+                    <td style="padding:4px 8px;font-family:var(--mono);color:var(--muted);">${m.assists || 0}</td><td style="padding:4px 8px;font-family:var(--mono);color:var(--muted);">${m.failedHits || 0}</td>
                     <td style="padding:4px 8px;font-family:var(--mono);color:${m.overflowHits ? 'var(--reagent)' : 'var(--muted)'};">${m.overflowHits}</td>
                     <td style="padding:4px 8px;font-family:var(--mono);font-weight:700;">${m.totalHits}</td>
                 </tr>`).join('')}
             </tbody>
         </table>`;
     $('wp-hide-zero').addEventListener('change', renderWpResultsPreview);
+    $('wp-count-assists').addEventListener('change', e => { wpCountAssists = e.target.checked; wpApplyAssists(); renderWpResultsPreview(); renderWpPayout(); });
     wireSort(el, wpResultsSort, visible, accessors, renderWpResultsPreview);
 }
 
