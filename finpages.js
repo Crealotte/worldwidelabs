@@ -83,10 +83,15 @@ function finPlanCell(k) {
 function finFundDetail(ix) {
     const cols = FIN_LISTS.investors.cols.filter(c => !['fundId', 'name', 'tornId'].includes(c.f)), r0 = finData.investors[ix[0]], ids = ix.join(',');
     const hdr = (f, v, w, ph, bold) => `<input type="text" data-pers="${ids}" data-f="${f}" data-t="text" value="${esc(v || '')}" placeholder="${ph}" style="width:${w}px;${bold ? 'font-weight:700;' : ''}">`;
-    const th = t => `<th style="text-align:left;padding:2px 6px;font-size:10.5px;color:var(--muted);font-weight:600;white-space:nowrap;">${t}</th>`;
+    // a deposit is two short rows of labelled fields that wrap inside the width of the table (no sideways scrolling): the main ones first, the rest under them
+    const MAIN = ['active', 'amount', 'payout', 'mode', 'start', 'termEnd', 'leaving'];
+    const fld = (label, html) => `<div style="display:flex;flex-direction:column;gap:1px;"><span style="font-size:10.5px;color:var(--muted);font-weight:600;white-space:nowrap;">${label}</span><div style="white-space:nowrap;">${html}</div></div>`;
+    const cell = (k, c) => `${finCell('investors', k, c, finData.investors[k])}${c.f === 'mode' ? finPlanCell(k) : ''}`;
+    const deposit = (k, n) => `<div style="border-top:1px solid var(--line);padding:6px 0 8px;">
+        <div style="display:flex;gap:6px 14px;flex-wrap:wrap;align-items:flex-end;"><span style="color:var(--muted);font-size:11px;align-self:center;white-space:nowrap;">line ${n + 1}</span>${MAIN.map(f => cols.find(c => c.f === f)).filter(Boolean).map(c => fld(c.l, cell(k, c))).join('')}</div>
+        <div style="display:flex;gap:6px 14px;flex-wrap:wrap;align-items:flex-end;margin-top:4px;">${cols.filter(c => !MAIN.includes(c.f)).map(c => fld(c.l, cell(k, c))).join('')}${fld('Yearly', `<span data-pct="${k}"></span>`)}${fld('Payout due', `<span style="font-size:12px;" data-invdue="${k}"></span>`)}${fld('Term', `<span style="font-size:12px;" data-invterm="${k}"></span>`)}<button class="ghost small" data-del="investors" data-i="${k}" type="button" title="Remove this line" style="align-self:flex-end;">✕</button></div></div>`;
     return `<div style="padding:8px 12px 10px;background:rgba(127,127,127,.06);"><div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:6px;"><span style="color:var(--muted);font-size:12px;">ID</span>${hdr('fundId', r0.fundId, 46, '#')}${hdr('name', finData.investors[ix[ix.length - 1]].name, 170, 'Name', true)}${hdr('tornId', r0.tornId, 90, 'Torn ID')}<button class="ghost small" data-addline="${ix[0]}" type="button">+ Investment</button></div>
-        <div style="overflow-x:auto;"><table style="border-collapse:collapse;font-size:12.5px;"><thead><tr><th></th>${cols.map(c => th(c.l)).join('')}${th('Yearly')}${th('Payout due')}${th('Term')}<th></th></tr></thead>
-        <tbody>${ix.map((k, n) => `<tr style="border-top:1px solid var(--line);"><td style="padding:2px 6px;color:var(--muted);font-size:11px;white-space:nowrap;">line ${n + 1}</td>${cols.map(c => `<td style="padding:2px 5px;">${finCell('investors', k, c, finData.investors[k])}${c.f === 'mode' ? finPlanCell(k) : ''}</td>`).join('')}<td style="padding:2px 6px;white-space:nowrap;" data-pct="${k}"></td><td style="padding:2px 6px;font-size:12px;" data-invdue="${k}"></td><td style="padding:2px 6px;font-size:12px;white-space:nowrap;" data-invterm="${k}"></td><td><button class="ghost small" data-del="investors" data-i="${k}" type="button" title="Remove this line">✕</button></td></tr>`).join('')}</tbody></table></div></div>`;
+        ${ix.map(deposit).join('')}</div>`;
 }
 function finRenderFundTable() {
     const box = $('fund-tablebox'); if (!box) return;
