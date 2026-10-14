@@ -427,6 +427,8 @@ FIN_PAGES.fund = { status: 'fund-status', render: finRenderFund, refresh: finRef
 FIN_PAGES.buddy = { status: 'bb-status', render: finRenderBuddy, refresh: finRefreshBuddy, click: finClickBuddy, parts: ['buddies'] };
 
 // The City Bank check on the Buddy banking page: asks Torn straight from the browser (the key never goes through the server for this) what the key can see of the City Bank, and shows it as it comes back.
+// Torn gives the time left in seconds: days and hours, and the day it ends
+const finLeftText = s => { const d = Math.floor(s / 86400), h = Math.floor(s % 86400 / 3600); return `${d} day${d === 1 ? '' : 's'} ${h} hour${h === 1 ? '' : 's'} (ends about ${finDate(new Date(Date.now() + s * 1000).toISOString().slice(0, 10))})`; };
 async function finBankCheck(outEl) { // outEl: where to write (the buddy page uses it too); the Buddy banking page's own button passes nothing
     const out = outEl && outEl.nodeType === 1 ? outEl : $('bb-check-out'), money = n => `$${Math.round(Number(n) || 0).toLocaleString('en-US')}`;
     if (/^test:/.test(apiKey)) { out.textContent = 'You are using a test person: choose Me (your own key) in the orange bar first.'; return; }
@@ -439,7 +441,7 @@ async function finBankCheck(outEl) { // outEl: where to write (the buddy page us
         const keyLine = k && !k.error ? `Key access level: <b>${esc(String(k.access_level ?? '?'))}</b>${k.access_type ? ` (${esc(String(k.access_type))})` : ''}.` : 'Torn did not say what access level this key has.';
         if (m.error) { out.innerHTML = `${keyLine}<br><span style="color:var(--danger);">Torn refused the money check: ${esc(m.error.error || `error ${m.error.code}`)}.</span> A key that can read money is needed for this.`; return; }
         const cb = m.city_bank || (m.money && m.money.city_bank) || null, rows = [];
-        if (cb && typeof cb === 'object') Object.keys(cb).forEach(f => { const v = cb[f]; rows.push(`<tr><td style="padding:1px 14px 1px 0;color:var(--muted);">${esc(f)}</td><td style="font-family:var(--mono);">${/amount|profit|interest/i.test(f) && Number(v) > 100 ? money(v) : esc(String(v))}</td></tr>`); });
+        if (cb && typeof cb === 'object') Object.keys(cb).forEach(f => { const v = cb[f]; rows.push(`<tr><td style="padding:1px 14px 1px 0;color:var(--muted);">${esc(f)}</td><td style="font-family:var(--mono);">${f === 'time_left' && Number(v) > 0 ? esc(finLeftText(Number(v))) : /amount|profit|interest/i.test(f) && Number(v) > 100 ? money(v) : esc(String(v))}</td></tr>`); });
         const has = cb && Number(cb.amount) > 0;
         out.innerHTML = `${keyLine}<br>${has ? `<b style="color:var(--success,#35d99b);">✅ This key can see an active City Bank investment of ${money(cb.amount)}.</b>` : '<b>Torn shows no active City Bank investment for this key.</b>'}
             ${rows.length ? `<table style="border-collapse:collapse;margin-top:4px;">${rows.join('')}</table>` : ''}

@@ -9,7 +9,9 @@ const FIN_PAST = 8, FIN_HORIZON = 52;
 // The profit estimate is the Torn bank's rate for 10/10 merits (no TCI) on that term: 5.14% for 1 month, 11.93% for 2 months (Torn's bank page); a real profit can be typed per buddy.
 const FIN_TIERS = { bronze: { amount: 500000000, days: 30 }, silver: { amount: 1000000000, days: 30 }, gold: { amount: 2000000000, days: 60 } };
 const finBankRate = days => (days <= 45 ? 0.0514 : 0.1193);
-const finBuddy = b => { const profit = b.profit > 0 ? b.profit : Math.round(b.amount * finBankRate(b.term)); return { profit, back: b.amount + Math.round(profit * b.share / 100), due: finAdd(b.given, b.term) }; };
+// the profit: a typed one wins; else, when the buddy's bank was read from Torn (its amount is what was given plus the interest), the real profit is that amount minus what was given; else an estimate from Torn's rate
+const finBankProfit = b => (b.status === 'active' && b.bank && b.bank.amount > b.amount ? b.bank.amount - b.amount : 0);
+const finBuddy = b => { const profit = b.profit > 0 ? b.profit : finBankProfit(b) || Math.round(b.amount * finBankRate(b.term)); return { profit, back: b.amount + Math.round(profit * b.share / 100), due: finAdd(b.given, b.term) }; };
 let finData = null, finSrv = null, finAhead = 16, finShowPlan = '', finTimer = null, finSaving = false;
 let finPage = 'finances'; const FIN_PAGES = {}, finBound = {}; // the pages that share this file: Finances, Investment fund, Buddy banking (each registers itself with its render, status line and the lists it saves)
 
@@ -466,7 +468,7 @@ function finRefreshCells() {
     document.querySelectorAll('[data-bbinfo]').forEach(el => {
         const b = finData.buddies[+el.dataset.bbinfo]; if (!b) return;
         const f = finBuddy(b);
-        el.innerHTML = b.status === 'returned' ? `<span style="color:var(--muted);">paid back${b.returnedOn ? ` ${esc(finDate(b.returnedOn))}` : ''}</span>` : `${esc(finDate(f.due))}${f.due < finSrv.today ? ' <span style="color:var(--danger);">late</span>' : ''}<div style="font-family:var(--mono);color:var(--muted);">${finShort(f.back)} (profit ${finShort(f.profit)}${b.profit > 0 ? '' : ', est.'})</div>`;
+        el.innerHTML = b.status === 'returned' ? `<span style="color:var(--muted);">paid back${b.returnedOn ? ` ${esc(finDate(b.returnedOn))}` : ''}</span>` : `${esc(finDate(f.due))}${f.due < finSrv.today ? ' <span style="color:var(--danger);">late</span>' : ''}<div style="font-family:var(--mono);color:var(--muted);">${finShort(f.back)} (profit ${finShort(f.profit)}${b.profit > 0 ? '' : finBankProfit(b) ? ', from the bank' : ', est.'})</div>${b.bank ? `<div style="font-size:11px;color:${b.bank.amount > 0 ? 'var(--success,#35d99b)' : '#e0a030'};" title="Read from Torn with the buddy's own key when they opened their page">bank ${esc(finDate(new Date(b.bank.at).toISOString().slice(0, 10)))}: ${b.bank.amount > 0 ? `${finShort(b.bank.amount)}${b.bank.endsAt ? `, ends ${esc(finDate(new Date(b.bank.endsAt).toISOString().slice(0, 10)))}` : ''}` : 'no investment'}</div>` : '<div style="font-size:11px;color:var(--muted);">bank not checked yet</div>'}`;
     });
     document.querySelectorAll('[data-loanleft]').forEach(el => {
         const l = finData.loans[+el.dataset.loanleft]; if (!l) return;
