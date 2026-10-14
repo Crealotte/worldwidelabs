@@ -360,6 +360,7 @@ function wpCompute() {
         theirLeadership: netPool * 0.05,
         you: netPool * 0.05,
         mutualFund: netPool * 0.10,
+        toCreaLotte: netPool * 0.15, // your 5% and the mutual fund 10% together: the one amount a sub-faction sends
     } : null;
 
     return { cfg, netPool, retained, payoutPool, rows, subSplit, totalWarHits, totalOverflowHits, totalAllHits, warRate, overflowRate, poolExceeded };
@@ -376,6 +377,7 @@ function renderWpPayout() {
             <div><div style="color:var(--muted);font-size:11px;">Their leadership (5%)</div>$${Math.round(computed.subSplit.theirLeadership).toLocaleString()}</div>
             <div><div style="color:var(--muted);font-size:11px;">You (5%)</div>$${Math.round(computed.subSplit.you).toLocaleString()}</div>
             <div><div style="color:var(--muted);font-size:11px;">Mutual fund (10%)</div>$${Math.round(computed.subSplit.mutualFund).toLocaleString()}</div>
+            <div style="border:1px solid var(--reagent);border-radius:8px;padding:4px 10px;"><div style="color:var(--muted);font-size:11px;">Send to CreaLotte (15%)</div><b style="font-family:var(--mono);">$${Math.round(computed.subSplit.toCreaLotte).toLocaleString()}</b> <button class="ghost small" type="button" style="padding:0 6px;" title="Copy the amount without commas" onclick="navigator.clipboard.writeText('${Math.round(computed.subSplit.toCreaLotte)}').then(() => toast('Copied'))">📋</button></div>
             <div style="font-size:11px;color:var(--muted);align-self:center;">Sub-faction sends you 15% total (leadership share stays local)</div>
         </div>` : '';
 

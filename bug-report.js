@@ -106,6 +106,7 @@ function kbRow(b, leader) {
             <b style="font-size:14px;">${esc(b.title)}</b>
             ${b.status !== 'fixed' ? `<button class="ghost small kb-metoo" data-id="${esc(b.id)}" style="margin-left:auto;${b.mine ? 'border-color:var(--reagent);color:var(--reagent);' : ''}">${b.mine ? '✓ You have this too' : 'I have this too'} · ${b.count}</button>` : ''}
         </div>
+        <div style="font-size:12px;color:var(--muted);margin-top:2px;display:flex;gap:8px;align-items:center;">Reported ${esc(bsDate(b.createdAt))}${leader ? `<button class="ghost small bs-copy-one" data-kind="bug" data-id="${esc(b.id)}" title="Copy everything about this report" type="button" style="padding:0 6px;">📋 Copy</button>` : ''}</div>
         ${b.note ? `<div style="color:var(--muted);font-size:13px;margin-top:3px;">${esc(b.note)}</div>` : ''}
         ${b.detail ? (b.detail.length <= 300
             ? `<div style="white-space:pre-wrap;font-size:13px;margin-top:4px;">${esc(b.detail)}${b.by ? ` <span style="color:var(--muted);">— ${esc(b.by)}</span>` : ''}</div>`
@@ -186,6 +187,7 @@ function sgRow(s, leader) {
                 <button class="ghost small sg-vote" data-id="${esc(s.id)}" data-vote="-1" style="${s.mine === -1 ? 'border-color:var(--danger);color:var(--danger);' : ''}">👎 ${s.down}</button>
             </span>
         </div>
+        <div style="font-size:12px;color:var(--muted);margin-top:2px;display:flex;gap:8px;align-items:center;">Added ${esc(bsDate(s.createdAt))}${leader ? `<button class="ghost small bs-copy-one" data-kind="sug" data-id="${esc(s.id)}" title="Copy everything about this suggestion" type="button" style="padding:0 6px;">📋 Copy</button>` : ''}</div>
         ${leader ? `<div style="margin-top:4px;font-size:12px;color:var(--muted);">${s.by ? `Suggested by <b style="color:var(--text);">${esc(s.by)}</b>` : ''}${s.upBy && s.upBy.length ? ` · 👍 ${esc(s.upBy.join(', '))}` : ''}${s.downBy && s.downBy.length ? ` · 👎 ${esc(s.downBy.join(', '))}` : ''}</div>` : ''}
         ${leader ? `<div style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap;align-items:center;font-size:12px;color:var(--muted);">
             ${Object.keys(SG_STATUS).filter(k => k !== s.status).map(k => `<button class="ghost small sg-status" data-id="${esc(s.id)}" data-status="${k}">Mark ${SG_STATUS[k][0].toLowerCase()}</button>`).join('')}
@@ -219,12 +221,25 @@ $('sg-send').addEventListener('click', async () => {
 $('br-clear-video').addEventListener('click', brClearVideo);
 
 // ---- Leaders: copy every bug and suggestion (full text) as one block of text ----
+const bsFmtDate = ms => (ms ? new Date(ms).toISOString().slice(0, 10) : '?');
+const bsDate = ms => (ms ? new Date(ms).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '');
+// one bug / one suggestion as plain text: everything that is needed to post it (the screenshot itself can not be copied, it says whether there is one)
+const bsBugText = b => [`[${(KB_STATUS[b.status] || KB_STATUS.known)[0]}] ${b.title}`,
+    `  ${b.count} member${b.count === 1 ? '' : 's'} have this · reported ${bsFmtDate(b.createdAt)}${b.by ? ` by ${b.by}` : ''}${b.hasShot ? ' · has a screenshot (see it on the page)' : ''}${b.who && b.who.length ? ` · have this too: ${b.who.join(', ')}` : ''}`,
+    b.note ? `  Note: ${b.note}` : '', b.detail ? `  Full report: ${b.detail.replace(/\n/g, '\n    ')}` : ''].filter(Boolean).join('\n');
+const bsSugText = s => [`[${(SG_STATUS[s.status] || SG_STATUS.open)[0]}] 👍${s.up} 👎${s.down} — ${bsFmtDate(s.createdAt)}${s.by ? ` — by ${s.by}` : ''}`, `  ${s.text.replace(/\n/g, '\n  ')}`].join('\n');
+document.addEventListener('click', async e => {
+    const b = e.target.closest('.bs-copy-one');
+    if (!b) return;
+    const item = b.dataset.kind === 'bug' ? kbBugs.find(x => x.id === b.dataset.id) : sgList.find(x => x.id === b.dataset.id);
+    if (!item) return;
+    const text = `WWL ${b.dataset.kind === 'bug' ? 'bug report' : 'suggestion'}
+${b.dataset.kind === 'bug' ? bsBugText(item) : bsSugText(item)}
+`;
+    try { await navigator.clipboard.writeText(text); toast('Copied, paste it to Claude'); } catch (err) { toast('Could not copy, try again'); }
+});
 function bsExportText() {
-    const fmtDate = ms => (ms ? new Date(ms).toISOString().slice(0, 10) : '?');
-    const bugs = kbBugs.map(b => [`[${(KB_STATUS[b.status] || KB_STATUS.known)[0]}] ${b.title}`,
-        `  ${b.count} member${b.count === 1 ? '' : 's'} have this · reported ${fmtDate(b.createdAt)}${b.by ? ` by ${b.by}` : ''}${b.hasShot ? ' · has a screenshot' : ''}${b.who && b.who.length ? ` · have this too: ${b.who.join(', ')}` : ''}`,
-        b.note ? `  Note: ${b.note}` : '', b.detail ? `  Full report: ${b.detail.replace(/\n/g, '\n    ')}` : ''].filter(Boolean).join('\n'));
-    const sugs = sgList.map(s => [`[${(SG_STATUS[s.status] || SG_STATUS.open)[0]}] 👍${s.up} 👎${s.down} — ${fmtDate(s.createdAt)}${s.by ? ` — by ${s.by}` : ''}`, `  ${s.text.replace(/\n/g, '\n  ')}`].join('\n'));
+    const bugs = kbBugs.map(bsBugText), sugs = sgList.map(bsSugText);
     return `WWL bugs & suggestions — exported ${new Date().toISOString().slice(0, 16).replace('T', ' ')} UTC\n\n=== KNOWN BUGS (${bugs.length}) ===\n${bugs.join('\n\n') || '(none)'}\n\n=== SUGGESTIONS (${sugs.length}) ===\n${sugs.join('\n\n') || '(none)'}\n`;
 }
 $('bs-copy').addEventListener('click', async () => {
