@@ -45,7 +45,7 @@ const { factionAllowed, allowedList, resetCache: accessReset, LIST: ACCESS_LIST,
 const { companyHandle, isDirector, tornCompany: coTorn, normalize: coNormalize, getAll: coGetAll } = require('../lib/company');
 const { runCompanyReports } = require('../lib/companyReports');
 const { ltHandle, leaseTodos, tenHandle, isTenant } = require('../lib/labstracking');
-const { finHandle, invHandle, isInvestor, fundRequestTodos } = require('../lib/finances');
+const { finHandle, invHandle, isInvestor, isBuddy, budHandle, fundRequestTodos } = require('../lib/finances');
 const { joinHandle, joinTodos } = require('../lib/joinlabs');
 const { ohHandle } = require('../lib/onlineHours');
 const { labsIsOwner, labsHasOwners, labsHandle, labsRecordReceipt } = require('../lib/labsLedger');
@@ -785,7 +785,7 @@ module.exports = async function handler(req, res) {
         }
         // The login's access check and the company side (owner setup, directors) are answered BEFORE the faction lookup below: a company director does not
         // have to be in a faction at all, and a director only ever gets the co-* actions (see lib/company.js). Everyone else goes on to the faction checks.
-        if (action === 'access-check' || action.startsWith('co-') || action.startsWith('lt-') || action.startsWith('fin-') || action.startsWith('inv-') || action.startsWith('ten-') || action.startsWith('join-') || action === 'test-seed') {
+        if (action === 'access-check' || action.startsWith('co-') || action.startsWith('lt-') || action.startsWith('fin-') || action.startsWith('inv-') || action.startsWith('ten-') || action.startsWith('join-') || action.startsWith('bud-') || action === 'test-seed') {
             const who = await (async () => {
                 const r = await tornFetch(`https://api.torn.com/user/?selections=profile&key=${encodeURIComponent(key)}`);
                 const p = await r.json();
@@ -800,8 +800,9 @@ module.exports = async function handler(req, res) {
                 if (!owner) return res.status(403).json({ error: 'Only the owner can fill the test data.' });
                 return res.status(200).json(await require('../lib/testseed').seed(redis));
             }
-            if (action === 'access-check') return res.status(200).json({ allowed: who.factionId ? await factionAllowed(who.factionId, who.playerId) : owner, director, owner, investor: await isInvestor(redis, who), tenant: await isTenant(redis, who) });
+            if (action === 'access-check') return res.status(200).json({ allowed: who.factionId ? await factionAllowed(who.factionId, who.playerId) : owner, director, owner, investor: await isInvestor(redis, who), tenant: await isTenant(redis, who), buddy: await isBuddy(redis, who) });
             if (action.startsWith('inv-')) return res.status(200).json(await invHandle(action, req.body, { redis, who })); // an investor sees only their own investments
+            if (action.startsWith('bud-')) return res.status(200).json(await budHandle(action, req.body, { redis, who })); // a buddy sees only their own buddy banking plan
             if (action.startsWith('join-')) { // Labs services: anybody with a Torn key may look at the programs and ask to join one; the list and the decisions are for the owner (lib/joinlabs.js)
                 try { return res.status(200).json(await joinHandle(action, req.body, { redis, who, owner })); } catch (e) { return res.status(e.message === 'Owner only.' ? 403 : 400).json({ error: e.message }); }
             }

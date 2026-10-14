@@ -161,6 +161,7 @@
         if (typeof checkCompanyAccess === 'function') checkCompanyAccess(acc); // shows "My company" for directors and "Companies" for the owner
         if (typeof checkInvestorAccess === 'function') checkInvestorAccess(acc); // shows "My investments" for investors of the fund
         if (typeof checkTenantAccess === 'function') checkTenantAccess(acc); // shows "My rental" for tenants of a Labs island
+        if (typeof checkBuddyAccess === 'function') checkBuddyAccess(acc); // shows "My buddy plan" for buddies of buddy banking
         if (acc && acc.director && (acc.allowed === false || limitedErr)) { // a company director outside the allowed factions: WWL is just their company page
             localStorage.setItem(KEY_STORAGE, key);
             $('login-view').style.display = 'none';
@@ -168,14 +169,14 @@
             if (typeof enterDirectorMode === 'function') enterDirectorMode();
             return;
         }
-        if (acc && (acc.investor || acc.tenant) && !acc.owner && (limitedErr || acc.allowed === false)) { // an investor of the fund outside the allowed factions (or with a small key): WWL is just their investments page
+        if (acc && (acc.investor || acc.tenant || acc.buddy) && !acc.owner && (limitedErr || acc.allowed === false)) { // an investor of the fund outside the allowed factions (or with a small key): WWL is just their investments page
             localStorage.setItem(KEY_STORAGE, key);
             $('login-view').style.display = 'none';
             $('app-view').style.display = 'block';
             if (typeof enterInvestorMode === 'function') enterInvestorMode(acc);
             return;
         }
-        if (acc && acc.allowed === false && !acc.owner && !acc.director && !acc.investor && !acc.tenant && typeof enterJoinMode === 'function') { // somebody with nothing to do with Labs yet: WWL is just the page with the three programs
+        if (acc && acc.allowed === false && !acc.owner && !acc.director && !acc.investor && !acc.tenant && !acc.buddy && typeof enterJoinMode === 'function') { // somebody with nothing to do with Labs yet: WWL is just the page with the three programs
             localStorage.setItem(KEY_STORAGE, key);
             $('login-view').style.display = 'none';
             $('app-view').style.display = 'block';
@@ -458,6 +459,7 @@
         if (page === 'payouts') loadPayouts();
         if (page === 'investor') loadInvestor();
         if (page === 'tenant') loadTenant();
+        if (page === 'buddy') loadBuddy();
         if (page === 'join') loadJoin();
         if (page === 'join-requests') loadJoinRequests();
         if (page === 'buddybank') loadBuddyBank();

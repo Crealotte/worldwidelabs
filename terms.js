@@ -44,7 +44,7 @@ function termsPanel(id, accepted) {
 function termsWire(reload) {
     document.querySelectorAll('.terms-accept').forEach(b => b.addEventListener('click', async () => {
         b.disabled = true;
-        const res = await fetch('/api/war-payout', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key: apiKey, action: b.dataset.doc === 'property' ? 'ten-terms-accept' : 'inv-terms-accept' }) });
+        const res = await fetch('/api/war-payout', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key: apiKey, action: b.dataset.doc === 'property' ? 'ten-terms-accept' : b.dataset.doc === 'buddy' ? 'bud-terms-accept' : 'inv-terms-accept' }) });
         const r = await res.json().catch(() => ({ error: 'Server problem' }));
         if (r.error) { toast(r.error); b.disabled = false; return; }
         toast('Thank you'); reload();

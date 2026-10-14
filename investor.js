@@ -21,8 +21,9 @@ function enterInvestorMode(acc) { // the portal of an investor and/or a tenant: 
     const show = p => { const el = document.querySelector(`.nav-item[data-page="${p}"]`); if (el) el.style.display = ''; };
     if (!acc || acc.investor) show('investor');
     if (acc && acc.tenant) show('tenant');
+    if (acc && acc.buddy) show('buddy');
     show('join'); show('bug-report'); // Bugs & suggestions: they only see what belongs to their pages (the server filters)
-    goToPage(!acc || acc.investor ? 'investor' : 'tenant');
+    goToPage(!acc || acc.investor ? 'investor' : acc.tenant ? 'tenant' : 'buddy');
 }
 
 async function loadInvestor() {

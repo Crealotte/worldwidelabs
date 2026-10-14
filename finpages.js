@@ -427,8 +427,8 @@ FIN_PAGES.fund = { status: 'fund-status', render: finRenderFund, refresh: finRef
 FIN_PAGES.buddy = { status: 'bb-status', render: finRenderBuddy, refresh: finRefreshBuddy, click: finClickBuddy, parts: ['buddies'] };
 
 // The City Bank check on the Buddy banking page: asks Torn straight from the browser (the key never goes through the server for this) what the key can see of the City Bank, and shows it as it comes back.
-async function finBankCheck() {
-    const out = $('bb-check-out'), money = n => `$${Math.round(Number(n) || 0).toLocaleString('en-US')}`;
+async function finBankCheck(outEl) { // outEl: where to write (the buddy page uses it too); the Buddy banking page's own button passes nothing
+    const out = outEl && outEl.nodeType === 1 ? outEl : $('bb-check-out'), money = n => `$${Math.round(Number(n) || 0).toLocaleString('en-US')}`;
     if (/^test:/.test(apiKey)) { out.textContent = 'You are using a test person: choose Me (your own key) in the orange bar first.'; return; }
     out.textContent = 'Asking Torn…';
     try {
@@ -444,7 +444,8 @@ async function finBankCheck() {
         out.innerHTML = `${keyLine}<br>${has ? `<b style="color:var(--success,#35d99b);">✅ This key can see an active City Bank investment of ${money(cb.amount)}.</b>` : '<b>Torn shows no active City Bank investment for this key.</b>'}
             ${rows.length ? `<table style="border-collapse:collapse;margin-top:4px;">${rows.join('')}</table>` : ''}
             <details style="margin-top:6px;"><summary class="av-sum" style="font-size:12px;color:var(--muted);">What Torn sent (the bank part only)</summary><pre style="font-size:11px;white-space:pre-wrap;margin:4px 0 0;">${esc(JSON.stringify(cb, null, 2))}</pre></details>`;
-    } catch (e) { out.textContent = `Could not reach Torn: ${e.message}`; }
+        return cb;
+    } catch (e) { out.textContent = `Could not reach Torn: ${e.message}`; return null; }
 }
 
 // Deposits that were renewed for 180 days because no notice was given (lib/finances.js autoRenew), from the last 45 days: if the investor had in fact left, "They are leaving" marks the deposit as leaving at the end date it had (and the renewal is taken back).
