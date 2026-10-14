@@ -54,13 +54,13 @@ async function loadEvaluation() {
             moData = r;
         }
         // count any of the last 5 wars not counted yet (same as Member Overview does, each is saved for good)
-        const todo = moWarsInPeriod().filter(w => !w.event && !moData.hits[w.id]);
+        const todo = moWarsInPeriod().filter(w => !w.event && (!moData.hits[w.id] || (moData.staleWars || []).includes(w.id)));
         for (let i = 0; i < todo.length; i++) {
             for (let round = 1; round <= 10; round++) {
                 st.textContent = `Counting hits for the war vs ${todo[i].opponent} (${i + 1} of ${todo.length}${round > 1 ? `, part ${round}` : ''})…`;
                 const w = await moFetch({ action: 'mo-war', warId: todo[i].id });
                 if (w.error) throw new Error(`War vs ${todo[i].opponent}: ${w.error}`);
-                if (!w.partial) { moData.hits[w.warId] = w.hits; break; }
+                if (!w.partial) { moData.hits[w.warId] = w.hits; moData.staleWars = (moData.staleWars || []).filter(x => x !== w.warId); break; }
             }
         }
         st.textContent = 'Reading the training and the earlier evaluations…';
