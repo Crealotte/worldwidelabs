@@ -165,14 +165,17 @@ function finModel(plan, planStart) {
     // companies: what they really sent in the past weeks, the average of the last (up to) 4 known weeks from now on
     const coAvg = {};
     for (const c of S.companies) {
-        const known = c.weeks.filter(x => x.send != null).sort((a, b) => (a.weekEnd < b.weekEnd ? 1 : -1)).slice(0, 4);
+        // what a company sent: the sends the page worked out from the saved days, replaced by what you typed in as really received (the panel "What the companies sent me")
+        const sends = {}; c.weeks.forEach(x => { if (x.send != null) sends[x.weekEnd] = x.send; });
+        const typedSends = (D.coSends || {})[c.id] || {}; Object.keys(typedSends).forEach(d => { sends[d] = typedSends[d]; });
+        const known = Object.entries(sends).sort((a, b) => (a[0] < b[0] ? 1 : -1)).slice(0, 4).map(([weekEnd, send]) => ({ weekEnd, send }));
         // a sold company brings nothing more; one without a known week yet uses the estimate (see FIN_CO_DEFAULTS) until real weeks exist
         coAvg[c.id] = finEstOf(c).sold ? 0 : known.length ? known.reduce((s, x) => s + x.send, 0) / known.length : finEstWeekly(c);
         for (const wk of weeks) {
             const rec = c.weeks.find(x => x.weekEnd === wk.end);
-            const real = rec && rec.send != null;
-            const v = real ? rec.send : (wk.w >= 0 ? coAvg[c.id] : null);
-            if (v) { wk.co += v; wk.coParts.push(`${c.name}: ${finMoney(v)}${real ? '' : known.length ? ' (average)' : ' (estimate)'}`); wk.ev.push({ d: wk.end, key: 'co', amount: v, sign: 1, label: `${c.name} sends${real ? '' : known.length ? ' (average)' : ' (estimate)'}` }); }
+            const typed = typedSends[wk.end] !== undefined, real = typed || (rec && rec.send != null);
+            const v = typed ? typedSends[wk.end] : real ? rec.send : (wk.w >= 0 ? coAvg[c.id] : null), tag = typed ? ' (typed)' : real ? '' : known.length ? ' (average)' : ' (estimate)';
+            if (v) { wk.co += v; wk.coParts.push(`${c.name}: ${finMoney(v)}${tag}`); wk.ev.push({ d: wk.end, key: 'co', amount: v, sign: 1, label: `${c.name} sends${tag}` }); }
             if (rec && rec.daily) rec.daily.forEach(x => wk.ev.push({ d: x.date, key: 'coacc', amount: Math.round(x.profit - Math.max(0, x.profit) * (c.cutPct ?? 30) / 100), sign: 1, info: true, label: `${c.name} earned` }));
         }
     }
@@ -366,6 +369,16 @@ function finPlansPanel() {
             <div class="fin-plan-res" data-res="${esc(p.id)}" style="margin-top:8px;font-size:13px;"></div></div>`).join('') || '<div style="color:var(--muted);font-size:13px;margin-bottom:8px;">No plans yet.</div>'}
         <button class="ghost small" id="fin-addplan" type="button">+ Plan</button> <select id="fin-buddystart" title="Somebody you know can skip the lower tiers"><option value="bronze">starts at Bronze (500m)</option><option value="silver">starts at Silver (1b)</option><option value="gold">starts at Gold (2b)</option></select> <button class="ghost small" id="fin-addbuddyplan" type="button" title="500m now, 500m after 30 days, 1b after 60 days: the cash a new buddy needs over time">+ Buddy banking plan</button></div>`;
 }
+// "What the companies sent me": the amounts really received for a week; they replace the worked-out sends in the week table and in the average the coming weeks use.
+let finSendWeek = '';
+function finCoSendsPanel() {
+    const S = finSrv, D = finData, today = S.today, last = today === finSun(today) ? today : finAdd(finSun(today), -7);
+    const weeks = Array.from({ length: 8 }, (_, k) => finAdd(last, -7 * k)), wk = weeks.includes(finSendWeek) ? finSendWeek : last;
+    const rows = S.companies.filter(c => !finEstOf(c).sold).map(c => { const rec = c.weeks.find(x => x.weekEnd === wk), typed = ((D.coSends || {})[c.id] || {})[wk]; return `<tr><td style="padding:3px 8px;">${esc(c.name)}</td><td style="padding:3px 8px;color:var(--muted);font-family:var(--mono);" title="What the page works out from the saved days of this company">${rec && rec.send != null ? finShort(rec.send) : 'not worked out'}</td><td style="padding:3px 8px;"><input type="text" inputmode="decimal" data-cosend="${esc(String(c.id))}|${wk}" value="${typed !== undefined ? finFull(typed) : ''}" placeholder="Received" style="width:140px;text-align:right;font-family:var(--mono);"></td></tr>`; }).join('');
+    return `<div class="panel"><h3 style="margin-top:0;">💵 What the companies sent me</h3><p style="font-size:12px;color:var(--muted);margin:0 0 8px;">Type what each company really sent you for a week. It replaces the number the page works out from the saved days, in the week table and in the average that the coming weeks use. Clear a field to go back to the worked-out number.</p>
+        <div style="margin-bottom:6px;font-size:13px;">Week ending <select id="fin-sendweek">${weeks.map(d => `<option value="${d}" ${d === wk ? 'selected' : ''}>${esc(finDate(d))}</option>`).join('')}</select></div>
+        <table style="border-collapse:collapse;font-size:13px;"><thead><tr>${['Company', 'The page worked out', 'Really received'].map(h => `<th style="text-align:left;padding:4px 8px;font-size:11px;color:var(--muted);font-weight:600;">${h}</th>`).join('')}</tr></thead><tbody>${rows}</tbody></table></div>`;
+}
 function finCapitalsPanel() {
     const S = finSrv, D = finData;
     const inp = (attrs, val, w = 130) => `<input type="text" inputmode="decimal" ${attrs} data-t="money" value="${finFull(val)}" style="width:${w}px;text-align:right;font-family:var(--mono);">`;
@@ -375,7 +388,7 @@ function finCapitalsPanel() {
             <td style="padding:3px 8px;">${inp(`data-est="${esc(String(c.id))}" data-f="daily"`, e.daily)}</td><td style="padding:3px 8px;">${inp(`data-cap="co:${esc(String(c.id))}"`, cap)}</td>
             <td style="padding:3px 8px;text-align:center;"><input type="checkbox" data-est="${esc(String(c.id))}" data-f="sold" data-t="bool" ${e.sold ? 'checked' : ''} style="width:auto;"></td></tr>`;
     }).join('');
-    return `<div class="panel"><h3 style="margin-top:0;">Companies: estimate and capital</h3><p style="font-size:12px;color:var(--muted);margin:0 0 8px;">Until a company has 3 full weeks of saved numbers, the earnings table and the week-by-week page use your estimate: the net profit a day, with the company's director cut taken off. A 14-person mine costs about 9b to get and a 16-person one 12b (filled in when the capital is not set). A company that was sold earns nothing more.</p>
+    return `${finCoSendsPanel()}    return `<div class="panel"><h3 style="margin-top:0;">Companies: estimate and capital</h3><p style="font-size:12px;color:var(--muted);margin:0 0 8px;">Until a company has 3 full weeks of saved numbers, the earnings table and the week-by-week page use your estimate: the net profit a day, with the company's director cut taken off. A 14-person mine costs about 9b to get and a 16-person one 12b (filled in when the capital is not set). A company that was sold earns nothing more.</p>
         <div style="overflow-x:auto;"><table style="border-collapse:collapse;font-size:13px;"><thead><tr>${['Company', 'Size', 'Net profit a day (estimate)', 'Capital in it', 'Sold'].map(h => `<th style="text-align:left;padding:4px 8px;font-size:11px;color:var(--muted);font-weight:600;">${h}</th>`).join('')}</tr></thead><tbody>${coRows}</tbody></table></div></div>
         <div class="panel"><h3 style="margin-top:0;">Capital per island</h3><p style="font-size:12px;color:var(--muted);margin:0 0 8px;">What you paid for an island (the buying prices are filled in). The return table needs it to work out the percentage a year.</p>
         <table style="border-collapse:collapse;font-size:13px;"><tbody>${[4100, 3600, 2600].map(t => `<tr><td style="padding:3px 8px;">Island ${t}</td><td style="padding:3px 8px;">${inp(`data-cap="pi:${t}"`, D.capitals[`pi:${t}`] ?? S.rto.defaults.cost[t], 140)}</td></tr>`).join('')}</tbody></table></div>`;
@@ -389,7 +402,7 @@ async function loadFinances() {
     if (r.error) { st.className = 'status err'; st.textContent = r.error; return; }
     st.textContent = ''; st.className = 'status';
     finSrv = { cash: r.cash, companies: r.companies || [], rto: r.rto || { rtoItems: [], pis: [], defaults: { rent: { 4100: 27000000, 3600: 15000000, 2600: 12000000 }, equity: { 4100: 81000000, 3600: 45000000, 2600: 36000000 }, goals: { 4100: 1701000000, 3600: 855000000, 2600: 612000000 }, cost: { 4100: 1482500000, 3600: 757500000, 2600: 557500000 } } }, today: r.today };
-    finData = { fundsMode: r.fundsMode, fundsManual: r.fundsManual, reserve: r.reserve, investors: r.investors, income: r.income, outlays: r.outlays, plans: r.plans, roi: r.roi, ventures: r.ventures, capitals: r.capitals, coEst: r.coEst || {}, paidOffset: r.paidOffset || 0, terms: r.terms || {}, invRequests: r.invRequests || [], loans: r.loans || [], buddies: r.buddies || [] };
+    finData = { fundsMode: r.fundsMode, fundsManual: r.fundsManual, reserve: r.reserve, investors: r.investors, income: r.income, outlays: r.outlays, plans: r.plans, roi: r.roi, ventures: r.ventures, capitals: r.capitals, coEst: r.coEst || {}, coSends: r.coSends || {}, paidOffset: r.paidOffset || 0, terms: r.terms || {}, invRequests: r.invRequests || [], loans: r.loans || [], buddies: r.buddies || [] };
     finRenderAll();
 }
 function finRenderAll() { FIN_PAGES[finPage].render(); }
@@ -549,6 +562,14 @@ function finWire(bodyId) {
                 if (held.length && confirm(`${row.name} is back. Release the ${held.length} held payout${held.length === 1 ? '' : 's'} (${finMoney(sum)}) now?`)) finReleaseHeld(peers, today);
             }
             finTouch(); finRenderAll(); return;
+        }
+        if (el.id === 'fin-sendweek') { finSendWeek = el.value; finRenderAll(); return; }
+        if (el.dataset.cosend) { // what a company really sent for a week
+            const [cid, wk] = el.dataset.cosend.split('|'), txt = el.value.trim(), v = txt === '' ? null : finParse(txt);
+            if (txt !== '' && v === null) { toast('Write it as 100m or 100,000,000'); return; }
+            finData.coSends = finData.coSends || {}; finData.coSends[cid] = finData.coSends[cid] || {};
+            if (v === null) delete finData.coSends[cid][wk]; else finData.coSends[cid][wk] = v;
+            el.value = v === null ? '' : finFull(v); finTouch(); return;
         }
         if (el.dataset.pers) { // the ID, name or Torn ID in the top line of an investor card: it applies to every line of that investor
             const f = el.dataset.f, v = f === 'tornId' ? el.value.replace(/\D/g, '').slice(0, 10) : el.value.trim();
