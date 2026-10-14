@@ -40,7 +40,7 @@ let avArchivedPlans = []; // leader-only: archived plans, for the separate "pick
 let avViewingArchived = false; // true when avPlanId currently points at an archived plan
 let avPlanId = null;
 try { avPlanId = localStorage.getItem(AV_PLAN_KEY) || null; } catch (e) { /* storage blocked */ }
-const AV_PLAN_ACTIONS = new Set(['availability-get', 'availability-set', 'availability-watch', 'availability-link-war', 'availability-unavailable', 'availability-ping', 'availability-archive', 'availability-resize']);
+const AV_PLAN_ACTIONS = new Set(['availability-get', 'availability-set', 'availability-watch', 'availability-link-war', 'availability-unavailable', 'availability-ping', 'availability-archive', 'availability-resize', 'availability-preset']);
 let avOd = null; // leader-only: last overdose view from the backend
 let avOdIds = new Set(); // ids of members who've overdosed in the window (marked in the slot list)
 let avOdScanning = false;
@@ -520,11 +520,30 @@ function renderAvUnavailBar() {
             </div>`;
     } else {
         bar.innerHTML = `<button class="ghost small" id="av-unavail-btn">🚫 I can't make this war</button>
-            <span style="color:var(--muted);font-size:12px;margin-left:8px;">Real life happens — tell leadership here (same as the forum post).</span>`;
+            <span style="color:var(--muted);font-size:12px;margin-left:8px;">Real life happens — tell leadership here (same as the forum post).</span>
+            <div style="margin-top:8px;"><button class="ghost small" id="av-preset-save" type="button" title="Remember the hours you ticked now as your usual week">💾 Save my hours as my usual week</button>
+            <button class="ghost small" id="av-preset-use" type="button" title="Tick your saved usual week in this plan">↩ Use my usual week</button>
+            <span style="color:var(--muted);font-size:12px;margin-left:8px;">Nothing is filled in by itself: on a new plan you choose to use it, and you can still change any hour.</span></div>`;
+        $('av-preset-save').addEventListener('click', () => avPreset('save'));
+        $('av-preset-use').addEventListener('click', () => avPreset('use'));
     }
-    $('av-unavail-btn').addEventListener('click', toggleMyUnavailable);
+    $('av-unavail-btn')?.addEventListener('click', toggleMyUnavailable);
     $('av-grid-body').style.opacity = avMyUnavailable ? '.4' : '';
     $('av-grid-body').style.pointerEvents = avMyUnavailable ? 'none' : '';
+}
+
+// "My usual week": save the hours ticked now as a weekly pattern, or lay the saved pattern down in this plan (it replaces the ticks of this plan; the hours can be changed after).
+async function avPreset(mode) {
+    if (mode === 'use' && Object.keys(avMine || {}).length && !confirm('This replaces the hours you have ticked in this plan with your usual week. Continue?')) return;
+    const btn = $(mode === 'save' ? 'av-preset-save' : 'av-preset-use');
+    btn.disabled = true;
+    try {
+        const r = await avFetch({ action: 'availability-preset', mode });
+        if (r.error) throw new Error(r.error);
+        if (mode === 'save') toast(`Saved: ${r.hours} hour${r.hours === 1 ? '' : 's'} are now your usual week. On a new plan, press Use my usual week.`);
+        else { toast(`Your usual week is ticked (${r.hours} hour${r.hours === 1 ? '' : 's'}). Change anything that is different this week.`); await loadAvailability(); }
+    } catch (e) { toast(e.message); }
+    btn.disabled = false;
 }
 
 async function toggleMyUnavailable() {
