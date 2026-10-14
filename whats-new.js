@@ -12,6 +12,15 @@
 
 const WHATS_NEW = [
     {
+        version: '1.26', date: '2026-10-14',
+        title: 'Labs services, and My buddy plan',
+        everyone: [
+            'New page Labs services in the menu: the three Labs programs (the investment fund, rent-to-own private islands and buddy banking), how each one works and its terms, with a form to ask the owner to join one. People who are not in the faction can log in with their Torn key and will only see this page.',
+            'If you are a buddy in buddy banking there is a new page My buddy plan: your plan, what you keep and what you send back, and what Torn shows about your City Bank (read with your own key, your key is never stored).',
+        ],
+        leaders: [],
+    },
+    {
         version: '1.25', date: '2026-10-14',
         title: 'Availability: your usual week in one click',
         everyone: [

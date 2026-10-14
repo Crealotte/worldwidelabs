@@ -45,7 +45,7 @@ const { factionAllowed, allowedList, resetCache: accessReset, LIST: ACCESS_LIST,
 const { companyHandle, isDirector, tornCompany: coTorn, normalize: coNormalize, getAll: coGetAll } = require('../lib/company');
 const { runCompanyReports } = require('../lib/companyReports');
 const { ltHandle, leaseTodos, tenHandle, isTenant } = require('../lib/labstracking');
-const { finHandle, invHandle, isInvestor, isBuddy, budHandle, fundRequestTodos } = require('../lib/finances');
+const { finHandle, invHandle, isInvestor, isBuddy, finRoles, budHandle, fundRequestTodos } = require('../lib/finances');
 const { joinHandle, joinTodos } = require('../lib/joinlabs');
 const { ohHandle } = require('../lib/onlineHours');
 const { labsIsOwner, labsHasOwners, labsHandle, labsRecordReceipt } = require('../lib/labsLedger');
@@ -800,7 +800,7 @@ module.exports = async function handler(req, res) {
                 if (!owner) return res.status(403).json({ error: 'Only the owner can fill the test data.' });
                 return res.status(200).json(await require('../lib/testseed').seed(redis));
             }
-            if (action === 'access-check') return res.status(200).json({ allowed: who.factionId ? await factionAllowed(who.factionId, who.playerId) : owner, director, owner, investor: await isInvestor(redis, who), tenant: await isTenant(redis, who), buddy: await isBuddy(redis, who) });
+            if (action === 'access-check') { const roles = await finRoles(redis, who); return res.status(200).json({ allowed: who.factionId ? await factionAllowed(who.factionId, who.playerId) : owner, director, owner, investor: roles.investor, tenant: await isTenant(redis, who), buddy: roles.buddy }); }
             if (action.startsWith('inv-')) return res.status(200).json(await invHandle(action, req.body, { redis, who })); // an investor sees only their own investments
             if (action.startsWith('bud-')) return res.status(200).json(await budHandle(action, req.body, { redis, who })); // a buddy sees only their own buddy banking plan
             if (action.startsWith('join-')) { // Labs services: anybody with a Torn key may look at the programs and ask to join one; the list and the decisions are for the owner (lib/joinlabs.js)
