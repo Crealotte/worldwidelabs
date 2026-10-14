@@ -2380,7 +2380,7 @@ Cancel: ${cancelUrl}`, [], embeds, undefined, true);
             // Lets the UI flag a suspicious result, or tell the leader the fallback kicked in
             // (meaning: only chain-covered hits are counted this time, same limits as before).
             const warHitsMeta = {
-                scanned: warHitsResult.scanned, matched: warHitsResult.ownAttacks,
+                scanned: warHitsResult.scanned, matched: warHitsResult.ownAttacks, notCounted: warHitsResult.failed || 0,
                 rateLimited: warHitsResult.rateLimited, pagesFetched: warHitsResult.pagesFetched,
                 usedFallback, brokenWithNoChains: warHitsLookedBroken && !chains.length,
             };

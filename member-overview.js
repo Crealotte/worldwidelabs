@@ -143,13 +143,13 @@ async function loadMemberOverview() {
         // war is read in pieces (the server remembers where it stopped), so keep asking until done.
         // A war that fails must never stop the rest (the stats below), so problems are collected.
         const problems = [];
-        const todo = moWarsInPeriod().filter(w => !w.event && !moData.hits[w.id]); // a chain event has nothing to scan — only its linked chains
+        const todo = moWarsInPeriod().filter(w => !w.event && (!moData.hits[w.id] || (moData.staleWars || []).includes(w.id))); // a chain event has nothing to scan — only its linked chains
         for (let i = 0; i < todo.length; i++) {
             for (let round = 1; round <= 10; round++) {
                 st.className = 'status ok'; st.textContent = `Counting hits for the war vs ${todo[i].opponent} (${i + 1} of ${todo.length}${round > 1 ? `, part ${round}` : ''})…`;
                 const w = await moFetch({ action: 'mo-war', warId: todo[i].id });
                 if (w.error) { problems.push(`War vs ${todo[i].opponent}: ${w.error}`); break; }
-                if (!w.partial) { moData.hits[w.warId] = w.hits; renderMemberOverview(); break; }
+                if (!w.partial) { moData.hits[w.warId] = w.hits; moData.staleWars = (moData.staleWars || []).filter(x => x !== w.warId); renderMemberOverview(); break; }
                 if (round === 10) problems.push(`War vs ${todo[i].opponent} is still being counted — press Refresh to continue.`);
             }
         }
