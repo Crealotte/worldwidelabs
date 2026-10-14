@@ -512,7 +512,7 @@ function finWire(bodyId) {
         if (el.id === 'pay-tool') { finPayTool = el.value; return; }
         if (el.id === 'pay-week') { finPayWeek = el.value; finRefreshPay(); return; }
         if (el.id === 'fund-f') { finFundFilter = el.value; finRenderFundTable(); finRefreshFund(); return; }
-        if (el.id === 'fund-s') { finFundSort = el.value; finRenderFundTable(); finRefreshFund(); return; }
+        if (el.id === 'fund-s') { finFundSort = el.value; finFundRev = false; finRenderFundTable(); finRefreshFund(); return; }
         if (el.dataset.l === 'investors' && el.dataset.f === 'mode') { // the pay plan of a line, or pause mode for the whole person
             const row = finData.investors[+el.dataset.i], v = el.value, peers = finPeersOf(row), today = finSrv.today || new Date().toISOString().slice(0, 10);
             if (v === 'paused') {
@@ -566,6 +566,7 @@ function finWire(bodyId) {
     });
     body.addEventListener('click', e => {
         const b = e.target.closest('button');
+        const fth = e.target.closest('th[data-fsort]'); if (fth && typeof finFundSortBy === 'function') { finFundSortBy(fth.dataset.fsort); return; }
         const frow = e.target.closest('tr.fund-row'); if (!b && frow && !e.target.closest('input, select, a') && FIN_PAGES[finPage].rowclick) { FIN_PAGES[finPage].rowclick(frow); return; }
         if (!b) return;
         if (b.dataset.add) { finData[b.dataset.add].push(FIN_LISTS[b.dataset.add].fresh()); finRenderAll(); finTouch(); }

@@ -35,7 +35,7 @@ function finRenderFund() {
     finRefresh();
 }
 // The investors as ONE compact table (a row per person, like a spreadsheet), with a search, a filter and a sort; click a row and the lines of that person (every investment) open under it to edit.
-let finFundQ = '', finFundFilter = 'live', finFundSort = 'id'; const finFundOpen = new Set();
+let finFundQ = '', finFundFilter = 'live', finFundSort = 'id', finFundRev = false; const finFundOpen = new Set();
 const FIN_FUND_FILTERS = [['live', 'With money in now'], ['all', 'Everyone'], ['due', 'Payout due'], ['soon', 'Term ends within 30 days'], ['leaving', 'Leaving at the end of the term'], ['gone', 'Earlier investors']];
 const FIN_FUND_SORTS = [['id', 'ID'], ['name', 'Name'], ['inNow', 'Invested (high first)'], ['week', 'A week (high first)'], ['ends', 'Term ends (soonest first)'], ['paid', 'Paid out (high first)']];
 
@@ -70,7 +70,7 @@ function finPersonCells(s, ixs, open) {
         s.act.length ? `<span style="color:var(--muted);">${s.mode}</span> <button class="ghost small" data-modechange="${ixs.split(',')[Math.max(0, s.rows.findIndex(r => r.active))]}" type="button" title="Pay plan changes on a date: weekly to monthly, or back" style="padding:0 5px;">⇄</button>` : '',
         s.next ? `${esc(finDate(s.next.date))} <span style="color:var(--muted);">${finShort(s.next.amount)}</span>` : '<span style="color:var(--muted);">—</span>',
         s.due > 0 ? `<b style="color:#e0a030;">${finShort(s.due)}</b> <button class="small" data-pmark="${ixs}" type="button">Paid</button>` : s.unsynced ? `<button class="ghost small" data-psync="${ixs}" type="button" title="Everything up to the last Sunday is already paid">Set paid through</button>` : '<span style="color:var(--muted);">—</span>',
-        s.ends ? `<span style="color:${left < 0 ? 'var(--danger)' : left < 30 ? '#e0a030' : 'inherit'};">${esc(finDate(s.ends))}</span> <span style="color:var(--muted);font-size:11px;">${left < 0 ? 'ended' : `${left}d`}</span>` : '<span style="color:var(--muted);">—</span>',
+        s.ends ? `<span style="color:${left < 0 ? 'var(--danger)' : left < 30 ? '#e0a030' : 'inherit'};">${esc(finDate(s.ends))}</span> <span style="color:var(--muted);font-size:11px;">${left < 0 ? 'ended' : `${left}d`}</span>${!s.leaving && left < 30 ? `<div style="font-size:10.5px;color:var(--muted);" title="No notice was given, so it renews by itself for 180 days">renews ${esc(finDate(finAdd(s.ends, 180)))}</div>` : ''}` : '<span style="color:var(--muted);">—</span>',
         finShort(s.paid),
         `<span style="color:var(--muted);">${open ? '▾' : '▸'}</span>`,
     ];
@@ -102,11 +102,12 @@ function finRenderFundTable() {
     if (q) people = people.filter(p => p.name.toLowerCase().includes(q) || String(finData.investors[p.ix[0]].fundId).toLowerCase() === q || String(finData.investors[p.ix[0]].tornId || '') === q);
     const today = finSrv.today, flt = { live: p => p.s.act.length, all: () => true, due: p => p.s.due > 0 || p.s.unsynced, soon: p => p.s.act.length && p.s.ends && p.s.ends <= finAdd(today, 30), leaving: p => p.s.leaving, gone: p => !p.s.act.length }[finFundFilter] || (() => true);
     people = people.filter(flt);
-    const cmp = { id: (a, b) => a.id - b.id, name: (a, b) => (a.name.toLowerCase() < b.name.toLowerCase() ? -1 : 1), inNow: (a, b) => b.s.inNow - a.s.inNow, week: (a, b) => b.s.week - a.s.week, ends: (a, b) => (a.s.ends || '9') < (b.s.ends || '9') ? -1 : 1, paid: (a, b) => b.s.paid - a.s.paid }[finFundSort] || ((a, b) => a.id - b.id);
+    const cmp = { id: (a, b) => a.id - b.id, name: (a, b) => (a.name.toLowerCase() < b.name.toLowerCase() ? -1 : 1), inNow: (a, b) => b.s.inNow - a.s.inNow, week: (a, b) => b.s.week - a.s.week, ends: (a, b) => (a.s.ends || '9') < (b.s.ends || '9') ? -1 : 1, paid: (a, b) => b.s.paid - a.s.paid, pays: (a, b) => String(a.s.mode).localeCompare(String(b.s.mode)), next: (a, b) => ((a.s.next && a.s.next.date) || '9') < ((b.s.next && b.s.next.date) || '9') ? -1 : 1, due: (a, b) => b.s.due - a.s.due }[finFundSort] || ((a, b) => a.id - b.id);
     people.sort(cmp);
+    if (finFundRev) people.reverse();
     if ($('fund-count')) $('fund-count').textContent = `${people.length} of ${total} investors`;
-    const th = (t, r) => `<th style="padding:6px 9px;font-size:11px;color:var(--muted);font-weight:600;text-align:${r ? 'right' : 'left'};white-space:nowrap;">${t}</th>`;
-    box.innerHTML = `<table class="fund-table" style="width:100%;border-collapse:collapse;font-size:13px;"><thead><tr style="border-bottom:1px solid var(--line);">${th('ID')}${th('Investor')}${th('In now', 1)}${th('A week', 1)}${th('Pays')}${th('Next payout')}${th('Due now')}${th('Term ends')}${th('Paid out', 1)}<th></th></tr></thead><tbody>
+    const th = (t, r, key) => `<th ${key ? `data-fsort="${key}" title="Click to sort"` : ''} style="padding:6px 9px;font-size:11px;color:${finFundSort === key ? 'var(--text)' : 'var(--muted)'};font-weight:600;text-align:${r ? 'right' : 'left'};white-space:nowrap;${key ? 'cursor:pointer;user-select:none;' : ''}">${t}${finFundSort === key ? (finFundRev ? ' ▲' : ' ▼') : ''}</th>`;
+    box.innerHTML = `<table class="fund-table" style="width:100%;border-collapse:collapse;font-size:13px;"><thead><tr style="border-bottom:1px solid var(--line);">${th('ID', 0, 'id')}${th('Investor', 0, 'name')}${th('In now', 1, 'inNow')}${th('A week', 1, 'week')}${th('Pays', 0, 'pays')}${th('Next payout', 0, 'next')}${th('Due now', 0, 'due')}${th('Term ends', 0, 'ends')}${th('Paid out', 1, 'paid')}<th></th></tr></thead><tbody>
         ${people.map(p => { const open = finFundOpen.has(p.key), ixs = p.ix.join(','), cells = finPersonCells(p.s, ixs, open), right = [2, 3, 8];
             return `<tr class="fund-row" data-pkey="${esc(p.key)}" data-ix="${ixs}" style="cursor:pointer;border-top:1px solid var(--line);${open ? 'background:rgba(127,127,127,.10);' : ''}">${cells.map((c, i) => `<td style="padding:5px 9px;white-space:nowrap;${right.includes(i) ? 'text-align:right;font-family:var(--mono);' : ''}">${c}</td>`).join('')}</tr>${open ? `<tr class="fund-detail"><td colspan="10" style="padding:0;">${finFundDetail(p.ix)}</td></tr>` : ''}`; }).join('') || '<tr><td colspan="10" style="padding:14px;color:var(--muted);">Nobody matches.</td></tr>'}</tbody></table>`;
 }
@@ -116,6 +117,12 @@ function finRefreshRows() {
         const ix = tr.dataset.ix.split(',').map(Number), s = finPersonStats(ix), cells = finPersonCells(s, tr.dataset.ix, finFundOpen.has(tr.dataset.pkey));
         tr.querySelectorAll('td').forEach((td, i) => { if (cells[i] !== undefined) td.innerHTML = cells[i]; });
     });
+}
+// a click on a column title sorts by it; a second click turns the order around
+function finFundSortBy(key) {
+    if (finFundSort === key) finFundRev = !finFundRev; else { finFundSort = key; finFundRev = false; }
+    const sel = $('fund-s'); if (sel && [...sel.options].some(o => o.value === key)) sel.value = key;
+    finRenderFundTable(); finRefreshFund();
 }
 function finFundRowClick(tr) { const k = tr.dataset.pkey; if (finFundOpen.has(k)) finFundOpen.delete(k); else finFundOpen.add(k); finRenderFundTable(); finRefreshFund(); }
 
@@ -155,6 +162,7 @@ function finRefreshFund() {
         const n = (i.renewals || []).length;
         el.innerHTML = i.termEnd ? `${i.termEnd < today ? '<span style="color:var(--danger);">ended ' : '<span>until '}${esc(finDate(i.termEnd))}</span> <button class="ghost small" data-invrenew="${el.dataset.invterm}" type="button" title="${n ? `Renewed ${n} time${n === 1 ? '' : 's'}` : 'Not renewed yet'}">Renewed${n ? ` (${n})` : ''}</button>` : '<span style="color:var(--muted);">no end date</span>';
         if (i.termEnd && i.leaving) el.innerHTML += ' <span style="color:#e0a030;font-size:11px;">leaving at the end</span>';
+        if (i.termEnd && !i.leaving && i.termEnd <= finAdd(today, 30)) el.innerHTML += ` <span style="color:var(--muted);font-size:11px;">→ renews ${esc(finDate(finAdd(i.termEnd, 180)))}</span>`;
     });
     // requests from investors: renew, add money, withdraw at the end of the term (30 days notice, and the money has to be there: the Finances page counts an asked or approved withdrawal in its balance)
     const rq = (finData.invRequests || []), openQ = rq.filter(q => q.status === 'open'), doneQ = rq.filter(q => q.status !== 'open').slice(-8).reverse();
