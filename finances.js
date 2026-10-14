@@ -129,13 +129,28 @@ function finMarkPaid(i, due, today) {
     i.paidUntil = last; i.skip = (i.skip || []).filter(d => d > last); i.extra = (i.extra || []).filter(d => d > last);
 }
 
+// the weeks that are opened in the table (click a week to see it day by day)
+const finWeekOpen = new Set();
+// one week day by day: what came in and went out on each day; the grey lines are what the companies earned that day (they send it together on Sunday), only the coloured lines move money
+function finWeekDetail(w) {
+    const days = Array.from({ length: 7 }, (_, k) => finAdd(w.end, k - 6));
+    const sgn = e => (e.sign > 0 ? '+' : '-');
+    const rows = days.map(d => {
+        const evs = w.ev.filter(e => e.d === d).sort((a, b) => (a.info ? 1 : 0) - (b.info ? 1 : 0) || b.amount - a.amount), cash = evs.filter(e => !e.info), net = cash.reduce((s, e) => s + e.sign * e.amount, 0);
+        return `<tr style="border-top:1px solid var(--line);"><td style="padding:2px 10px 2px 0;white-space:nowrap;vertical-align:top;color:var(--muted);">${new Date(finD(d)).toLocaleDateString(undefined, { weekday: 'short', timeZone: 'UTC' })} ${esc(finDate(d))}</td><td style="padding:2px 10px;">${evs.map(e => `<div style="${e.info ? 'color:var(--muted);font-style:italic;' : ''}">${esc(e.label)} <span style="font-family:var(--mono);color:${e.info ? 'var(--muted)' : e.sign > 0 ? 'var(--success,#35d99b)' : '#e0a030'};">${sgn(e)}${finShort(e.amount)}</span></div>`).join('') || '<span style="color:var(--muted);">nothing</span>'}</td><td style="padding:2px 0;text-align:right;font-family:var(--mono);vertical-align:top;white-space:nowrap;">${cash.length ? `${net < 0 ? '-' : '+'}${finShort(Math.abs(net))}` : ''}</td></tr>`;
+    }).join('');
+    return `<tr><td colspan="13" style="padding:4px 14px 10px 28px;background:rgba(127,127,127,.06);"><table style="border-collapse:collapse;font-size:12.5px;width:100%;max-width:820px;"><tbody>${rows}</tbody></table><div style="font-size:11px;color:var(--muted);margin-top:4px;">Grey: what the companies earned that day (they send it together on Sunday). Coloured: money that comes in or goes out. Week: ${finShort(w.net)} net.</div></td></tr>`;
+}
+
 // ---- the timeline: weeks end on Sunday; 8 weeks back, 52 ahead ----
 function finModel(plan, planStart) {
     const D = finData, S = finSrv, cur = finSun(S.today);
     const weeks = [];
-    for (let w = -FIN_PAST; w < FIN_HORIZON; w++) weeks.push({ w, end: finAdd(cur, 7 * w), co: 0, coParts: [], rto: 0, inc: 0, inv: 0, invParts: [], out: 0, plan: 0, loan: 0, loanParts: [], bb: 0, bbParts: [] });
+    for (let w = -FIN_PAST; w < FIN_HORIZON; w++) weeks.push({ w, end: finAdd(cur, 7 * w), co: 0, coParts: [], rto: 0, inc: 0, inv: 0, invParts: [], out: 0, plan: 0, loan: 0, loanParts: [], bb: 0, bbParts: [], ev: [] });
     const idx = iso => { const w = Math.ceil(Math.round((finD(iso) - finD(cur)) / 86400000) / 7); return w >= -FIN_PAST && w < FIN_HORIZON ? w + FIN_PAST : -1; };
-    const place = (iso, amt, key) => { const j = idx(iso); if (j >= 0) weeks[j][key] += amt; };
+    // what happened on which day (opened under a week in the table): every amount placed with a label is also kept as an event; sign +1 comes in, -1 goes out
+    const SIGN = { co: 1, rto: 1, inc: 1, loan: 1, bb: 1, inv: -1, out: -1, plan: -1 };
+    const place = (iso, amt, key, label) => { const j = idx(iso); if (j >= 0) { weeks[j][key] += amt; if (label) weeks[j].ev.push({ d: iso, key, amount: amt, sign: SIGN[key], label }); } };
     const firstDay = finAdd(weeks[0].end, -6), lastDay = weeks[weeks.length - 1].end;
     // dates of a monthly thing: the same day of the month as `from`, until the end of the timeline
     const monthly = (from, fn) => {
@@ -157,7 +172,8 @@ function finModel(plan, planStart) {
             const rec = c.weeks.find(x => x.weekEnd === wk.end);
             const real = rec && rec.send != null;
             const v = real ? rec.send : (wk.w >= 0 ? coAvg[c.id] : null);
-            if (v) { wk.co += v; wk.coParts.push(`${c.name}: ${finMoney(v)}${real ? '' : known.length ? ' (average)' : ' (estimate)'}`); }
+            if (v) { wk.co += v; wk.coParts.push(`${c.name}: ${finMoney(v)}${real ? '' : known.length ? ' (average)' : ' (estimate)'}`); wk.ev.push({ d: wk.end, key: 'co', amount: v, sign: 1, label: `${c.name} sends${real ? '' : known.length ? ' (average)' : ' (estimate)'}` }); }
+            if (rec && rec.daily) rec.daily.forEach(x => wk.ev.push({ d: x.date, key: 'coacc', amount: Math.round(x.profit - Math.max(0, x.profit) * (c.cutPct ?? 30) / 100), sign: 1, info: true, label: `${c.name} earned` }));
         }
     }
     // rent-to-own: a payment (rent + equity) each time the lease runs out, until the full price is paid. Past weeks: the payments that were recorded (or, without a record, the 30-day dates from the start as an estimate).
@@ -170,30 +186,30 @@ function finModel(plan, planStart) {
         const typed = !recorded && r.manualEquityPaid !== null && r.manualEquityPaid !== undefined && r.manualEquityPaid !== '';
         const cycles = Math.max(1, Math.floor(Math.max(0, Math.round((finD(S.today) - finD(r.startDate)) / 86400000)) / 30) + 1);
         let paid;
-        if (recorded) { paid = (Number(r.opening) || 0) + recPays.reduce((s, p) => s + (Number(p.equity) || 0), 0); for (const p of recPays) if (p.date >= firstDay && p.date <= lastDay) place(p.date, (Number(p.rent) || 0) + (Number(p.equity) || 0), 'rto'); }
+        if (recorded) { paid = (Number(r.opening) || 0) + recPays.reduce((s, p) => s + (Number(p.equity) || 0), 0); for (const p of recPays) if (p.date >= firstDay && p.date <= lastDay) place(p.date, (Number(p.rent) || 0) + (Number(p.equity) || 0), 'rto', r.clientName || 'Rent-to-own'); }
         else if (typed) paid = Number(r.manualEquityPaid);
-        else { paid = cycles * eq; for (let n = 0; n < cycles; n++) { if (eq && n * eq >= goal) break; const iso = finAdd(r.startDate, 30 * n); if (iso >= firstDay) place(iso, rent + eq, 'rto'); } }
+        else { paid = cycles * eq; for (let n = 0; n < cycles; n++) { if (eq && n * eq >= goal) break; const iso = finAdd(r.startDate, 30 * n); if (iso >= firstDay) place(iso, rent + eq, 'rto', r.clientName || 'Rent-to-own'); } }
         let left = eq ? Math.max(0, Math.ceil((goal - paid) / eq)) : 0;
         const pi = (S.rto.pis || []).find(p => (r.propertyId && String(p.id) === String(r.propertyId)) || (r.tenantId && p.tenantID && String(p.tenantID) === String(r.tenantId)));
         let first = pi && pi.isRented && synced ? finAdd(synced, Number(pi.daysLeft) || 0) : recPays.length ? finAdd(recPays.map(p => p.date).sort().pop(), 30) : finAdd(r.startDate, 30 * cycles);
         if (first < S.today) first = S.today;
-        for (let iso = first; left > 0 && iso <= lastDay; left--, iso = finAdd(iso, 30)) place(iso, rent + eq, 'rto');
+        for (let iso = first; left > 0 && iso <= lastDay; left--, iso = finAdd(iso, 30)) place(iso, rent + eq, 'rto', r.clientName || 'Rent-to-own');
     }
     for (const i of D.income) {
         if (!i.active || !i.amount) continue;
-        if (i.freq === 'once') place(i.date, i.amount, 'inc');
-        else if (i.freq === 'weekly') weeks.forEach(wk => { if (wk.end >= i.date) wk.inc += i.amount; });
-        else monthly(i.date, iso => place(iso, i.amount, 'inc'));
+        if (i.freq === 'once') place(i.date, i.amount, 'inc', i.name || 'Income');
+        else if (i.freq === 'weekly') weeks.forEach(wk => { if (wk.end >= i.date) { wk.inc += i.amount; wk.ev.push({ d: wk.end, key: 'inc', amount: i.amount, sign: 1, label: i.name || 'Income' }); } });
+        else monthly(i.date, iso => place(iso, i.amount, 'inc', i.name || 'Income'));
     }
     // investors: paid on Sundays (the first payout is pro rata, see finInvPeriods); a monthly investor is paid the Sundays of the month together on the last Sunday of it. An investor whose pay is netted in a company's send is not an outflow again,
     // and one who got the money back stops after that date. What was due before this week and is not marked paid yet is counted in the current week.
     const week0 = finAdd(cur, -6);
     for (const i of D.investors) {
         if (i.nettedIn || (!i.active && !i.returnedOn)) continue;
-        for (const p of finInvPeriods(i, lastDay, finAdd(firstDay, -1))) { place(p.date, p.amount, 'inv'); const j = idx(p.date); if (j >= 0) weeks[j].invParts.push(`${i.name}: ${finMoney(p.amount)}`); }
-        if (finTracked(i)) { const old = finDueList(i, finAdd(week0, -1)); if (old.length) { place(S.today, finSum(old), 'inv'); const j = idx(S.today); if (j >= 0) weeks[j].invParts.push(`${i.name}: ${finMoney(finSum(old))} (still due)`); } }
+        for (const p of finInvPeriods(i, lastDay, finAdd(firstDay, -1))) { place(p.date, p.amount, 'inv', i.name); const j = idx(p.date); if (j >= 0) weeks[j].invParts.push(`${i.name}: ${finMoney(p.amount)}`); }
+        if (finTracked(i)) { const old = finDueList(i, finAdd(week0, -1)); if (old.length) { place(S.today, finSum(old), 'inv', `${i.name} (still due)`); const j = idx(S.today); if (j >= 0) weeks[j].invParts.push(`${i.name}: ${finMoney(finSum(old))} (still due)`); } }
     }
-    for (const o of D.outlays) place(o.date, o.amount, 'out');
+    for (const o of D.outlays) place(o.date, o.amount, 'out', o.name || 'Outlay');
     // investors who leave at the end of their term (approved) or asked to (open request): the money goes back on the term end; the summary says whether it is there then
     const withdrawals = [];
     for (const i of D.investors) {
@@ -201,28 +217,28 @@ function finModel(plan, planStart) {
         const asked = (D.invRequests || []).some(q => { if (q.status !== 'open' || q.type !== 'withdraw') return false; const r0 = D.investors.find(x => x.id === q.rowId); return q.rowId === i.id || (!!r0 && r0.termEnd === i.termEnd && finPersonKey(r0) === finPersonKey(i)); }); // a deposit that ends on the same day as the asked one leaves with it
         if (!i.leaving && !asked) continue;
         const date = i.termEnd < S.today ? S.today : i.termEnd;
-        place(date, i.amount, 'out'); withdrawals.push({ name: i.name, amount: i.amount, date, pending: !i.leaving });
+        place(date, i.amount, 'out', `${i.name} gets the money back`); withdrawals.push({ name: i.name, amount: i.amount, date, pending: !i.leaving });
     }
     // buddy banking: the cash leaves on the day it is given (if that is still ahead) and comes back, plus her share of the profit, when the term ends; a late one counts in the current week
     for (const b of D.buddies) {
         if (b.status !== 'active' || !b.amount) continue;
-        if (b.given > S.today) place(b.given, b.amount, 'out');
+        if (b.given > S.today) place(b.given, b.amount, 'out', `${b.name} (buddy banking, given)`);
         const f = finBuddy(b), j = idx(f.due < S.today ? S.today : f.due);
-        if (j >= 0) { weeks[j].bb += f.cash; weeks[j].bbParts.push(`${b.name}: ${finMoney(f.cash)}`); }
+        if (j >= 0) { weeks[j].bb += f.cash; weeks[j].bbParts.push(`${b.name}: ${finMoney(f.cash)}`); weeks[j].ev.push({ d: f.due < S.today ? S.today : f.due, key: 'bb', amount: f.cash, sign: 1, label: `${b.name} sends ${b.reinvest !== false ? 'your share' : 'it back'}` }); }
     }
     // loans given to people: what is still to come back arrives on the repayment dates; a loan that is not given yet leaves on its date. An overdue payment counts in the current week.
     for (const L of D.loans) {
         if (!L.active) continue;
-        if (L.date > S.today) place(L.date, L.lent, 'out');
+        if (L.date > S.today) place(L.date, L.lent, 'out', `${L.name} (loan given)`);
         let rest = Math.max(0, (L.owed > 0 ? L.owed : L.lent) - L.repaid);
         if (!rest || L.freq === 'open') continue;
-        const put = (iso, amt) => { const a = Math.min(amt, rest); if (a <= 0) return; rest -= a; const j = idx(iso < S.today ? S.today : iso); if (j >= 0) { weeks[j].loan += a; weeks[j].loanParts.push(`${L.name}: ${finMoney(a)}`); } };
+        const put = (iso, amt) => { const a = Math.min(amt, rest); if (a <= 0) return; rest -= a; const j = idx(iso < S.today ? S.today : iso); if (j >= 0) { weeks[j].loan += a; weeks[j].loanParts.push(`${L.name}: ${finMoney(a)}`); weeks[j].ev.push({ d: iso < S.today ? S.today : iso, key: 'loan', amount: a, sign: 1, label: `${L.name} pays back` }); } };
         const pay = L.freq === 'once' || !(L.payment > 0) ? rest : L.payment;
         if (L.freq === 'once') put(L.from, rest);
         else if (L.freq === 'weekly') { for (let n = 0; n < 400 && rest > 0; n++) { const iso = finAdd(L.from, 7 * n); if (iso > lastDay) break; if (iso >= S.today) put(iso, pay); } }
         else monthly(L.from, iso => { if (rest > 0 && iso >= S.today) put(iso, pay); });
     }
-    if (plan && planStart != null) for (const s of plan.steps) { const j = FIN_PAST + planStart + s.afterWeeks; if (s.amount > 0 && j < weeks.length) weeks[j].plan += s.amount; }
+    if (plan && planStart != null) for (const s of plan.steps) { const j = FIN_PAST + planStart + s.afterWeeks; if (s.amount > 0 && j < weeks.length) { weeks[j].plan += s.amount; weeks[j].ev.push({ d: weeks[j].end, key: 'plan', amount: s.amount, sign: -1, label: `${plan.name}: ${s.label || 'step'}` }); } }
     // the balance runs forward from the money available now
     const funds = finFunds(); let bal = funds;
     for (const wk of weeks) {
@@ -348,7 +364,7 @@ function finPlansPanel() {
                 <td><button class="ghost small" data-delstep="${pi}" data-i="${si}" type="button">✕</button></td></tr>`).join('')}</tbody></table>
             <button class="ghost small" data-addstep="${pi}" type="button" style="margin-top:4px;">+ Step</button>
             <div class="fin-plan-res" data-res="${esc(p.id)}" style="margin-top:8px;font-size:13px;"></div></div>`).join('') || '<div style="color:var(--muted);font-size:13px;margin-bottom:8px;">No plans yet.</div>'}
-        <button class="ghost small" id="fin-addplan" type="button">+ Plan</button></div>`;
+        <button class="ghost small" id="fin-addplan" type="button">+ Plan</button> <button class="ghost small" id="fin-addbuddyplan" type="button" title="500m now, 500m after 30 days, 1b after 60 days: the cash a new buddy needs over time">+ Buddy banking plan</button></div>`;
 }
 function finCapitalsPanel() {
     const S = finSrv, D = finData;
@@ -431,9 +447,10 @@ function finRefreshMain() {
     $('fin-timeline').innerHTML = `<table style="width:100%;border-collapse:collapse;font-size:13px;"><thead><tr>${th('Week ending')}${th('Companies', 1)}${th('Rent-to-own', 1)}${th('Other income', 1)}${th('Loans back', 1)}${th('Buddy banks', 1)}${th('Investors', 1)}${th('Planned', 1)}${sel && res[sel.id] && res[sel.id].start != null ? th(esc(sel.name), 1) : ''}${th('Net', 1)}${th('Balance', 1)}</tr></thead>
         <tbody>${shown.map(w => {
             const past = w.w < 0, now = w.w === 0;
-            return `<tr style="${past ? 'opacity:.6;' : ''}${now ? 'background:rgba(53,217,155,.10);' : ''}border-top:1px solid var(--border,rgba(255,255,255,.08));"><td style="padding:4px 9px;white-space:nowrap;">${esc(finDate(w.end))}${now ? ' <span style="font-size:11px;color:var(--muted);">this week</span>' : ''}</td>
+            const open = finWeekOpen.has(w.end);
+            return `<tr class="fin-wk" data-wk="${w.end}" title="Click to see the days of this week" style="cursor:pointer;${past ? 'opacity:.6;' : ''}${now ? 'background:rgba(53,217,155,.10);' : ''}border-top:1px solid var(--border,rgba(255,255,255,.08));"><td style="padding:4px 9px;white-space:nowrap;"><span style="color:var(--muted);">${open ? '▾' : '▸'}</span> ${esc(finDate(w.end))}${now ? ' <span style="font-size:11px;color:var(--muted);">this week</span>' : ''}</td>
             ${td(w.co ? finShort(w.co) : '—', { title: w.coParts.join('\n') })}${td(w.rto ? finShort(w.rto) : '—')}${td(w.inc ? finShort(w.inc) : '—')}${td(w.loan ? finShort(w.loan) : '—', { title: w.loanParts.join('\n') })}${td(w.bb ? finShort(w.bb) : '—', { title: w.bbParts.join('\n') })}${td(w.inv ? '-' + finShort(w.inv) : '—', { title: w.invParts.join('\n') })}${td(w.out ? '-' + finShort(w.out) : '—')}
-            ${sel && res[sel.id] && res[sel.id].start != null ? td(w.plan ? '-' + finShort(w.plan) : '—', { color: '#e0a030' }) : ''}${td(finShort(w.net), { color: w.net < 0 ? 'var(--danger)' : '' })}${td(w.bal === null ? '—' : finShort(w.bal), { b: 1, color: w.bal !== null && w.bal < reserve ? 'var(--danger)' : '' })}</tr>`;
+            ${sel && res[sel.id] && res[sel.id].start != null ? td(w.plan ? '-' + finShort(w.plan) : '—', { color: '#e0a030' }) : ''}${td(finShort(w.net), { color: w.net < 0 ? 'var(--danger)' : '' })}${td(w.bal === null ? '—' : finShort(w.bal), { b: 1, color: w.bal !== null && w.bal < reserve ? 'var(--danger)' : '' })}</tr>${open ? finWeekDetail(w) : ''}`;
         }).join('')}</tbody></table>`;
     // plan results
     document.querySelectorAll('.fin-plan-res').forEach(el => {
@@ -569,12 +586,17 @@ function finWire(bodyId) {
     });
     body.addEventListener('click', e => {
         const b = e.target.closest('button');
+        const wkr = e.target.closest('tr.fin-wk'); if (!b && wkr && !e.target.closest('input, select, a')) { const k = wkr.dataset.wk; if (finWeekOpen.has(k)) finWeekOpen.delete(k); else finWeekOpen.add(k); finRefresh(); return; }
         const fth = e.target.closest('th[data-fsort]'); if (fth && typeof finFundSortBy === 'function') { finFundSortBy(fth.dataset.fsort); return; }
         const frow = e.target.closest('tr.fund-row'); if (!b && frow && !e.target.closest('input, select, a') && FIN_PAGES[finPage].rowclick) { FIN_PAGES[finPage].rowclick(frow); return; }
         if (!b) return;
         if (b.dataset.add) { finData[b.dataset.add].push(FIN_LISTS[b.dataset.add].fresh()); finRenderAll(); finTouch(); }
         else if (b.dataset.del) { finData[b.dataset.del].splice(+b.dataset.i, 1); finRenderAll(); finTouch(); }
         else if (b.id === 'fin-addplan') { finData.plans.push({ id: finId(), name: 'New plan', steps: [{ label: '', amount: 0, afterWeeks: 0 }] }); finRenderAll(); finTouch(); }
+        else if (b.id === 'fin-addbuddyplan') { // a new buddy: the money goes out in three rounds, 500m now, 500m after 30 days (about 4 weeks) and 1b after 60 days (about 9 weeks); the principal then stays invested, so each round only adds the new money
+            finData.plans.push({ id: finId(), name: 'New buddy (Bronze, Silver, Gold)', steps: [{ label: 'Round 1: Bronze 500m', amount: 500000000, afterWeeks: 0 }, { label: 'Round 2: Silver, 500m more (1b in total)', amount: 500000000, afterWeeks: 4 }, { label: 'Round 3: Gold, 1b more (2b in total)', amount: 1000000000, afterWeeks: 9 }] });
+            finRenderAll(); finTouch();
+        }
         else if (b.dataset.delplan !== undefined) { const p = finData.plans.splice(+b.dataset.delplan, 1)[0]; if (p && finShowPlan === p.id) finShowPlan = ''; finRenderAll(); finTouch(); }
         else if (b.dataset.addstep !== undefined) { finData.plans[+b.dataset.addstep].steps.push({ label: '', amount: 0, afterWeeks: 4 }); finRenderAll(); finTouch(); }
         else if (b.dataset.delstep !== undefined) { finData.plans[+b.dataset.delstep].steps.splice(+b.dataset.i, 1); finRenderAll(); finTouch(); }
