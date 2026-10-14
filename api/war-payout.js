@@ -46,6 +46,7 @@ const { companyHandle, isDirector, tornCompany: coTorn, normalize: coNormalize, 
 const { runCompanyReports } = require('../lib/companyReports');
 const { ltHandle, leaseTodos, tenHandle, isTenant } = require('../lib/labstracking');
 const { finHandle, invHandle, isInvestor, fundRequestTodos } = require('../lib/finances');
+const { joinHandle, joinTodos } = require('../lib/joinlabs');
 const { ohHandle } = require('../lib/onlineHours');
 const { labsIsOwner, labsHasOwners, labsHandle, labsRecordReceipt } = require('../lib/labsLedger');
 
@@ -784,7 +785,7 @@ module.exports = async function handler(req, res) {
         }
         // The login's access check and the company side (owner setup, directors) are answered BEFORE the faction lookup below: a company director does not
         // have to be in a faction at all, and a director only ever gets the co-* actions (see lib/company.js). Everyone else goes on to the faction checks.
-        if (action === 'access-check' || action.startsWith('co-') || action.startsWith('lt-') || action.startsWith('fin-') || action.startsWith('inv-') || action.startsWith('ten-') || action === 'test-seed') {
+        if (action === 'access-check' || action.startsWith('co-') || action.startsWith('lt-') || action.startsWith('fin-') || action.startsWith('inv-') || action.startsWith('ten-') || action.startsWith('join-') || action === 'test-seed') {
             const who = await (async () => {
                 const r = await tornFetch(`https://api.torn.com/user/?selections=profile&key=${encodeURIComponent(key)}`);
                 const p = await r.json();
@@ -801,6 +802,9 @@ module.exports = async function handler(req, res) {
             }
             if (action === 'access-check') return res.status(200).json({ allowed: who.factionId ? await factionAllowed(who.factionId, who.playerId) : owner, director, owner, investor: await isInvestor(redis, who), tenant: await isTenant(redis, who) });
             if (action.startsWith('inv-')) return res.status(200).json(await invHandle(action, req.body, { redis, who })); // an investor sees only their own investments
+            if (action.startsWith('join-')) { // Labs services: anybody with a Torn key may look at the programs and ask to join one; the list and the decisions are for the owner (lib/joinlabs.js)
+                try { return res.status(200).json(await joinHandle(action, req.body, { redis, who, owner })); } catch (e) { return res.status(e.message === 'Owner only.' ? 403 : 400).json({ error: e.message }); }
+            }
             if (action.startsWith('ten-')) return res.status(200).json(await tenHandle(action, req.body, { redis, who })); // a tenant sees only their own rent-to-buy contract
             if (action.startsWith('lt-')) { // Labstracking (the owner's Private Islands and rent-to-own contracts): owners only
                 if (!owner) return res.status(403).json({ error: 'Owners only' });
@@ -1355,7 +1359,7 @@ Cancel: ${cancelUrl}`, [], embeds, undefined, true);
         if (action === 'leader-todos') {
             if (!(await isLeader(key))) return res.status(403).json({ error: 'Leaders only' });
             const lt = await leaderTodos(key, factionId);
-            try { if (await labsIsOwner(redis, playerId)) lt.todos.push(...(await fundRequestTodos(redis))); } catch (e) { /* the other to dos still show */ } // the owner also sees the investor requests that are waiting
+            try { if (await labsIsOwner(redis, playerId)) lt.todos.push(...(await fundRequestTodos(redis)), ...(await joinTodos(redis))); } catch (e) { /* the other to dos still show */ } // the owner also sees the investor requests that are waiting
             return res.status(200).json(lt);
         }
         // The weekly energy plan, shared between the Energy planner page and the userscript in Torn.
@@ -1526,7 +1530,7 @@ Cancel: ${cancelUrl}`, [], embeds, undefined, true);
                     const ocsOpen = ocs.filter(q => q.status !== 'claimed'); if (ocsOpen.length) items.push({ id: 'oc-requests', text: `${ocsOpen.length} OC request${ocsOpen.length === 1 ? '' : 's'}: ${ocsOpen.slice(0, 4).map(r => `${r.name} (level ${r.level})`).join(', ')}${ocsOpen.length > 4 ? ` +${ocsOpen.length - 4} more` : ''}.`, cta: 'See requests', url: `${site}/oc-requests` });
                     const openBanks = banks.filter(r => r.status === 'open');
                     if (openBanks.length) items.push({ id: 'bank-requests', text: `${openBanks.length} bank request${openBanks.length === 1 ? '' : 's'}: ${openBanks.slice(0, 4).map(r => `${r.name} ($${Number(r.amount).toLocaleString('en-US')})`).join(', ')}${openBanks.length > 4 ? ` +${openBanks.length - 4} more` : ''}.`, cta: 'Open bank requests', url: `${site}/bank` });
-                    if (await labsIsOwner(redis, playerId)) items.push(...(await leaseTodos(redis, key))); if (await labsIsOwner(redis, playerId)) items.push(...(await fundRequestTodos(redis))); // and the investor requests that are waiting // the owner's lease payments that are due (the script shows Offered / Paid buttons on them)
+                    if (await labsIsOwner(redis, playerId)) items.push(...(await leaseTodos(redis, key))); if (await labsIsOwner(redis, playerId)) items.push(...(await fundRequestTodos(redis)), ...(await joinTodos(redis))); // and the investor requests that are waiting // the owner's lease payments that are due (the script shows Offered / Paid buttons on them)
                 }
             } catch (e) { /* skip */ }
 

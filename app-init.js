@@ -43,7 +43,7 @@ fetch('/api/war-payout', { method: 'POST', headers: { 'Content-Type': 'applicati
     bar.textContent = e.dbReady ? `TEST SITE (${e.branch || 'dev'}): separate test data, nothing here changes the real WWL` : 'TEST SITE: not connected to a test database yet, so it is closed on purpose';
     if (e.dbReady) { // "Use as": log in as a test person (a key like test:ID:Name is never sent to Torn) and see the site the way they do; "Fill test data" adds the test investor and tenant
         const STORE = 'wwl_api_key', REAL = 'wwl_test_realkey', get = k => { try { return localStorage.getItem(k) || ''; } catch (x) { return ''; } }, put = (k, v) => { try { localStorage.setItem(k, v); } catch (x) { /* blocked */ } };
-        const people = [['me', 'Me (my own key)'], ['test:9000001:Test Investor', 'An investor'], ['test:9000002:Test Tenant', 'A tenant']];
+        const people = [['me', 'Me (my own key)'], ['test:9000001:Test Investor', 'An investor'], ['test:9000002:Test Tenant', 'A tenant'], ['test:9000003:New Person', 'Someone new (nothing with Labs yet)']];
         const cur = get(STORE), sel = document.createElement('select');
         sel.style.cssText = 'margin-left:12px;font:12px Arial,sans-serif;padding:1px 4px;border-radius:4px;';
         sel.innerHTML = people.map(([v, l]) => `<option value="${v}">Use as: ${l}</option>`).join('');

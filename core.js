@@ -175,6 +175,13 @@
             if (typeof enterInvestorMode === 'function') enterInvestorMode(acc);
             return;
         }
+        if (acc && acc.allowed === false && !acc.owner && !acc.director && !acc.investor && !acc.tenant && typeof enterJoinMode === 'function') { // somebody with nothing to do with Labs yet: WWL is just the page with the three programs
+            localStorage.setItem(KEY_STORAGE, key);
+            $('login-view').style.display = 'none';
+            $('app-view').style.display = 'block';
+            enterJoinMode();
+            return;
+        }
         if (limitedErr) { apiKey = ''; throw limitedErr; } // a small key is only enough for the pages above
         if (acc && acc.allowed === false) { const denied = new Error('Your faction is not on the list of factions that can use WWL yet. Ask the WWL owner to add it.'); denied.denied = true; apiKey = ''; throw denied; }
         localStorage.setItem(KEY_STORAGE, key);
@@ -451,6 +458,8 @@
         if (page === 'payouts') loadPayouts();
         if (page === 'investor') loadInvestor();
         if (page === 'tenant') loadTenant();
+        if (page === 'join') loadJoin();
+        if (page === 'join-requests') loadJoinRequests();
         if (page === 'buddybank') loadBuddyBank();
         if (page === 'bug-report') loadBugReport();
         if (page === 'labs-funds') loadLabsFunds();

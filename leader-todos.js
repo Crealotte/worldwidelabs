@@ -34,6 +34,11 @@ function renderLeaderTodos(todos) {
         if (todos.length) { const s = document.createElement('span'); s.className = 'todo-dot'; s.textContent = todos.length; s.title = 'Things for leaders to do'; nav.appendChild(s); }
     }
     // and the number of investor requests on the Investment fund item (the owner only gets that to do)
+    const joinNav = document.querySelector('.nav-item[data-page="join-requests"]'), jr = todos.find(t => t.id === 'join-requests'); // people who asked to join a program
+    if (joinNav) {
+        joinNav.querySelector('.todo-dot')?.remove();
+        if (jr) { const s = document.createElement('span'); s.className = 'todo-dot'; s.textContent = jr.n || 1; s.title = 'Requests to join Labs waiting'; joinNav.appendChild(s); }
+    }
     const fundNav = document.querySelector('.nav-item[data-page="fund"]'), fr = todos.find(t => t.id === 'fund-requests');
     if (fundNav) {
         fundNav.querySelector('.todo-dot')?.remove();

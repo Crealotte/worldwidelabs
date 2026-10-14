@@ -29,6 +29,7 @@ function enterDirectorMode() {
     document.querySelectorAll('nav.side .nav-item, nav.side .nav-group').forEach(el => { el.style.display = 'none'; });
     const mine = document.querySelector('.nav-item[data-page="company"]');
     if (mine) mine.style.display = '';
+    const jn = document.querySelector('.nav-item[data-page="join"]'); if (jn) jn.style.display = ''; // the other Labs programs
     const bugs = document.querySelector('.nav-item[data-page="bug-report"]'); if (bugs) bugs.style.display = ''; // Bugs & suggestions: only what belongs to the company page (the server filters)
     goToPage('company');
 }
