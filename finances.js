@@ -277,7 +277,7 @@ function finVentures(m) {
         const real = w.length >= 3; // until 3 full weeks are saved the estimate stands in
         const weekly = real ? w.reduce((s, x) => s + x.profit - x.cut, 0) / w.length : est.daily ? finEstWeekly(c) : (w.length ? w.reduce((s, x) => s + x.profit - x.cut, 0) / w.length : 0);
         rows.push({ name: c.name + (!real && est.daily ? ' (estimate)' : ''), type: est.staff ? `Company, ${est.staff} people` : 'Company', capital: D.capitals[`co:${c.id}`] ?? FIN_STAFF_COST[est.staff] ?? 0, weekly,
-            note: real ? `profit after the director cut, average of ${w.length} weeks` : est.daily ? `estimate: ${finShort(est.daily)} a day net, minus the ${cut}% director cut; the real average takes over after 3 full weeks (${w.length} so far)` : 'no full weeks saved yet' });
+            note: real ? `profit after the director cut, average of ${w.length} full weeks (${w.slice().reverse().map(x => `${finDate(x.weekEnd)}: ${finShort(x.profit - x.cut)}, ${x.days} days`).join('; ')}); from the daily numbers of the company reports` : est.daily ? `estimate: ${finShort(est.daily)} a day net, minus the ${cut}% director cut; the real average takes over after 3 full weeks (${w.length} so far)` : 'no full weeks saved yet' });
     }
     for (const staff of [16, 14]) rows.push({ name: `A new ${staff}-person mine, optimized`, type: 'Company, benchmark', capital: FIN_STAFF_COST[staff], weekly: FIN_STAFF_OPT[staff] * 7 * 0.7, note: `about ${finShort(FIN_STAFF_OPT[staff])} a day net when optimized, 30% director cut taken off` });
     const rent = S.rto.defaults.rent, eqs = S.rto.defaults.equity;

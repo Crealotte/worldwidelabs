@@ -204,8 +204,7 @@
         const pathPage = window.location.pathname.replace(/^\/+|\/+$/g, '');
         const lastPage = (pathPage && $('page-' + pathPage)) ? pathPage : (sessionStorage.getItem(CURRENT_PAGE_KEY) || 'dashboard');
         const navItem = document.querySelector(`.nav-item[data-page="${lastPage}"]`);
-        const parentGroup = navItem?.closest('.nav-group');
-        if (parentGroup) parentGroup.classList.remove('collapsed'); // reveal it even if its group was left collapsed
+        for (let g = navItem?.closest('.nav-group'); g; g = g.parentElement?.closest('.nav-group')) g.classList.remove('collapsed'); // reveal it even if its group (or the group around it) was left collapsed
         goToPage(lastPage);
         if (typeof loadBanners === 'function') loadBanners();
         loadAnnouncement();
