@@ -12,6 +12,18 @@
 
 const WHATS_NEW = [
     {
+        version: '1.23', date: '2026-10-14',
+        title: 'War hits: only successful attacks count',
+        everyone: [
+            'War hits now only count attacks you WON. Before, an attack that was lost, ended in a stalemate or was escaped from also counted as a war hit, which made some hit totals too high. Your war counts in Member Overview are counted again automatically with the fix, so you may see a lower number for wars you lost attacks in.',
+            'Assists are counted apart from hits (and so are failed attacks), so they never inflate your hits.',
+        ],
+        leaders: [
+            'The war payout calculator and the war rule in Member Overview now count only won attacks as war hits. In the payout results there are two new grey columns, Assists and Failed, per member. A tick box "Also count assists as hits" lets a faction that wants to pay for assists include them; it is off by default. The saved war counts of the last wars are recounted by the page itself the next time you open Member Overview or the Evaluation (it takes a moment per war); a recount that finds nothing never wipes the counts that were saved.',
+            'Payouts that were already calculated and paid keep the numbers they were made with.',
+        ],
+    },
+    {
         version: '1.22', date: '2026-10-10',
         title: 'Userscript 1.39.1: the To do button moved',
         everyone: [
