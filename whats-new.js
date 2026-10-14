@@ -12,6 +12,14 @@
 
 const WHATS_NEW = [
     {
+        version: '1.25', date: '2026-10-14',
+        title: 'Availability: your usual week in one click',
+        everyone: [
+            'Availability tracker: tick the hours you are usually free, press Save my hours as my usual week, and on a new plan press Use my usual week to tick them all again in one go. Nothing is filled in by itself: you choose each week, and you can still change any hour that is different. Using it replaces what you have ticked in that plan.',
+        ],
+        leaders: [],
+    },
+    {
         version: '1.24', date: '2026-10-14',
         title: 'Bugs & suggestions show their date, one amount for CreaLotte',
         everyone: [
