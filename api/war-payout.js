@@ -47,6 +47,7 @@ const { runCompanyReports } = require('../lib/companyReports');
 const { ltHandle, leaseTodos, tenHandle, isTenant } = require('../lib/labstracking');
 const { finHandle, invHandle, isInvestor, isBuddy, finRoles, budHandle, fundRequestTodos } = require('../lib/finances');
 const { joinHandle, joinTodos } = require('../lib/joinlabs');
+const { serviceView, setKnown } = require('../lib/todoKnown');
 const { ohHandle } = require('../lib/onlineHours');
 const { labsIsOwner, labsHasOwners, labsHandle, labsRecordReceipt } = require('../lib/labsLedger');
 
@@ -785,7 +786,7 @@ module.exports = async function handler(req, res) {
         }
         // The login's access check and the company side (owner setup, directors) are answered BEFORE the faction lookup below: a company director does not
         // have to be in a faction at all, and a director only ever gets the co-* actions (see lib/company.js). Everyone else goes on to the faction checks.
-        if (action === 'access-check' || action.startsWith('co-') || action.startsWith('lt-') || action.startsWith('fin-') || action.startsWith('inv-') || action.startsWith('ten-') || action.startsWith('join-') || action.startsWith('bud-') || action === 'test-seed') {
+        if (action === 'access-check' || action.startsWith('co-') || action.startsWith('lt-') || action.startsWith('fin-') || action.startsWith('inv-') || action.startsWith('ten-') || action.startsWith('join-') || action.startsWith('bud-') || action === 'todo-known' || action === 'test-seed') {
             const who = await (async () => {
                 const r = await tornFetch(`https://api.torn.com/user/?selections=profile&key=${encodeURIComponent(key)}`);
                 const p = await r.json();
@@ -802,6 +803,11 @@ module.exports = async function handler(req, res) {
             }
             if (action === 'access-check') { const roles = await finRoles(redis, who); return res.status(200).json({ allowed: who.factionId ? await factionAllowed(who.factionId, who.playerId) : owner, director, owner, investor: roles.investor, tenant: await isTenant(redis, who), buddy: roles.buddy }); }
             if (action.startsWith('inv-')) return res.status(200).json(await invHandle(action, req.body, { redis, who })); // an investor sees only their own investments
+            if (action === 'todo-known') { // the owner marks a Services to do as known (stays in the list, does not count) or takes that back
+                if (!owner) return res.status(403).json({ error: 'Owner only.' });
+                await setKnown(redis, req.body.id, req.body.sig, req.body.on !== false);
+                return res.status(200).json({ ok: true });
+            }
             if (action.startsWith('bud-')) return res.status(200).json(await budHandle(action, req.body, { redis, who })); // a buddy sees only their own buddy banking plan
             if (action.startsWith('join-')) { // Labs services: anybody with a Torn key may look at the programs and ask to join one; the list and the decisions are for the owner (lib/joinlabs.js)
                 try { return res.status(200).json(await joinHandle(action, req.body, { redis, who, owner })); } catch (e) { return res.status(e.message === 'Owner only.' ? 403 : 400).json({ error: e.message }); }
@@ -1360,7 +1366,12 @@ Cancel: ${cancelUrl}`, [], embeds, undefined, true);
         if (action === 'leader-todos') {
             if (!(await isLeader(key))) return res.status(403).json({ error: 'Leaders only' });
             const lt = await leaderTodos(key, factionId);
-            try { if (await labsIsOwner(redis, playerId)) lt.todos.push(...(await fundRequestTodos(redis)), ...(await joinTodos(redis))); } catch (e) { /* the other to dos still show */ } // the owner also sees the investor requests that are waiting
+            try { // the owner also gets everything from the Labs services (investor requests, join requests, leases) as ONE to do that opens up to its items; items marked Known stay in it but do not count
+                if (await labsIsOwner(redis, playerId)) {
+                    const svc = await serviceView(redis, [...(await fundRequestTodos(redis)), ...(await joinTodos(redis)), ...(await leaseTodos(redis, key))].map(x => ({ ...x, page: x.page || (x.id === 'join-requests' ? 'join-requests' : 'fund') })));
+                    if (svc.length) { const open = svc.filter(x => !x.known); lt.todos.push({ id: 'services', group: true, text: 'Services', n: open.length, known: !open.length, items: svc }); }
+                }
+            } catch (e) { /* the other to dos still show */ }
             return res.status(200).json(lt);
         }
         // The weekly energy plan, shared between the Energy planner page and the userscript in Torn.
@@ -1531,7 +1542,12 @@ Cancel: ${cancelUrl}`, [], embeds, undefined, true);
                     const ocsOpen = ocs.filter(q => q.status !== 'claimed'); if (ocsOpen.length) items.push({ id: 'oc-requests', text: `${ocsOpen.length} OC request${ocsOpen.length === 1 ? '' : 's'}: ${ocsOpen.slice(0, 4).map(r => `${r.name} (level ${r.level})`).join(', ')}${ocsOpen.length > 4 ? ` +${ocsOpen.length - 4} more` : ''}.`, cta: 'See requests', url: `${site}/oc-requests` });
                     const openBanks = banks.filter(r => r.status === 'open');
                     if (openBanks.length) items.push({ id: 'bank-requests', text: `${openBanks.length} bank request${openBanks.length === 1 ? '' : 's'}: ${openBanks.slice(0, 4).map(r => `${r.name} ($${Number(r.amount).toLocaleString('en-US')})`).join(', ')}${openBanks.length > 4 ? ` +${openBanks.length - 4} more` : ''}.`, cta: 'Open bank requests', url: `${site}/bank` });
-                    if (await labsIsOwner(redis, playerId)) items.push(...(await leaseTodos(redis, key))); if (await labsIsOwner(redis, playerId)) items.push(...(await fundRequestTodos(redis)), ...(await joinTodos(redis))); // and the investor requests that are waiting // the owner's lease payments that are due (the script shows Offered / Paid buttons on them)
+                    if (await labsIsOwner(redis, playerId)) { // the owner: leases that are due keep their Offered / Paid buttons; everything else from the Labs services is ONE line (the list with the Known buttons is on the dashboard)
+                        const svc = await serviceView(redis, [...(await leaseTodos(redis, key)), ...(await fundRequestTodos(redis)), ...(await joinTodos(redis))]);
+                        items.push(...svc.filter(x => !x.known && x.lease && x.lease.status === 'due').map(x => { const { svc: s0, waiting, sig, known, ...rest } = x; return rest; }));
+                        const rest = svc.filter(x => !x.known && !(x.lease && x.lease.status === 'due'));
+                        if (rest.length) items.push({ id: 'services', text: `Services: ${rest.length} thing${rest.length === 1 ? '' : 's'} to look at. ${rest.slice(0, 3).map(x => x.text.split(':')[0]).join('; ')}${rest.length > 3 ? ` and ${rest.length - 3} more` : ''}`, cta: 'Open the list', url: `${site}/dashboard` });
+                    }
                 }
             } catch (e) { /* skip */ }
 
