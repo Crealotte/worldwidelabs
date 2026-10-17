@@ -94,6 +94,11 @@
             ? `${profile.faction.position} of ${profile.faction.faction_name}`
             : 'No faction on record';
         $('whoami').innerHTML = `<b>${esc(profile.name)}</b> [${profile.player_id}]`;
+        // a new member (in the faction for 3 weeks or less) is pointed at Lab Notes at the top of the dashboard until they say they know their way around
+        { const d = profile.faction?.days_in_faction; let hidden = false; try { hidden = localStorage.getItem('wwl_newcomer_hide') === '1'; } catch (e) { /* storage blocked */ }
+          $('dash-newcomer').style.display = d !== undefined && d !== null && d <= 21 && !hidden ? 'block' : 'none';
+          $('dash-newcomer-go').onclick = () => goToPage('lab-notes');
+          $('dash-newcomer-hide').onclick = () => { try { localStorage.setItem('wwl_newcomer_hide', '1'); } catch (e) { /* storage blocked */ } $('dash-newcomer').style.display = 'none'; }; }
 
         $('bars').innerHTML =
             barBlock('Energy', profile.energy, 'var(--energy)') +

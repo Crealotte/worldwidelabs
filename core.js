@@ -202,7 +202,9 @@
         // over whatever page was last open in this session — that's the whole point of sharing
         // a specific link. Falls through to the remembered page, then dashboard, same as before.
         const pathPage = window.location.pathname.replace(/^\/+|\/+$/g, '');
-        const lastPage = (pathPage && $('page-' + pathPage)) ? pathPage : (sessionStorage.getItem(CURRENT_PAGE_KEY) || 'dashboard');
+        let lastPage = (pathPage && $('page-' + pathPage)) ? pathPage : (sessionStorage.getItem(CURRENT_PAGE_KEY) || 'dashboard');
+        // the very first time a new member (3 days or less in the faction) logs in on this device, they land on Lab Notes instead of the dashboard
+        if (!(pathPage && $('page-' + pathPage)) && !sessionStorage.getItem(CURRENT_PAGE_KEY)) { const d0 = profile?.faction?.days_in_faction; try { if (d0 !== undefined && d0 !== null && d0 <= 3 && !localStorage.getItem('wwl_newcomer_landed')) { localStorage.setItem('wwl_newcomer_landed', '1'); lastPage = 'lab-notes'; } } catch (e) { /* storage blocked */ } }
         const navItem = document.querySelector(`.nav-item[data-page="${lastPage}"]`);
         for (let g = navItem?.closest('.nav-group'); g; g = g.parentElement?.closest('.nav-group')) g.classList.remove('collapsed'); // reveal it even if its group (or the group around it) was left collapsed
         goToPage(lastPage);

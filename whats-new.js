@@ -12,6 +12,16 @@
 
 const WHATS_NEW = [
     {
+        version: '1.28', date: '2026-10-17',
+        title: 'New members are pointed to Lab Notes',
+        everyone: [
+            'New members (in the faction for 3 weeks or less) now see a card at the top of the dashboard, New here? Start with Lab Notes, and the very first time they log in they land on Lab Notes. Lab Notes guide you step by step through what we need from you. You can hide the card with I know my way around.',
+        ],
+        leaders: [
+            'Tip for recruiting: send new people the link https://worldwidelabs.vercel.app/lab-notes. After they log in with their key, it opens straight on Lab Notes.',
+        ],
+    },
+    {
         version: '1.27', date: '2026-10-17',
         title: 'Userscript 1.39.2: fewer calls to the server',
         everyone: [
