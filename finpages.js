@@ -10,11 +10,12 @@ async function finLoadLight(page, statusId) {
     if (r.error) { st.className = 'status err'; st.textContent = r.error; return; }
     st.textContent = ''; st.className = 'status';
     finSrv = { cash: null, companies: r.companies || [], rto: null, today: r.today };
-    finData = { fundsMode: r.fundsMode, fundsManual: r.fundsManual, reserve: r.reserve, investors: r.investors, income: r.income, outlays: r.outlays, plans: r.plans, roi: r.roi, ventures: r.ventures, capitals: r.capitals, coEst: r.coEst || {}, paidOffset: r.paidOffset || 0, terms: r.terms || {}, invRequests: r.invRequests || [], loans: r.loans || [], buddies: r.buddies || [] };
+    finData = { fundsMode: r.fundsMode, fundsManual: r.fundsManual, reserve: r.reserve, investors: r.investors, income: r.income, outlays: r.outlays, plans: r.plans, roi: r.roi, ventures: r.ventures, capitals: r.capitals, coEst: r.coEst || {}, fundings: r.fundings || [], fundingCap: r.fundingCap || 0, paidOffset: r.paidOffset || 0, terms: r.terms || {}, invRequests: r.invRequests || [], loans: r.loans || [], buddies: r.buddies || [] };
     finRenderAll();
 }
 const loadInvestFund = () => finLoadLight('fund', 'fund-status');
 const loadBuddyBank = () => finLoadLight('buddy', 'bb-status');
+const loadFunding = () => finLoadLight('funding', 'fn-status');
 
 
 // ---- Investment fund ----

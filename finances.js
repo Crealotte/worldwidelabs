@@ -234,6 +234,11 @@ function finModel(plan, planStart) {
         for (const p of finInvPeriods(i, lastDay, finAdd(firstDay, -1))) { place(p.date, p.amount, 'inv', i.name); const j = idx(p.date); if (j >= 0) weeks[j].invParts.push(`${i.name}: ${finMoney(p.amount)}`); }
         if (finTracked(i)) { const old = finDueList(i, finAdd(week0, -1)); if (old.length) { place(S.today, finSum(old), 'inv', `${i.name} (still due)`); const j = idx(S.today); if (j >= 0) weeks[j].invParts.push(`${i.name}: ${finMoney(finSum(old))} (still due)`); } }
     }
+    // trading funding: the weekly fee of every funding (the ladder, or the fixed fee typed on the line) comes in at the end of each funding week; a fee that is due and not marked as paid yet counts in the current week
+    for (const f of (D.fundings || [])) {
+        if (!f.start || !f.amount || (!f.active && !f.endedOn)) continue;
+        for (const p of fnDues(f, lastDay)) { const paid = f.paidUntil && p.date <= f.paidUntil, when = !paid && p.date < S.today ? S.today : p.date; if (when >= firstDay) place(when, p.amount, 'inc', `${f.name}: trading funding fee (week ${p.week}, ${p.pct}%)`); }
+    }
     for (const o of D.outlays) place(o.date, o.amount, 'out', o.name || 'Outlay');
     // investors who leave at the end of their term (approved) or asked to (open request): the money goes back on the term end; the summary says whether it is there then
     const withdrawals = [];
@@ -376,10 +381,10 @@ function finCell(list, i, col, row, extra = '') {
 }
 function finListEditor(list) {
     const L = FIN_LISTS[list], rows = finData[list];
-    const extra = list === 'investors' ? ['Yearly', 'Payout due', 'Term'] : list === 'loans' ? ['Still to come back'] : list === 'buddies' ? ['Due / comes back', ''] : [];
+    const extra = list === 'investors' ? ['Yearly', 'Payout due', 'Term'] : list === 'loans' ? ['Still to come back'] : list === 'buddies' ? ['Due / comes back', ''] : list === 'fundings' ? ['Fee now / earned', ''] : [];
     return `<div class="panel"><h3 style="margin-top:0;">${L.title}</h3>${list === 'roi' ? '<p style="font-size:12px;color:var(--muted);margin:0 0 8px;">From the top row up, an investor is paid per billion the same as the top row. In between rows it is scaled from the row below it. At most 35% a year.</p>' : ''}
         <div style="overflow-x:auto;"><table style="border-collapse:collapse;font-size:13px;"><thead><tr>${L.cols.map(c => `<th style="text-align:left;padding:4px 8px;font-size:11px;color:var(--muted);font-weight:600;">${c.l}</th>`).join('')}${extra.map(x => `<th style="padding:4px 8px;font-size:11px;color:var(--muted);font-weight:600;text-align:left;">${x}</th>`).join('')}<th></th></tr></thead>
-        <tbody>${rows.map((r, i) => `<tr>${L.cols.map(c => `<td style="padding:3px 6px;">${finCell(list, i, c, r)}</td>`).join('')}${list === 'investors' ? `<td style="padding:3px 8px;white-space:nowrap;" data-pct="${i}"></td><td style="padding:3px 8px;font-size:12px;" data-invdue="${i}"></td><td style="padding:3px 8px;font-size:12px;white-space:nowrap;" data-invterm="${i}"></td>` : list === 'loans' ? `<td style="padding:3px 8px;white-space:nowrap;font-family:var(--mono);" data-loanleft="${i}"></td>` : list === 'buddies' ? `<td style="padding:3px 8px;white-space:nowrap;font-size:12px;" data-bbinfo="${i}"></td><td style="padding:3px 8px;white-space:nowrap;" data-bbact="${i}"></td>` : ''}<td><button class="ghost small" data-del="${list}" data-i="${i}" type="button" title="Remove">✕</button></td></tr>`).join('') || `<tr><td colspan="${L.cols.length + 2}" style="color:var(--muted);padding:6px 8px;">Nothing yet.</td></tr>`}</tbody></table></div>
+        <tbody>${rows.map((r, i) => `<tr>${L.cols.map(c => `<td style="padding:3px 6px;">${finCell(list, i, c, r)}</td>`).join('')}${list === 'investors' ? `<td style="padding:3px 8px;white-space:nowrap;" data-pct="${i}"></td><td style="padding:3px 8px;font-size:12px;" data-invdue="${i}"></td><td style="padding:3px 8px;font-size:12px;white-space:nowrap;" data-invterm="${i}"></td>` : list === 'loans' ? `<td style="padding:3px 8px;white-space:nowrap;font-family:var(--mono);" data-loanleft="${i}"></td>` : list === 'buddies' ? `<td style="padding:3px 8px;white-space:nowrap;font-size:12px;" data-bbinfo="${i}"></td><td style="padding:3px 8px;white-space:nowrap;" data-bbact="${i}"></td>` : list === 'fundings' ? `<td style="padding:3px 8px;font-size:12px;min-width:250px;" data-fninfo="${i}"></td><td style="padding:3px 8px;white-space:nowrap;" data-fnact="${i}"></td>` : ''}<td><button class="ghost small" data-del="${list}" data-i="${i}" type="button" title="Remove">✕</button></td></tr>`).join('') || `<tr><td colspan="${L.cols.length + 2}" style="color:var(--muted);padding:6px 8px;">Nothing yet.</td></tr>`}</tbody></table></div>
         <button class="ghost small" data-add="${list}" type="button" style="margin-top:8px;">${L.add}</button></div>`;
 }
 function finPlansPanel() {
@@ -431,7 +436,7 @@ async function loadFinances() {
     if (r.error) { st.className = 'status err'; st.textContent = r.error; return; }
     st.textContent = ''; st.className = 'status';
     finSrv = { cash: r.cash, companies: r.companies || [], rto: r.rto || { rtoItems: [], pis: [], defaults: { rent: { 4100: 27000000, 3600: 15000000, 2600: 12000000 }, equity: { 4100: 81000000, 3600: 45000000, 2600: 36000000 }, goals: { 4100: 1701000000, 3600: 855000000, 2600: 612000000 }, cost: { 4100: 1482500000, 3600: 757500000, 2600: 557500000 } } }, today: r.today, labsCuts: r.labsCuts || [] };
-    finData = { fundsMode: r.fundsMode, fundsManual: r.fundsManual, reserve: r.reserve, investors: r.investors, income: r.income, outlays: r.outlays, plans: r.plans, roi: r.roi, ventures: r.ventures, capitals: r.capitals, coEst: r.coEst || {}, coSends: r.coSends || {}, warFactions: r.warFactions || [], paidOffset: r.paidOffset || 0, terms: r.terms || {}, invRequests: r.invRequests || [], loans: r.loans || [], buddies: r.buddies || [] };
+    finData = { fundsMode: r.fundsMode, fundsManual: r.fundsManual, reserve: r.reserve, investors: r.investors, income: r.income, outlays: r.outlays, plans: r.plans, roi: r.roi, ventures: r.ventures, capitals: r.capitals, coEst: r.coEst || {}, coSends: r.coSends || {}, warFactions: r.warFactions || [], fundings: r.fundings || [], fundingCap: r.fundingCap || 0, paidOffset: r.paidOffset || 0, terms: r.terms || {}, invRequests: r.invRequests || [], loans: r.loans || [], buddies: r.buddies || [] };
     finRenderAll();
 }
 function finRenderAll() { FIN_PAGES[finPage].render(); }
@@ -551,7 +556,7 @@ async function finSaveNow() {
     const P = FIN_PAGES[finPage];
     // the Finances page saves everything except the lists of the investment fund and buddy banking pages; those pages save only their own lists
     const r = P.parts ? await finFetch({ action: 'fin-part-save', parts: Object.fromEntries(P.parts.map(k => [k, finData[k]])) })
-        : await finFetch({ action: 'fin-save', data: Object.fromEntries(Object.entries(finData).filter(([k]) => !['investors', 'buddies', 'roi', 'invRequests', 'paidOffset', 'terms'].includes(k))) });
+        : await finFetch({ action: 'fin-save', data: Object.fromEntries(Object.entries(finData).filter(([k]) => !['investors', 'buddies', 'roi', 'invRequests', 'paidOffset', 'terms', 'fundings', 'fundingCap'].includes(k))) });
     finSaving = false;
     const st = finStatusEl();
     if (r.error) { st.className = 'status err'; st.textContent = `Not saved: ${r.error}`; return; }
@@ -631,6 +636,7 @@ function finWire(bodyId) {
         target[field] = v;
         if (el.dataset.est && (field === 'staff' || field === 'sold')) finRenderAll();
         if (el.dataset.l === 'investors' && field === 'returnedOn') { target.active = !v; finRenderAll(); } // the money was given back: stops the payouts after that date; clearing the date (they came back) switches it on again
+        if (el.dataset.l === 'fundings' && field === 'endedOn') { target.active = !v; finRenderAll(); } // the funding came back: no more fees after that date
         if (el.dataset.l === 'buddies' && field === 'tier' && FIN_TIERS[v]) { target.amount = FIN_TIERS[v].amount; target.term = FIN_TIERS[v].days; finRenderAll(); } // a tier brings its usual amount and term
         finTouch();
     });

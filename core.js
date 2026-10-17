@@ -464,6 +464,7 @@
         if (page === 'join') loadJoin();
         if (page === 'join-requests') loadJoinRequests();
         if (page === 'buddybank') loadBuddyBank();
+        if (page === 'funding') loadFunding();
         if (page === 'bug-report') loadBugReport();
         if (page === 'labs-funds') loadLabsFunds();
         if (page === 'members-overview') loadMemberOverview();
