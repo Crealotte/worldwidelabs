@@ -20,11 +20,15 @@ const JOIN_PROGRAM_NAME = { invest: 'Investment fund', rent: 'Rent-to-own', budd
 async function loadJoin() {
     const st = $('join-status');
     st.className = 'status ok'; st.textContent = 'Loading…';
-    const r = await joinFetch({ action: 'join-info' });
-    if (r.error) { st.className = 'status err'; st.textContent = r.error; return; }
-    st.textContent = ''; st.className = 'status';
-    joinData = r;
-    joinRender();
+    try {
+        // the page uses helpers from finances.js and terms.js: if one of those files did not load (an old copy kept by the browser), say so instead of staying blank
+        if (typeof finRoi !== 'function' || typeof FIN_TIER_NAMES === 'undefined' || typeof termsHtml !== 'function') throw new Error('part of WWL did not load');
+        const r = await joinFetch({ action: 'join-info' });
+        if (r.error) { st.className = 'status err'; st.textContent = r.error; return; }
+        st.textContent = ''; st.className = 'status';
+        joinData = r;
+        joinRender();
+    } catch (e) { st.className = 'status err'; st.textContent = `This page could not load (${e.message}). Reload the page; if you use TornPDA or a phone browser, clear the site data or close and reopen it. If it still fails, send a bug report from the Bugs and suggestions page.`; }
 }
 function joinRender() {
     const r = joinData, m = n => finMoney(n);

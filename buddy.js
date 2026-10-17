@@ -17,11 +17,13 @@ function checkBuddyAccess(acc) {
 async function loadBuddy() {
     const st = $('bud-status');
     st.className = 'status ok'; st.textContent = 'Loading…';
-    const r = await budFetch({ action: 'bud-my' });
-    if (r.error) { st.className = 'status err'; st.textContent = r.error; return; }
-    st.textContent = ''; st.className = 'status';
-    budData = r;
-    budRender();
+    try {
+        const r = await budFetch({ action: 'bud-my' });
+        if (r.error) { st.className = 'status err'; st.textContent = r.error; return; }
+        st.textContent = ''; st.className = 'status';
+        budData = r;
+        budRender();
+    } catch (e) { st.className = 'status err'; st.textContent = `This page could not load (${e.message}). Reload the page; if you use TornPDA or a phone browser, clear the site data or close and reopen it. If it still fails, send a bug report.`; }
 }
 function budRender() {
     const r = budData, m = n => finMoney(n), today = r.today;
