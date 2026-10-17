@@ -22,8 +22,9 @@ function enterInvestorMode(acc) { // the portal of an investor and/or a tenant: 
     if (!acc || acc.investor) show('investor');
     if (acc && acc.tenant) show('tenant');
     if (acc && acc.buddy) show('buddy');
+    if (acc && acc.trader) show('ledger');
     show('join'); show('bug-report'); // Bugs & suggestions: they only see what belongs to their pages (the server filters)
-    goToPage(!acc || acc.investor ? 'investor' : acc.tenant ? 'tenant' : 'buddy');
+    goToPage(!acc || acc.investor ? 'investor' : acc.tenant ? 'tenant' : acc.buddy ? 'buddy' : 'ledger');
 }
 
 async function loadInvestor() {
