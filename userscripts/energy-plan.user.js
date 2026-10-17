@@ -2,7 +2,7 @@
 // @name         World Wide Labs
 // @namespace    https://worldwidelabs.vercel.app
 // @author       CreaLotte
-// @version      1.39.1
+// @version      1.39.2
 // @updateURL    __WWL_BASE__/worldwidelabs.user.js
 // @downloadURL  __WWL_BASE__/worldwidelabs.user.js
 // @description  Shows your WorldWideLabs weekly energy plan (the checklist from the Energy planner) inside Torn, a To do tab with small personal reminders (revive setting, feedback, timezone map, availability, Discord/Intel/CAT), your My Targets list, a simplified energy/war standing strip, and — if you are in the Mentoring Platform — your mentoring checklist too. Also shows faction banners at the top of every Torn page. A small ⚙ in the header shows the installed version, flags when a newer one is out, lets you set/replace your API key, and — for a leader — add or remove your faction's banners right from Torn. On a computer it is a small window you can drag around and close; in TornPDA it is a menu. Ticks are shared with the WWL site.
@@ -26,7 +26,7 @@
     const KEY_NAME = 'wwl_api_key', POS_NAME = 'wwl_plan_pos', STATE_NAME = 'wwl_plan_state';
     // GM_info gives the version Tampermonkey actually has installed right now — falls back to a
     // hardcoded copy (kept in sync with @version above) for TornPDA, which doesn't grant GM_info.
-    const SCRIPT_VERSION = (typeof GM_info !== 'undefined' && GM_info.script?.version) || '1.39.1';
+    const SCRIPT_VERSION = (typeof GM_info !== 'undefined' && GM_info.script?.version) || '1.39.2';
     const versionGreater = (a, b) => {
         const pa = String(a).split('.').map(Number), pb = String(b).split('.').map(Number);
         for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
@@ -199,9 +199,9 @@
     // this tab, or click into the To do tab — and never more than once every 30s.
     let lastTodoFetch = Date.now();
     async function refreshTodoItems(force = false) {
-        if (win.style.display === 'none' || (!force && Date.now() - lastTodoFetch < 30000)) return;
+        if (win.style.display === 'none' || (!force && Date.now() - lastTodoFetch < 180000)) return;
         lastTodoFetch = Date.now();
-        try { const r = await api({ action: 'member-todo' }); todoItems = r.items || []; if (tab === 'todo' || tab === 'settings') render(); }
+        try { const r = await api({ action: 'member-todo' }); try { store.set('wwl_c_todo', JSON.stringify({ at: Date.now(), data: r })); } catch (e) { /* no cache */ } todoItems = r.items || []; if (tab === 'todo' || tab === 'settings') render(); }
         catch (e) { /* keep showing what we already had */ }
     }
     document.addEventListener('visibilitychange', () => { if (!document.hidden) refreshTodoItems(); });
@@ -210,7 +210,7 @@
         pill.style.display = on ? 'none' : 'flex';
         if (save) store.set(STATE_NAME, on ? 'open' : 'closed');
         if (on) {
-            if (!IS_PDA) restorePos(); lastTodoFetch = Date.now(); load();
+            if (!IS_PDA) restorePos(); lastTodoFetch = Date.now(); load(save);
             // opening the window asks (cheaply, at most every 5 minutes) whether a newer version exists, so the update banner at the top shows without anyone going to Settings
             try { checkForUpdate(true); } catch (e) { /* still starting up - the passive check covers it */ }
         }
@@ -701,7 +701,11 @@
             render();
         }));
     }
-    async function load() {
+    // Calls kept on this device for a few minutes: with the window left open, every Torn page load used to ask the server for the plan, the mentoring status and the To do again (3 calls a page).
+    // Now a page load uses what was fetched in the last minutes; opening the window by hand, a new key or a click on the To do tab still asks fresh.
+    const cacheGet = (name, ttl) => { try { const c = JSON.parse(store.get('wwl_c_' + name) || 'null'); return c && Date.now() - c.at < ttl ? c.data : null; } catch (e) { return null; } };
+    const cachedApi = (name, ttl, body, force) => { const hit = force ? null : cacheGet(name, ttl); return hit ? Promise.resolve(hit) : api(body).then(r => { try { store.set('wwl_c_' + name, JSON.stringify({ at: Date.now(), data: r })); } catch (e) { /* storage full: just no cache */ } return r; }); };
+    async function load(force = false) {
         body.innerHTML = '<div style="padding:6px 0;color:#9aa4b5;">Loading…</div>';
         try {
             // The standing numbers (energy trained this month, wars) only move about once a day, so they're
@@ -709,9 +713,9 @@
             let standingCached = null; try { standingCached = JSON.parse(store.get('wwl_standing_cache') || 'null'); } catch (e) { /* none */ }
             const standingFresh = standingCached && Date.now() - standingCached.at < 30 * 60000;
             const [planR, mtR, todoR, standingR] = await Promise.all([
-                api({ action: 'plan-get' }),
-                api({ action: 'mentor-my-status' }).catch(() => null), // fine if this member isn't in the program at all
-                api({ action: 'member-todo' }).catch(() => null),
+                cachedApi('plan', 300000, { action: 'plan-get' }, force),
+                cachedApi('mentor', 600000, { action: 'mentor-my-status' }, force).catch(() => null), // fine if this member isn't in the program at all
+                cachedApi('todo', 300000, { action: 'member-todo' }, force).catch(() => null),
                 standingFresh ? Promise.resolve(standingCached.data) : api({ action: 'mo-me' }).catch(() => null), // the standing strip — fine if it fails, the strip just stays blank
             ]);
             plan = planR.plan; store.set('wwl_plan_cache', JSON.stringify({ at: Date.now(), plan }));

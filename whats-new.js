@@ -12,6 +12,14 @@
 
 const WHATS_NEW = [
     {
+        version: '1.27', date: '2026-10-17',
+        title: 'Userscript 1.39.2: fewer calls to the server',
+        everyone: [
+            'Userscript 1.39.2 (update it when the banner shows, or with the button on your dashboard): it asks the server less often. With the window left open, a Torn page load now reuses what it fetched in the last few minutes instead of fetching your plan, mentoring status and To do again on every page. Opening the window yourself still shows fresh numbers. Nothing else changed.',
+        ],
+        leaders: [],
+    },
+    {
         version: '1.26', date: '2026-10-14',
         title: 'Labs services, and My buddy plan',
         everyone: [

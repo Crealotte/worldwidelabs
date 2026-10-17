@@ -15,8 +15,7 @@ Members get `energy-plan.user.js` (the **release** file). Every change from now 
 Queue changes below instead of releasing each one. Nothing here is live for members until a release.
 
 ### Queued for the next release
-- 1.39.2 (work file): fewer calls to the server (Vercel CPU is at 75% of the free hours): a page load with the window open now uses the plan, mentoring status and To do fetched in the last 5 to 10 minutes instead of asking again on every Torn page; opening the window by hand and a new key still ask fresh; coming back to the tab asks at most every 3 minutes (was 30 seconds).
-- Last release: script 1.39.1 (2026-10-10): the To do button moved to the top row next to the energy and war numbers.
+- Nothing queued. Last release: script 1.39.2 (2026-10-17): fewer calls to the server (the plan, mentoring status and To do are reused for a few minutes on a page load; coming back to the tab asks at most every 3 minutes).
 
 ## Releasing (when the list is done and tested)
 1. Copy the work file over the release file: `cp userscripts/energy-plan.dev.user.js userscripts/energy-plan.user.js`.
