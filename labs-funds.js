@@ -58,14 +58,14 @@ async function loadLabsFunds() {
 function lfFactions() {
     const map = {};
     for (const e of lfEntries) {
-        const f = map[e.factionKey] || (map[e.factionKey] = { key: e.factionKey, id: e.factionId, name: lfName(e), wars: 0, income: 0, out: 0 });
+        const f = map[e.factionKey] || (map[e.factionKey] = { key: e.factionKey, id: e.factionId, name: lfName(e), wars: 0, income: 0, own: 0, out: 0 });
         if (e.factionName && f.name.startsWith('Faction ')) f.name = e.factionName;
-        if (e.kind === 'war') { f.wars++; f.income += e.amount; } else f.out += e.amount;
+        if (e.kind === 'war') { f.wars++; f.income += e.amount; f.own += e.ownerCut || 0; } else f.out += e.amount;
     }
     return Object.values(map).sort((a, b) => (b.income + b.out) - (a.income + a.out));
 }
 let lfFactionsSort = { key: null, dir: 'desc' }; // null = the default order lfFactions() already returns (funds, biggest first)
-const lfFactionsAccessors = { name: f => f.name.toLowerCase(), wars: f => f.wars, income: f => f.income, out: f => f.out, funds: f => f.income + f.out };
+const lfFactionsAccessors = { name: f => f.name.toLowerCase(), wars: f => f.wars, income: f => f.income, own: f => f.own, out: f => f.out, funds: f => f.income + f.out };
 let lfHistorySort = { key: 'date', dir: 'desc' };
 const lfHistoryAccessors = { date: e => e.date, name: e => lfName(e).toLowerCase(), kind: e => lfKind[e.kind] || e.kind, amount: e => e.amount };
 
@@ -81,10 +81,12 @@ function renderLabsFunds() {
     const total = counted.reduce((s, f) => s + f.income + f.out, 0);
     const income = counted.reduce((s, f) => s + f.income, 0);
     const out = counted.reduce((s, f) => s + f.out, 0);
+    const own = counted.reduce((s, f) => s + f.own, 0); // the owner's own 5% of the sister factions' war cuts: not in the fund, in her finances
 
     $('lf-totals').innerHTML = `
         <div><div style="color:var(--muted);font-size:11px;">All Labs funds</div><div style="font-weight:700;font-size:22px;color:var(--reagent);">${lfMoney(total)}</div></div>
-        <div><div style="color:var(--muted);font-size:11px;">War cuts received</div><div style="font-weight:700;">${lfMoney(income)}</div></div>
+        <div><div style="color:var(--muted);font-size:11px;">War cuts to the fund</div><div style="font-weight:700;">${lfMoney(income)}</div></div>
+        <div><div style="color:var(--muted);font-size:11px;" title="Your 5% of a sister faction's war cut: it is not in the fund, it counts as income on the Finances page">Your own cuts (5%)</div><div style="font-weight:700;">${lfMoney(own)}</div></div>
         <div><div style="color:var(--muted);font-size:11px;">Spent / adjusted</div><div style="font-weight:700;">${lfMoney(out)}</div></div>
         <div><div style="color:var(--muted);font-size:11px;">Factions</div><div style="font-weight:700;">${counted.length}</div></div>`;
 
@@ -92,7 +94,7 @@ function renderLabsFunds() {
     $('lf-factions').innerHTML = factions.length ? `
         <table style="width:100%;font-size:13px;border-collapse:collapse;">
             <thead><tr style="color:var(--muted);text-align:left;">
-                <th data-sort="name" style="padding:4px 8px;">Faction</th><th data-sort="wars" style="padding:4px 8px;">Wars</th><th data-sort="income" style="padding:4px 8px;">Cut received</th>
+                <th data-sort="name" style="padding:4px 8px;">Faction</th><th data-sort="wars" style="padding:4px 8px;">Wars</th><th data-sort="income" style="padding:4px 8px;">To the fund</th><th data-sort="own" style="padding:4px 8px;">Your cut</th>
                 <th data-sort="out" style="padding:4px 8px;">Spent / adj.</th><th data-sort="funds" style="padding:4px 8px;">Funds</th><th style="padding:4px 8px;">Count it</th>
             </tr></thead>
             <tbody>${factionsSorted.map(f => `
@@ -100,6 +102,7 @@ function renderLabsFunds() {
                     <td style="padding:4px 8px;"><a href="#" class="lf-filter" data-key="${esc(f.key)}" style="color:var(--text);">${esc(f.name)}</a></td>
                     <td style="padding:4px 8px;">${f.wars}</td>
                     <td style="padding:4px 8px;font-family:var(--mono);">${lfMoney(f.income)}</td>
+                    <td style="padding:4px 8px;font-family:var(--mono);">${f.own ? lfMoney(f.own) : ''}</td>
                     <td style="padding:4px 8px;font-family:var(--mono);">${lfMoney(f.out)}</td>
                     <td style="padding:4px 8px;font-family:var(--mono);font-weight:700;color:var(--reagent);">${lfMoney(f.income + f.out)}</td>
                     <td style="padding:4px 8px;"><input type="checkbox" class="lf-count" data-key="${esc(f.key)}" ${lfExcluded.has(f.key) ? '' : 'checked'} ${lfCanEdit ? '' : 'disabled'} style="width:auto;"></td>
@@ -124,7 +127,7 @@ function renderLabsFunds() {
         <table style="width:100%;font-size:13px;border-collapse:collapse;">
             <thead><tr style="color:var(--muted);text-align:left;">
                 <th data-sort="date" style="padding:4px 8px;">Date</th><th data-sort="name" style="padding:4px 8px;">Faction</th><th data-sort="kind" style="padding:4px 8px;">Type</th>
-                <th style="padding:4px 8px;">Opponent / note</th><th data-sort="amount" style="padding:4px 8px;text-align:right;">Amount</th><th></th>
+                <th style="padding:4px 8px;">Opponent / note</th><th style="padding:4px 8px;text-align:right;">Your cut</th><th data-sort="amount" style="padding:4px 8px;text-align:right;">To the fund</th><th></th>
             </tr></thead>
             <tbody>${shownSorted.map(e => `
                 <tr style="border-top:1px solid var(--line);">
@@ -132,6 +135,7 @@ function renderLabsFunds() {
                     <td style="padding:4px 8px;">${esc(lfName(e))}</td>
                     <td style="padding:4px 8px;">${lfKind[e.kind]}${e.source === 'manual' ? '' : ` <span style="color:var(--muted);font-size:11px;">(${e.source})</span>`}</td>
                     <td style="padding:4px 8px;color:var(--muted);">${esc([e.opponent && `vs ${e.opponent}`, e.note].filter(Boolean).join(' — '))}${e.receiptId ? ` <a href="/?receipt=${esc(e.receiptId)}" target="_blank" style="color:var(--reagent);">receipt</a>` : ''}</td>
+                    <td style="padding:4px 8px;text-align:right;font-family:var(--mono);color:var(--muted);" title="${e.sub ? 'A sister faction: 20% is 5% for their leadership, 5% for you and 10% for the fund' : ''}">${e.ownerCut ? lfMoney(e.ownerCut) : ''}</td>
                     <td style="padding:4px 8px;text-align:right;font-family:var(--mono);${e.amount < 0 ? 'color:var(--danger);' : ''}">${lfMoney(e.amount)}</td>
                     <td style="padding:4px 8px;">${lfCanEdit ? `<button class="ghost small lf-del" data-id="${esc(e.id)}" title="Delete this entry">✕</button>` : ''}</td>
                 </tr>`).join('')}

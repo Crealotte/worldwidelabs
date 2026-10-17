@@ -198,6 +198,7 @@ function finModel(plan, planStart) {
         if (first < S.today) first = S.today;
         for (let iso = first; left > 0 && iso <= lastDay; left--, iso = finAdd(iso, 30)) place(iso, rent + eq, 'rto', r.clientName || 'Rent-to-own');
     }
+    for (const c of (S.labsCuts || [])) { const iso = finIso(c.date * 1000); if (iso >= firstDay && iso <= lastDay) place(iso, c.amount, 'inc', `${c.name}: your 5% of the war cut`); } // your own cut of the sister factions' war payouts (Labs funds)
     for (const i of D.income) {
         if (!i.active || !i.amount) continue;
         if (i.freq === 'once') place(i.date, i.amount, 'inc', i.name || 'Income');
@@ -401,7 +402,7 @@ async function loadFinances() {
     const r = await finFetch({ action: 'fin-get' });
     if (r.error) { st.className = 'status err'; st.textContent = r.error; return; }
     st.textContent = ''; st.className = 'status';
-    finSrv = { cash: r.cash, companies: r.companies || [], rto: r.rto || { rtoItems: [], pis: [], defaults: { rent: { 4100: 27000000, 3600: 15000000, 2600: 12000000 }, equity: { 4100: 81000000, 3600: 45000000, 2600: 36000000 }, goals: { 4100: 1701000000, 3600: 855000000, 2600: 612000000 }, cost: { 4100: 1482500000, 3600: 757500000, 2600: 557500000 } } }, today: r.today };
+    finSrv = { cash: r.cash, companies: r.companies || [], rto: r.rto || { rtoItems: [], pis: [], defaults: { rent: { 4100: 27000000, 3600: 15000000, 2600: 12000000 }, equity: { 4100: 81000000, 3600: 45000000, 2600: 36000000 }, goals: { 4100: 1701000000, 3600: 855000000, 2600: 612000000 }, cost: { 4100: 1482500000, 3600: 757500000, 2600: 557500000 } } }, today: r.today, labsCuts: r.labsCuts || [] };
     finData = { fundsMode: r.fundsMode, fundsManual: r.fundsManual, reserve: r.reserve, investors: r.investors, income: r.income, outlays: r.outlays, plans: r.plans, roi: r.roi, ventures: r.ventures, capitals: r.capitals, coEst: r.coEst || {}, coSends: r.coSends || {}, paidOffset: r.paidOffset || 0, terms: r.terms || {}, invRequests: r.invRequests || [], loans: r.loans || [], buddies: r.buddies || [] };
     finRenderAll();
 }
