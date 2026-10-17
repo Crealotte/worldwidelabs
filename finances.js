@@ -146,10 +146,10 @@ function finWeekDetail(w) {
 function finModel(plan, planStart) {
     const D = finData, S = finSrv, cur = finSun(S.today);
     const weeks = [];
-    for (let w = -FIN_PAST; w < FIN_HORIZON; w++) weeks.push({ w, end: finAdd(cur, 7 * w), co: 0, coParts: [], rto: 0, inc: 0, inv: 0, invParts: [], out: 0, plan: 0, loan: 0, loanParts: [], bb: 0, bbParts: [], ev: [] });
+    for (let w = -FIN_PAST; w < FIN_HORIZON; w++) weeks.push({ w, end: finAdd(cur, 7 * w), co: 0, coParts: [], rto: 0, inc: 0, inv: 0, invParts: [], out: 0, plan: 0, loan: 0, loanParts: [], bb: 0, bbParts: [], sis: 0, sisParts: [], ev: [] });
     const idx = iso => { const w = Math.ceil(Math.round((finD(iso) - finD(cur)) / 86400000) / 7); return w >= -FIN_PAST && w < FIN_HORIZON ? w + FIN_PAST : -1; };
     // what happened on which day (opened under a week in the table): every amount placed with a label is also kept as an event; sign +1 comes in, -1 goes out
-    const SIGN = { co: 1, rto: 1, inc: 1, loan: 1, bb: 1, inv: -1, out: -1, plan: -1 };
+    const SIGN = { co: 1, rto: 1, inc: 1, loan: 1, bb: 1, sis: 1, inv: -1, out: -1, plan: -1 };
     const place = (iso, amt, key, label) => { const j = idx(iso); if (j >= 0) { weeks[j][key] += amt; if (label) weeks[j].ev.push({ d: iso, key, amount: amt, sign: SIGN[key], label }); } };
     const firstDay = finAdd(weeks[0].end, -6), lastDay = weeks[weeks.length - 1].end;
     // dates of a monthly thing: the same day of the month as `from`, until the end of the timeline
@@ -198,7 +198,28 @@ function finModel(plan, planStart) {
         if (first < S.today) first = S.today;
         for (let iso = first; left > 0 && iso <= lastDay; left--, iso = finAdd(iso, 30)) place(iso, rent + eq, 'rto', r.clientName || 'Rent-to-own');
     }
-    for (const c of (S.labsCuts || [])) { const iso = finIso(c.date * 1000); if (iso >= firstDay && iso <= lastDay) place(iso, c.amount, 'inc', `${c.name}: your 5% of the war cut`); } // your own cut of the sister factions' war payouts (Labs funds)
+    // sister factions: a war brings in about what you typed per faction (the 15% they send you: your 5% and the fund's 10%, you invest all of it). The war cuts really saved in Labs funds replace the average in their week;
+    // the weeks of a faction that has a war every 2 or more weeks line up with its latest real war (or the date you typed).
+    const wIdx = iso => Math.ceil(Math.round((finD(iso) - finD(cur)) / 86400000) / 7) + FIN_PAST;
+    for (const f of (D.warFactions || [])) {
+        const nm = String(f.name || '').trim().toLowerCase(), exp = Math.round(Number(f.expected) || 0), every = Math.max(1, Number(f.every) || 1);
+        if (!nm) continue;
+        const real = (S.labsCuts || []).filter(c => String(c.name || '').trim().toLowerCase() === nm), realWeeks = new Set();
+        for (const c of real) {
+            const iso = finIso(c.date * 1000), j = idx(iso), got = (c.own || 0) + (c.fund || 0);
+            if (j < 0) continue;
+            realWeeks.add(j); weeks[j].sis += got; weeks[j].sisParts.push(`${f.name}: ${finMoney(got)} (real)`);
+            weeks[j].ev.push({ d: iso, key: 'sis', amount: got, sign: 1, label: `${f.name} war cut: your 5% ${finMoney(c.own || 0)} + the fund 10% ${finMoney(c.fund || 0)}` });
+        }
+        if (!exp) continue;
+        const lastReal = real.map(c => wIdx(finIso(c.date * 1000))).sort((a, b) => b - a)[0], base = lastReal !== undefined ? lastReal : f.anchor ? wIdx(f.anchor) : FIN_PAST;
+        for (let j = FIN_PAST; j < weeks.length; j++) {
+            if ((j - base) % every !== 0 || realWeeks.has(j)) continue;
+            const own = Math.round(exp / 3);
+            weeks[j].sis += exp; weeks[j].sisParts.push(`${f.name}: ${finMoney(exp)} (average)`);
+            weeks[j].ev.push({ d: weeks[j].end, key: 'sis', amount: exp, sign: 1, label: `${f.name} war cut (average): your 5% ${finMoney(own)} + the fund 10% ${finMoney(exp - own)}` });
+        }
+    }
     for (const i of D.income) {
         if (!i.active || !i.amount) continue;
         if (i.freq === 'once') place(i.date, i.amount, 'inc', i.name || 'Income');
@@ -246,7 +267,7 @@ function finModel(plan, planStart) {
     // the balance runs forward from the money available now
     const funds = finFunds(); let bal = funds;
     for (const wk of weeks) {
-        wk.net = wk.co + wk.rto + wk.inc + wk.loan + wk.bb - wk.inv - wk.out;
+        wk.net = wk.co + wk.rto + wk.inc + wk.loan + wk.bb + wk.sis - wk.inv - wk.out;
         if (wk.w >= 0) { bal += wk.net - wk.plan; wk.bal = bal; } else wk.bal = null;
     }
     withdrawals.forEach(w => { const j = idx(w.date); const wk = j >= 0 ? weeks[j] : null; w.after = wk && wk.bal !== null ? wk.bal : null; w.ok = w.after === null ? null : w.after >= D.reserve; });
@@ -329,6 +350,9 @@ const FIN_LISTS = {
     buddies: { title: 'Buddy banking', add: '+ Buddy', fresh: () => ({ id: finId(), name: '', tornId: '', tier: 'bronze', amount: FIN_TIERS.bronze.amount, term: FIN_TIERS.bronze.days, given: new Date().toISOString().slice(0, 10), profit: 0, share: 70, status: 'active', note: '', returnedOn: '', reinvest: true }), cols: [
         { f: 'name', l: 'Who', t: 'text', w: 120 }, { f: 'tornId', l: 'Torn ID', t: 'text', w: 80 }, { f: 'tier', l: 'Tier', t: 'sel', opts: [['bronze', 'Bronze'], ['silver', 'Silver'], ['gold', 'Gold'], ['', 'Other']] }, { f: 'amount', l: 'Given', t: 'money', w: 120 }, { f: 'term', l: 'Days', t: 'money', w: 60 },
         { f: 'given', l: 'Given on', t: 'date' }, { f: 'profit', l: 'Expected profit (0 = estimate)', t: 'money', w: 120 }, { f: 'share', l: 'Your share %', t: 'money', w: 60 }, { f: 'status', l: 'Status', t: 'sel', opts: [['active', 'Invested'], ['returned', 'Paid back']] }, { f: 'reinvest', l: 'Principal stays invested', t: 'bool' }, { f: 'note', l: 'Note', t: 'text', w: 110 }] },
+    warFactions: { title: '⚔️ Sister factions: what a war brings in', add: '+ Faction', fresh: () => ({ id: finId(), name: '', expected: 80000000, every: '1', anchor: '' }), cols: [
+        { f: 'name', l: 'Faction (as it is named in Labs funds)', t: 'text', w: 160 }, { f: 'expected', l: 'Usually sent to you per war (the 15%)', t: 'money', w: 130 },
+        { f: 'every', l: 'A war', t: 'sel', opts: [['1', 'every week'], ['2', 'every 2 weeks'], ['3', 'every 3 weeks'], ['4', 'every 4 weeks']] }, { f: 'anchor', l: 'A war date (lines up the weeks)', t: 'date' }] },
     loans: { title: 'Loans I gave', add: '+ Loan', fresh: () => ({ id: finId(), name: '', lent: 0, owed: 0, repaid: 0, freq: 'open', payment: 0, date: new Date().toISOString().slice(0, 10), from: new Date().toISOString().slice(0, 10), active: true, note: '' }), cols: [
         { f: 'active', l: 'On', t: 'bool' }, { f: 'name', l: 'Who', t: 'text', w: 120 }, { f: 'lent', l: 'Lent', t: 'money', w: 110 }, { f: 'owed', l: 'To get back (0 = same as lent)', t: 'money', w: 120 }, { f: 'repaid', l: 'Paid back so far', t: 'money', w: 110 },
         { f: 'freq', l: 'Pays back', t: 'sel', opts: [['open', 'No fixed plan'], ['weekly', 'Every week'], ['monthly', 'Every month'], ['once', 'All at once']] }, { f: 'payment', l: 'Per payment', t: 'money', w: 100 }, { f: 'from', l: 'First / due on', t: 'date' }, { f: 'date', l: 'Lent on', t: 'date' }, { f: 'note', l: 'Note', t: 'text', w: 120 }] },
@@ -370,6 +394,10 @@ function finPlansPanel() {
             <div class="fin-plan-res" data-res="${esc(p.id)}" style="margin-top:8px;font-size:13px;"></div></div>`).join('') || '<div style="color:var(--muted);font-size:13px;margin-bottom:8px;">No plans yet.</div>'}
         <button class="ghost small" id="fin-addplan" type="button">+ Plan</button> <select id="fin-buddystart" title="Somebody you know can skip the lower tiers"><option value="bronze">starts at Bronze (500m)</option><option value="silver">starts at Silver (1b)</option><option value="gold">starts at Gold (2b)</option></select> <button class="ghost small" id="fin-addbuddyplan" type="button" title="500m now, 500m after 30 days, 1b after 60 days: the cash a new buddy needs over time">+ Buddy banking plan</button></div>`;
 }
+// The sister factions' average war income: the money they send you (the 15% of the war cut: your 5% and the fund's 10%, which you invest). A war that is saved in Labs funds replaces the average for its week by itself.
+function finWarFactionsPanel() {
+    return `<div style="font-size:12px;color:var(--muted);margin:0 0 6px;">Type an average per faction, as the page cannot know a win from a loss. The coming weeks use it; when a war report comes in (Labs funds) the real amount replaces the average in that week by itself. The faction name must be the same as in Labs funds.</div>${finListEditor('warFactions')}`;
+}
 // "What the companies sent me": the amounts really received for a week; they replace the worked-out sends in the week table and in the average the coming weeks use.
 let finSendWeek = '';
 function finCoSendsPanel() {
@@ -389,7 +417,7 @@ function finCapitalsPanel() {
             <td style="padding:3px 8px;">${inp(`data-est="${esc(String(c.id))}" data-f="daily"`, e.daily)}</td><td style="padding:3px 8px;">${inp(`data-cap="co:${esc(String(c.id))}"`, cap)}</td>
             <td style="padding:3px 8px;text-align:center;"><input type="checkbox" data-est="${esc(String(c.id))}" data-f="sold" data-t="bool" ${e.sold ? 'checked' : ''} style="width:auto;"></td></tr>`;
     }).join('');
-    return `${finCoSendsPanel()}<div class="panel"><h3 style="margin-top:0;">Companies: estimate and capital</h3><p style="font-size:12px;color:var(--muted);margin:0 0 8px;">Until a company has 3 full weeks of saved numbers, the earnings table and the week-by-week page use your estimate: the net profit a day, with the company's director cut taken off. A 14-person mine costs about 9b to get and a 16-person one 12b (filled in when the capital is not set). A company that was sold earns nothing more.</p>
+    return `${finCoSendsPanel()}${finWarFactionsPanel()}<div class="panel"><h3 style="margin-top:0;">Companies: estimate and capital</h3><p style="font-size:12px;color:var(--muted);margin:0 0 8px;">Until a company has 3 full weeks of saved numbers, the earnings table and the week-by-week page use your estimate: the net profit a day, with the company's director cut taken off. A 14-person mine costs about 9b to get and a 16-person one 12b (filled in when the capital is not set). A company that was sold earns nothing more.</p>
         <div style="overflow-x:auto;"><table style="border-collapse:collapse;font-size:13px;"><thead><tr>${['Company', 'Size', 'Net profit a day (estimate)', 'Capital in it', 'Sold'].map(h => `<th style="text-align:left;padding:4px 8px;font-size:11px;color:var(--muted);font-weight:600;">${h}</th>`).join('')}</tr></thead><tbody>${coRows}</tbody></table></div></div>
         <div class="panel"><h3 style="margin-top:0;">Capital per island</h3><p style="font-size:12px;color:var(--muted);margin:0 0 8px;">What you paid for an island (the buying prices are filled in). The return table needs it to work out the percentage a year.</p>
         <table style="border-collapse:collapse;font-size:13px;"><tbody>${[4100, 3600, 2600].map(t => `<tr><td style="padding:3px 8px;">Island ${t}</td><td style="padding:3px 8px;">${inp(`data-cap="pi:${t}"`, D.capitals[`pi:${t}`] ?? S.rto.defaults.cost[t], 140)}</td></tr>`).join('')}</tbody></table></div>`;
@@ -403,7 +431,7 @@ async function loadFinances() {
     if (r.error) { st.className = 'status err'; st.textContent = r.error; return; }
     st.textContent = ''; st.className = 'status';
     finSrv = { cash: r.cash, companies: r.companies || [], rto: r.rto || { rtoItems: [], pis: [], defaults: { rent: { 4100: 27000000, 3600: 15000000, 2600: 12000000 }, equity: { 4100: 81000000, 3600: 45000000, 2600: 36000000 }, goals: { 4100: 1701000000, 3600: 855000000, 2600: 612000000 }, cost: { 4100: 1482500000, 3600: 757500000, 2600: 557500000 } } }, today: r.today, labsCuts: r.labsCuts || [] };
-    finData = { fundsMode: r.fundsMode, fundsManual: r.fundsManual, reserve: r.reserve, investors: r.investors, income: r.income, outlays: r.outlays, plans: r.plans, roi: r.roi, ventures: r.ventures, capitals: r.capitals, coEst: r.coEst || {}, coSends: r.coSends || {}, paidOffset: r.paidOffset || 0, terms: r.terms || {}, invRequests: r.invRequests || [], loans: r.loans || [], buddies: r.buddies || [] };
+    finData = { fundsMode: r.fundsMode, fundsManual: r.fundsManual, reserve: r.reserve, investors: r.investors, income: r.income, outlays: r.outlays, plans: r.plans, roi: r.roi, ventures: r.ventures, capitals: r.capitals, coEst: r.coEst || {}, coSends: r.coSends || {}, warFactions: r.warFactions || [], paidOffset: r.paidOffset || 0, terms: r.terms || {}, invRequests: r.invRequests || [], loans: r.loans || [], buddies: r.buddies || [] };
     finRenderAll();
 }
 function finRenderAll() { FIN_PAGES[finPage].render(); }
@@ -439,13 +467,13 @@ function finRefreshMain() {
     const cost = finInvestorCost();
     const dip = fut.find(w => w.bal < reserve);
     const noCo = finSrv.companies.filter(c => !c.weeks.some(x => x.send != null)).map(c => c.name);
-    const inAvg = avg('co') + avg('rto') + avg('inc') + avg('loan');
+    const inAvg = avg('co') + avg('rto') + avg('inc') + avg('loan') + avg('sis');
     const loanOut = finData.loans.filter(l => l.active).reduce((s, l) => s + Math.max(0, (l.owed > 0 ? l.owed : l.lent) - l.repaid), 0);
     const bbOut = finData.buddies.filter(b => b.status === 'active'), bbBack = bbOut.reduce((s, b) => s + finBuddy(b).cash, 0);
     $('fin-summary').innerHTML = `<div class="panel" style="display:flex;gap:26px;flex-wrap:wrap;font-size:13px;">
         <div><div style="color:var(--muted);font-size:11px;">Available now</div><b style="font-family:var(--mono);">${finShort(m.funds)}</b></div>
         <div><div style="color:var(--muted);font-size:11px;">Coming in a week (average of the next 12 weeks)</div><b style="font-family:var(--mono);color:var(--success,#35d99b);">${finShort(inAvg)}</b>
-            <div style="font-size:11px;color:var(--muted);">companies ${finShort(avg('co'))} · rent-to-own ${finShort(avg('rto'))} · other ${finShort(avg('inc'))} · loans ${finShort(avg('loan'))}</div><div style="font-size:11px;color:var(--muted);">Buddy banks paying back (${finShort(avg('bb'))} a week) is mostly your own cash returning, so it is not counted here.</div>${noCo.length ? `<div style="font-size:11px;color:#e0a030;">No weekly send known yet for ${esc(noCo.join(', '))}, so that part is counted as 0.</div>` : ''}</div>
+            <div style="font-size:11px;color:var(--muted);">companies ${finShort(avg('co'))} · rent-to-own ${finShort(avg('rto'))} · other ${finShort(avg('inc'))} · loans ${finShort(avg('loan'))} · sister factions ${finShort(avg('sis'))}</div><div style="font-size:11px;color:var(--muted);">Buddy banks paying back (${finShort(avg('bb'))} a week) is mostly your own cash returning, so it is not counted here.</div>${noCo.length ? `<div style="font-size:11px;color:#e0a030;">No weekly send known yet for ${esc(noCo.join(', '))}, so that part is counted as 0.</div>` : ''}</div>
         <div><div style="color:var(--muted);font-size:11px;">Paid to investors a week</div><b style="font-family:var(--mono);">${finShort(avg('inv'))}</b></div>
         <div><div style="color:var(--muted);font-size:11px;">Left over a week (before one-time spending)</div><b style="font-family:var(--mono);">${finShort(inAvg - avg('inv'))}</b></div>
         <div><div style="color:var(--muted);font-size:11px;">In buddy banks</div><b style="font-family:var(--mono);">${finShort(bbOut.reduce((s, b) => s + b.amount, 0))}</b> <span style="color:var(--muted);font-size:11px;">(${bbOut.length}; to you ${finShort(bbBack)})</span></div>
@@ -458,12 +486,12 @@ function finRefreshMain() {
     const shown = m.weeks.filter(w => w.w < finAhead);
     const th = (t, r) => `<th style="padding:5px 9px;font-size:11px;color:var(--muted);font-weight:600;text-align:${r ? 'right' : 'left'};white-space:nowrap;">${t}</th>`;
     const td = (v, o = {}) => `<td style="padding:4px 9px;text-align:right;font-family:var(--mono);white-space:nowrap;${o.color ? `color:${o.color};` : ''}${o.b ? 'font-weight:700;' : ''}" ${o.title ? `title="${esc(o.title)}"` : ''}>${v}</td>`;
-    $('fin-timeline').innerHTML = `<table style="width:100%;border-collapse:collapse;font-size:13px;"><thead><tr>${th('Week ending')}${th('Companies', 1)}${th('Rent-to-own', 1)}${th('Other income', 1)}${th('Loans back', 1)}${th('Buddy banks', 1)}${th('Investors', 1)}${th('Planned', 1)}${sel && res[sel.id] && res[sel.id].start != null ? th(esc(sel.name), 1) : ''}${th('Net', 1)}${th('Balance', 1)}</tr></thead>
+    $('fin-timeline').innerHTML = `<table style="width:100%;border-collapse:collapse;font-size:13px;"><thead><tr>${th('Week ending')}${th('Companies', 1)}${th('Rent-to-own', 1)}${th('Other income', 1)}${th('Loans back', 1)}${th('Buddy banks', 1)}${th('Sister factions', 1)}${th('Investors', 1)}${th('Planned', 1)}${sel && res[sel.id] && res[sel.id].start != null ? th(esc(sel.name), 1) : ''}${th('Net', 1)}${th('Balance', 1)}</tr></thead>
         <tbody>${shown.map(w => {
             const past = w.w < 0, now = w.w === 0;
             const open = finWeekOpen.has(w.end);
             return `<tr class="fin-wk" data-wk="${w.end}" title="Click to see the days of this week" style="cursor:pointer;${past ? 'opacity:.6;' : ''}${now ? 'background:rgba(53,217,155,.10);' : ''}border-top:1px solid var(--border,rgba(255,255,255,.08));"><td style="padding:4px 9px;white-space:nowrap;"><span style="color:var(--muted);">${open ? '▾' : '▸'}</span> ${esc(finDate(w.end))}${now ? ' <span style="font-size:11px;color:var(--muted);">this week</span>' : ''}</td>
-            ${td(w.co ? finShort(w.co) : '—', { title: w.coParts.join('\n') })}${td(w.rto ? finShort(w.rto) : '—')}${td(w.inc ? finShort(w.inc) : '—')}${td(w.loan ? finShort(w.loan) : '—', { title: w.loanParts.join('\n') })}${td(w.bb ? finShort(w.bb) : '—', { title: w.bbParts.join('\n') })}${td(w.inv ? '-' + finShort(w.inv) : '—', { title: w.invParts.join('\n') })}${td(w.out ? '-' + finShort(w.out) : '—')}
+            ${td(w.co ? finShort(w.co) : '—', { title: w.coParts.join('\n') })}${td(w.rto ? finShort(w.rto) : '—')}${td(w.inc ? finShort(w.inc) : '—')}${td(w.loan ? finShort(w.loan) : '—', { title: w.loanParts.join('\n') })}${td(w.bb ? finShort(w.bb) : '—', { title: w.bbParts.join('\n') })}${td(w.sis ? finShort(w.sis) : '—', { title: w.sisParts.join('\n') })}${td(w.inv ? '-' + finShort(w.inv) : '—', { title: w.invParts.join('\n') })}${td(w.out ? '-' + finShort(w.out) : '—')}
             ${sel && res[sel.id] && res[sel.id].start != null ? td(w.plan ? '-' + finShort(w.plan) : '—', { color: '#e0a030' }) : ''}${td(finShort(w.net), { color: w.net < 0 ? 'var(--danger)' : '' })}${td(w.bal === null ? '—' : finShort(w.bal), { b: 1, color: w.bal !== null && w.bal < reserve ? 'var(--danger)' : '' })}</tr>${open ? finWeekDetail(w) : ''}`;
         }).join('')}</tbody></table>`;
     // plan results
