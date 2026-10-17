@@ -47,10 +47,10 @@ function ledCompute(trades, values) {
     for (const t of sorted) {
         const kind = ledKind(t), row = { ...t, kind, profit: null, cost: null, note: '' };
         if (kind === 'buy') {
-            const sh = ledShares(t.items, t.money, values); bought += t.money;
+            const sh = t.prices ? Object.fromEntries(Object.entries(t.items).map(([n, q]) => [n, (t.prices[n] || 0) * q])) : ledShares(t.items, t.money, values); bought += t.money; // a trade can carry a price per item (then no lump sum is split)
             for (const [n, q] of Object.entries(t.items)) (lots[n] = lots[n] || []).push({ qty: q, unit: sh[n] / q, at: t.at });
         } else if (kind === 'sell') {
-            const sh = ledShares(t.items, t.money, values); sold += t.money;
+            const sh = t.prices && Object.keys(t.prices).length === Object.keys(t.items).length ? Object.fromEntries(Object.entries(t.items).map(([n, q]) => [n, (t.prices[n] || 0) * q])) : ledShares(t.items, t.money, values); sold += t.money;
             let cost = 0, matchedProceeds = 0, lacking = [];
             for (const [n, q] of Object.entries(t.items)) {
                 let need = q, took = 0, c = 0;
@@ -71,7 +71,7 @@ function ledCompute(trades, values) {
 }
 
 // ---- the page ----
-let ledData = null, ledValues = {}, ledWho = '', ledTraders = null, ledIsOwner = false;
+let ledData = null, ledValues = {}, ledWho = '', ledTraders = null, ledIsOwner = false, ledLastMsg = null;
 async function ledFetch(body) {
     const res = await fetch('/api/war-payout', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key: apiKey, ...body }) });
     const text = await res.text();
@@ -106,9 +106,9 @@ function ledRender() {
         <td style="padding:3px 8px;text-align:right;font-family:var(--mono);color:${t.profit === null ? 'var(--muted)' : t.profit >= 0 ? 'var(--success,#35d99b)' : 'var(--danger)'};">${t.profit === null ? '' : `${t.profit >= 0 ? '+' : ''}${ledMoney(t.profit)}`}</td>${mine ? `<td style="padding:3px 8px;"><button class="ghost small led-del" data-id="${esc(t.id)}" type="button" title="Remove this trade">✕</button></td>` : '<td></td>'}</tr>`;
     $('led-body').innerHTML = `${chooser}
         ${mine ? `<div class="panel"><h3 style="margin-top:0;">Add trades</h3>
-            <div style="font-size:12px;color:var(--muted);margin-bottom:6px;">Open your trades log in Torn, copy the lines and paste them here. Only trades that completed are read (the lines "X traded … to you", "You traded … to X" and "completed successfully"). A trade you paste twice is added once.</div>
-            <textarea id="led-paste" rows="5" placeholder="05:34:50 - 15/10/26 Name initiated a trade with you titled ..." style="width:100%;font-family:var(--mono);font-size:12px;"></textarea>
-            <div style="margin-top:6px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;"><button id="led-read" type="button">Read the log</button><span id="led-preview" style="font-size:13px;"></span></div></div>
+            <div style="font-size:12px;color:var(--muted);margin-bottom:6px;">Paste the lines of your <b>Torn trade log</b>. They are read and added straight away, and you can undo it. A log has one sum for the whole trade, so the cost is split over the items by their market value. Several trades in one go are fine, and a trade that is in the ledger already is skipped.</div>
+            <textarea id="led-paste" rows="4" placeholder="Paste your trade log here, lines like 05:34:50 - 15/10/26 Name initiated a trade with you titled ..." style="width:100%;font-family:var(--mono);font-size:12px;"></textarea>
+            <div style="margin-top:6px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;"><button id="led-read" type="button">Add what is pasted</button><span id="led-preview" style="font-size:13px;"></span></div></div>
         <details class="panel"><summary class="av-sum"><b>Add a purchase by hand</b> <span style="font-size:12px;color:var(--muted);">(bought on the market or in a bazaar, so there is no trade log for it)</span></summary>
             <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:8px;"><input id="led-h-items" type="text" placeholder="5x Armor Cache, 2x Melee Cache" style="width:280px;"><input id="led-h-money" type="text" inputmode="decimal" placeholder="Paid in total (580m)" style="width:150px;text-align:right;font-family:var(--mono);"><input id="led-h-date" type="date" value="${esc(r.today || '')}"><button id="led-h-add" class="ghost small" type="button">Add the purchase</button></div></details>` : ''}
         <div class="panel" style="display:flex;gap:26px;flex-wrap:wrap;font-size:13px;">${box('Bought', ledMoney(c.bought))}${box('Sold', ledMoney(c.sold))}${box('Profit on what is sold', `${c.profit >= 0 ? '+' : ''}${ledMoney(c.profit)}`, `color:${c.profit >= 0 ? 'var(--success,#35d99b)' : 'var(--danger)'};`)}${box('Return on what is sold', c.soldCost ? `${pct.toFixed(1)}%` : '—')}${box('Stock now (at cost)', ledMoney(c.stockCost))}${box('Trades', r.trades.length)}</div>
@@ -122,20 +122,28 @@ function ledRender() {
         loadLedger();
     }));
     if (!mine) return;
-    let pending = [];
-    $('led-read').addEventListener('click', () => {
-        const p = ledParse($('led-paste').value), pv = $('led-preview');
-        pending = p.trades;
-        if (!pending.length) { pv.innerHTML = `<span style="color:var(--danger);">No finished trade found in that text.${p.skipped.length ? ` ${p.skipped.length} trade(s) were not completed.` : ''}</span>`; return; }
-        const k = { buy: 0, sell: 0, other: 0 }; pending.forEach(t => { const kind = ledKind(t); k[kind === 'buy' ? 'buy' : kind === 'sell' ? 'sell' : 'other']++; });
-        pv.innerHTML = `Found <b>${pending.length}</b> trade${pending.length === 1 ? '' : 's'} (${k.buy} bought, ${k.sell} sold${k.other ? `, ${k.other} other` : ''}${p.skipped.length ? `, ${p.skipped.length} not completed` : ''}) <button id="led-add" type="button" style="margin-left:8px;">Add them</button>`;
-        $('led-add').addEventListener('click', async () => {
-            $('led-add').disabled = true;
-            const res = await ledFetch({ action: 'led-add', trades: pending });
-            if (res.error) { toast(res.error); $('led-add').disabled = false; return; }
-            toast(`${res.added} added${res.skipped ? `, ${res.skipped} were in the ledger already` : ''}`); loadLedger();
-        });
+    // paste -> read -> add, in one go: the result can be undone (the message stays after the page is drawn again)
+    const wireUndo = ids => $('led-undo')?.addEventListener('click', async e => {
+        e.preventDefault();
+        for (const id of ids) await ledFetch({ action: 'led-del', id });
+        ledLastMsg = null; toast('Removed again'); loadLedger();
     });
+    if (ledLastMsg) { $('led-preview').innerHTML = ledLastMsg.html; wireUndo(ledLastMsg.ids); }
+    const ingest = async () => {
+        const text = $('led-paste').value, pv = $('led-preview');
+        if (!text.trim()) { pv.innerHTML = '<span style="color:var(--muted);">Paste something first.</span>'; return; }
+        const p = ledParse(text);
+        if (!p.trades.length) { pv.innerHTML = `<span style="color:var(--danger);">I could not find a finished trade in that text.${(p.skipped || []).length ? ` ${esc(p.skipped.join('; '))}.` : ''}</span>`; return; }
+        pv.textContent = 'Adding…';
+        const res = await ledFetch({ action: 'led-add', trades: p.trades });
+        if (res.error) { pv.innerHTML = `<span style="color:var(--danger);">${esc(res.error)}</span>`; return; }
+        const k = { buy: 0, sell: 0, other: 0 }; p.trades.forEach(t => { const kind = ledKind(t); k[kind === 'buy' ? 'buy' : kind === 'sell' ? 'sell' : 'other']++; });
+        const ids = res.ids || [];
+        ledLastMsg = { ids, html: `<span style="color:var(--success,#35d99b);"><b>${res.added}</b> added${res.skipped ? `, ${res.skipped} were in the ledger already` : ''} (${k.buy} bought, ${k.sell} sold${k.other ? `, ${k.other} other` : ''}${(p.skipped || []).length ? `, ${p.skipped.length} skipped` : ''}).</span>${ids.length ? ' <a href="#" id="led-undo" style="margin-left:6px;">Undo</a>' : ''}` };
+        await loadLedger();
+    };
+    $('led-read').addEventListener('click', ingest);
+    $('led-paste').addEventListener('paste', () => setTimeout(ingest, 60));
     $('led-h-add').addEventListener('click', async () => {
         const items = ledItemList($('led-h-items').value), money = finParse($('led-h-money').value), date = $('led-h-date').value;
         if (!Object.keys(items).length) { toast('Write the items as 5x Armor Cache, 2x Melee Cache'); return; }
