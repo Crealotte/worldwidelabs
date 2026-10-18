@@ -101,6 +101,7 @@ function plPublicLink() {
 }
 
 async function loadPricelist() {
+    if (typeof trdLoadScriptInfo === 'function') await trdLoadScriptInfo();
     const st = $('pl-status'); st.className = 'status ok'; st.textContent = 'Loading…';
     try {
         const [r, v] = await Promise.all([ledFetch({ action: 'led-pl-get' }), ledFetch({ action: 'led-values' })]);
@@ -116,7 +117,7 @@ async function loadPricelist() {
 }
 function plRender() {
     const ago = plPricesAt ? `${Math.max(1, Math.round((Date.now() - plPricesAt) / 3600000))} hours ago` : '';
-    $('pl-body').innerHTML = `<div class="panel" style="display:flex;gap:16px;flex-wrap:wrap;align-items:center;justify-content:space-between;">
+    $('pl-body').innerHTML = `${typeof trdScriptHtml === 'function' ? trdScriptHtml(ledIsOwner) : ''}<div class="panel" style="display:flex;gap:16px;flex-wrap:wrap;align-items:center;justify-content:space-between;">
             <div><h3 style="margin:0;">${esc(plName)}'s Pricelist</h3><div id="pl-head-count" style="color:var(--muted);font-size:13px;"></div></div>
             <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:center;font-size:13px;">
                 <span>Round to <select id="pl-round" style="width:auto;"><option value="0">no rounding</option><option value="100" ${plSets.round === 100 ? 'selected' : ''}>100</option><option value="1000" ${plSets.round === 1000 ? 'selected' : ''}>1,000</option><option value="10000" ${plSets.round === 10000 ? 'selected' : ''}>10,000</option></select></span>
@@ -133,6 +134,7 @@ function plRender() {
             <span style="color:var(--muted);font-size:12px;">Tick the boxes in front of the items (they stay ticked between categories and searches).</span></div>
         <div class="panel"><input id="pl-search" type="text" placeholder="Search items…" style="width:100%;max-width:420px;"><div id="pl-cats"></div></div>`;
     plPublicLink(); plRenderList();
+    if (typeof trdWireScript === 'function') trdWireScript();
     $('pl-search').addEventListener('input', e => { plFilter = e.target.value.trim(); plRenderList(); });
     $('pl-round').addEventListener('change', e => { plSets.round = Number(e.target.value) || 0; plDirty = true; plSyncRows(); });
     $('pl-shared').addEventListener('change', e => { plSets.shared = e.target.checked; plDirty = true; plPaintHead(); });

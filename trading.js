@@ -33,7 +33,7 @@ function trdTable(rows) {
 function trdOverview() {
     const day = (trdData.receipts || []).filter(r => Date.now() - r.created < 86400000), paid = day.reduce((s, r) => s + r.total, 0), market = day.reduce((s, r) => s + (r.market || 0), 0);
     const box = (l, v) => `<div class="panel" style="margin:0;flex:1;min-width:200px;"><div style="color:var(--muted);font-size:12px;">${l}</div><div style="font-size:22px;font-weight:700;">${v}</div></div>`;
-    return `<div style="display:flex;gap:12px;flex-wrap:wrap;">${box('Trades in the past 24h', day.length)}${box('Bought total (past 24h)', ledMoney(paid))}${box('Estimated savings vs market (past 24h)', trdSavingHtml(market - paid, market))}</div>
+    return `${trdScriptHtml(ledIsOwner)}<div style="display:flex;gap:12px;flex-wrap:wrap;">${box('Trades in the past 24h', day.length)}${box('Bought total (past 24h)', ledMoney(paid))}${box('Estimated savings vs market (past 24h)', trdSavingHtml(market - paid, market))}</div>
         <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:12px;margin-top:12px;">
         <div class="panel" style="margin:0;"><h3 style="margin-top:0;">Quick Receipt Generator</h3>
             <div style="font-size:12px;color:var(--muted);margin-bottom:6px;">Paste the lines of a trade (like <i>shukolza added 10x Sheep Plushie to the trade.</i>) or just the items (<i>10x Sheep Plushie, 1x Xanax</i>). Only the items the other player added are used; money, accepts and cancels are ignored. The prices come from your pricelist.</div>
@@ -86,6 +86,7 @@ async function trdMake() {
 }
 function trdWire() {
     const body = $('trd-body');
+    trdWireScript();
     // VIP: the code and the check
     const sb = $('trd-subscribe');
     if (sb) sb.addEventListener('click', async () => { const r = await ledFetch({ action: 'lic-subscribe' }); if (r.error) { toast(r.error); return; } trdData.code = r.code; trdRender(); });
@@ -157,8 +158,29 @@ function trdRender() {
     trdWire();
 }
 async function loadTrading() {
+    await trdLoadScriptInfo();
     if (!trdData) { trdTabs(); if (trdTab !== 'ledger') $('trd-body').innerHTML = '<div class="panel" style="color:var(--muted);">Loading…</div>'; trdRender(); }
     const r = await ledFetch({ action: 'led-rcpt-list' });
     if (r.error) { $('trd-body').innerHTML = `<div class="panel" style="color:var(--danger);">${esc(r.error)}</div>`; return; }
     trdData = r; trdRender();
+}
+
+// ---- the WWL script: where to install it (shown on the Pricelist and Receipts & ledger pages) ----
+// The trade bar on Torn's trade pages (total at your pricelist, receipt link, Accept check, auto-save of finished trades) is part of the WWL userscript.
+let trdScriptInfo = null;
+async function trdLoadScriptInfo() {
+    if (trdScriptInfo) return trdScriptInfo;
+    try { const r = await fetch('/api/war-payout', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'script-version' }) }); trdScriptInfo = await r.json(); } catch (e) { trdScriptInfo = {}; }
+    return trdScriptInfo;
+}
+function trdScriptHtml(isOwner) {
+    const info = trdScriptInfo || {}, file = '/worldwidelabs.user.js';
+    return `<div class="panel" id="trd-script" style="margin:0 0 12px;"><div style="display:flex;gap:12px;flex-wrap:wrap;align-items:center;justify-content:space-between;"><div style="flex:1;min-width:240px;"><b>📲 The WWL script for Torn</b>
+        <div style="font-size:13px;color:var(--muted);margin-top:2px;">${info.tradeHelper === false ? 'The trade bar comes with the next update of the script; install it now and it updates by itself. ' : ''}On Torn's trade pages it shows the total at your pricelist, a link to the receipt, an Accept check, and saves your finished trades.</div></div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;"><a href="${file}" target="_blank" rel="noopener" style="text-decoration:none;"><button type="button">Install the WWL script</button></a>${isOwner ? '<a href="/worldwidelabs-dev.user.js" target="_blank" rel="noopener" style="text-decoration:none;"><button type="button" class="ghost small">Install DEV (test)</button></a>' : ''}<a href="#" id="trd-script-copy" style="font-size:12px;">copy the link</a></div></div>
+        <div style="font-size:12px;color:var(--muted);margin-top:6px;">On a computer you need <b>Tampermonkey</b> (or a similar script manager) first. On TornPDA, add it as a script in the app. If the button only opens a page, copy the link and paste it into your script manager.</div></div>`;
+}
+function trdWireScript() {
+    const c = $('trd-script-copy');
+    if (c) c.addEventListener('click', e => { e.preventDefault(); navigator.clipboard.writeText(`${location.origin}/worldwidelabs.user.js`).then(() => toast('Script link copied'), () => toast(`Copy this link: ${location.origin}/worldwidelabs.user.js`)); });
 }
