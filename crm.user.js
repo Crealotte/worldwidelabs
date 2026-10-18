@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         CoreLabs Elite Recruiter v22.0
-// @version      22.7.0
+// @version      22.8.0
 // @updateURL    https://worldwidelabs.vercel.app/crm.user.js
 // @downloadURL  https://worldwidelabs.vercel.app/crm.user.js
 // @description  Test version Corelabs
@@ -1166,7 +1166,10 @@ function setUselessRow(btn, uid) {
 
 	function _pump() {
 		if (_active >= MAX_CONCURRENT || !_queue.length) return;
-		const job = _queue.shift();
+		// The players you can see on the screen go first; the ones further down the list wait.
+		const inView = j => { if (!j.pill || !j.pill.isConnected) return false; const r = j.pill.getBoundingClientRect(); return r.bottom > 0 && r.top < window.innerHeight; };
+		let at = _queue.findIndex(inView); if (at < 0) at = 0;
+		const job = _queue.splice(at, 1)[0];
 		_active++;
 		Promise.resolve(job()).finally(() => {
 			_active--;
@@ -1181,14 +1184,16 @@ function setUselessRow(btn, uid) {
 	// stuck on "…" forever (the bug where only F5 fixed it). fetchAndRender returns
 	// true on success, false if it should be retried.
 	function enqueueFetch(uid, pill, attempt = 0) {
-		_queue.push(async () => {
+		const job = async () => {
 			if (!pill.isConnected) return;            // pill gone (navigated away) — drop
 			const ok = await fetchAndRender(uid, pill);
 			if (!ok && attempt < MAX_RETRIES && pill.isConnected) {
 				const delay = RETRY_BASE_MS * (attempt + 1); // 4s, 8s, 12s, …
 				setTimeout(() => enqueueFetch(uid, pill, attempt + 1), delay);
 			}
-		});
+		};
+		job.pill = pill;
+		_queue.push(job);
 		_pump();
 	}
 
