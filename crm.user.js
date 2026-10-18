@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         CoreLabs Elite Recruiter v22.0
-// @version      22.6.0
+// @version      22.6.1
 // @updateURL    https://worldwidelabs.vercel.app/crm.user.js
 // @downloadURL  https://worldwidelabs.vercel.app/crm.user.js
 // @description  Test version Corelabs
@@ -2049,8 +2049,8 @@ function setUselessRow(btn, uid) {
 		const FIELDS = [
 			{ key: 'xan', ico: '💊', title: 'Min xanax taken — hide rows below this', ph: 'Xan' },
 			{ key: 'act', ico: '⚔️', title: 'Min war hits — hide rows below this',    ph: 'War' },
+			{ key: 'streak', ico: '🔥', title: 'Min activity streak (days) — hide rows below this', ph: 'Days' },
 			{ key: 'ws',  ico: '💼', title: 'Min work stats — hide rows below this',  ph: 'WS'  },
-		{ key: 'streak', ico: '🔥', title: 'Min activity streak (days) — hide rows below this', ph: 'Days' },
 		];
 
 		FIELDS.forEach(f => {
