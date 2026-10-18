@@ -13,6 +13,7 @@ async function joinFetch(body) {
 function enterJoinMode() {
     document.querySelectorAll('nav.side .nav-item, nav.side .nav-group').forEach(el => { el.style.display = 'none'; });
     const el = document.querySelector('.nav-item[data-page="join"]'); if (el) el.style.display = '';
+    if (typeof showTradingNav === 'function') showTradingNav(); // Pricelist and Receipts & ledger are free for everybody
     goToPage('join');
 }
 

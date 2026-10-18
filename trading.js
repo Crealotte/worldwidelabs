@@ -12,7 +12,8 @@ const trdSaving = r => (r.market || 0) - (r.total || 0);
 const trdSavingHtml = (s, market) => `<span style="color:${s >= 0 ? 'var(--success,#35d99b)' : 'var(--danger)'};font-family:var(--mono);">${s >= 0 ? '+' : '-'}${ledMoney(Math.abs(s))}</span> <span style="font-size:11px;color:var(--muted);">(${market ? `${s >= 0 ? '+' : '-'}${Math.abs(s / market * 100).toFixed(2)}%` : '0.00%'})</span>`;
 
 function trdTabs() {
-    $('trd-tabs').innerHTML = TRD_TABS.map(([k, label]) => `<button class="${trdTab === k ? '' : 'ghost'} small trd-tab" data-tab="${k}" type="button">${label}</button>`).join(' ');
+    const v = trdData && trdData.vip, vipLine = !trdData ? '' : v && v.active ? (v.reason === 'license' ? `<span style="font-size:12px;color:var(--success,#35d99b);margin-left:8px;">★ VIP until ${esc(trdWhen(v.until).slice(0, 10))} (${Math.max(1, Math.ceil((v.until - Date.now()) / 86400000))} days left)</span>` : `<span style="font-size:12px;color:var(--success,#35d99b);margin-left:8px;">★ ${v.reason === 'owner' ? 'Owner' : 'Trading Funding'}: the ledger is yours</span>`) : '<span style="font-size:12px;color:var(--muted);margin-left:8px;">Ledger &amp; profit is VIP</span>';
+    $('trd-tabs').innerHTML = TRD_TABS.map(([k, label]) => `<button class="${trdTab === k ? '' : 'ghost'} small trd-tab" data-tab="${k}" type="button">${label}${k === 'ledger' && trdData && !(trdData.vip && trdData.vip.active) ? ' 🔒' : ''}</button>`).join(' ') + vipLine;
     $('trd-tabs').querySelectorAll('.trd-tab').forEach(b => b.addEventListener('click', () => { trdTab = b.dataset.tab; trdRender(); }));
 }
 function trdTable(rows) {
@@ -84,6 +85,24 @@ async function trdMake() {
 }
 function trdWire() {
     const body = $('trd-body');
+    // VIP: the code and the check
+    const cc = $('trd-codecopy'); if (cc) cc.addEventListener('click', () => navigator.clipboard.writeText(trdData.code).then(() => toast('Code copied'), () => toast('Copying was not allowed here')));
+    const lc = $('trd-liccheck');
+    if (lc) lc.addEventListener('click', async () => {
+        const msg = $('trd-licmsg'); msg.textContent = 'Checking…'; lc.disabled = true;
+        const r = await ledFetch({ action: 'lic-check' }); lc.disabled = false;
+        if (r.error) { msg.innerHTML = `<span style="color:var(--danger);">${esc(r.error)}</span>`; return; }
+        if (r.manual || r.wait) { msg.textContent = r.message; return; }
+        if (r.granted) { msg.innerHTML = `<span style="color:var(--success,#35d99b);">VIP is on until ${esc(trdWhen(r.until).slice(0, 10))}.</span>`; await loadTrading(); if (typeof loadLedger === 'function') loadLedger(); return; }
+        msg.textContent = r.withoutCode ? 'I see a Xanax from you, but without the code in the message. Send it again with the code, or ask the owner to give you VIP by hand.' : r.used ? 'That Xanax was counted already.' : 'I do not see a Xanax from you yet. It can take a minute to show up: try again in a moment.';
+    });
+    // the owner's tools
+    const ls = $('trd-lic-show');
+    if (ls) ls.addEventListener('click', async () => { const r = await ledFetch({ action: 'lic-list' }); if (r.error) { toast(r.error); return; } trdLicHtml = r.licenses.length ? r.licenses.map(l => `<div>${esc(l.tornId)} — ${l.until > Date.now() ? 'VIP until' : 'ended'} ${esc(trdWhen(l.until).slice(0, 10))}</div>`).join('') : 'No VIPs yet.'; $('trd-lic').innerHTML = trdLicHtml; });
+    const lg = $('trd-lic-give');
+    if (lg) lg.addEventListener('click', async () => { const r = await ledFetch({ action: 'lic-grant', tornId: $('trd-lic-id').value, days: $('trd-lic-days').value }); if (r.error) { toast(r.error); return; } toast(`VIP of ${r.tornId} runs until ${trdWhen(r.until).slice(0, 10)}`); });
+    const lp = $('trd-lic-peek');
+    if (lp) lp.addEventListener('click', async () => { const r = await ledFetch({ action: 'lic-peek' }); if (r.error) { toast(r.error); return; } trdLicHtml = `${r.events} events; Xanax-style gifts: ${r.gifts.length ? '' : 'none'}${r.gifts.map(g => `<div>${esc(trdWhen(g.ts * 1000))} from ${esc(g.sender)}: ${g.qty}x ${esc(g.item)} — "${esc(g.message)}"</div>`).join('')}`; $('trd-lic').innerHTML = trdLicHtml; });
     const mk = $('trd-make'); if (mk) mk.addEventListener('click', trdMake);
     const more = $('trd-more'); if (more) more.addEventListener('click', () => { trdTab = 'purchases'; trdRender(); });
     const ms = $('trd-msgsave'); if (ms) ms.addEventListener('click', async () => { const r = await ledFetch({ action: 'led-msg-save', message: $('trd-msg').value }); if (r.error) { toast(r.error); return; } trdData.message = r.message; toast('Message saved'); });
@@ -92,12 +111,32 @@ function trdWire() {
     body.querySelectorAll('.trd-ledger').forEach(b => b.addEventListener('click', async () => { const r = await ledFetch({ action: 'led-receipt-ledger', token: b.dataset.token }); if (r.error) { toast(r.error); return; } toast(r.added ? 'Added to your ledger' : 'It was in your ledger already'); await loadTrading(); if (typeof loadLedger === 'function') loadLedger(); }));
     body.querySelectorAll('.trd-del').forEach(b => b.addEventListener('click', async () => { if (!confirm('Delete this receipt? Its link stops working.')) return; const r = await ledFetch({ action: 'led-receipt-del', token: b.dataset.token }); if (r.error) { toast(r.error); return; } toast('Receipt deleted'); await loadTrading(); }));
 }
+// What a trader without VIP sees on the ledger tab: how to get it
+function trdLock() {
+    const v = trdData, vp = v.vip || {};
+    return `<div class="panel"><h3 style="margin-top:0;">🔒 Ledger &amp; profit is VIP</h3>
+        <p style="font-size:13px;">Keep track of what you bought, what you sold, the profit on every sale, your stock and what you made per month. VIP costs <b>${esc(v.price || '1 Xanax per 7 days')}</b>. Everything else on this page (the pricelist, the receipts, Overview, Purchases and Partners) stays free. A trader with a Trading Funding has the ledger without paying.</p>
+        <p style="font-size:13px;color:var(--muted);">Your trades keep being saved while you have no VIP, nothing is lost: you see them again as soon as VIP is on.${vp.until ? ` Your last VIP ended on ${esc(trdWhen(vp.until).slice(0, 10))}.` : ''}</p>
+        <ol style="font-size:13px;line-height:1.7;padding-left:20px;">
+            <li>Send <b>1 Xanax</b> to <a href="https://www.torn.com/profiles.php?XID=${esc(v.ownerId)}" target="_blank" rel="noopener">CreaLotte [${esc(v.ownerId)}]</a> (one Xanax per 7 days, send 2 for 14 days).</li>
+            <li>Put this code in the message of the Xanax: <code id="trd-code" style="padding:2px 8px;border:1px solid var(--line);border-radius:4px;font-family:var(--mono);">${esc(v.code)}</code> <button id="trd-codecopy" class="ghost small" type="button">Copy the code</button></li>
+            <li>Press <b>I sent it</b>. WWL looks at the Xanax CreaLotte received, and switches VIP on by itself.</li></ol>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;"><button id="trd-liccheck" type="button">I sent it — check now</button><span id="trd-licmsg" style="font-size:13px;"></span></div></div>`;
+}
+// the owner's own tools: who has VIP, giving or taking days by hand, and a look at the Xanax gifts WWL can see
+function trdOwnerTools() {
+    return `<div class="panel"><h3 style="margin-top:0;">VIP licenses (owner)</h3><div id="trd-lic" style="font-size:13px;">${trdLicHtml}</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:8px;"><input id="trd-lic-id" type="text" inputmode="numeric" placeholder="Torn ID" style="width:120px;"><input id="trd-lic-days" type="text" inputmode="numeric" placeholder="days (7, or -7 to take away)" style="width:200px;"><button id="trd-lic-give" class="ghost small" type="button">Give VIP days</button><button id="trd-lic-show" class="ghost small" type="button">Show the VIPs</button><button id="trd-lic-peek" class="ghost small" type="button">What Xanax can WWL see?</button></div>
+        <div style="font-size:12px;color:var(--muted);margin-top:6px;">Automatic checking needs the server setting WWL_OWNER_KEY (your key with Limited access) in Vercel. ${trdData.auto ? 'It is set.' : '<b style="color:#e0a030;">It is not set yet.</b>'}</div></div>`;
+}
+let trdLicHtml = '';
 function trdRender() {
     trdTabs();
-    const showLedger = trdTab === 'ledger';
+    const locked = trdTab === 'ledger' && trdData && !(trdData.vip && trdData.vip.active), showLedger = trdTab === 'ledger' && !locked;
     $('trd-body').style.display = showLedger ? 'none' : ''; $('led-body').style.display = showLedger ? '' : 'none'; $('led-status').style.display = showLedger ? '' : 'none';
     if (showLedger || !trdData) return;
-    $('trd-body').innerHTML = trdTab === 'purchases' ? `<div class="panel"><h3 style="margin-top:0;">Purchases</h3>${trdTable(trdData.receipts || [])}</div>` : trdTab === 'partners' ? trdPartners() : trdOverview();
+    const isOwner = trdData.vip && trdData.vip.reason === 'owner';
+    $('trd-body').innerHTML = locked ? trdLock() : trdTab === 'purchases' ? `<div class="panel"><h3 style="margin-top:0;">Purchases</h3>${trdTable(trdData.receipts || [])}</div>` : trdTab === 'partners' ? trdPartners() : trdOverview() + (isOwner ? trdOwnerTools() : '');
     trdWire();
 }
 async function loadTrading() {

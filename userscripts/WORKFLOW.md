@@ -15,7 +15,7 @@ Members get `energy-plan.user.js` (the **release** file). Every change from now 
 Queue changes below instead of releasing each one. Nothing here is live for members until a release.
 
 ### Queued for the next release
-- **Trade helper** (dev 1.40.2, test first): on Torn trade pages, for traders of Trading Funding only. Shows the total of the other person's items at the WWL pricelist (Copy, Add money, fills the Add money page), blocks Accept while the money is not the total, and saves a finished trade (trade log page) to the trading ledger by itself, with Undo. Server side (led-prices, led-script-add) is already live.
+- **Trade helper** (dev 1.40.3, test first): on Torn trade pages, for traders of Trading Funding only. Shows the total of the other person's items at the WWL pricelist (Copy, Add money, fills the Add money page), blocks Accept while the money is not the total, and saves a finished trade (trade log page) to the trading ledger by itself, with Undo. Server side (led-prices, led-script-add) is already live.
 - (before that) Last release: script 1.39.2 (2026-10-17): fewer calls to the server (the plan, mentoring status and To do are reused for a few minutes on a page load; coming back to the tab asks at most every 3 minutes).
 
 ## Releasing (when the list is done and tested)

@@ -31,6 +31,7 @@ function enterDirectorMode() {
     if (mine) mine.style.display = '';
     const jn = document.querySelector('.nav-item[data-page="join"]'); if (jn) jn.style.display = ''; // the other Labs programs
     const bugs = document.querySelector('.nav-item[data-page="bug-report"]'); if (bugs) bugs.style.display = ''; // Bugs & suggestions: only what belongs to the company page (the server filters)
+    if (typeof showTradingNav === 'function') showTradingNav(); // Pricelist and Receipts & ledger are free for everybody
     goToPage('company');
 }
 

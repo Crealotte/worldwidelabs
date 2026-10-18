@@ -12,6 +12,17 @@
 
 const WHATS_NEW = [
     {
+        version: '1.29', date: '2026-10-18',
+        title: 'Trading: a pricelist and receipts for everybody',
+        everyone: [
+            'New Trading menu with two pages: Pricelist and Receipts & ledger. They are free for everybody who logs in to WWL, also for people outside the faction.',
+            'Pricelist: every Torn item by category. Give an item a percentage of its market value and it is on your list, at the price you pay. Tick several items to set a percentage for all of them at once, round the prices, and share the list as a public page (worldwidelabs.vercel.app/?pricelist=your Torn ID) with your number of trades and a vote for the trader. The Plushie Set and Flower Set show what is in them.',
+            'Receipts: make a receipt of a trade at your prices from a pasted trade log (Quick Receipt Generator), or with the WWL userscript while you trade. A receipt is a page anybody can open without logging in, and you can delete it whenever you want. Overview, Purchases and Partners show what you bought and how much you saved against the market.',
+            'Ledger & profit (what you bought, sold and made, the stock, the profit per sale and per month, sets exchanged for points) is VIP: 1 Xanax per 7 days. Send the Xanax to CreaLotte with the code that is shown on the page in the message and press the button, then WWL switches VIP on by itself. A trader with a Trading Funding has it for free, and your trades keep being saved while you have no VIP.',
+        ],
+        leaders: [],
+    },
+    {
         version: '1.28', date: '2026-10-17',
         title: 'New members are pointed to Lab Notes',
         everyone: [

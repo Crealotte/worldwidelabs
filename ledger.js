@@ -108,16 +108,18 @@ async function ledFetch(body) {
 // Called by login() with the server's access check: the page is for the owner and for the traders of Trading Funding.
 function checkLedgerAccess(acc) {
     ledIsOwner = !!(acc && acc.owner);
-    const el = document.querySelector('.nav-item[data-page="ledger"]');
-    if (el) el.style.display = acc && (acc.owner || acc.trader) ? '' : 'none';
-    const pl = document.querySelector('.nav-item[data-page="pricelist"]');
-    if (pl) pl.style.display = acc && (acc.owner || acc.trader) ? '' : 'none';
+    showTradingNav();
+}
+// the Trading pages (Pricelist, Receipts & ledger) are free for everybody: they are in the menu for every login, also in the portals that hide the rest
+function showTradingNav() {
+    document.querySelectorAll('.nav-item[data-page="ledger"], .nav-item[data-page="pricelist"]').forEach(el => { el.style.display = ''; const g = el.closest('.nav-group'); if (g) g.style.display = ''; });
 }
 async function loadLedger() {
     const st = $('led-status');
     st.className = 'status ok'; st.textContent = 'Loading…';
     try {
         const [r, v] = await Promise.all([ledFetch(ledWho ? { action: 'led-owner-get', tornId: ledWho } : { action: 'led-get' }), ledFetch({ action: 'led-values' })]);
+        if (r.error === 'VIP_REQUIRED') { st.className = 'status'; st.textContent = ''; $('led-body').innerHTML = ''; return; }
         if (r.error) { st.className = 'status err'; st.textContent = r.error; return; }
         ledValues = v.values || {};
         ledMeta = v.meta || {};

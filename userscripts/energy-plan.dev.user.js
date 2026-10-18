@@ -2,7 +2,7 @@
 // @name         World Wide Labs
 // @namespace    https://worldwidelabs.vercel.app
 // @author       CreaLotte
-// @version      1.40.2
+// @version      1.40.3
 // @updateURL    __WWL_BASE__/worldwidelabs.user.js
 // @downloadURL  __WWL_BASE__/worldwidelabs.user.js
 // @description  Shows your WorldWideLabs weekly energy plan (the checklist from the Energy planner) inside Torn, a To do tab with small personal reminders (revive setting, feedback, timezone map, availability, Discord/Intel/CAT), your My Targets list, a simplified energy/war standing strip, and — if you are in the Mentoring Platform — your mentoring checklist too. Also shows faction banners at the top of every Torn page. A small ⚙ in the header shows the installed version, flags when a newer one is out, lets you set/replace your API key, and — for a leader — add or remove your faction's banners right from Torn. On a computer it is a small window you can drag around and close; in TornPDA it is a menu. Ticks are shared with the WWL site.
@@ -26,7 +26,7 @@
     const KEY_NAME = 'wwl_api_key', POS_NAME = 'wwl_plan_pos', STATE_NAME = 'wwl_plan_state';
     // GM_info gives the version Tampermonkey actually has installed right now — falls back to a
     // hardcoded copy (kept in sync with @version above) for TornPDA, which doesn't grant GM_info.
-    const SCRIPT_VERSION = (typeof GM_info !== 'undefined' && GM_info.script?.version) || '1.40.2';
+    const SCRIPT_VERSION = (typeof GM_info !== 'undefined' && GM_info.script?.version) || '1.40.3';
     const versionGreater = (a, b) => {
         const pa = String(a).split('.').map(Number), pb = String(b).split('.').map(Number);
         for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
@@ -913,12 +913,7 @@
         try { for (let i = localStorage.length - 1; i >= 0; i--) { const k = localStorage.key(i); if (k && k.startsWith('wwl_trade_') && k !== NOT_TRADER) { const r = readJson(k); if (!r || Date.now() - (r.at || 0) > 7 * 86400000) localStorage.removeItem(k); } } } catch (e) { /* not cleared */ }
 
         let stopped = false;
-        const call = async body => {
-            try { return await api(body); } catch (e) {
-                if (/trading ledger is for/i.test(e.message)) { store.set(NOT_TRADER, String(Date.now())); stopped = true; dropBar(); }
-                throw e;
-            }
-        };
+        const call = body => api(body);
         const bar = () => {
             let b = document.getElementById('wwl-trade-bar');
             const anchor = q1('.trade-cont.m-top10') || q1('.init-trade');
@@ -947,7 +942,7 @@
             if (!missing.length || pricing) return;
             pricing = true;
             call({ action: 'led-prices', names })
-                .then(r => { Object.keys(r.prices || {}).forEach(n => { prices[n] = { price: r.prices[n] || 0, at: Date.now() }; }); setDefs = r.sets || {}; priceError = ''; })
+                .then(r => { if (r.listed === 0) { store.set(NOT_TRADER, String(Date.now())); stopped = true; dropBar(); setAcceptBlock(realAccept(), false, ''); return; } Object.keys(r.prices || {}).forEach(n => { prices[n] = { price: r.prices[n] || 0, at: Date.now() }; }); setDefs = r.sets || {}; priceError = ''; })
                 .catch(e => { priceError = e.message; missing.forEach(n => { prices[n] = { price: 0, at: Date.now() - 270000 }; }); })
                 .finally(() => { pricing = false; });
         };
@@ -1060,6 +1055,7 @@
                     if (names.every(n => rec.items[n] && rec.items[n].price) && sum === other.money) names.forEach(n => { pr[n] = rec.items[n].price; });
                 }
                 const r = await call({ action: 'led-script-add', tradeId: id, at: logTime(logLines()), sides: sides.map(s => ({ name: s.name.replace(/'s items.*$/i, '').trim(), money: s.money, items: s.items })), prices: pr });
+                if (r.off) { dropBar(); return; } // no pricelist and no ledger yet: nothing is saved
                 store.set(SAVED(id), JSON.stringify({ at: Date.now() }));
                 const undo = r.ids && r.ids[0];
                 setBar(`<b style="color:#35d99b;">WWL</b> ${r.added ? `Saved in your trading ledger (${r.kind === 'buy' ? 'bought' : 'sold'}).` : 'This trade is in your trading ledger already.'}${undo ? btn('wwl-tb-undo', 'Undo') : ''}`, b => {

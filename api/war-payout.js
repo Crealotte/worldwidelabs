@@ -802,7 +802,7 @@ module.exports = async function handler(req, res) {
         }
         // The login's access check and the company side (owner setup, directors) are answered BEFORE the faction lookup below: a company director does not
         // have to be in a faction at all, and a director only ever gets the co-* actions (see lib/company.js). Everyone else goes on to the faction checks.
-        if (action === 'access-check' || action.startsWith('co-') || action.startsWith('lt-') || action.startsWith('fin-') || action.startsWith('inv-') || action.startsWith('ten-') || action.startsWith('join-') || action.startsWith('bud-') || action.startsWith('led-') || action === 'todo-known' || action === 'test-seed') {
+        if (action === 'access-check' || action.startsWith('co-') || action.startsWith('lt-') || action.startsWith('fin-') || action.startsWith('inv-') || action.startsWith('ten-') || action.startsWith('join-') || action.startsWith('bud-') || action.startsWith('led-') || action.startsWith('lic-') || action === 'todo-known' || action === 'test-seed') {
             const who = await (async () => {
                 const r = await tornFetch(`https://api.torn.com/user/?selections=profile&key=${encodeURIComponent(key)}`);
                 const p = await r.json();
@@ -824,7 +824,7 @@ module.exports = async function handler(req, res) {
                 await setKnown(redis, req.body.id, req.body.sig, req.body.on !== false);
                 return res.status(200).json({ ok: true });
             }
-            if (action.startsWith('led-')) { // the trader ledger: a trader sees their own, the owner sees every trader's (lib/ledger.js)
+            if (action.startsWith('led-') || action.startsWith('lic-')) { // the trader ledger and VIP: a trader sees their own, the owner sees every trader's (lib/ledger.js)
                 try { return res.status(200).json(await ledHandle(action, req.body, { redis, who, key, owner })); } catch (e) { return res.status(/only|owner/i.test(e.message) ? 403 : 400).json({ error: e.message }); }
             }
             if (action.startsWith('bud-')) return res.status(200).json(await budHandle(action, req.body, { redis, who })); // a buddy sees only their own buddy banking plan
