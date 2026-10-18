@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         CoreLabs Elite Recruiter v22.0
-// @version      22.6.1
+// @version      22.7.0
 // @updateURL    https://worldwidelabs.vercel.app/crm.user.js
 // @downloadURL  https://worldwidelabs.vercel.app/crm.user.js
 // @description  Test version Corelabs
@@ -182,7 +182,6 @@
 	}
 
 	const CFG = {
-		DISCORD_WEBHOOK: 'https://discord.com/api/webhooks/1490385921248596049/S9bRATb51O4DTVbSAVewImV3QPF5mvZ72FM54vrVIiML4md3OsRDqu2euEsGJGS7hpka',
 		// All DB access goes through the gateway Edge Function. The anon key is GONE
 		// from the client on purpose — the function holds the service_role key
 		// server-side and enforces the paywall. RLS denies the anon key everything.
@@ -833,11 +832,25 @@
 		};
 	}
 
-	// Write the 4 pill stats back to the shared targets table after a Torn fetch,
-	// so the next user (any account) reads them from the DB instead of Torn.
+	// The Discord link lives on the server, not in this script: the gateway builds the post itself and sends it.
+	async function brokerPost(ws, comp, notes) {
+		return gateway('broker-post', null, { body: { ws: String(ws), comp: String(comp), notes: String(notes || '') } });
+	}
+	
+	// Write the pill stats back to the shared targets table after a Torn fetch, so the next user (any account) reads them from the DB instead of Torn.
+	// The rows are collected and sent together (one request for up to 20 players, or after 3 seconds), not one request per player.
+	const SHARED_BUF = new Map();
+	let sharedTimer = null;
+	function flushSharedStats() {
+		clearTimeout(sharedTimer); sharedTimer = null;
+		if (!SHARED_BUF.size) return;
+		const rows = [...SHARED_BUF.values()]; SHARED_BUF.clear();
+		sbRequest('POST', 'targets', rows).then(r => { if (r && r.error) console.warn('[CoreLabs] shared stats not saved:', r.error); }).catch(() => {});
+	}
+	window.addEventListener('pagehide', flushSharedStats);
 	async function writeSharedStat(uid, data) {
 		if (!CFG.MY_ID) return;
-		await sbRequest('POST', 'targets', {
+		SHARED_BUF.set(String(uid), {
 			id:           parseInt(uid),
 			name:         data.name || null,
 			work_stats:   data.ws || 0,
@@ -848,6 +861,8 @@
 			scouted_by:   parseInt(CFG.MY_ID),
 			last_updated: new Date().toISOString(),
 		});
+		if (SHARED_BUF.size >= 20) flushSharedStats();
+		else if (!sharedTimer) sharedTimer = setTimeout(flushSharedStats, 3000);
 	}
 
 	function openFollowUp(uid) {
@@ -961,17 +976,9 @@
 	}
 
 	async function postToDiscord(ws, comp, notes) {
-		const r = await gmFetch(CFG.DISCORD_WEBHOOK, {
-			method: 'POST',
-			headers: { 'Content-Type': 'application/json' },
-			body: JSON.stringify({ embeds: [{ title: '💰 NEW BLIND LEAD GENERATED', color: 3447003, fields: [
-				{ name: '📊 Work Stats',     value: `**${ws}**`,          inline: true },
-				{ name: '🏢 Target Job',      value: `**${comp}**`,        inline: true },
-				{ name: '📝 Recruiter Notes', value: notes || 'No notes.' },
-				{ name: '🔒 Identity',         value: 'REDACTED' },
-			], footer: { text: 'Elite Brokerage System' }, timestamp: new Date() }] }),
-		});
-		if (r.ok) alert('Lead Posted!');
+			// The Discord link lives on the server (not in this script): the gateway builds the post and sends it.
+		const r = await brokerPost(ws, comp, notes);
+		if (r && r.ok) alert('Lead Posted!'); else alert('Could not post the lead: ' + ((r && r.error) || 'no answer'));
 	}
 
 	function openBroker(currentWS = '0') {
