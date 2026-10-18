@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         CoreLabs Elite Recruiter v22.0
-// @version      24.0.1
+// @version      24.0.2
 // @updateURL    https://worldwidelabs.vercel.app/crm.user.js
 // @downloadURL  https://worldwidelabs.vercel.app/crm.user.js
 // @description  Test version Corelabs
@@ -123,7 +123,7 @@
 		.cl-fac-bar { display:flex; gap:12px; flex-wrap:wrap; align-items:center; background:#1a1a1a; border:1px solid #333; border-radius:6px; padding:6px 10px; margin:6px 0; font-size:12px; color:#ccc; }
 		.cl-fac-bar button { background:#2a2a2a; border:1px solid #383838; color:#ccc; border-radius:4px; padding:4px 10px; font-size:11px; cursor:pointer; }
 		.cl-fac-bar button.on { border-color:#2f9e44; color:#51cf66; }
-		.cl-fac-chip { display:inline-block; margin-left:8px; padding:1px 7px; border-radius:9px; background:#222; border:1px solid #3a3a3a; color:#bbb; font-size:10px; white-space:nowrap; vertical-align:middle; }
+		.cl-fac-chip { display:block; clear:both; width:fit-content; max-width:96%; margin:3px 0 4px 46px; padding:2px 9px; border-radius:9px; background:#222; border:1px solid #3a3a3a; color:#bbb; font-size:10px; white-space:nowrap; vertical-align:middle; }
 		.cl-fac-chip .hi { color:#ff8080; font-weight:700; }
 		.cl-fac-chip .lo { color:#51cf66; font-weight:700; }
 		.cl-fac-chip .q { color:#74c0fc; cursor:pointer; text-decoration:underline dotted; }
@@ -2552,10 +2552,8 @@ function setUselessRow(btn, uid) {
 	}
 	function ensureChip(li, f) {
 		let chip = li.querySelector('.cl-fac-chip');
-		if (!chip) {
-			chip = document.createElement('span'); chip.className = 'cl-fac-chip';
-			(li.querySelector('.cl-pill-cont') || li.querySelector('.icons-wrap') || li.querySelector('.level-icons-wrap') || li).appendChild(chip);
-		}
+		if (!chip) { chip = document.createElement('span'); chip.className = 'cl-fac-chip'; }
+		if (chip.parentElement !== li) li.appendChild(chip); // on its own line under the row, so the row itself is not squeezed
 		chip.dataset.fac = f.id;
 		paintChip(chip, f.id);
 		li.classList.toggle('fs-reviewed', isChecked(f.id));
