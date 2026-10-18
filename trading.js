@@ -12,9 +12,10 @@ const trdSaving = r => (r.market || 0) - (r.total || 0);
 const trdSavingHtml = (s, market) => `<span style="color:${s >= 0 ? 'var(--success,#35d99b)' : 'var(--danger)'};font-family:var(--mono);">${s >= 0 ? '+' : '-'}${ledMoney(Math.abs(s))}</span> <span style="font-size:11px;color:var(--muted);">(${market ? `${s >= 0 ? '+' : '-'}${Math.abs(s / market * 100).toFixed(2)}%` : '0.00%'})</span>`;
 
 function trdTabs() {
-    const v = trdData && trdData.vip, vipLine = !trdData ? '' : v && v.active ? (v.reason === 'license' ? `<span style="font-size:12px;color:var(--success,#35d99b);margin-left:8px;">★ VIP until ${esc(trdWhen(v.until).slice(0, 10))} (${Math.max(1, Math.ceil((v.until - Date.now()) / 86400000))} days left)</span>` : `<span style="font-size:12px;color:var(--success,#35d99b);margin-left:8px;">★ ${v.reason === 'owner' ? 'Owner' : 'Trading Funding'}: the ledger is yours</span>`) : '<span style="font-size:12px;color:var(--muted);margin-left:8px;">Ledger &amp; profit is VIP</span>';
+    const v = trdData && trdData.vip, vipLine = !trdData ? '' : v && v.active ? (v.reason === 'license' ? `<span style="font-size:12px;color:var(--success,#35d99b);margin-left:8px;">★ VIP until ${esc(trdWhen(v.until).slice(0, 10))} (${Math.max(1, Math.ceil((v.until - Date.now()) / 86400000))} days left) <a href="#" id="trd-renew">Renew</a></span>` : `<span style="font-size:12px;color:var(--success,#35d99b);margin-left:8px;">★ ${v.reason === 'owner' ? 'Owner' : 'Trading Funding'}: the ledger is yours</span>`) : '<span style="font-size:12px;color:var(--muted);margin-left:8px;">Ledger &amp; profit is VIP</span>';
     $('trd-tabs').innerHTML = TRD_TABS.map(([k, label]) => `<button class="${trdTab === k ? '' : 'ghost'} small trd-tab" data-tab="${k}" type="button">${label}${k === 'ledger' && trdData && !(trdData.vip && trdData.vip.active) ? ' 🔒' : ''}</button>`).join(' ') + vipLine;
     $('trd-tabs').querySelectorAll('.trd-tab').forEach(b => b.addEventListener('click', () => { trdTab = b.dataset.tab; trdRender(); }));
+    const rn = $('trd-renew'); if (rn) rn.addEventListener('click', e => { e.preventDefault(); trdTab = 'vip'; trdRender(); });
 }
 function trdTable(rows) {
     if (!rows.length) return '<div style="color:var(--muted);font-size:13px;">No receipts yet.</div>';
@@ -86,13 +87,17 @@ async function trdMake() {
 function trdWire() {
     const body = $('trd-body');
     // VIP: the code and the check
+    const sb = $('trd-subscribe');
+    if (sb) sb.addEventListener('click', async () => { const r = await ledFetch({ action: 'lic-subscribe' }); if (r.error) { toast(r.error); return; } trdData.code = r.code; trdRender(); });
+    const nc = $('trd-newcode');
+    if (nc) nc.addEventListener('click', async e => { e.preventDefault(); if (!confirm('Get a new message? The old one stops working, so a Xanax that was sent with it and not yet checked will not count.')) return; const r = await ledFetch({ action: 'lic-subscribe', fresh: true }); if (r.error) { toast(r.error); return; } trdData.code = r.code; trdRender(); toast('New message ready'); });
     const cc = $('trd-codecopy'); if (cc) cc.addEventListener('click', () => navigator.clipboard.writeText(trdData.code).then(() => toast('Code copied'), () => toast('Copying was not allowed here')));
     const lc = $('trd-liccheck');
     if (lc) lc.addEventListener('click', async () => {
         const msg = $('trd-licmsg'); msg.textContent = 'Checking…'; lc.disabled = true;
         const r = await ledFetch({ action: 'lic-check' }); lc.disabled = false;
         if (r.error) { msg.innerHTML = `<span style="color:var(--danger);">${esc(r.error)}</span>`; return; }
-        if (r.manual || r.wait) { msg.textContent = r.message; return; }
+        if (r.manual || r.wait || r.noCode) { msg.textContent = r.message; return; }
         if (r.granted) { msg.innerHTML = `<span style="color:var(--success,#35d99b);">VIP is on until ${esc(trdWhen(r.until).slice(0, 10))}.</span>`; await loadTrading(); if (typeof loadLedger === 'function') loadLedger(); return; }
         msg.textContent = r.withoutCode ? 'I see a Xanax from you, but without the code in the message. Send it again with the code, or ask the owner to give you VIP by hand.' : r.used ? 'That Xanax was counted already.' : 'I do not see a Xanax from you yet. It can take a minute to show up: try again in a moment.';
     });
@@ -111,17 +116,20 @@ function trdWire() {
     body.querySelectorAll('.trd-ledger').forEach(b => b.addEventListener('click', async () => { const r = await ledFetch({ action: 'led-receipt-ledger', token: b.dataset.token }); if (r.error) { toast(r.error); return; } toast(r.added ? 'Added to your ledger' : 'It was in your ledger already'); await loadTrading(); if (typeof loadLedger === 'function') loadLedger(); }));
     body.querySelectorAll('.trd-del').forEach(b => b.addEventListener('click', async () => { if (!confirm('Delete this receipt? Its link stops working.')) return; const r = await ledFetch({ action: 'led-receipt-del', token: b.dataset.token }); if (r.error) { toast(r.error); return; } toast('Receipt deleted'); await loadTrading(); }));
 }
-// What a trader without VIP sees on the ledger tab: how to get it
-function trdLock() {
-    const v = trdData, vp = v.vip || {};
-    return `<div class="panel"><h3 style="margin-top:0;">🔒 Ledger &amp; profit is VIP</h3>
-        <p style="font-size:13px;">Keep track of what you bought, what you sold, the profit on every sale, your stock and what you made per month. VIP costs <b>${esc(v.price || '1 Xanax per 7 days')}</b>. Everything else on this page (the pricelist, the receipts, Overview, Purchases and Partners) stays free. A trader with a Trading Funding has the ledger without paying.</p>
-        <p style="font-size:13px;color:var(--muted);">Your trades keep being saved while you have no VIP, nothing is lost: you see them again as soon as VIP is on.${vp.until ? ` Your last VIP ended on ${esc(trdWhen(vp.until).slice(0, 10))}.` : ''}</p>
-        <ol style="font-size:13px;line-height:1.7;padding-left:20px;">
-            <li>Send <b>1 Xanax</b> to <a href="https://www.torn.com/profiles.php?XID=${esc(v.ownerId)}" target="_blank" rel="noopener">CreaLotte [${esc(v.ownerId)}]</a> (one Xanax per 7 days, send 2 for 14 days).</li>
-            <li>Put this code in the message of the Xanax: <code id="trd-code" style="padding:2px 8px;border:1px solid var(--line);border-radius:4px;font-family:var(--mono);">${esc(v.code)}</code> <button id="trd-codecopy" class="ghost small" type="button">Copy the code</button></li>
+// What a trader without VIP sees on the ledger tab (and what somebody with VIP sees under Renew): subscribe, get a message of their own, send a Xanax with it
+function trdLock(renew) {
+    const v = trdData, vp = v.vip || {}, owner = `<a href="https://www.torn.com/profiles.php?XID=${esc(v.ownerId)}" target="_blank" rel="noopener">CreaLotte [${esc(v.ownerId)}]</a>`;
+    const intro = renew ? '' : `<p style="font-size:13px;">Keep track of what you bought, what you sold, the profit on every sale, your stock and what you made per month. VIP costs <b>${esc(v.price || '1 Xanax per 7 days')}</b>. Everything else on this page (the pricelist, the receipts, Overview, Purchases and Partners) stays free. A trader with a Trading Funding has the ledger without paying.</p>
+        <p style="font-size:13px;color:var(--muted);">Your trades keep being saved while you have no VIP, nothing is lost: you see them again as soon as VIP is on.${vp.until ? ` Your last VIP ended on ${esc(trdWhen(vp.until).slice(0, 10))}.` : ''}</p>`;
+    const body = !v.code
+        ? `<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;"><button id="trd-subscribe" type="button">Subscribe to VIP</button><span style="font-size:13px;color:var(--muted);">You get a message of your own to send with the Xanax. Only a Xanax with that message counts, so other Xanax you send are never taken for a payment.</span></div>`
+        : `<ol style="font-size:13px;line-height:1.7;padding-left:20px;">
+            <li>Send <b>1 Xanax</b> to ${owner} (one Xanax per 7 days, send 2 for 14 days).</li>
+            <li>Write exactly this in the message of the Xanax: <code id="trd-code" style="padding:2px 8px;border:1px solid var(--line);border-radius:4px;font-family:var(--mono);">${esc(v.code)}</code> <button id="trd-codecopy" class="ghost small" type="button">Copy the message</button></li>
             <li>Press <b>I sent it</b>. WWL looks at the Xanax CreaLotte received, and switches VIP on by itself.</li></ol>
-        <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;"><button id="trd-liccheck" type="button">I sent it — check now</button><span id="trd-licmsg" style="font-size:13px;"></span></div></div>`;
+        <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;"><button id="trd-liccheck" type="button">I sent it — check now</button><span id="trd-licmsg" style="font-size:13px;"></span></div>
+        <div style="font-size:12px;color:var(--muted);margin-top:8px;">Use the same message for every renewal. <a href="#" id="trd-newcode">Get a new message</a> (the old one then stops working).</div>`;
+    return `<div class="panel"><h3 style="margin-top:0;">${renew ? '★ Renew VIP' : '🔒 Ledger &amp; profit is VIP'}</h3>${intro}${body}</div>`;
 }
 // the owner's own tools: who has VIP, giving or taking days by hand, and a look at the Xanax gifts WWL can see
 function trdOwnerTools() {
@@ -136,7 +144,7 @@ function trdRender() {
     $('trd-body').style.display = showLedger ? 'none' : ''; $('led-body').style.display = showLedger ? '' : 'none'; $('led-status').style.display = showLedger ? '' : 'none';
     if (showLedger || !trdData) return;
     const isOwner = trdData.vip && trdData.vip.reason === 'owner';
-    $('trd-body').innerHTML = locked ? trdLock() : trdTab === 'purchases' ? `<div class="panel"><h3 style="margin-top:0;">Purchases</h3>${trdTable(trdData.receipts || [])}</div>` : trdTab === 'partners' ? trdPartners() : trdOverview() + (isOwner ? trdOwnerTools() : '');
+    $('trd-body').innerHTML = locked ? trdLock(false) : trdTab === 'vip' ? trdLock(true) : trdTab === 'purchases' ? `<div class="panel"><h3 style="margin-top:0;">Purchases</h3>${trdTable(trdData.receipts || [])}</div>` : trdTab === 'partners' ? trdPartners() : trdOverview() + (isOwner ? trdOwnerTools() : '');
     trdWire();
 }
 async function loadTrading() {
