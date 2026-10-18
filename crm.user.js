@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         CoreLabs Elite Recruiter v22.0
-// @version      23.2.1
+// @version      24.0.0
 // @updateURL    https://worldwidelabs.vercel.app/crm.user.js
 // @downloadURL  https://worldwidelabs.vercel.app/crm.user.js
 // @description  Test version Corelabs
@@ -119,6 +119,27 @@
 		.cl-note-input   { background:#111; border:1px solid #444; color:#ccc; width:100%; padding:6px; border-radius:4px; box-sizing:border-box; }
 		.cl-done-btn     { background:#2b5e2d; color:#fff; border:none; padding:6px 12px; cursor:pointer; border-radius:4px; font-weight:bold; }
 		.cl-player-link  { color:#37b3f9; text-decoration:none; font-weight:bold; }
+		/* --- factions: search chips, bar, reviewed boxes, leader flags --- */
+		.cl-fac-bar { display:flex; gap:12px; flex-wrap:wrap; align-items:center; background:#1a1a1a; border:1px solid #333; border-radius:6px; padding:6px 10px; margin:6px 0; font-size:12px; color:#ccc; }
+		.cl-fac-bar button { background:#2a2a2a; border:1px solid #383838; color:#ccc; border-radius:4px; padding:4px 10px; font-size:11px; cursor:pointer; }
+		.cl-fac-bar button.on { border-color:#2f9e44; color:#51cf66; }
+		.cl-fac-chip { display:inline-block; margin-left:8px; padding:1px 7px; border-radius:9px; background:#222; border:1px solid #3a3a3a; color:#bbb; font-size:10px; white-space:nowrap; vertical-align:middle; }
+		.cl-fac-chip .hi { color:#ff8080; font-weight:700; }
+		.cl-fac-chip .lo { color:#51cf66; font-weight:700; }
+		.cl-fac-chip .q { color:#74c0fc; cursor:pointer; text-decoration:underline dotted; }
+		.cl-hide-leaders li.cl-fac-leader { display:none !important; }
+		.fs-check { width:14px; height:14px; margin:0; cursor:pointer; vertical-align:middle; accent-color:#2f9e44; }
+		.fs-check-wrap { position:absolute; right:6px; top:50%; transform:translateY(-50%); z-index:5; display:inline-flex; align-items:center; background:rgba(0,0,0,.4); border-radius:3px; padding:2px 4px; }
+		.fs-reviewed { opacity:.4; transition:opacity .15s; }
+		.fs-reviewed:hover { opacity:.8; }
+		.fs-leader-row { background:rgba(201,42,42,.18) !important; box-shadow:inset 3px 0 0 #c92a2a; }
+		.fs-coleader-row { background:rgba(232,184,0,.15) !important; box-shadow:inset 3px 0 0 #e8b800; }
+		.fs-tag { display:inline-block; box-sizing:border-box; font-size:9px; font-weight:900; letter-spacing:.3px; height:14px; line-height:14px; padding:0 5px; border-radius:3px; margin-left:6px; vertical-align:middle; white-space:nowrap; color:#fff; text-transform:uppercase; }
+		.fs-tag.leader { background:#c92a2a; }
+		.fs-tag.coleader { background:#c49a00; }
+		.fs-summary { display:flex; gap:14px; flex-wrap:wrap; align-items:center; font-size:12px; color:#ccc; background:#1a1a1a; border:1px solid #333; border-radius:6px; padding:8px 12px; margin:8px 0; }
+		.fs-summary b { color:#fff; }
+		.fs-badge { position:fixed; right:14px; bottom:14px; z-index:99999; background:#222; border:1px solid #444; color:#aaa; font-size:11px; padding:6px 10px; border-radius:6px; box-shadow:0 2px 8px rgba(0,0,0,.4); }
 		/* --- useless dim --- */
 		li.cl-useless { opacity:0.35; transition:opacity .2s; }
 		li.cl-useless:hover { opacity:0.7; }
@@ -2420,6 +2441,282 @@ function setUselessRow(btn, uid) {
 		return false;
 	}
 
+	// ── Factions: the search view and the old "Faction Scout" ─────────────────────
+	// 1. Torn's Advanced Search: when the search also shows players that are IN a faction, every such row gets a chip with the faction's name and respect and its leader's battle stats
+	//    compared with yours. Faction leaders and co-leaders can be hidden (so you never message them), and the rows can be sorted by the respect of their faction.
+	// 2. Hall of Fame (faction respect list) and war reports: a "reviewed" checkbox per faction (the same store everywhere) and leaders / co-leaders flagged.
+	// Faction name, respect and leaders come from Torn's own API (one call per faction, kept 24 hours). Battle stats are NOT fetched from anywhere: they are read from what the
+	// Battle Stats Predictor (BSP) script already saved in this browser (its predictions and your own stats). BSP's keys are never touched. A leader BSP has not predicted yet
+	// shows "? check": click it to open that leader's profile, BSP predicts them there, and the chip fills in by itself.
+	const FAC_KEY = 'RecruiterFactionCache', FAC_TTL = 24 * 60 * 60 * 1000;
+	const FAC = load(FAC_KEY, {});
+	const facWait = new Set(), facFail = {}, facQ = [], facWaiters = {};
+	let facRunning = false;
+	
+	const fmtBig = n => n >= 1e12 ? (n / 1e12).toFixed(2) + 't' : n >= 1e9 ? (n / 1e9).toFixed(2) + 'b' : n >= 1e6 ? (n / 1e6).toFixed(1) + 'm' : n >= 1e3 ? Math.round(n / 1e3) + 'k' : String(Math.round(n));
+	const BSP = 'tdup.battleStatsPredictor.';
+	function myTBS() { try { return Number(JSON.parse(localStorage.getItem(BSP + 'playerBattleStats') || '{}').TBS) || 0; } catch (e) { return 0; } }
+	function leaderTBS(id) { try { return Number((JSON.parse(localStorage.getItem(BSP + 'cache.prediction.' + id) || 'null') || {}).TBS) || 0; } catch (e) { return 0; } }
+	
+	// the factions you have looked at and ticked as reviewed (shared by the search chips, the Hall of Fame and the war reports)
+	let CHECKED = load('RecruiterFactionChecked', {});
+	const isChecked = id => !!CHECKED[id];
+	function setChecked(id, val) {
+		if (val) CHECKED[id] = { ts: Date.now() }; else delete CHECKED[id];
+		save('RecruiterFactionChecked', CHECKED);
+		document.querySelectorAll(`input.fs-check[data-fs-id="${id}"]`).forEach(cb => { cb.checked = val; });
+		document.querySelectorAll(`[data-fs-row="${id}"]`).forEach(row => row.classList.toggle('fs-reviewed', val));
+		document.querySelectorAll(`li[data-cl-fac="${id}"]`).forEach(li => li.classList.toggle('fs-reviewed', val));
+	}
+	
+	function facEnqueue(id) {
+		if (!CFG.API_KEY) return false;
+		if (FAC[id] && Date.now() - FAC[id].ts < FAC_TTL) return false;
+		if (facWait.has(id)) return true;
+		if (facFail[id] && Date.now() - facFail[id] < 30000) return false;
+		facWait.add(id); facQ.push(id); facPump();
+		return true;
+	}
+	// a promise of the faction's data (or null when it cannot be loaded)
+	function facLoad(id) {
+		return new Promise(res => {
+			if (FAC[id] && Date.now() - FAC[id].ts < FAC_TTL) return res(FAC[id]);
+			if (!facEnqueue(id)) return res(FAC[id] || null);
+			(facWaiters[id] = facWaiters[id] || []).push(res);
+			setTimeout(() => res(FAC[id] || null), 30000);
+		});
+	}
+	async function facPump() {
+		if (facRunning) return;
+		facRunning = true;
+		while (facQ.length) {
+			const id = facQ.shift();
+			try {
+				const res = await gmFetch(`https://api.torn.com/faction/${id}?selections=basic&key=${CFG.API_KEY}`);
+				const d = JSON.parse(await res.text());
+				if (d && !d.error && d.name !== undefined) {
+					const members = d.members || {}, nameOf = uid => (members[uid] && members[uid].name) || `ID ${uid}`;
+					const coIds = new Set(), coId = d['co-leader'] ?? d.co_leader;
+					if (coId) coIds.add(String(coId));
+					Object.entries(members).forEach(([uid, m]) => { if (/^co-?leader$/i.test((m && m.position) || '')) coIds.add(String(uid)); });
+					const lid = d.leader != null ? String(d.leader) : '';
+					FAC[id] = { ts: Date.now(), name: d.name, respect: Number(d.respect) || 0, leader: lid ? { id: lid, name: nameOf(lid) } : null, co: [...coIds].map(c => ({ id: c, name: nameOf(c) })) };
+					save(FAC_KEY, FAC);
+				} else facFail[id] = Date.now();
+			} catch (e) { facFail[id] = Date.now(); }
+			facWait.delete(id);
+			(facWaiters[id] || []).splice(0).forEach(r => r(FAC[id] || null));
+			factionPass();
+			await new Promise(r => setTimeout(r, 650)); // gentle: Torn allows 100 calls a minute for everything together
+		}
+		facRunning = false;
+	}
+	
+	// ── 1. the search ─────────────────────────────────────────────────────────────
+	// the faction of a search row (the faction badge link) and the member's position (the title of the faction icon)
+	function rowFaction(li) {
+		const a = li.querySelector('a.user.faction[href*="ID="]');
+		const id = a && (a.getAttribute('href').match(/ID=(\d+)/) || [])[1];
+		if (!id) return null;
+		let pos = '';
+		li.querySelectorAll('li.iconShow[title]').forEach(ic => { const t = (ic.getAttribute('title') || '').replace(/<[^>]*>/g, '').trim(); if (/^Faction/i.test(t)) pos = t.replace(/^Faction/i, '').trim(); });
+		const nameLink = li.querySelector('a.user.name');
+		const uid = nameLink ? ((nameLink.getAttribute('href') || '').match(/XID=(\d+)/) || [])[1] || '' : '';
+		return { id, pos, uid };
+	}
+	const rowShown = li => !li.classList.contains('tt-hidden') && li.style.display !== 'none' && li.offsetParent !== null;
+	
+	function paintChip(chip, id) {
+		const e = FAC[id];
+		chip.textContent = '';
+		if (!e) { chip.textContent = 'faction …'; return; }
+		const cb = document.createElement('input'); cb.type = 'checkbox'; cb.className = 'fs-check'; cb.dataset.fsId = id; cb.checked = isChecked(id); cb.title = 'Mark this faction as reviewed';
+		cb.onclick = ev => { ev.stopPropagation(); setChecked(id, cb.checked); };
+		const name = document.createElement('b'); name.textContent = e.name; name.style.color = '#ddd';
+		chip.append(cb, document.createTextNode(' '), name, document.createTextNode(` · ${fmtBig(e.respect)} respect`));
+		if (!e.leader) return;
+		chip.append(document.createTextNode(' · leader '));
+		const tbs = leaderTBS(e.leader.id), mine = myTBS();
+		if (tbs) {
+			const s = document.createElement('span');
+			s.textContent = fmtBig(tbs) + (mine ? (tbs > mine ? ' ▲ stronger than you' : ' ▼ weaker than you') : '');
+			s.className = mine ? (tbs > mine ? 'hi' : 'lo') : '';
+			s.title = `${e.leader.name || 'Leader'}: BSP total ${tbs.toLocaleString('en-US')}` + (mine ? `, you: ${mine.toLocaleString('en-US')}` : '');
+			chip.appendChild(s);
+		} else {
+			const q = document.createElement('a');
+			q.className = 'q'; q.textContent = '? check'; q.title = `Open ${e.leader.name || 'the leader'}'s profile in a new tab: BSP predicts them there and this fills in by itself`;
+			q.onclick = ev => { ev.preventDefault(); ev.stopPropagation(); window.open(`https://www.torn.com/profiles.php?XID=${e.leader.id}`, '_blank'); };
+			chip.appendChild(q);
+		}
+	}
+	function ensureChip(li, f) {
+		let chip = li.querySelector('.cl-fac-chip');
+		if (!chip) {
+			chip = document.createElement('span'); chip.className = 'cl-fac-chip';
+			(li.querySelector('.cl-pill-cont') || li.querySelector('.icons-wrap') || li.querySelector('.level-icons-wrap') || li).appendChild(chip);
+		}
+		chip.dataset.fac = f.id;
+		paintChip(chip, f.id);
+		li.classList.toggle('fs-reviewed', isChecked(f.id));
+	}
+	
+	function ensureBar(wrap, any) {
+		let bar = document.getElementById('cl-fac-bar');
+		if (!any) { if (bar) bar.style.display = 'none'; return null; }
+		if (!bar) {
+			bar = document.createElement('div'); bar.id = 'cl-fac-bar'; bar.className = 'cl-fac-bar';
+			const lab = document.createElement('label'); lab.style.cssText = 'display:inline-flex;gap:5px;align-items:center;cursor:pointer;';
+			const cb = document.createElement('input'); cb.type = 'checkbox'; cb.checked = load('RecruiterHideLeaders', true);
+			cb.onchange = () => { save('RecruiterHideLeaders', cb.checked); factionPass(); };
+			lab.append(cb, document.createTextNode('Hide faction leaders and co-leaders'));
+			const sort = document.createElement('button'); sort.type = 'button'; sort.id = 'cl-fac-sort'; sort.textContent = 'Sort by faction respect';
+			sort.onclick = () => { save('RecruiterSortFaction', !load('RecruiterSortFaction', false)); factionPass(); };
+			const info = document.createElement('span'); info.id = 'cl-fac-info'; info.style.color = '#999';
+			bar.append(lab, sort, info);
+			wrap.parentElement.insertBefore(bar, wrap);
+		}
+		bar.style.display = '';
+		return bar;
+	}
+	
+	function factionPass() {
+		if (!window.location.href.includes('sid=UserList')) return;
+		const wrap = document.querySelector('.userlist-wrapper');
+		if (!wrap) return;
+		const rows = [...wrap.querySelectorAll('li[class*="user"]')];
+		const hideLeaders = load('RecruiterHideLeaders', true), sortOn = load('RecruiterSortFaction', false);
+		let any = false, leaders = 0;
+		const facIds = new Set();
+		rows.forEach(li => {
+			const f = rowFaction(li);
+			if (!f) return;
+			any = true;
+			li.dataset.clFac = f.id;
+			const fe = FAC[f.id];
+			const isLeader = /^(co-?)?leader$/i.test(f.pos) || !!(fe && f.uid && ((fe.leader && fe.leader.id === f.uid) || fe.co.some(c => c.id === f.uid)));
+			li.classList.toggle('cl-fac-leader', isLeader);
+			if (isLeader) { leaders++; return; }
+			ensureChip(li, f);
+			facIds.add(f.id);
+			if (rowShown(li)) facEnqueue(f.id);
+		});
+		wrap.classList.toggle('cl-hide-leaders', hideLeaders);
+		const bar = ensureBar(wrap, any);
+		if (!bar) return;
+		bar.querySelector('#cl-fac-sort').classList.toggle('on', sortOn);
+		const mine = myTBS();
+		let msg = CFG.API_KEY ? '' : 'Add your Torn API key in the CoreLabs dashboard to load factions. ';
+		msg += mine ? `Your battle stats (from BSP): ${fmtBig(mine)}. ` : 'BSP not found: open your own profile once with BSP on, then leaders can be compared with you. ';
+		if (leaders) msg += `${leaders} leader${leaders === 1 ? '' : 's'} ${hideLeaders ? 'hidden' : 'shown'}. `;
+		if (sortOn) {
+			const ids = [...facIds]; ids.slice(0, 150).forEach(facEnqueue);
+			const loaded = ids.filter(id => FAC[id]).length;
+			if (loaded < ids.length) msg += `Loading factions ${loaded}/${ids.length}… `;
+		}
+		bar.querySelector('#cl-fac-info').textContent = msg.trim();
+		// sorting only changes the display order (CSS), so Torn's own list is never rebuilt
+		const list = rows.length ? rows[0].parentElement : null;
+		if (!list) return;
+		if (sortOn) {
+			list.style.display = 'flex'; list.style.flexDirection = 'column';
+			rows.forEach(li => { const f = rowFaction(li), e = f && FAC[f.id]; li.style.order = String(e ? Math.max(0, 1e9 - Math.round(e.respect)) : 2e9); });
+		} else if (list.style.display === 'flex') {
+			list.style.display = ''; list.style.flexDirection = '';
+			rows.forEach(li => { li.style.order = ''; });
+		}
+	}
+	
+	// ── 2. Hall of Fame and war reports (the old Faction Scout) ───────────────────
+	// The chat panel and the sidebar are on every page and can hold pasted faction or war links of other conversations: every scan stays inside the main content area.
+	const CHROME_SELECTOR = '#chat-container, [id^="private-"], #chat-app, #chatRoot, #sidebar, #sidebarroot';
+	const mainScope = () => document.querySelector('#mainContainer') || document;
+	const inChrome = el => !!el.closest(CHROME_SELECTOR);
+	
+	const onHOFFactionRespect = () => window.location.pathname.includes('page.php') && (window.location.hash || '').includes('factionrespect');
+	const onRankReport = () => window.location.pathname.includes('war.php') && window.location.search.includes('step=rankreport');
+	
+	function injectHOFCheckboxes() {
+		if (!onHOFFactionRespect()) return;
+		[...mainScope().querySelectorAll('a[href*="factions.php"][href*="ID="]')].filter(l => !inChrome(l)).forEach(link => {
+			if (link.dataset.fsDone) return;
+			const m = link.href.match(/ID=(\d+)/);
+			if (!m) return;
+			const id = m[1];
+			link.dataset.fsDone = '1'; link.dataset.fsRow = id;
+			// Torn draws each row as ONE big clickable link: the checkbox floats at the far right inside it, out of the normal flow, so the columns do not move
+			if (getComputedStyle(link).position === 'static') link.style.position = 'relative';
+			const wrap = document.createElement('span'); wrap.className = 'fs-check-wrap';
+			const cb = document.createElement('input'); cb.type = 'checkbox'; cb.className = 'fs-check'; cb.dataset.fsId = id; cb.title = 'Mark this faction as reviewed'; cb.checked = isChecked(id);
+			link.classList.toggle('fs-reviewed', cb.checked);
+			cb.onclick = e => { e.preventDefault(); e.stopPropagation(); setChecked(id, cb.checked); }; // inside a link: without this the click would open the faction
+			wrap.appendChild(cb); link.appendChild(wrap);
+		});
+	}
+	
+	async function injectRankReport() {
+		if (!onRankReport()) return;
+		const anchor = document.querySelector('#mainContainer') || document.body;
+		const seen = new Map(); // factionId -> first link
+		[...mainScope().querySelectorAll('a[href*="factions.php"][href*="ID="]')].filter(l => !inChrome(l)).forEach(l => { const m = l.href.match(/ID=(\d+)/); if (m && !seen.has(m[1])) seen.set(m[1], l); });
+		if (!seen.size) return;
+		seen.forEach((link, id) => {
+			if (link.dataset.fsRevDone) return;
+			link.dataset.fsRevDone = '1';
+			const cb = document.createElement('input'); cb.type = 'checkbox'; cb.className = 'fs-check'; cb.dataset.fsId = id; cb.title = 'Mark this faction as reviewed (the same list as in the Hall of Fame)'; cb.checked = isChecked(id); cb.style.marginLeft = '8px';
+			cb.onclick = e => { e.stopPropagation(); setChecked(id, cb.checked); };
+			link.insertAdjacentElement('afterend', cb);
+		});
+		if (!CFG.API_KEY) return;
+		const ids = [...seen.keys()], results = await Promise.all(ids.map(facLoad));
+		document.querySelector('.fs-summary')?.remove();
+		const summary = document.createElement('div'); summary.className = 'fs-summary';
+		let anyData = false;
+		results.forEach((r, i) => {
+			if (!r) return;
+			anyData = true;
+			const span = document.createElement('span');
+			const b = document.createElement('b'); b.textContent = r.name || `Faction ${ids[i]}`; span.appendChild(b);
+			const add = (label, name, cls, short) => { span.append(document.createTextNode(` · ${label}: ${name} `)); const t = document.createElement('span'); t.className = `fs-tag ${cls}`; t.textContent = short; span.appendChild(t); };
+			if (r.leader) add('Leader', r.leader.name, 'leader', 'L');
+			r.co.forEach(c => add('Co-Leader', c.name, 'coleader', 'CL'));
+			summary.appendChild(span);
+		});
+		if (anyData) { const first = seen.values().next().value; (first && first.closest('div') || anchor).insertAdjacentElement('afterend', summary); }
+		// flag every member row of a leader or co-leader on the page (this does not need to know how the report groups the two sides)
+		const flagged = new Map();
+		results.forEach(r => { if (!r) return; if (r.leader) flagged.set(String(r.leader.id), 'leader'); r.co.forEach(c => flagged.set(String(c.id), 'coleader')); });
+		if (!flagged.size) return;
+		mainScope().querySelectorAll('a[href*="XID="]').forEach(memberLink => {
+			if (inChrome(memberLink)) return;
+			const m = memberLink.href.match(/XID=(\d+)/), tag = m && flagged.get(m[1]);
+			if (!tag) return;
+			const row = memberLink.closest('tr') || memberLink.closest('li') || memberLink.closest('[class*="row"]') || memberLink.parentElement;
+			if (!row || row.dataset.fsTagged) return;
+			row.dataset.fsTagged = '1';
+			row.classList.add(tag === 'leader' ? 'fs-leader-row' : 'fs-coleader-row');
+			const badge = document.createElement('span'); badge.className = `fs-tag ${tag}`; badge.textContent = tag === 'leader' ? 'LEADER' : 'CO-LEADER';
+			memberLink.insertAdjacentElement('afterend', badge);
+		});
+	}
+	
+	function updateBadge() {
+		const show = onHOFFactionRespect() || onRankReport();
+		let badge = document.querySelector('.fs-badge');
+		if (!show) { if (badge) badge.remove(); return; }
+		if (!badge) { badge = document.createElement('div'); badge.className = 'fs-badge'; document.body.appendChild(badge); }
+		badge.textContent = `${Object.keys(CHECKED).length} faction(s) reviewed`;
+	}
+	
+	function scoutPass() {
+		injectHOFCheckboxes();
+		injectRankReport();
+		updateBadge();
+	}
+	window.addEventListener('hashchange', () => setTimeout(scoutPass, 400));
+	// BSP saves a prediction when the leader's profile is opened in another tab: the chips fill in without a reload
+	window.addEventListener('storage', e => { if (e.key && e.key.indexOf(BSP) === 0) factionPass(); });
+
 	// ── Pending message auto-fill (messages.php compose) ─────────────────────────
 	function injectPendingMessage() {
 		if (!window.location.href.includes('messages.php')) return;
@@ -2472,6 +2769,7 @@ function setUselessRow(btn, uid) {
 	// ── DOM pass ──────────────────────────────────────────────────────────────────
 	function runPass() {
 		injectPendingMessage();
+		scoutPass();
 		// Exclude sidebar headers up front (injectHeader also guards defensively):
 		// `header___` is shared by sidebar panels, so an unscoped match leaked F/C/S
 		// into the sidebar "Information" panel.
@@ -2480,6 +2778,7 @@ function setUselessRow(btn, uid) {
 			injectUserIconsHelp();
 			document.querySelectorAll('.userlist-wrapper a[href*="XID="]').forEach(injectUserlistPill);
 			reapplyAllFilters();
+			factionPass();
 		}
 		// Chat windows: Torn's chat lives in #chatRoot. A private chat window is a div whose id is the OTHER player's id (digits only; it used to be "private-A-B")
 		// and that holds a textarea once it is open. Group chats (faction, global) have other ids and are skipped.
