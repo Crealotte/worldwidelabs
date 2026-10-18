@@ -85,6 +85,10 @@
     .logo h1 span { color: var(--reagent); }
     .login-card .tag { font-family: var(--mono); font-size: 12px; color: var(--muted); margin: 0 0 24px 46px; }
     .login-note { font-size: 12px; color: var(--muted); line-height: 1.6; margin-top: 14px; }
+    .api-doc-table { border-collapse: collapse; width: 100%; font-size: 13px; }
+    .api-doc-table th, .api-doc-table td { border-top: 1px solid var(--line); padding: 8px 10px; text-align: left; vertical-align: top; }
+    .api-doc-table th { color: var(--muted); font-size: 12px; font-weight: 600; white-space: nowrap; }
+    .api-doc-list { font-size: 13px; line-height: 1.7; padding-left: 20px; }
     #login-error { color: var(--danger); font-size: 13px; margin-top: 12px; display: none; }
 
     /* ---------- app shell ---------- */
@@ -472,22 +476,8 @@
         <button id="login-btn" style="width:100%;">Enter the lab</button>
         <div id="login-error"></div>
         <p class="login-note">
-            Create a key at Torn → Settings → API Keys. A <b>Limited Access</b> key is recommended
-            (needed for your energy bars; leaders also get the chain payout tool).
-            You do not have to be in the faction to log in: with any Torn key you can use the
-            <b>Trading tools</b> (a pricelist and receipts, free for everybody) and the <b>Labs services</b>.
-        </p>
-        <p class="login-note">
-            Your key is only used to ask Torn who you are and what WWL needs from your account. It stays in this
-            browser and is sent to WWL's server with each request, but <b>WWL does not store it</b>. The one
-            exception is optional: if a leader turns on nightly saving, that leader's key is kept encrypted so the
-            energy numbers can be saved while nobody is logged in.
-            For faction members, logging in records your name and login time so faction leadership can see who's using the tool.
-        </p>
-        <p class="login-note">
-            If you check the OC Fit Tracker, your predicted Organized Crime role percentages are also shared with
-            faction leadership — this helps them build stronger teams and helps you get placed where you're most
-            likely to succeed. Nothing else about your account is shared this way.
+            Need a key? Create one at Torn → Settings → API Keys.
+            <a href="/api-info">How WWL uses your API key</a>
         </p>
     </div>
 </div>
@@ -2024,6 +2014,55 @@
             <p class="pagedesc">Every Torn item by category: give an item a percentage of its market value and it is on your list, at the price you pay. The userscript prices your trades with it, and you can share it as a page for the people who sell to you.</p>
             <div class="status" id="pl-status"></div>
             <div id="pl-body"></div>
+        </section>
+
+        <section class="page" id="page-api-info">
+            <div class="lab-label">WWL·53 / api &amp; privacy</div>
+            <h2>How WWL uses your API key</h2>
+            <p class="pagedesc">WWL is a tool for Torn City. This page says what it does with your Torn API key and with your data, for everybody who logs in: faction members and people outside the faction. WWL never asks for a Full Access key.</p>
+
+            <div class="panel">
+                <h3 style="margin-top:0;">In short (the table Torn asks for)</h3>
+                <table class="api-doc-table">
+                    <tr><th>Data storage</th><td>Both. Your key and your settings stay in your own browser. What WWL works out for you (see the second table) is kept on WWL's server.</td></tr>
+                    <tr><th>Data sharing</th><td>It depends on the part of WWL: faction leadership can see faction members' stats and logins, the owner can see the ledger of traders with a Trading Funding, and public pages (a pricelist, a receipt) show only what the trader chose to share. Nothing is sold or given to anybody else.</td></tr>
+                    <tr><th>Purpose of use</th><td>Faction tools (energy planning and tracking, war payouts, mentoring), the Labs services (investments, rentals, companies), and the Trading tools (pricelist, receipts, ledger).</td></tr>
+                    <tr><th>Key storage and sharing</th><td>Your key is kept in your browser and is sent to WWL's server over HTTPS with each request, to ask Torn about you. The server does <b>not</b> store it and does not share it. One optional exception for leaders: see "Your key" below.</td></tr>
+                    <tr><th>Key access level</th><td>Anybody with a Torn key can log in. A <b>Public</b> key is enough for the Trading tools and the Labs services. A <b>Limited Access</b> key is recommended for faction members (energy bars) and is what leaders need for the faction tools. A Full Access key is never needed and never asked for.</td></tr>
+                </table>
+            </div>
+
+            <div class="panel">
+                <h3 style="margin-top:0;">What WWL reads and keeps, by part</h3>
+                <table class="api-doc-table">
+                    <tr><th>Part</th><th>What it reads from Torn</th><th>What WWL keeps on its server</th><th>Who can see it</th></tr>
+                    <tr><td>Logging in (everybody)</td><td>Your profile: Torn ID, name and faction.</td><td>Nothing for people outside the faction. For faction members: your name and the time of your login.</td><td>Faction leadership sees the logins of faction members.</td></tr>
+                    <tr><td>Faction members</td><td>With a Limited key: your bars, cooldowns, notifications, gym and personal stats.</td><td>Your energy plan and targets, your to-dos and reminders, daily energy numbers for the faction's gym challenge, and the choices you make in WWL.</td><td>You. Faction leadership sees the faction's stats and members' standing.</td></tr>
+                    <tr><td>OC Fit Tracker (optional)</td><td>The details needed for your predicted Organized Crime role percentages.</td><td>Your predicted role percentages, only if you use the tracker.</td><td>Faction leadership.</td></tr>
+                    <tr><td>Leaders</td><td>The faction's data a leader's Limited key can read (members, contributors, wars, chains).</td><td>War payout reports and the faction's daily energy numbers. A leader who turns on nightly saving: see "Your key".</td><td>Leadership of that faction. A war payout report is a page with a link that anybody with the link can open.</td></tr>
+                    <tr><td>Labs services</td><td>Your profile. For buddy banking also the bank deposit shown in your Torn city bank.</td><td>Your investments, rental contract or buddy plan and the payments made, the requests you send, and your company's figures for a director.</td><td>You and the owner of the Labs services.</td></tr>
+                    <tr><td>Trading tools: pricelist and receipts</td><td>Your profile, and Torn's item list with market values (the same list for everybody, refreshed every 12 hours).</td><td>Your pricelist, your receipts, your message for a receipt, and your trade count.</td><td>You. A pricelist is public only if you tick "Share as a public page", and shows your name, Torn ID, prices, trade count and votes. A receipt is a page that anybody with its link can open; you can delete it whenever you want.</td></tr>
+                    <tr><td>Trading tools: ledger and VIP</td><td>Nothing more. Trades come from what you paste, from the WWL userscript, or from your receipts.</td><td>Your trades, your stock and profit figures, your VIP status and the Xanax payment that gave it (a short record, no key).</td><td>You. The owner can see the ledger of traders who have a Trading Funding. Nobody else.</td></tr>
+                    <tr><td>Voting on a pricelist</td><td>Nothing: no key and no login.</td><td>A vote is kept with a one-way code made from the visitor's internet address, so one visitor counts once.</td><td>Only the total is shown.</td></tr>
+                </table>
+            </div>
+
+            <div class="panel">
+                <h3 style="margin-top:0;">Your key</h3>
+                <ul class="api-doc-list">
+                    <li><b>In your browser:</b> the key you type on the login page is saved in this browser (local storage), so you stay logged in. Log out or clear the site data and it is gone.</li>
+                    <li><b>On the server:</b> each time WWL needs something from Torn, your browser sends the key to WWL's server, which asks Torn and answers you. The key is used for that one request and is not written to the database.</li>
+                    <li><b>Leaders, optional:</b> a leader can press "Turn on nightly saving" on the dashboard. That leader's key is then kept encrypted on the server, so the faction's energy numbers can be saved while nobody is logged in. It is used only for that, and only for that leader's faction.</li>
+                    <li><b>The owner's own key:</b> the owner's key (Limited access) is set in the server settings to read the Xanax the owner received, to switch VIP on. It is the owner's key, not yours.</li>
+                    <li><b>The WWL userscript:</b> if you install it, it keeps your key in your browser (on torn.com) and uses it to ask WWL for your plan and to-dos. The Trade helper part reads the trade page you have open in your browser, and sends WWL only that trade's items, money, trade ID and the other player's name. It does not use the Torn API and does not read your messages or logs.</li>
+                </ul>
+            </div>
+
+            <div class="panel">
+                <h3 style="margin-top:0;">Removing your data</h3>
+                <p style="font-size:13px;">You can delete your receipts and take items off your pricelist yourself. For anything else, ask the owner, CreaLotte [2645743], and it will be removed. To stop WWL using your key, log out, and create a new key in Torn (Settings, API Keys) if you want the old one to stop working everywhere.</p>
+                <p style="font-size:13px;"><a href="/">Back to the login page</a></p>
+            </div>
         </section>
 
         <section class="page" id="page-trade-receipt">
