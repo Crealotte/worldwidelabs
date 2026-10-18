@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         CoreLabs Elite Recruiter v22.0
-// @version      24.0.2
+// @version      24.1.0
 // @updateURL    https://worldwidelabs.vercel.app/crm.user.js
 // @downloadURL  https://worldwidelabs.vercel.app/crm.user.js
 // @description  Test version Corelabs
@@ -2486,31 +2486,36 @@ function setUselessRow(btn, uid) {
 			setTimeout(() => res(FAC[id] || null), 30000);
 		});
 	}
-	async function facPump() {
-		if (facRunning) return;
-		facRunning = true;
-		while (facQ.length) {
-			const id = facQ.shift();
-			try {
-				const res = await gmFetch(`https://api.torn.com/faction/${id}?selections=basic&key=${CFG.API_KEY}`);
-				const d = JSON.parse(await res.text());
-				if (d && !d.error && d.name !== undefined) {
-					const members = d.members || {}, nameOf = uid => (members[uid] && members[uid].name) || `ID ${uid}`;
-					const coIds = new Set(), coId = d['co-leader'] ?? d.co_leader;
-					if (coId) coIds.add(String(coId));
-					Object.entries(members).forEach(([uid, m]) => { if (/^co-?leader$/i.test((m && m.position) || '')) coIds.add(String(uid)); });
-					const lid = d.leader != null ? String(d.leader) : '';
-					FAC[id] = { ts: Date.now(), name: d.name, respect: Number(d.respect) || 0, leader: lid ? { id: lid, name: nameOf(lid) } : null, co: [...coIds].map(c => ({ id: c, name: nameOf(c) })) };
-					save(FAC_KEY, FAC);
-				} else facFail[id] = Date.now();
-			} catch (e) { facFail[id] = Date.now(); }
-			facWait.delete(id);
-			(facWaiters[id] || []).splice(0).forEach(r => r(FAC[id] || null));
-			factionPass();
-			await new Promise(r => setTimeout(r, 650)); // gentle: Torn allows 100 calls a minute for everything together
+	// Up to 3 factions are loaded at the same time (like the player pills), and a faction that is on your screen goes before the ones further down the list.
+	let facActive = 0;
+	const facInView = id => [...document.querySelectorAll(`li[data-cl-fac="${id}"]`)].some(li => { const r = li.getBoundingClientRect(); return r.bottom > 0 && r.top < window.innerHeight; });
+	function facPump() {
+		while (facActive < 3 && facQ.length) {
+			let at = facQ.findIndex(facInView); if (at < 0) at = 0;
+			const id = facQ.splice(at, 1)[0];
+			facActive++;
+			facFetch(id).finally(() => { facActive--; setTimeout(facPump, 150); });
 		}
-		facRunning = false;
 	}
+	async function facFetch(id) {
+		try {
+			const res = await gmFetch(`https://api.torn.com/faction/${id}?selections=basic&key=${CFG.API_KEY}`);
+			const d = JSON.parse(await res.text());
+			if (d && !d.error && d.name !== undefined) {
+				const members = d.members || {}, nameOf = uid => (members[uid] && members[uid].name) || `ID ${uid}`;
+				const coIds = new Set(), coId = d['co-leader'] ?? d.co_leader;
+				if (coId) coIds.add(String(coId));
+				Object.entries(members).forEach(([uid, m]) => { if (/^co-?leader$/i.test((m && m.position) || '')) coIds.add(String(uid)); });
+				const lid = d.leader != null ? String(d.leader) : '';
+				FAC[id] = { ts: Date.now(), name: d.name, respect: Number(d.respect) || 0, leader: lid ? { id: lid, name: nameOf(lid) } : null, co: [...coIds].map(c => ({ id: c, name: nameOf(c) })) };
+				save(FAC_KEY, FAC);
+			} else facFail[id] = Date.now();
+		} catch (e) { facFail[id] = Date.now(); }
+		facWait.delete(id);
+		(facWaiters[id] || []).splice(0).forEach(r => r(FAC[id] || null));
+		factionPass();
+	}
+	
 	
 	// ── 1. the search ─────────────────────────────────────────────────────────────
 	// the faction of a search row (the faction badge link) and the member's position (the title of the faction icon)
