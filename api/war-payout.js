@@ -48,7 +48,7 @@ const { ltHandle, leaseTodos, tenHandle, isTenant } = require('../lib/labstracki
 const { finHandle, invHandle, isInvestor, isBuddy, finRoles, budHandle, fundRequestTodos } = require('../lib/finances');
 const { joinHandle, joinTodos } = require('../lib/joinlabs');
 const { serviceView, setKnown } = require('../lib/todoKnown');
-const { ledHandle } = require('../lib/ledger');
+const { ledHandle, pricelistPublic } = require('../lib/ledger');
 const { ohHandle } = require('../lib/onlineHours');
 const { labsIsOwner, labsHasOwners, labsHandle, labsRecordReceipt } = require('../lib/labsLedger');
 
@@ -753,6 +753,12 @@ module.exports = async function handler(req, res) {
             const raw = await redis(['GET', `wwl:payout-receipt:${id}`]);
             if (!raw) return res.status(404).json({ error: 'Receipt not found — the link may be wrong, or it may have been generated on a different deployment.' });
             return res.status(200).json({ receipt: JSON.parse(raw) });
+        }
+
+        // A trader's shared pricelist is public too (only when they chose to share it): no key, no Torn call.
+        if (action === 'pricelist-public') {
+            const out = await pricelistPublic(redis, req.body.id);
+            return res.status(out.error ? 404 : 200).json(out);
         }
 
         // Lets the userscript flag a newer version without doing its own raw GET-and-regex fetch of the live .user.js file

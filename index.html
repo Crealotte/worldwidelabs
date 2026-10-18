@@ -509,6 +509,7 @@
         <a class="nav-item" data-page="tenant" href="/tenant" style="display:none;">🏝️ My rental</a>
         <a class="nav-item" data-page="buddy" href="/buddy" style="display:none;">🤝 My buddy plan</a>
         <a class="nav-item" data-page="ledger" href="/ledger" style="display:none;">📒 Trading ledger</a>
+        <a class="nav-item" data-page="pricelist" href="/pricelist" style="display:none;">💰 Pricelist</a>
         <a class="nav-item" data-page="join" href="/join">🌱 Labs services</a>
 
         <div class="nav-group">
@@ -2000,6 +2001,18 @@
             <div id="led-body"></div>
         </section>
 
+        <section class="page" id="page-pricelist">
+            <div class="lab-label">WWL·51</div>
+            <h2>💰 Pricelist</h2>
+            <p class="pagedesc">Every Torn item by category: give an item a percentage of its market value and it is on your list, at the price you pay. The userscript prices your trades with it, and you can share it as a page for the people who sell to you.</p>
+            <div class="status" id="pl-status"></div>
+            <div id="pl-body"></div>
+        </section>
+
+        <section class="page" id="page-public-pricelist">
+            <div id="pub-pl-body"><p style="color:var(--muted);">Loading…</p></div>
+        </section>
+
         <section class="page" id="page-buddy">
             <div class="lab-label">WWL·48</div>
             <h2>🤝 My buddy plan</h2>
@@ -2850,6 +2863,8 @@
 <script src="buddy.js"></script>
 <script src="funding.js"></script>
 <script src="ledger.js"></script>
+<script src="pricelist.js"></script>
+<script src="public-pricelist.js"></script>
 <script src="join.js"></script>
 <script src="app-init.js"></script>
 </body>

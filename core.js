@@ -413,11 +413,11 @@
         // gives a direct link back to it, e.g. for a newsletter. replaceState (not pushState): one
         // tab navigating around shouldn't pile up back-button history for every click. Skips
         // 'payout-receipt', which carries its own ?receipt=ID query string that this would wipe.
-        if (page !== 'payout-receipt' && window.location.pathname.replace(/^\/+|\/+$/g, '') !== page) {
+        if (page !== 'payout-receipt' && page !== 'public-pricelist' && window.location.pathname.replace(/^\/+|\/+$/g, '') !== page) {
             history.replaceState(null, '', '/' + page);
         }
         { const prev = sessionStorage.getItem(CURRENT_PAGE_KEY); if (page === 'bug-report' && prev && prev !== 'bug-report') sessionStorage.setItem('wwl_prev_page', prev); } // so a bug report knows where you came from
-        sessionStorage.setItem(CURRENT_PAGE_KEY, page);
+        if (page !== 'public-pricelist') sessionStorage.setItem(CURRENT_PAGE_KEY, page); // a shared pricelist someone looked at is not "the page you were on"
         if (page === 'targets') loadBaldrLists();
         if (page === 'targetfinder') initTargetFinder();
         else if (typeof stopTfLive === 'function') stopTfLive();
@@ -467,6 +467,7 @@
         if (page === 'buddybank') loadBuddyBank();
         if (page === 'funding') loadFunding();
         if (page === 'ledger') loadLedger();
+        if (page === 'pricelist') loadPricelist();
         if (page === 'bug-report') loadBugReport();
         if (page === 'labs-funds') loadLabsFunds();
         if (page === 'members-overview') loadMemberOverview();

@@ -83,7 +83,7 @@ function ledCompute(trades, values) {
 }
 
 // ---- the page ----
-let ledData = null, ledValues = {}, ledWho = '', ledTraders = null, ledIsOwner = false, ledLastMsg = null;
+let ledData = null, ledValues = {}, ledMeta = {}, ledWho = '', ledTraders = null, ledIsOwner = false, ledLastMsg = null;
 async function ledFetch(body) {
     const res = await fetch('/api/war-payout', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key: apiKey, ...body }) });
     const text = await res.text();
@@ -94,6 +94,8 @@ function checkLedgerAccess(acc) {
     ledIsOwner = !!(acc && acc.owner);
     const el = document.querySelector('.nav-item[data-page="ledger"]');
     if (el) el.style.display = acc && (acc.owner || acc.trader) ? '' : 'none';
+    const pl = document.querySelector('.nav-item[data-page="pricelist"]');
+    if (pl) pl.style.display = acc && (acc.owner || acc.trader) ? '' : 'none';
 }
 async function loadLedger() {
     const st = $('led-status');
@@ -102,6 +104,7 @@ async function loadLedger() {
         const [r, v] = await Promise.all([ledFetch(ledWho ? { action: 'led-owner-get', tornId: ledWho } : { action: 'led-get' }), ledFetch({ action: 'led-values' })]);
         if (r.error) { st.className = 'status err'; st.textContent = r.error; return; }
         ledValues = v.values || {};
+        ledMeta = v.meta || {};
         ledData = r;
         if (!ledTraders && ledOwnerNow()) { const t = await ledFetch({ action: 'led-owner-list' }); ledTraders = t.error ? [] : t.traders; }
         st.textContent = v.error ? `Item values are not available (${v.error}): costs are split equally over the items.` : ''; st.className = v.error ? 'status err' : 'status';
@@ -123,7 +126,6 @@ function ledRender() {
             <div style="margin-top:6px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;"><button id="led-read" type="button">Add what is pasted</button><span id="led-preview" style="font-size:13px;"></span></div></div>
         <details class="panel"><summary class="av-sum"><b>Add a purchase or a sale by hand</b> <span style="font-size:12px;color:var(--muted);">(bought in a bazaar, sold at the auction house, or anything else that has no line in the log)</span></summary>
             <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:8px;"><select id="led-h-dir"><option value="in">I bought</option><option value="out">I sold</option></select><select id="led-h-where"><option>Bazaar</option><option>Item Market</option><option>Auction house</option><option>Points market</option><option>Other</option></select><input id="led-h-items" type="text" placeholder="5x Armor Cache, 2x Melee Cache, or a 9mm Uzi" style="width:280px;"><input id="led-h-money" type="text" inputmode="decimal" placeholder="Total money (580m)" style="width:150px;text-align:right;font-family:var(--mono);"><input id="led-h-date" type="date" value="${esc(r.today || '')}"><button id="led-h-add" class="ghost small" type="button">Add it</button></div></details>` : ''}
-        ${mine ? ledPriceListHtml() : ''}
         <div class="panel" style="display:flex;gap:26px;flex-wrap:wrap;font-size:13px;">${box('Bought', ledMoney(c.bought))}${box('Sold', ledMoney(c.sold))}${box('Profit on what is sold', `${c.profit >= 0 ? '+' : ''}${ledMoney(c.profit)}`, `color:${c.profit >= 0 ? 'var(--success,#35d99b)' : 'var(--danger)'};`)}${box('Return on what is sold', c.soldCost ? `${pct.toFixed(1)}%` : '—')}${box('Stock now (at cost)', ledMoney(c.stockCost))}${box('Trades', r.trades.length)}</div>
         ${c.stock.length ? `<div class="panel"><h3 style="margin-top:0;">Stock</h3><table style="border-collapse:collapse;font-size:13px;"><thead><tr style="color:var(--muted);font-size:11px;text-align:left;"><th style="padding:2px 14px 2px 0;">Item</th><th style="padding:2px 14px 2px 0;">Left</th><th style="padding:2px 14px 2px 0;">At cost</th><th style="padding:2px 0;">Since</th></tr></thead><tbody>${c.stock.map(s => `<tr><td style="padding:2px 14px 2px 0;">${esc(s.name)}</td><td style="padding:2px 14px 2px 0;font-family:var(--mono);">${s.qty}</td><td style="padding:2px 14px 2px 0;font-family:var(--mono);">${ledMoney(s.cost)}</td><td style="padding:2px 0;color:var(--muted);">${esc(s.since.slice(0, 10))}</td></tr>`).join('')}</tbody></table></div>` : ''}
         <div class="panel" style="overflow-x:auto;"><h3 style="margin-top:0;">Trades</h3>${r.trades.length ? `<table style="border-collapse:collapse;font-size:13px;width:100%;"><thead><tr style="color:var(--muted);font-size:11px;text-align:left;"><th style="padding:2px 8px;">When</th><th style="padding:2px 8px;">What</th><th style="padding:2px 8px;">With</th><th style="padding:2px 8px;">Items</th><th style="padding:2px 8px;text-align:right;">Money</th><th style="padding:2px 8px;text-align:right;">Profit</th><th></th></tr></thead><tbody>${c.rows.slice().reverse().map(tradeRow).join('')}</tbody></table>` : '<div style="color:var(--muted);font-size:13px;">No trades yet.</div>'}</div>`;
@@ -135,7 +137,7 @@ function ledRender() {
         loadLedger();
     }));
     if (!mine) return;
-    ledWirePricelist(); ledWireReceipts(c, r.name || 'me');
+    ledWireReceipts(c, r.name || 'me');
     // paste -> read -> add, in one go: the result can be undone (the message stays after the page is drawn again)
     const wireUndo = ids => $('led-undo')?.addEventListener('click', async e => {
         e.preventDefault();
@@ -167,51 +169,6 @@ function ledRender() {
         if (res.error) { toast(res.error); return; }
         toast(res.added ? (sold ? 'Sale added' : 'Purchase added') : 'That one was already there'); loadLedger();
     });
-}
-
-// ---- pricelist ----
-// The trader's own price list: for each item a percentage of its market value (or a fixed price). The prices are worked out here from the cached market values; "Copy the list" gives plain text to paste.
-const ledPlPrice = (name, pct, fixed, def) => fixed || Math.round((ledValues[name] || 0) * (pct || def || 100) / 100);
-const ledPlRow = x => `<tr><td style="padding:2px 6px 2px 0;"><input class="pl-n" list="led-items" type="text" value="${esc(x.name)}" placeholder="Item name" style="width:190px;"></td><td style="padding:2px 6px;"><input class="pl-p" type="text" inputmode="decimal" value="${x.pct ? esc(x.pct) : ''}" placeholder="default" style="width:64px;text-align:right;font-family:var(--mono);"></td><td style="padding:2px 6px;"><input class="pl-f" type="text" inputmode="decimal" value="${x.fixed ? esc(x.fixed) : ''}" placeholder="no" style="width:100px;text-align:right;font-family:var(--mono);"></td><td class="pl-m" style="padding:2px 6px;text-align:right;font-family:var(--mono);color:var(--muted);"></td><td class="pl-price" style="padding:2px 6px;text-align:right;font-family:var(--mono);"></td><td><button class="ghost small pl-x" type="button" title="Remove this item">✕</button></td></tr>`;
-function ledPriceListHtml() {
-    const pl = ledData.pricelist || { pct: 100, rows: [] };
-    return `<details class="panel" id="led-pl"><summary class="av-sum"><b>My pricelist</b> <span style="font-size:12px;color:var(--muted);">(${pl.rows.length} items — the price you pay for an item, as a percentage of its market value; the userscript uses it on trade pages)</span></summary>
-        <datalist id="led-items">${Object.keys(ledValues).sort().map(n => `<option value="${esc(n)}">`).join('')}</datalist>
-        <div style="font-size:12px;color:var(--muted);margin:8px 0;">Every item gets the default percentage unless it has its own percentage or a fixed price. The market value is Torn's average (kept 12 hours), not the cheapest listing right now.</div>
-        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:6px;font-size:13px;">Default <input id="led-pl-pct" type="text" inputmode="decimal" value="${esc(pl.pct)}" style="width:56px;text-align:right;font-family:var(--mono);">% of market value</div>
-        <table style="border-collapse:collapse;font-size:13px;"><thead><tr style="color:var(--muted);font-size:11px;text-align:left;"><th style="padding:2px 6px 2px 0;">Item</th><th style="padding:2px 6px;">% of market</th><th style="padding:2px 6px;">Fixed price</th><th style="padding:2px 6px;text-align:right;">Market value</th><th style="padding:2px 6px;text-align:right;">Your price</th><th></th></tr></thead><tbody id="led-pl-rows">${pl.rows.map(ledPlRow).join('')}</tbody></table>
-        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;"><button id="led-pl-add" class="ghost small" type="button">+ Add an item</button><button id="led-pl-stock" class="ghost small" type="button">+ Add my stock</button><button id="led-pl-save" type="button">Save the list</button><button id="led-pl-copy" class="ghost" type="button">Copy the list</button></div></details>`;
-}
-function ledWirePricelist() {
-    const body = $('led-pl-rows'); if (!body) return;
-    const read = () => ({ pct: Number(String($('led-pl-pct').value).replace(',', '.')) || 100, rows: [...body.querySelectorAll('tr')].map(tr => ({ name: tr.querySelector('.pl-n').value.trim(), pct: Number(String(tr.querySelector('.pl-p').value).replace(',', '.')) || 0, fixed: finParse(tr.querySelector('.pl-f').value) || 0 })).filter(x => x.name) });
-    const refresh = () => {
-        const def = read().pct;
-        body.querySelectorAll('tr').forEach(tr => {
-            const name = tr.querySelector('.pl-n').value.trim(), pct = Number(String(tr.querySelector('.pl-p').value).replace(',', '.')) || 0, fixed = finParse(tr.querySelector('.pl-f').value) || 0, mv = ledValues[name] || 0, price = name ? ledPlPrice(name, pct, fixed, def) : 0;
-            tr.querySelector('.pl-m').textContent = name && mv ? ledMoney(mv) : '';
-            tr.querySelector('.pl-price').textContent = price ? ledMoney(price) : name ? 'no market value: give a fixed price' : '';
-        });
-    };
-    const add = x => { body.insertAdjacentHTML('beforeend', ledPlRow(x)); refresh(); };
-    body.addEventListener('input', refresh); $('led-pl-pct').addEventListener('input', refresh);
-    body.addEventListener('click', e => { if (e.target.classList.contains('pl-x')) { e.target.closest('tr').remove(); refresh(); } });
-    $('led-pl-add').addEventListener('click', () => add({ name: '' }));
-    $('led-pl-stock').addEventListener('click', () => {
-        const have = new Set(read().rows.map(x => x.name)), stock = ledCompute(ledData.trades, ledValues).stock.filter(s => !have.has(s.name));
-        stock.forEach(s => add({ name: s.name })); toast(stock.length ? `${stock.length} items added` : 'Everything in your stock is on the list already');
-    });
-    $('led-pl-save').addEventListener('click', async () => {
-        const res = await ledFetch({ action: 'led-pl-save', pricelist: read() });
-        if (res.error) { toast(res.error); return; }
-        ledData.pricelist = res.pricelist; toast('Pricelist saved');
-    });
-    $('led-pl-copy').addEventListener('click', () => {
-        const pl = read(), text = pl.rows.map(x => ({ n: x.name, p: ledPlPrice(x.name, x.pct, x.fixed, pl.pct) })).filter(x => x.p).map(x => `${x.n}: ${ledMoney(x.p)}`).join('\n');
-        if (!text) { toast('There are no prices to copy yet'); return; }
-        navigator.clipboard.writeText(text).then(() => toast('Pricelist copied'), () => toast('Copying was not allowed here'));
-    });
-    refresh();
 }
 
 // ---- receipts ----

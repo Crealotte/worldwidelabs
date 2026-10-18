@@ -7,7 +7,15 @@
     // people with no Torn account at all, not just logged-in faction members. So this skips the
     // entire login flow when a receipt link is opened: no key needed, no session, nothing.
     const receiptId = new URLSearchParams(window.location.search).get('receipt');
-    if (receiptId) {
+    // A trader's shared pricelist (/pricelist/<tornId>) is public in the same way: no login, no session.
+    const pubPricelist = /^\/pricelist\/(\d+)\/?$/.exec(window.location.pathname);
+    if (pubPricelist) {
+        $('login-view').style.display = 'none';
+        $('app-view').style.display = 'block';
+        document.querySelector('nav.side').style.display = 'none';
+        goToPage('public-pricelist');
+        loadPublicPricelist(pubPricelist[1]);
+    } else if (receiptId) {
         $('login-view').style.display = 'none';
         $('app-view').style.display = 'block';
         document.querySelector('nav.side').style.display = 'none'; // irrelevant without a real login
