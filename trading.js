@@ -107,7 +107,7 @@ function trdWire() {
     const lg = $('trd-lic-give');
     if (lg) lg.addEventListener('click', async () => { const r = await ledFetch({ action: 'lic-grant', tornId: $('trd-lic-id').value, days: $('trd-lic-days').value }); if (r.error) { toast(r.error); return; } toast(`VIP of ${r.tornId} runs until ${trdWhen(r.until).slice(0, 10)}`); });
     const lp = $('trd-lic-peek');
-    if (lp) lp.addEventListener('click', async () => { const r = await ledFetch({ action: 'lic-peek' }); if (r.error) { toast(r.error); return; } trdLicHtml = `${r.events} events; Xanax-style gifts: ${r.gifts.length ? '' : 'none'}${r.gifts.map(g => `<div>${esc(trdWhen(g.ts * 1000))} from ${esc(g.sender)}: ${g.qty}x ${esc(g.item)} — "${esc(g.message)}"</div>`).join('')}`; $('trd-lic').innerHTML = trdLicHtml; });
+    if (lp) lp.addEventListener('click', async () => { const r = await ledFetch({ action: 'lic-peek' }); if (r.error) { toast(r.error); return; } trdLicHtml = `${r.events} events; Xanax-style gifts: ${r.gifts.length ? '' : 'none'}${r.gifts.map(g => `<div>${esc(trdWhen(g.ts * 1000))} from ${esc(g.senderName || g.sender)}${g.sender ? ` [${esc(g.sender)}]` : ''}: ${g.qtyKnown ? g.qty + 'x' : 'some'} ${esc(g.item)} — "${esc(g.message)}"</div>`).join('')}`; $('trd-lic').innerHTML = trdLicHtml; });
     const mk = $('trd-make'); if (mk) mk.addEventListener('click', trdMake);
     const more = $('trd-more'); if (more) more.addEventListener('click', () => { trdTab = 'purchases'; trdRender(); });
     const ms = $('trd-msgsave'); if (ms) ms.addEventListener('click', async () => { const r = await ledFetch({ action: 'led-msg-save', message: $('trd-msg').value }); if (r.error) { toast(r.error); return; } trdData.message = r.message; toast('Message saved'); });
