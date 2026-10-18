@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         CoreLabs Elite Recruiter v22.0
-// @version      24.0.0
+// @version      24.0.1
 // @updateURL    https://worldwidelabs.vercel.app/crm.user.js
 // @downloadURL  https://worldwidelabs.vercel.app/crm.user.js
 // @description  Test version Corelabs
@@ -2539,7 +2539,7 @@ function setUselessRow(btn, uid) {
 		const tbs = leaderTBS(e.leader.id), mine = myTBS();
 		if (tbs) {
 			const s = document.createElement('span');
-			s.textContent = fmtBig(tbs) + (mine ? (tbs > mine ? ' ▲ stronger than you' : ' ▼ weaker than you') : '');
+			s.textContent = fmtBig(tbs) + (mine ? (tbs > mine ? ' ▲ stronger' : ' ▼ weaker') : '');
 			s.className = mine ? (tbs > mine ? 'hi' : 'lo') : '';
 			s.title = `${e.leader.name || 'Leader'}: BSP total ${tbs.toLocaleString('en-US')}` + (mine ? `, you: ${mine.toLocaleString('en-US')}` : '');
 			chip.appendChild(s);
