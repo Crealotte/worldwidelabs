@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         CoreLabs Elite Recruiter v22.0
-// @version      22.1.0
+// @version      22.2.0
 // @updateURL    https://worldwidelabs.vercel.app/crm.user.js
 // @downloadURL  https://worldwidelabs.vercel.app/crm.user.js
 // @description  Test version Corelabs
@@ -412,8 +412,9 @@
 	 * Fields: recruiter_id, target_id, f, c, u, name, notes, company, updated_at
 	 */
 	async function upsertCRMState(uid) {
+		saveCRM(); // the click is kept on this computer at once, whatever the server answers
 		const s = CRM[uid] || {};
-		await sbRequest('POST', 'crm_states', {
+		const saved = await sbRequest('POST', 'crm_states', {
 			recruiter_id: parseInt(CFG.MY_ID),
 			target_id:    parseInt(uid),
 			f:            s.F || 0,
@@ -426,6 +427,7 @@
 			manual_stats: s.manualStats || null,
 			updated_at:   new Date().toISOString(),
 		});
+		if (!saved || saved.error) console.warn('[CoreLabs] CRM state NOT saved to the cloud:', saved ? saved.error : 'no answer');
 	}
 
 	/**
@@ -446,7 +448,7 @@
 		let rows = [];
 		for (let offset = 0; ; offset += PAGE) {
 			const page = await sbRequest('GET', 'crm_states', {
-				query: `recruiter_id=eq.${CFG.MY_ID}&select=target_id,f,c,s,u,name,notes,company,created_at,manual_stats,updated_at${fullSync ? '' : '&updated_at=gt.' + encodeURIComponent(since)}&order=target_id.asc&offset=${offset}&limit=${PAGE}`,
+				query: `recruiter_id=eq.${CFG.MY_ID}&select=target_id,f,c,s,u,name,notes,company,created_at,manual_stats,updated_at${fullSync ? '' : '&updated_at=gt.' + encodeURIComponent(new Date((Date.parse(since) || 0) - 10 * 60 * 1000).toISOString())}&order=target_id.asc&offset=${offset}&limit=${PAGE}`,
 			});
 			if (!Array.isArray(page)) break;       // error mid-paging — keep what we have
 			rows = rows.concat(page);
@@ -784,7 +786,7 @@
 			// event to avoid a static import cycle (supabase.js ↔ pill.js).
 			document.dispatchEvent(new CustomEvent('cl-shared-seeded'));
 		}
-		autoHunt(ids, cloudIds);
+		// (autoHunt no longer runs here: the pills already fetch and share the stats of every shown player)
 	}
 
 	// ── Shared pill-stats cache (DB-backed, mutualised across all users) ──────────
