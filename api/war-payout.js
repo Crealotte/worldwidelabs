@@ -779,7 +779,7 @@ module.exports = async function handler(req, res) {
         if (action === 'script-version') {
             const src = require('fs').readFileSync(require('path').join(process.cwd(), 'userscripts', req.body?.channel === 'dev' ? 'energy-plan.dev.user.js' : 'energy-plan.user.js'), 'utf8');
             const m = /@version\s+([\d.]+)/.exec(src);
-            return res.status(200).json({ version: m ? m[1] : null, tradeHelper: /function tradeHelper(/.test(src) }); // tradeHelper: this script has the trade bar for the Trading tools
+            return res.status(200).json({ version: m ? m[1] : null, tradeHelper: src.includes('function tradeHelper(') }); // tradeHelper: this script has the trade bar for the Trading tools
         }
         if (!key) return res.status(400).json({ error: 'Missing key' });
         // "Bugs & suggestions" for people who only use a Labs service (an investor, a tenant, a company director) and are not in an allowed faction: they only see, vote on and send
