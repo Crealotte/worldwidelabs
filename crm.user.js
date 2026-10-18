@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         CoreLabs Elite Recruiter v22.0
-// @version      23.0.0
+// @version      23.1.0
 // @updateURL    https://worldwidelabs.vercel.app/crm.user.js
 // @downloadURL  https://worldwidelabs.vercel.app/crm.user.js
 // @description  Test version Corelabs
@@ -417,18 +417,28 @@
 	 */
 	// Changes are collected for a moment and sent together (a click, a note, a name: one request for all of them).
 	const CRM_BUF = new Map();
+	const PENDING = load('RecruiterCrmPending', {}); // changes the server has not confirmed yet: kept across reloads, and never overwritten by an older copy from the server
 	let crmTimer = null;
 	async function flushCRM() {
 		clearTimeout(crmTimer); crmTimer = null;
 		if (!CRM_BUF.size) return;
 		const rows = [...CRM_BUF.values()]; CRM_BUF.clear();
 		const saved = await wwl('rec-save', { rows });
-		if (!saved || saved.error) console.warn('[CoreLabs] CRM state NOT saved to the server:', saved ? saved.error : 'no answer');
+		if (!saved || saved.error) {
+			console.warn('[CoreLabs] CRM state NOT saved to the server' + (saved && /subscription/i.test(saved.error || '') ? '' : ' (will try again)') + ':', saved ? saved.error : 'no answer');
+			if (saved && /subscription/i.test(saved.error || '')) return;   // no subscription: nothing to retry, the changes stay marked as pending
+			rows.forEach(r => { if (!CRM_BUF.has(String(r.id))) CRM_BUF.set(String(r.id), r); });
+			clearTimeout(crmTimer); crmTimer = setTimeout(flushCRM, 20000);
+			return;
+		}
+		rows.forEach(r => { if (!CRM_BUF.has(String(r.id))) delete PENDING[String(r.id)]; });
+		save('RecruiterCrmPending', PENDING);
 	}
 	window.addEventListener('pagehide', flushCRM);
 	async function upsertCRMState(uid) {
 		if (CRM[uid]) CRM[uid].updatedAt = new Date().toISOString();
 		saveCRM(); // the click is kept on this computer at once, whatever the server answers
+		PENDING[String(uid)] = 1; save('RecruiterCrmPending', PENDING);
 		const s = CRM[uid] || {};
 		CRM_BUF.set(String(uid), { id: parseInt(uid), f: s.F || 0, c: s.C || 0, s: s.S || 0, u: s.U || 0, name: s.name || null, notes: s.notes || null, company: s.company || null, manual: s.manualStats || null });
 		if (CRM_BUF.size >= 50) flushCRM();
@@ -462,11 +472,13 @@
 		if (typeof reply.paid === 'boolean') { CFG.PAID = reply.paid; CFG.IS_ADMIN = !!reply.owner; }
 		if (fullSync) save('RecruiterCrmFull', Date.now());
 		if (reply.now) save('RecruiterWwlSince', reply.now);
+		Object.keys(PENDING).forEach(uid => { if (CRM[uid]) upsertCRMState(uid); else delete PENDING[uid]; }); // changes the server never got (a request that failed or was cut off): sent again
 		const rows = reply.rows;
 		if (!rows.length) { expireYellowF(); return; }
 		const isBadName = (n) => n && /torn|rpg/i.test(n);
 		rows.forEach(row => {
 			const uid = String(row.id);
+			if (PENDING[uid] && CRM[uid]) return; // this computer has a newer change of this player that the server does not have yet: keep it
 			const cleanName = isBadName(row.name) ? null : row.name;
 			CRM[uid] = {
 				F:           row.f       ?? 0,
