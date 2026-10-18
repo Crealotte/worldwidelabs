@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         CoreLabs Elite Recruiter v22.0
-// @version      22.4.0
+// @version      22.5.0
 // @updateURL    https://worldwidelabs.vercel.app/crm.user.js
 // @downloadURL  https://worldwidelabs.vercel.app/crm.user.js
 // @description  Test version Corelabs
@@ -121,6 +121,9 @@
 		/* --- useless dim --- */
 		li.cl-useless { opacity:0.35; transition:opacity .2s; }
 		li.cl-useless:hover { opacity:0.7; }
+		/* --- row tint: faded red (a red button) and faded yellow (F yellow) --- */
+		li.cl-row-red { box-shadow:inset 0 0 0 999px rgba(220,70,70,.22); }
+		li.cl-row-yellow { box-shadow:inset 0 0 0 999px rgba(230,190,40,.20); }
 		/* --- FCU help badge --- */
 		.cl-fcu-help {
 			display:inline-flex; align-items:center; justify-content:center;
@@ -1044,12 +1047,18 @@
 	];
 	const U_DEF = { id: 'U', labels: ['U','U'], colors: ['cl-grey','cl-blue'] }; // U = Useless
 
-	// A row is dimmed when the player is marked useless (U), when F is yellow (waiting for an answer) or red, or when C / S is red: easier to look at a list of members.
+	// U dims the row. A red button (F, C or S) tints the whole row faded red, a yellow F tints it faded yellow: easier to look at a list of members.
 function setUselessRow(btn, uid) {
 	const st = CRM[uid] || {};
-	const isUseless = st.U === 1 || st.F === 1 || st.F === 3 || st.C === 3 || st.S === 3;
+	const isUseless = st.U === 1;
+	const isRed = st.F === 3 || st.C === 3 || st.S === 3;
+	const isYellow = !isRed && st.F === 1;
 		const li = btn.closest('li[class*="user"]');
-		if (li) li.classList.toggle('cl-useless', isUseless);
+		if (li) {
+			li.classList.toggle('cl-useless', isUseless);
+			li.classList.toggle('cl-row-red', isRed);
+			li.classList.toggle('cl-row-yellow', isYellow);
+		}
 	}
 
 	function makeCRMButtons(uid, { withU = true, withActions = false } = {}) {
