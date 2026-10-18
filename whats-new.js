@@ -12,6 +12,16 @@
 
 const WHATS_NEW = [
     {
+        version: '1.30', date: '2026-10-18',
+        title: 'Userscript 1.40: a trade bar on the trade pages in Torn',
+        everyone: [
+            'The WWL script now adds a bar to the trade pages in Torn for anybody who made a pricelist on WWL (the Trading menu). Open a trade where somebody sells you items and it shows the total at your pricelist, with buttons to copy the total, to copy a link to the receipt (a page you can send to the seller), and to accept. The Accept button turns green when the money in the trade is the total, and shows Add Money, Too Low or Too High when it is not (Accept anyway is there if you want it).',
+            'The money page is filled in for you, a full Plushie Set or Flower Set is priced as the set when the set is on your list, and a finished trade is saved to your ledger from its trade log page, with Undo. It only reads the trade page you have open, it does not use the Torn API, and it stays quiet when you have no pricelist.',
+            'Install or update it from the dashboard card, or from the Pricelist and Receipts & ledger pages. Your script manager asks you to confirm the update.',
+        ],
+        leaders: [],
+    },
+    {
         version: '1.29', date: '2026-10-18',
         title: 'Trading: a pricelist and receipts for everybody',
         everyone: [
