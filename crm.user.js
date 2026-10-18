@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         CoreLabs Elite Recruiter v22.0
-// @version      23.1.0
+// @version      23.2.0
 // @updateURL    https://worldwidelabs.vercel.app/crm.user.js
 // @downloadURL  https://worldwidelabs.vercel.app/crm.user.js
 // @description  Test version Corelabs
@@ -240,7 +240,7 @@
 	function saveFilters(f) { save(STORE.FILTERS, f); }
 
 	const DEFAULT_TEMPLATES = [
-		{ label: 'FC', fullName: 'First Contact',     text: `Hey {name}! I noticed your work stats and think you'd be a great fit for one of our top companies. We help players maximize their earning potential. Would you be open to hearing more? 😊` },
+		{ label: 'FC', fullName: 'First Contact',     text: `Hi {name}! Looking for a faction that actually talks, loves a good war and feels like family? That is CoreLabs. We supply the Xanax for wars (the cost comes out of the war money before we divide it), pay out 80% on wars and OCs, and have a faction perk that rotates every month. Apply here and leave a funny or original application message, we read them all: https://www.torn.com/factions.php?step=profile&ID=51197` },
 		{ label: 'FU', fullName: 'Follow-Up',          text: `Hi {name}, just following up on my earlier message! We still have a spot open at {company} and your profile looks like a perfect match. Let me know if you have any questions!` },
 		{ label: 'CO', fullName: 'Company Offer',      text: `Hi {name}! I have a position available at {company} that could really boost your income. The perks are great and the team is active. Interested in learning more?` },
 		{ label: 'NR', fullName: 'No Response Nudge',  text: `Hey {name}! Still here if you want to chat about career opportunities 😄 No pressure, just want to make sure you don't miss out!` },
@@ -940,6 +940,155 @@
 			// The Discord link lives on the server (not in this script): the gateway builds the post and sends it.
 		const r = await brokerPost(ws, comp, notes);
 		if (r && r.ok) alert('Lead Posted!'); else alert('Could not post the lead: ' + ((r && r.error) || 'no answer'));
+	}
+
+	function openMessageModal(uid) {
+		document.getElementById('cl-msg')?.remove();
+	
+		const state      = CRM[uid] || {};
+		const playerName = state.name || CACHE[uid]?.data?.name || `ID: ${uid}`;
+		const company    = state.company || '';
+		let templates    = load(STORE.TEMPLATES, DEFAULT_TEMPLATES);
+		let activeIdx    = 0;
+		let editMode     = false;
+	
+		const overlay = document.createElement('div');
+		overlay.id = 'cl-msg'; overlay.className = 'cl-overlay';
+	
+		const modal = document.createElement('div');
+		modal.style.cssText = 'background:#1e1e1e;color:#fff;padding:0;border-radius:10px;border:1px solid #383838;width:460px;box-sizing:border-box;overflow:hidden;';
+	
+		const header = document.createElement('div');
+		header.style.cssText = 'display:flex;align-items:center;justify-content:space-between;padding:14px 18px;border-bottom:1px solid #2c2c2c;background:#252525;';
+		const hTitle = document.createElement('div');
+		hTitle.style.cssText = 'font-size:13px;font-weight:bold;color:#fff;';
+		hTitle.textContent = `Message — ${playerName}`;
+		const hClose = document.createElement('span');
+		hClose.textContent = '✕';
+		hClose.style.cssText = 'cursor:pointer;color:#666;font-size:16px;line-height:1;';
+		hClose.onclick = () => overlay.remove();
+		header.append(hTitle, hClose);
+	
+		const tabRow = document.createElement('div');
+		tabRow.style.cssText = 'display:flex;gap:0;border-bottom:1px solid #2c2c2c;background:#1e1e1e;overflow-x:auto;';
+	
+		function renderTabs() {
+			tabRow.innerHTML = '';
+			templates.forEach((t, i) => {
+				const tab = document.createElement('div');
+				tab.style.cssText = `padding:8px 14px;font-size:11px;cursor:pointer;white-space:nowrap;border-bottom:2px solid ${i === activeIdx ? '#37b3f9' : 'transparent'};color:${i === activeIdx ? '#37b3f9' : '#888'};transition:.1s;`;
+				tab.textContent = t.label;
+				tab.onclick = () => { activeIdx = i; editMode = false; renderAll(); };
+				tabRow.appendChild(tab);
+			});
+		}
+	
+		const body = document.createElement('div');
+		body.style.cssText = 'padding:16px 18px;';
+	
+		const txtMsg = document.createElement('textarea');
+		txtMsg.style.cssText = 'width:100%;background:#111;color:#ddd;border:1px solid #333;border-radius:6px;padding:10px;font-size:12px;line-height:1.5;resize:vertical;box-sizing:border-box;min-height:110px;font-family:inherit;';
+	
+		const editSection = document.createElement('div');
+		editSection.style.cssText = 'margin-top:12px;display:none;';
+	
+		const editLabel = document.createElement('div');
+		editLabel.style.cssText = 'font-size:10px;color:#555;margin-bottom:4px;';
+		editLabel.textContent = 'RAW TEMPLATE — use {name} and {company}';
+	
+		const txtEdit = document.createElement('textarea');
+		txtEdit.style.cssText = 'width:100%;background:#111;color:#888;border:1px solid #2c2c2c;border-radius:6px;padding:8px;font-size:11px;resize:vertical;box-sizing:border-box;min-height:70px;font-family:inherit;';
+	
+		const btnSaveTpl = document.createElement('button');
+		btnSaveTpl.style.cssText = 'margin-top:6px;background:#2a2a2a;color:#aaa;border:1px solid #383838;padding:6px 12px;border-radius:4px;font-size:11px;cursor:pointer;';
+		btnSaveTpl.textContent = 'Save template';
+		btnSaveTpl.onclick = () => {
+			templates[activeIdx].text = txtEdit.value;
+			save(STORE.TEMPLATES, templates);
+			fillMessage();
+		};
+	
+		editSection.append(editLabel, txtEdit, btnSaveTpl);
+	
+		function fillMessage() {
+			const t = templates[activeIdx];
+			if (!t) return;
+			txtMsg.value = t.text
+				.replace(/\{name\}/g, playerName)
+				.replace(/\{company\}/g, company || '[company]');
+			txtEdit.value = t.text;
+		}
+	
+		const footer = document.createElement('div');
+		footer.style.cssText = 'display:flex;gap:8px;padding:12px 18px;border-top:1px solid #2c2c2c;background:#252525;';
+	
+		const btnEdit = document.createElement('button');
+		btnEdit.style.cssText = 'flex:0 0 auto;background:none;border:1px solid #383838;color:#666;padding:8px 12px;border-radius:4px;font-size:11px;cursor:pointer;';
+		btnEdit.textContent = 'Edit template';
+		btnEdit.onclick = () => {
+			editMode = !editMode;
+			editSection.style.display = editMode ? 'block' : 'none';
+			btnEdit.style.color = editMode ? '#37b3f9' : '#666';
+			btnEdit.style.borderColor = editMode ? '#37b3f9' : '#383838';
+		};
+	
+		const btnCopy = document.createElement('button');
+		btnCopy.style.cssText = 'flex:1;background:#2a2a2a;border:1px solid #383838;color:#ccc;padding:8px;border-radius:4px;font-size:12px;font-weight:bold;cursor:pointer;';
+		btnCopy.textContent = 'Copy';
+		btnCopy.onclick = () => {
+			navigator.clipboard.writeText(txtMsg.value).then(() => {
+				btnCopy.textContent = '✓ Copied!'; btnCopy.style.color = '#51cf66';
+				setTimeout(() => { btnCopy.textContent = 'Copy'; btnCopy.style.color = '#ccc'; }, 1500);
+			});
+		};
+	
+		const btnChat = document.createElement('button');
+		btnChat.style.cssText = 'flex:1;background:#1971c2;border:none;color:#fff;padding:8px;border-radius:4px;font-size:12px;font-weight:bold;cursor:pointer;';
+		btnChat.textContent = '💬 Chat';
+		btnChat.onclick = () => {
+			navigator.clipboard.writeText(txtMsg.value).then(() => {
+				btnChat.textContent = '✓ Copied';
+				setTimeout(() => { btnChat.textContent = '💬 Chat'; }, 1500);
+			}).catch(() => {});
+			overlay.remove();
+			const existingChat = document.querySelector(`a[href*="XID=${uid}"][class*="chat"]`)
+				|| document.querySelector(`[data-uid="${uid}"] [class*="chatInput"]`);
+			if (existingChat) { existingChat.click(); return; }
+			window.open(`https://www.torn.com/messages.php#/p=chat&XID=${uid}`, '_blank');
+		};
+	
+		const btnMail = document.createElement('button');
+		btnMail.style.cssText = 'flex:1;background:#2a2a2a;border:1px solid #383838;color:#aaa;padding:8px;border-radius:4px;font-size:12px;font-weight:bold;cursor:pointer;';
+		btnMail.textContent = '✉️ Mail';
+		btnMail.onclick = () => {
+			GM_setValue('cl_pending_msg', JSON.stringify({
+				uid,
+				subject: 'An invitation to CoreLabs',
+				body: txtMsg.value,
+				ts: Date.now(),
+			}));
+			overlay.remove();
+			window.open(`https://www.torn.com/messages.php#/p=compose&XID=${uid}`, '_blank'); // a new tab: the user list stays where it is
+		};
+	
+		footer.append(btnEdit, btnCopy, btnChat, btnMail);
+	
+		function renderAll() {
+			renderTabs();
+			fillMessage();
+			editSection.style.display = 'none';
+			editMode = false;
+			btnEdit.style.color = '#666';
+			btnEdit.style.borderColor = '#383838';
+		}
+	
+		body.append(txtMsg, editSection);
+		modal.append(header, tabRow, body, footer);
+		overlay.appendChild(modal);
+		document.body.appendChild(overlay);
+	
+		renderAll();
+		overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
 	}
 
 	function openBroker(currentWS = '0') {
@@ -2078,6 +2227,16 @@ function setUselessRow(btn, uid) {
 		header.appendChild(minfWrap);
 	}
 
+	// A small mail icon on every row: for players who have turned their chat off (or when a mail suits better). It opens the message window with the templates;
+	// its Mail button opens Torn's mail page in a new tab with the mail already filled in (you press Send yourself).
+	function addMailIcon(cont, uid) {
+		const mail = document.createElement('span');
+		mail.className = 'cl-act-icon cl-mail-icon'; mail.textContent = '✉'; mail.title = 'Write a mail or a message to this player (for players with chat off)';
+		mail.style.cssText = 'margin-left:6px;cursor:pointer;';
+		mail.onclick = e => { e.preventDefault(); e.stopPropagation(); openMessageModal(uid); };
+		cont.appendChild(mail);
+	}
+
 	function injectUserlistPill(link) {
 		if (link.dataset.clDone) return;
 		const uid = link.href.match(/XID=(\d+)/)?.[1];
@@ -2093,12 +2252,14 @@ function setUselessRow(btn, uid) {
 			const cont = document.createElement('span'); cont.className = 'cl-pill-cont';
 			iconsWrap.appendChild(cont);
 			ensurePill(uid, cont);
+			addMailIcon(cont, uid);
 			return;
 		}
 
 		const cont = document.createElement('span'); cont.className = 'cl-pill-cont';
 		link.after(cont);
 		ensurePill(uid, cont);
+		addMailIcon(cont, uid);
 	}
 
 	function injectChatTab(chatBox) {
@@ -2265,7 +2426,7 @@ function setUselessRow(btn, uid) {
 
 		let pending;
 		try { pending = JSON.parse(GM_getValue('cl_pending_msg', null)); } catch { return; }
-		if (!pending || Date.now() - pending.ts > 30000) { GM_setValue('cl_pending_msg', null); return; }
+		if (!pending || Date.now() - pending.ts > 60000) { GM_setValue('cl_pending_msg', null); return; }
 
 		function reactSet(el, val) {
 			const nativeSetter = Object.getOwnPropertyDescriptor(
@@ -2286,8 +2447,11 @@ function setUselessRow(btn, uid) {
 				);
 				if (subjectInput && pending.subject) { reactSet(subjectInput, pending.subject); subjectDone = true; }
 			}
+			if (pending.subject && !subjectDone) return false; // the subject first (the mail page builds its form a moment after loading)
 			const allTextareas = [...document.querySelectorAll('textarea')];
+			// Torn's mail editor is a rich-text box (a contenteditable div); the page also has a chat textarea that must not be filled in by mistake
 			const bodyField =
+				document.querySelector('.mce-content-body[contenteditable="true"], .editor-content[contenteditable="true"]') ||
 				document.querySelector('textarea[name="body"]') ||
 				allTextareas.find(t => (t.placeholder || '').toLowerCase().includes('message')) ||
 				allTextareas.find(t => (t.placeholder || '').toLowerCase().includes('write')) ||
@@ -2301,7 +2465,7 @@ function setUselessRow(btn, uid) {
 		};
 		if (!tryInject()) {
 			let tries = 0;
-			const iv = setInterval(() => { if (tryInject() || ++tries > 10) clearInterval(iv); }, 400);
+			const iv = setInterval(() => { if (tryInject() || ++tries > 30) clearInterval(iv); }, 400);
 		}
 	}
 
