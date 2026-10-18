@@ -466,7 +466,7 @@
         if (page === 'join-requests') loadJoinRequests();
         if (page === 'buddybank') loadBuddyBank();
         if (page === 'funding') loadFunding();
-        if (page === 'ledger') loadLedger();
+        if (page === 'ledger') { loadLedger(); if (typeof loadTrading === 'function') loadTrading(); }
         if (page === 'pricelist') loadPricelist();
         if (page === 'bug-report') loadBugReport();
         if (page === 'labs-funds') loadLabsFunds();

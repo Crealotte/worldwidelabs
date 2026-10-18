@@ -2,7 +2,7 @@
 // @name         World Wide Labs
 // @namespace    https://worldwidelabs.vercel.app
 // @author       CreaLotte
-// @version      1.40.1
+// @version      1.40.2
 // @updateURL    __WWL_BASE__/worldwidelabs.user.js
 // @downloadURL  __WWL_BASE__/worldwidelabs.user.js
 // @description  Shows your WorldWideLabs weekly energy plan (the checklist from the Energy planner) inside Torn, a To do tab with small personal reminders (revive setting, feedback, timezone map, availability, Discord/Intel/CAT), your My Targets list, a simplified energy/war standing strip, and — if you are in the Mentoring Platform — your mentoring checklist too. Also shows faction banners at the top of every Torn page. A small ⚙ in the header shows the installed version, flags when a newer one is out, lets you set/replace your API key, and — for a leader — add or remove your faction's banners right from Torn. On a computer it is a small window you can drag around and close; in TornPDA it is a menu. Ticks are shared with the WWL site.
@@ -26,7 +26,7 @@
     const KEY_NAME = 'wwl_api_key', POS_NAME = 'wwl_plan_pos', STATE_NAME = 'wwl_plan_state';
     // GM_info gives the version Tampermonkey actually has installed right now — falls back to a
     // hardcoded copy (kept in sync with @version above) for TornPDA, which doesn't grant GM_info.
-    const SCRIPT_VERSION = (typeof GM_info !== 'undefined' && GM_info.script?.version) || '1.40.1';
+    const SCRIPT_VERSION = (typeof GM_info !== 'undefined' && GM_info.script?.version) || '1.40.2';
     const versionGreater = (a, b) => {
         const pa = String(a).split('.').map(Number), pb = String(b).split('.').map(Number);
         for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
@@ -901,6 +901,12 @@
         const moneyOf = s => { const m = String(s || '').match(/\$([\d,]+)/); return m ? parseInt(m[1].replace(/,/g, ''), 10) : 0; };
         const fmt = n => '$' + Math.round(n).toLocaleString('en-US');
         const q1 = (s, r = document) => r.querySelector(s);
+        // a player's name from a trade page header: the header also holds a "Hide item values" button, so only the name's own text counts
+        const headName = h => {
+            if (!h) return '';
+            let t = ''; for (const c of h.childNodes) if (c.nodeType === 3 && c.nodeValue.trim()) { t = c.nodeValue; break; }
+            return (t || h.textContent || '').replace(/(hide|show) item values/ig, '').replace(/'s items.*$/i, '').replace(/\[\d+\]/g, '').replace(/\s+/g, ' ').trim();
+        };
         const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
         const readJson = k => { try { return JSON.parse(store.get(k) || 'null'); } catch (e) { return null; } };
         // records of trades older than a week are cleared once per page load
@@ -951,7 +957,7 @@
         // The receipt: a page anybody can open with the items and prices of this trade. It is saved (again) whenever the items or prices change, and the link is kept with the trade.
         const receipts = {}; // trade id -> { sig, url, busy }
         const partnerOf = cont => {
-            const name = ((q1('.user.right .title-black', cont) || {}).textContent || '').trim().replace(/'s items.*$/i, '').replace(/\[\d+\]/g, '').trim();
+            const name = headName(q1('.user.right .title-black', cont));
             let me = ''; try { me = String(JSON.parse(q1('#torn-user').value).id); } catch (e) { me = ''; }
             const ids = [...document.querySelectorAll('#trade-container a[href*="XID="]')].map(a => (a.href.match(/XID=(\d+)/) || [])[1]).filter(x => x && x !== me);
             return { name, id: ids[0] || '' };
@@ -960,7 +966,7 @@
             const sig = JSON.stringify([lines, partner]), r = receipts[id] || (receipts[id] = { sig: '', url: '', busy: false });
             if (r.busy || r.sig === sig) return;
             r.busy = true; r.sig = sig;
-            call({ action: 'led-receipt-save', tradeId: id, partner, lines }).then(res => { if (!res.token) throw new Error('no receipt'); r.url = `${WWL}/?tradereceipt=${res.token}`; const rec = readJson(REC(id)); if (rec) { rec.receipt = r.url; store.set(REC(id), JSON.stringify(rec)); } })
+            call({ action: 'led-receipt-save', tradeId: id, partner, lines, base: WWL }).then(res => { if (!res.token) throw new Error('no receipt'); r.message = res.message || ''; r.url = `${WWL}/?tradereceipt=${res.token}`; const rec = readJson(REC(id)); if (rec) { rec.receipt = r.url; store.set(REC(id), JSON.stringify(rec)); } })
                 .catch(() => { r.sig = ''; }).finally(() => { r.busy = false; });
         }
         function viewTick(id) {
@@ -1002,9 +1008,11 @@
             else if (acc && ready) accept = inTrade === total ? b('wwl-tb-acc', 'Accept Trade', 'background:#1f9d63;border-color:#1f9d63;') : !inTrade ? b('wwl-tb-acc', 'Add Money', 'background:#c98a14;border-color:#c98a14;') : b('wwl-tb-acc', diff < 0 ? 'Too Low — add money' : 'Too High — fix money', 'background:#b03a3a;border-color:#b03a3a;');
             else if (acc && !waiting) accept = b('wwl-tb-acc', 'Accept (not checked)', '');
             const head = waiting ? 'Looking up your prices…' : priceError ? `<span style="color:#ff6b6b;">${esc(priceError)}</span>` : '';
-            setBar(`<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;"><b style="color:#35d99b;">WWL</b>${head}${!head && total ? b('wwl-tb-copy', `Total: ${fmt(total)}`) : ''}${ready ? (rurl ? b('wwl-tb-rcpt', 'Receipt — copy link') + ` <a href="${esc(rurl)}" target="_blank" rel="noopener" style="color:#7fb0ff;font-size:12px;">open</a>` : '<span style="color:#8a93a6;font-size:12px;">receipt…</span>') : ''}${accept}</div>${unpriced && !waiting ? `<div style="color:#f0b432;">${unpriced} item${unpriced === 1 ? '' : 's'} without a price on your list.</div>` : ''}${status ? `<div>${status} <span style="color:#8a93a6;">In the trade: ${fmt(inTrade)}</span>${mismatch ? ' <a href="#" id="wwl-tb-any" style="color:#7fb0ff;">Accept anyway</a>' : ''}</div>` : ''}<details style="margin-top:4px;"><summary style="cursor:pointer;color:#8a93a6;">Items</summary>${rows.join('')}</details>`, el => {
+            setBar(`<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;"><b style="color:#35d99b;">WWL</b>${head}${!head && total ? b('wwl-tb-copy', `Total: ${fmt(total)}`) : ''}${ready ? (rurl ? b('wwl-tb-rcpt', 'Receipt — copy link') + ` <a href="${esc(rurl)}" target="_blank" rel="noopener" style="color:#7fb0ff;font-size:12px;">open</a>` + (receipts[id].message ? b('wwl-tb-msg', 'Copy message') : '') : '<span style="color:#8a93a6;font-size:12px;">receipt…</span>') : ''}${accept}</div>${unpriced && !waiting ? `<div style="color:#f0b432;">${unpriced} item${unpriced === 1 ? '' : 's'} without a price on your list.</div>` : ''}${status ? `<div>${status} <span style="color:#8a93a6;">In the trade: ${fmt(inTrade)}</span>${mismatch ? ' <a href="#" id="wwl-tb-any" style="color:#7fb0ff;">Accept anyway</a>' : ''}</div>` : ''}<details style="margin-top:4px;"><summary style="cursor:pointer;color:#8a93a6;">Items</summary>${rows.join('')}</details>`, el => {
                 const c = el.querySelector('#wwl-tb-copy');
                 if (c) c.addEventListener('click', () => { const t = String(total); (navigator.clipboard ? navigator.clipboard.writeText(t) : Promise.reject()).then(() => { c.textContent = 'Copied'; }, () => { c.textContent = t; }); });
+                const mg = el.querySelector('#wwl-tb-msg');
+                if (mg) mg.addEventListener('click', () => { const t = receipts[id].message; (navigator.clipboard ? navigator.clipboard.writeText(t) : Promise.reject()).then(() => { mg.textContent = 'Message copied'; }, () => { mg.textContent = 'Copy failed'; }); });
                 const r = el.querySelector('#wwl-tb-rcpt');
                 if (r) r.addEventListener('click', () => { (navigator.clipboard ? navigator.clipboard.writeText(rurl) : Promise.reject()).then(() => { r.textContent = 'Link copied'; }, () => { r.textContent = rurl; }); });
                 const a = el.querySelector('#wwl-tb-acc');
@@ -1031,7 +1039,7 @@
         const savedTried = {}; let logBusy = false;
         const sideOf = u => {
             const head = q1('.title-black', u);
-            return { name: ((head && head.textContent) || '').trim(), money: moneyOf((q1('.cont li.color1 .name.left', u) || {}).textContent), items: readItems(u, '.cont li.color2 ul.desc li .name.left') };
+            return { name: headName(head), money: moneyOf((q1('.cont li.color1 .name.left', u) || {}).textContent), items: readItems(u, '.cont li.color2 ul.desc li .name.left') };
         };
         const logLines = () => [...document.querySelectorAll('#trade-container .log li, ul.log li')].map(li => li.textContent.trim()).join('\n');
         const logTime = text => {

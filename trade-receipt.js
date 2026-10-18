@@ -14,7 +14,7 @@ async function loadTradeReceipt(token) {
     const who = (name, id) => (id ? `<a href="https://www.torn.com/profiles.php?XID=${esc(id)}" target="_blank" rel="noopener">${esc(name || 'Player')} [${esc(id)}]</a>` : esc(name || 'Player'));
     document.title = `Trade receipt · ${r.trader}`;
     box.innerHTML = `<div style="display:flex;flex-wrap:wrap;gap:6px 24px;font-size:13px;color:var(--muted);margin-bottom:10px;">
-            <span>Trade ID <b style="color:var(--text);">${esc(r.tradeId)}</b></span><span>${esc(when)}</span>
+            ${/^d+$/.test(r.tradeId) ? `<span>Trade ID <b style="color:var(--text);">${esc(r.tradeId)}</b></span>` : ''}<span>${esc(when)}</span>
             <span>Seller: <b style="color:var(--text);">${who(r.partner && r.partner.name, r.partner && r.partner.id)}</b></span>
             <span>Buyer: <b style="color:var(--text);">${who(r.trader, r.traderId)}</b></span></div>
         <div style="overflow-x:auto;"><table style="border-collapse:collapse;width:100%;font-size:14px;"><thead><tr style="color:var(--muted);font-size:11px;text-align:left;"><th></th><th style="padding:4px 8px;">Item</th><th style="padding:4px 8px;text-align:right;">Quantity</th><th style="padding:4px 8px;text-align:right;">Price</th><th style="padding:4px 8px;text-align:right;">Total</th></tr></thead><tbody>
@@ -22,5 +22,5 @@ async function loadTradeReceipt(token) {
             <td style="padding:4px 8px;"><b>${esc(l.name)}</b>${l.parts ? `<details style="font-size:12px;color:var(--muted);"><summary style="cursor:pointer;">What is in it?</summary>${l.parts.map(n => `<div>1 × ${esc(n)}</div>`).join('')}</details>` : ''}</td>
             <td style="padding:4px 8px;text-align:right;font-family:var(--mono);">${l.qty.toLocaleString('en-US')}</td><td style="padding:4px 8px;text-align:right;font-family:var(--mono);">${money(l.price)}</td><td style="padding:4px 8px;text-align:right;font-family:var(--mono);">${money(l.qty * l.price)}</td></tr>`).join('')}
         </tbody><tfoot><tr style="border-top:2px solid var(--line);"><td colspan="4" style="padding:8px;text-align:right;"><b>Total</b></td><td style="padding:8px;text-align:right;font-family:var(--mono);"><b>${money(r.total)}</b></td></tr></tfoot></table></div>
-        <p style="font-size:12px;color:var(--muted);margin-top:10px;">The prices are the buyer's pricelist prices at the time of the trade. This receipt is kept for 30 days.</p>`;
+        <p style="font-size:12px;color:var(--muted);margin-top:10px;">The prices are the buyer's pricelist prices at the time of the trade. The trader can delete a receipt; until then it stays here.</p>`;
 }
