@@ -26,13 +26,29 @@ async function loadPublicPricelist(id) {
         }).join('') || '<p style="color:var(--muted);">No items match.</p>';
     };
     box.innerHTML = `<div class="panel" style="display:flex;gap:16px;flex-wrap:wrap;align-items:center;justify-content:space-between;">
-            <div><h2 style="margin:0;">${esc(r.name)}'s Pricelist</h2><div style="color:var(--muted);font-size:13px;">${r.items.length} items priced — what ${esc(r.name)} pays</div></div>
+            <div><h2 style="margin:0;">${esc(r.name)}'s Pricelist</h2><div style="color:var(--muted);font-size:13px;">${r.items.length} items priced — what ${esc(r.name)} pays<br><b style="color:var(--text);">${r.trades || 0} trades</b>${r.tradesWeek ? ` · ${r.tradesWeek} this week` : ''}</div></div>
             <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+                <div id="pp-vote" title="Vote for this trader" style="display:flex;flex-direction:column;align-items:center;border:1px solid var(--line);border-radius:8px;padding:2px 8px;font-size:13px;"><button id="pp-up" class="ghost small" type="button" style="padding:0 6px;border:0;">▲</button><b id="pp-score">${r.score || 0}</b><button id="pp-down" class="ghost small" type="button" style="padding:0 6px;border:0;">▼</button></div>
                 <a class="btn ghost" href="https://www.torn.com/profiles.php?XID=${esc(r.tornId)}" target="_blank" rel="noopener" style="padding:6px 12px;border:1px solid var(--line);border-radius:6px;">View Profile</a>
                 <a class="btn" href="https://www.torn.com/trade.php#step=start&userID=${esc(r.tornId)}" target="_blank" rel="noopener" style="padding:6px 12px;border:1px solid var(--accent,#35d99b);border-radius:6px;">Set Trade</a></div>
             <div style="flex-basis:100%;font-size:12px;color:var(--muted);">${r.pricesAt ? `<b>${esc(ppAgo(r.pricesAt))}</b> prices updated` : ''}${lastTrade ? ` · <b>${esc(lastTrade)}</b> last trade` : ''} · The prices follow Torn's market value, so they change a little during the day.</div></div>
         <div class="panel"><input id="pp-search" type="text" placeholder="Search items…" style="width:100%;max-width:420px;"></div>
         <div id="pp-cats" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px;align-items:start;"></div>`;
     draw('');
+    // the vote: ▲ up, ▼ down, the same arrow again takes the vote back (the page remembers what you voted in this browser)
+    let mine = 0; try { mine = Number(localStorage.getItem('wwl_plvote_' + id)) || 0; } catch (e) { mine = 0; }
+    const paint = () => { $('pp-up').style.color = mine > 0 ? 'var(--success,#35d99b)' : ''; $('pp-down').style.color = mine < 0 ? 'var(--danger,#ff6b6b)' : ''; };
+    const vote = async dir => {
+        const next = mine === dir ? 0 : dir;
+        try {
+            const res = await fetch('/api/war-payout', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'pricelist-vote', id, dir: next }) });
+            const out = JSON.parse(await res.text());
+            if (out.error) { if (typeof toast === 'function') toast(out.error); return; }
+            mine = out.mine; $('pp-score').textContent = out.score;
+            try { localStorage.setItem('wwl_plvote_' + id, String(mine)); } catch (e) { /* not remembered */ }
+            paint();
+        } catch (e) { if (typeof toast === 'function') toast('The vote could not be sent. Try again.'); }
+    };
+    $('pp-up').addEventListener('click', () => vote(1)); $('pp-down').addEventListener('click', () => vote(-1)); paint();
     $('pp-search').addEventListener('input', e => draw(e.target.value.trim()));
 }

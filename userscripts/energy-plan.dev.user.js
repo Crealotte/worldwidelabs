@@ -935,13 +935,13 @@
         const readItems = (root, sel) => { const out = {}; root.querySelectorAll(sel).forEach(n => { const it = parseItem(n); if (it) out[it.name] = (out[it.name] || 0) + it.qty; }); return out; };
 
         // ---- an open trade: the total at your pricelist, and the check on Accept ----
-        const prices = {}; let pricing = false, priceError = '';
+        const prices = {}; let pricing = false, priceError = '', setDefs = {}; // setDefs: the sets on your list that this trade has a full set of (name -> parts)
         const needPrices = names => {
             const now = Date.now(), missing = names.filter(n => !prices[n] || now - prices[n].at > 300000);
             if (!missing.length || pricing) return;
             pricing = true;
-            call({ action: 'led-prices', names: missing })
-                .then(r => { missing.forEach(n => { prices[n] = { price: (r.prices || {})[n] || 0, at: Date.now() }; }); priceError = ''; })
+            call({ action: 'led-prices', names })
+                .then(r => { Object.keys(r.prices || {}).forEach(n => { prices[n] = { price: r.prices[n] || 0, at: Date.now() }; }); setDefs = r.sets || {}; priceError = ''; })
                 .catch(e => { priceError = e.message; missing.forEach(n => { prices[n] = { price: 0, at: Date.now() - 270000 }; }); })
                 .finally(() => { pricing = false; });
         };
@@ -951,15 +951,24 @@
             if (!names.length) { dropBar(); return; }
             needPrices(names);
             const inTrade = moneyOf((q1('.user.left .cont li.color1 ul.desc li .name.left', cont) || {}).textContent);
-            let total = 0, unpriced = 0; const rows = [];
+            let total = 0, unpriced = 0; const rows = [], left = { ...items }, setLines = [];
+            // a set is not an item: one of each part is priced as the set on your list (as often as there are full sets), and the parts that are left one by one
+            for (const [setName, parts] of Object.entries(setDefs)) {
+                const sp = prices[setName] ? prices[setName].price : 0, count = sp ? Math.min(...parts.map(p => left[p] || 0)) : 0;
+                if (!count) continue;
+                parts.forEach(p => { left[p] -= count; });
+                total += count * sp; setLines.push({ name: setName, count, price: sp });
+                rows.push(`<div style="color:#aab2c3;">${count}x ${esc(setName)} (one of each of its ${parts.length} items) — ${fmt(sp)} each, ${fmt(count * sp)}</div>`);
+            }
             for (const n of names) {
-                const p = prices[n] ? prices[n].price : 0, line = p * items[n]; total += line; if (!p) unpriced++;
-                rows.push(`<div style="color:${p ? '#aab2c3' : '#f0b432'};">${items[n]}x ${esc(n)} — ${p ? `${fmt(p)} each, ${fmt(line)}` : 'no price on your list'}</div>`);
+                if (!left[n]) continue;
+                const p = prices[n] ? prices[n].price : 0, line = p * left[n]; total += line; if (!p) unpriced++;
+                rows.push(`<div style="color:${p ? '#aab2c3' : '#f0b432'};">${left[n]}x ${esc(n)} — ${p ? `${fmt(p)} each, ${fmt(line)}` : 'no price on your list'}</div>`);
             }
             const waiting = pricing || (!priceError && names.some(n => !prices[n]));
             const diff = inTrade - total;
             const status = unpriced || waiting || !total ? '' : inTrade === total ? '<span style="color:#35d99b;">The money matches.</span>' : !inTrade ? 'No money added yet.' : diff < 0 ? `<span style="color:#ff6b6b;">Too low by ${fmt(-diff)}.</span>` : `<span style="color:#ff6b6b;">Too high by ${fmt(diff)}.</span>`;
-            if (total > 0 && !waiting && !unpriced) store.set(REC(id), JSON.stringify({ total, at: Date.now(), items: Object.fromEntries(names.map(n => [n, { qty: items[n], price: prices[n] ? prices[n].price : 0 }])) }));
+            if (total > 0 && !waiting && !unpriced) store.set(REC(id), JSON.stringify({ total, at: Date.now(), sets: setLines, items: Object.fromEntries(names.map(n => [n, { qty: items[n], price: prices[n] ? prices[n].price : 0 }])) }));
             setBar(`<b style="color:#35d99b;">WWL</b> ${waiting ? 'Looking up your prices…' : priceError ? `<span style="color:#ff6b6b;">${esc(priceError)}</span>` : `Total at your pricelist: <b>${fmt(total)}</b>${unpriced ? ` <span style="color:#f0b432;">(${unpriced} without a price)</span>` : ''}`}${total && !waiting && !unpriced ? btn('wwl-tb-copy', 'Copy') + (inTrade !== total ? btn('wwl-tb-add', 'Add money') : '') : ''}${status ? `<div>${status} <span style="color:#8a93a6;">In the trade: ${fmt(inTrade)}</span></div>` : ''}<details style="margin-top:4px;"><summary style="cursor:pointer;color:#8a93a6;">Items</summary>${rows.join('')}</details>`, b => {
                 const c = b.querySelector('#wwl-tb-copy');
                 if (c) c.addEventListener('click', () => { const t = String(total); (navigator.clipboard ? navigator.clipboard.writeText(t) : Promise.reject()).then(() => { c.textContent = 'Copied'; }, () => { c.textContent = t; }); });
@@ -1004,7 +1013,7 @@
                 const rec = readJson(REC(id)), pr = {};
                 const itemSides = sides.filter(s => Object.keys(s.items).length), other = sides.find(s => !Object.keys(s.items).length);
                 // the price per item is only kept when it adds up to exactly the money in the trade
-                if (rec && itemSides.length === 1 && other) {
+                if (rec && !(rec.sets && rec.sets.length) && itemSides.length === 1 && other) {
                     const names = Object.keys(itemSides[0].items), sum = names.reduce((t, n) => t + ((rec.items[n] ? rec.items[n].price : 0) * itemSides[0].items[n]), 0);
                     if (names.every(n => rec.items[n] && rec.items[n].price) && sum === other.money) names.forEach(n => { pr[n] = rec.items[n].price; });
                 }

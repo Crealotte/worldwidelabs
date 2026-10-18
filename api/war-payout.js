@@ -48,7 +48,7 @@ const { ltHandle, leaseTodos, tenHandle, isTenant } = require('../lib/labstracki
 const { finHandle, invHandle, isInvestor, isBuddy, finRoles, budHandle, fundRequestTodos } = require('../lib/finances');
 const { joinHandle, joinTodos } = require('../lib/joinlabs');
 const { serviceView, setKnown } = require('../lib/todoKnown');
-const { ledHandle, pricelistPublic } = require('../lib/ledger');
+const { ledHandle, pricelistPublic, pricelistVote } = require('../lib/ledger');
 const { ohHandle } = require('../lib/onlineHours');
 const { labsIsOwner, labsHasOwners, labsHandle, labsRecordReceipt } = require('../lib/labsLedger');
 
@@ -759,6 +759,11 @@ module.exports = async function handler(req, res) {
         if (action === 'pricelist-public') {
             const out = await pricelistPublic(redis, req.body.id);
             return res.status(out.error ? 404 : 200).json(out);
+        }
+        if (action === 'pricelist-vote') {
+            const ip = String(req.headers['x-forwarded-for'] || req.socket?.remoteAddress || '').split(',')[0].trim();
+            const out = await pricelistVote(redis, req.body.id, req.body.dir, ip);
+            return res.status(out.error ? 400 : 200).json(out);
         }
 
         // Lets the userscript flag a newer version without doing its own raw GET-and-regex fetch of the live .user.js file

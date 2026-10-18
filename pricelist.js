@@ -28,12 +28,12 @@ const plShownOf = type => { const q = plFilter.toLowerCase(), names = plItemsOf(
 function plSetPartsHtml(name) {
     const parts = PL_SETS[name]; if (!parts) return '';
     const market = parts.reduce((s, n) => s + (plValues[n] || 0), 0), mine = parts.reduce((s, n) => s + plPrice(n), 0), all = parts.every(n => plPrice(n) > 0);
-    return `<div style="margin-bottom:4px;color:var(--muted);">One of each, ${parts.length} items — together ${ledMoney(market)} at market${all ? `, ${ledMoney(mine)} at your prices` : ' (not every part is on your list)'}.</div>${parts.map(n => `<div style="display:flex;justify-content:space-between;gap:12px;max-width:380px;"><span>1 × ${esc(n)}</span><span style="font-family:var(--mono);color:var(--muted);">${ledMoney(plValues[n] || 0)}${plPrice(n) ? ` · you pay ${ledMoney(plPrice(n))}` : ''}</span></div>`).join('')}`;
+    return `<div style="margin-bottom:4px;color:var(--muted);">A set is not an item in Torn: when a trade has one of each of these ${parts.length} items, the set price is used instead of the single prices. Together they are worth ${ledMoney(market)} at market${all ? `, ${ledMoney(mine)} at your prices` : ' (not every part is on your list)'}.</div>${parts.map(n => `<div style="display:flex;justify-content:space-between;gap:12px;max-width:380px;"><span>1 × ${esc(n)}</span><span style="font-family:var(--mono);color:var(--muted);">${ledMoney(plValues[n] || 0)}${plPrice(n) ? ` · you pay ${ledMoney(plPrice(n))}` : ''}</span></div>`).join('')}`;
 }
 function plRowHtml(name) {
     const r = plRows[name] || {}, id = (plMeta[name] || [])[0], isSet = !!PL_SETS[name];
     return `<div class="pl-row" data-name="${esc(name)}" style="display:flex;align-items:center;gap:10px;padding:6px 0;border-top:1px solid var(--line);flex-wrap:wrap;">
-        <input class="pl-s" type="checkbox" ${plSel.has(name) ? 'checked' : ''} title="Select this item" style="flex:none;">
+        <input class="pl-s" type="checkbox" ${plSel.has(name) ? 'checked' : ''} title="Select this item" style="flex:none;width:auto;padding:0;margin:0;">
         ${id ? `<img src="https://www.torn.com/images/items/${id}/small.png" width="30" height="30" loading="lazy" alt="" style="flex:none;" onerror="this.style.visibility='hidden'">` : '<span style="width:30px;flex:none;"></span>'}
         <div style="flex:1;min-width:150px;"><div style="font-weight:600;">${esc(name)}</div><div class="pl-sub" style="font-size:12px;color:var(--muted);"></div>
             ${isSet ? `<details class="pl-set" style="font-size:12px;margin-top:2px;"><summary style="cursor:pointer;color:var(--accent,#35d99b);">What is in it?</summary><div class="pl-parts" style="padding:4px 0;"></div></details>` : ''}</div>
@@ -44,7 +44,7 @@ function plRowHtml(name) {
 // the "Mkt: … Buy: …" line of a row, and the counts of its category
 function plPaintRow(row) {
     const name = row.dataset.name, p = plPrice(name), mv = plValues[name] || 0;
-    row.querySelector('.pl-sub').innerHTML = `Mkt: ${mv ? ledMoney(mv) : '$0'} · Buy: <b style="color:${p ? 'var(--success,#35d99b)' : 'var(--muted)'};">${ledMoney(p)}</b>`;
+    row.querySelector('.pl-sub').innerHTML = `${PL_SETS[name] ? 'Parts together' : 'Mkt'}: ${mv ? ledMoney(mv) : '$0'} · Buy: <b style="color:${p ? 'var(--success,#35d99b)' : 'var(--muted)'};">${ledMoney(p)}</b>`;
     const parts = row.querySelector('.pl-set'); if (parts && parts.open) row.querySelector('.pl-parts').innerHTML = plSetPartsHtml(name);
 }
 function plPaintCount(det) {
@@ -119,8 +119,8 @@ function plRender() {
     $('pl-body').innerHTML = `<div class="panel" style="display:flex;gap:16px;flex-wrap:wrap;align-items:center;justify-content:space-between;">
             <div><h3 style="margin:0;">${esc(plName)}'s Pricelist</h3><div id="pl-head-count" style="color:var(--muted);font-size:13px;"></div></div>
             <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:center;font-size:13px;">
-                <span>Round to <select id="pl-round"><option value="0">no rounding</option><option value="100" ${plSets.round === 100 ? 'selected' : ''}>100</option><option value="1000" ${plSets.round === 1000 ? 'selected' : ''}>1,000</option><option value="10000" ${plSets.round === 10000 ? 'selected' : ''}>10,000</option></select></span>
-                <label><input id="pl-shared" type="checkbox" ${plSets.shared ? 'checked' : ''}> Share as a public page</label>
+                <span>Round to <select id="pl-round" style="width:auto;"><option value="0">no rounding</option><option value="100" ${plSets.round === 100 ? 'selected' : ''}>100</option><option value="1000" ${plSets.round === 1000 ? 'selected' : ''}>1,000</option><option value="10000" ${plSets.round === 10000 ? 'selected' : ''}>10,000</option></select></span>
+                <label><input id="pl-shared" type="checkbox" style="width:auto;" ${plSets.shared ? 'checked' : ''}> Share as a public page</label>
                 <button id="pl-copy" class="ghost" type="button">Copy the list</button><button id="pl-save" type="button">Save the list</button></div>
             <div style="flex-basis:100%;font-size:12px;color:var(--muted);">${ago ? `Market values updated ${ago}. ` : ''}They are Torn's average market value, not the cheapest listing right now. Give an item a percentage to put it on your list; the price you pay is shown next to it.</div>
             <div id="pl-link" style="flex-basis:100%;font-size:13px;"></div></div>
