@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         CoreLabs Elite Recruiter v22.0
-// @version      22.5.0
+// @version      22.6.0
 // @updateURL    https://worldwidelabs.vercel.app/crm.user.js
 // @downloadURL  https://worldwidelabs.vercel.app/crm.user.js
 // @description  Test version Corelabs
@@ -235,7 +235,7 @@
 
 	// Userlist row filters — minimum thresholds. 0 = off (show everyone).
 	// ws = work stats, xan = xanax taken, act = ranked war hits.
-	const DEFAULT_FILTERS = { ws: 0, xan: 0, act: 0 };
+	const DEFAULT_FILTERS = { ws: 0, xan: 0, act: 0, streak: 0 };
 	function loadFilters() { return { ...DEFAULT_FILTERS, ...load(STORE.FILTERS, {}) }; }
 	function saveFilters(f) { save(STORE.FILTERS, f); }
 
@@ -331,6 +331,7 @@
 		if (f.ws  > 0 && (data.ws  || 0) < f.ws)  return false;
 		if (f.xan > 0 && (data.xan || 0) < f.xan) return false;
 		if (f.act > 0 && (data.act || 0) < f.act) return false;
+	if (f.streak > 0 && (data.streak || 0) < f.streak) return false;
 		return true;
 	}
 
@@ -2049,6 +2050,7 @@ function setUselessRow(btn, uid) {
 			{ key: 'xan', ico: '💊', title: 'Min xanax taken — hide rows below this', ph: 'Xan' },
 			{ key: 'act', ico: '⚔️', title: 'Min war hits — hide rows below this',    ph: 'War' },
 			{ key: 'ws',  ico: '💼', title: 'Min work stats — hide rows below this',  ph: 'WS'  },
+		{ key: 'streak', ico: '🔥', title: 'Min activity streak (days) — hide rows below this', ph: 'Days' },
 		];
 
 		FIELDS.forEach(f => {
