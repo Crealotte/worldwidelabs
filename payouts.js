@@ -18,7 +18,7 @@ function finPayPeople(upTo, fromIso) {
         const back = {}, ends = {};
         ix.forEach(k => { const l = finData.investors[k]; if (!l.termEnd) return; const d = finSun(l.termEnd), target = l.leaving ? back : ends; (target[d] = target[d] || { amount: 0, lines: [] }); target[d].amount += l.amount; target[d].lines.push(k); });
         const first = finData.investors[ix[0]];
-        return { key, ix, daysBy, changed: ix.some(k => (finData.investors[k].switches || []).length), back, ends, name: finData.investors[ix[ix.length - 1]].name, id: parseInt(first.fundId, 10) || 1e9, mode: first.mode, invested: ix.reduce((s, k) => s + finData.investors[k].amount, 0), week: ix.reduce((s, k) => s + finPayout(finData.investors[k]), 0), nettedIn: ix.every(k => finData.investors[k].nettedIn) };
+        return { key, ix, daysBy, changed: ix.some(k => (finData.investors[k].switches || []).length), back, ends, name: finData.investors[ix[ix.length - 1]].name, tornId: (ix.map(k => String(finData.investors[k].tornId || '').replace(/\D/g, '')).find(Boolean) || ''), id: parseInt(first.fundId, 10) || 1e9, mode: first.mode, invested: ix.reduce((s, k) => s + finData.investors[k].amount, 0), week: ix.reduce((s, k) => s + finPayout(finData.investors[k]), 0), nettedIn: ix.every(k => finData.investors[k].nettedIn) };
     });
 }
 const finCellState = (p, date) => {
@@ -69,7 +69,7 @@ function finRefreshPay() {
     };
     const sticky = 'position:sticky;left:0;background:var(--bench-2,#1b212b);z-index:1;';
     const th = 'padding:3px 8px;font-size:11px;font-weight:600;white-space:nowrap;border:1px solid var(--line);';
-    const nm = (p, n) => `<th style="${th}text-align:right;${gStart.has(n) && n > 0 ? 'border-left:2px solid var(--muted);' : ''}">${esc(p.name)}</th>`;
+    const nm = (p, n) => `<th style="${th}text-align:right;${gStart.has(n) && n > 0 ? 'border-left:2px solid var(--muted);' : ''}">${p.tornId ? `<a href="https://www.torn.com/profiles.php?XID=${esc(p.tornId)}" target="_blank" rel="noopener" title="Open ${esc(p.name)}'s Torn profile" style="color:inherit;text-decoration:underline dotted;">${esc(p.name)}</a>` : esc(p.name)}</th>`;
     const inv = (p, n) => `<th style="${th}color:var(--muted);text-align:right;${gStart.has(n) && n > 0 ? 'border-left:2px solid var(--muted);' : ''}">${finPayShortAmt(p.invested)}</th>`;
     $('pay-grid').innerHTML = people.length ? `<table style="border-collapse:collapse;font-size:12px;"><thead>
         ${grp.length ? `<tr><th style="${th}${sticky}text-align:left;">Per week</th>${grp.map(g => `<th colspan="${g.count}" style="${th}text-align:center;border-left:2px solid var(--muted);"><button type="button" class="ghost small" data-paygroup="${g.ix.join(',')}" data-d="${payDay}" title="Mark the payout of ${esc(finDate(payDay))} of these ${g.count} investor${g.count === 1 ? '' : 's'} as paid" style="padding:0 8px;font-family:var(--mono);">${finFull(g.week)} · ${g.count} ✓</button></th>`).join('')}<th style="${th}"></th></tr>` : ''}
