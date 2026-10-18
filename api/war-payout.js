@@ -49,6 +49,7 @@ const { finHandle, invHandle, isInvestor, isBuddy, finRoles, budHandle, fundRequ
 const { joinHandle, joinTodos } = require('../lib/joinlabs');
 const { serviceView, setKnown } = require('../lib/todoKnown');
 const { ledHandle, pricelistPublic, pricelistVote, tradeReceiptPublic } = require('../lib/ledger');
+const { recHandle, whoOf: recWhoOf } = require('../lib/recruit');
 const { ohHandle } = require('../lib/onlineHours');
 const { labsIsOwner, labsHasOwners, labsHandle, labsRecordReceipt } = require('../lib/labsLedger');
 
@@ -802,6 +803,14 @@ module.exports = async function handler(req, res) {
         }
         // The login's access check and the company side (owner setup, directors) are answered BEFORE the faction lookup below: a company director does not
         // have to be in a faction at all, and a director only ever gets the co-* actions (see lib/company.js). Everyone else goes on to the faction checks.
+        // The Recruiter script (lib/recruit.js): anybody with a Torn key may ask; the subscription is checked inside. The key is looked up once per 10 minutes per server instance.
+        if (typeof action === 'string' && action.startsWith('rec-')) {
+            try {
+                const who = await recWhoOf(key);
+                if (!who) return res.status(403).json({ error: 'Could not read your profile from this key.' });
+                return res.status(200).json(await recHandle(action, req.body, { redis, who, key }));
+            } catch (e) { return res.status(e.code === 402 ? 402 : /only|owner/i.test(e.message) ? 403 : 400).json({ error: e.message }); }
+        }
         if (action === 'access-check' || action.startsWith('co-') || action.startsWith('lt-') || action.startsWith('fin-') || action.startsWith('inv-') || action.startsWith('ten-') || action.startsWith('join-') || action.startsWith('bud-') || action.startsWith('led-') || action.startsWith('lic-') || action === 'todo-known' || action === 'test-seed') {
             const who = await (async () => {
                 const r = await tornFetch(`https://api.torn.com/user/?selections=profile&key=${encodeURIComponent(key)}`);
