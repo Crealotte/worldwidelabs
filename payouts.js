@@ -5,6 +5,13 @@
 
 let finPaySheet = 'weekly', finPayWeeks = 8, finPayAhead = 8, finPaySort = 'amount', finPayWeek = '', finPayTool = 'paid';
 const loadPayouts = () => finLoadLight('pay', 'pay-status');
+// Torn ID by lower-case name, from the members of your faction: an investor without a Torn ID filled in still gets a link to their profile when their name is a member's name
+let finPayRoster = null;
+async function finPayLoadRoster() {
+    if (finPayRoster) return;
+    finPayRoster = {};
+    try { const r = await tornV2('/faction/members?striptags=true'); (r.members || []).forEach(m => { finPayRoster[String(m.name).trim().toLowerCase()] = String(m.id); }); finRenderPay(); } catch (e) { /* the links then only exist for the investors that have a Torn ID */ }
+}
 
 const finPayShortAmt = a => (a >= 1e9 ? `${+(a / 1e9).toFixed(2)}b` : `${+(a / 1e6).toFixed(0)}m`); // 1b, 500m, 1.5b, as in the sheet
 // each person's payouts per Sunday: { date: { amount, lines: [index of every line paying that day] } }; `week` = what they are paid a week now (to group people who get the same)
@@ -18,7 +25,7 @@ function finPayPeople(upTo, fromIso) {
         const back = {}, ends = {};
         ix.forEach(k => { const l = finData.investors[k]; if (!l.termEnd) return; const d = finSun(l.termEnd), target = l.leaving ? back : ends; (target[d] = target[d] || { amount: 0, lines: [] }); target[d].amount += l.amount; target[d].lines.push(k); });
         const first = finData.investors[ix[0]];
-        return { key, ix, daysBy, changed: ix.some(k => (finData.investors[k].switches || []).length), back, ends, name: finData.investors[ix[ix.length - 1]].name, tornId: (ix.map(k => String(finData.investors[k].tornId || '').replace(/\D/g, '')).find(Boolean) || ''), id: parseInt(first.fundId, 10) || 1e9, mode: first.mode, invested: ix.reduce((s, k) => s + finData.investors[k].amount, 0), week: ix.reduce((s, k) => s + finPayout(finData.investors[k]), 0), nettedIn: ix.every(k => finData.investors[k].nettedIn) };
+        return { key, ix, daysBy, changed: ix.some(k => (finData.investors[k].switches || []).length), back, ends, name: finData.investors[ix[ix.length - 1]].name, tornId: (ix.map(k => String(finData.investors[k].tornId || '').replace(/\D/g, '')).find(Boolean) || ix.map(k => (finPayRoster || {})[String(finData.investors[k].name || '').trim().toLowerCase()]).find(Boolean) || ''), id: parseInt(first.fundId, 10) || 1e9, mode: first.mode, invested: ix.reduce((s, k) => s + finData.investors[k].amount, 0), week: ix.reduce((s, k) => s + finPayout(finData.investors[k]), 0), nettedIn: ix.every(k => finData.investors[k].nettedIn) };
     });
 }
 const finCellState = (p, date) => {
@@ -32,6 +39,7 @@ const finCellState = (p, date) => {
 };
 
 function finRenderPay() {
+    finPayLoadRoster();
     const opt = (list, cur) => list.map(([v, l]) => `<option value="${v}" ${String(cur) === String(v) ? 'selected' : ''}>${l}</option>`).join('');
     $('pay-body').innerHTML = `<div class="panel" style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;padding:8px 12px;margin-bottom:8px;"><select id="pay-sheet">${opt([['weekly', 'Weekly investors'], ['monthly', 'Monthly investors (last Sunday of the month)']], finPaySheet)}</select>
             <label style="font-size:12px;color:var(--muted);">Weeks back <select id="pay-weeks">${opt([[4, '4'], [8, '8'], [13, '13'], [26, '26']], finPayWeeks)}</select></label>
@@ -79,7 +87,7 @@ function finRefreshPay() {
             return `<tr><th style="${th}${sticky}text-align:left;${d === payDay ? 'color:#35d99b;' : later ? 'color:var(--muted);' : ''}">${esc(finDate(d))}${todo ? ` <button type="button" class="ghost small" data-payrow="${d}" title="Mark every payout of this Sunday as paid" style="padding:0 6px;">✓ all</button>` : ''}</th>${people.map((p, n) => cell(p, n, d)).join('')}<td style="${th}text-align:right;font-family:var(--mono);">${tot ? finFull(tot) : ''}</td></tr>`; }).join('')}</tbody>
         <tfoot><tr><th style="${th}${sticky}text-align:left;">Total</th>${people.map(p => `<td style="${th}text-align:right;font-family:var(--mono);">${finFull(dates.reduce((s, d) => s + (p.days[d] ? p.days[d].amount : 0), 0))}</td>`).join('')}<td style="${th}text-align:right;font-family:var(--mono);">${finFull(people.reduce((s, p) => s + dates.reduce((a, d) => a + (p.days[d] ? p.days[d].amount : 0), 0), 0))}</td></tr></tfoot></table>`
         : '<div style="padding:14px;color:var(--muted);">Nobody on this sheet.</div>';
-    if ($('pay-count')) $('pay-count').textContent = `${people.length} investors`;
+    if ($('pay-count')) { const noLink = people.filter(p => !p.tornId).length; $('pay-count').textContent = `${people.length} investors${noLink ? `, ${noLink} without a profile link (no Torn ID filled in, and not a member of your faction): ${people.filter(p => !p.tornId).map(p => p.name).join(', ')}` : ''}`; }
     // the Discord update: the weeks of the calendar, the latest paid week as the default
     const sel = $('pay-week'), weeks = dates.slice().reverse();
     if (!finPayWeek || !weeks.includes(finPayWeek)) finPayWeek = payDay;
