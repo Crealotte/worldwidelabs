@@ -9,6 +9,7 @@
     { "path": "/api/war-payout?cron=company", "schedule": "25 18 * * *" }
   ],
   "redirects": [
+    { "source": "/pricelist/:id(\\d+)", "destination": "/?pricelist=:id", "permanent": false },
     { "source": "/worldwidelabs.user.js(.+)", "destination": "/worldwidelabs.user.js", "permanent": false },
     { "source": "/WorldWideLabs.user.js(.*)", "destination": "/worldwidelabs.user.js", "permanent": false },
     { "source": "/worldwidelabs-dev.user.js(.+)", "destination": "/worldwidelabs-dev.user.js", "permanent": false }

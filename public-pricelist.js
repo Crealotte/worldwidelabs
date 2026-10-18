@@ -1,4 +1,4 @@
-// public-pricelist.js — the public page of a trader's pricelist (/pricelist/<tornId>): what that trader pays for each item, by category, with buttons to open their Torn profile and to start a trade.
+// public-pricelist.js — the public page of a trader's pricelist (/?pricelist=<tornId>): what that trader pays for each item, by category, with buttons to open their Torn profile and to start a trade.
 // Anyone can open it, no login (see app-init.js); the trader chooses to share it on the Pricelist page. The server only reads what is already stored (lib/ledger.js pricelistPublic).
 'use strict';
 

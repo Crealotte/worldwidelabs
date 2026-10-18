@@ -1,6 +1,6 @@
 // pricelist.js — the "Pricelist" page of a trader: every Torn item, by category, to price what you are willing to PAY for it. An item gets a price when you give it a percentage of its market value
 // (or a fixed price); only those items are on the list. Tick items (any category, also from a search) to set a percentage for all of them at once. The two museum sets show what is in them.
-// The userscript prices trades with the list, and the list can be shared as a public page (/pricelist/<tornId>, see public-pricelist.js). Needs ledger.js (ledFetch, ledMoney).
+// The userscript prices trades with the list, and the list can be shared as a public page (/?pricelist=<tornId>, see public-pricelist.js). Needs ledger.js (ledFetch, ledMoney).
 // The list is saved with the trader's ledger record (lib/ledger.js).
 'use strict';
 
@@ -95,7 +95,7 @@ function plRenderList() {
 }
 function plPublicLink() {
     const el = $('pl-link'); if (!el) return;
-    const url = `${location.origin}/pricelist/${plId}`;
+    const url = `${location.origin}/?pricelist=${plId}`;
     el.innerHTML = plSets.shared && Object.keys(plRows).length ? `Your public pricelist: <a href="${esc(url)}" target="_blank" rel="noopener">${esc(url)}</a> <button id="pl-copylink" class="ghost small" type="button">Copy the link</button>` : '';
     const b = $('pl-copylink'); if (b) b.addEventListener('click', () => navigator.clipboard.writeText(url).then(() => toast('Link copied'), () => toast('Copying was not allowed here')));
 }

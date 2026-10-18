@@ -7,8 +7,9 @@
     // people with no Torn account at all, not just logged-in faction members. So this skips the
     // entire login flow when a receipt link is opened: no key needed, no session, nothing.
     const receiptId = new URLSearchParams(window.location.search).get('receipt');
-    // A trader's shared pricelist (/pricelist/<tornId>) is public in the same way: no login, no session.
-    const pubPricelist = /^\/pricelist\/(\d+)\/?$/.exec(window.location.pathname);
+    // A trader's shared pricelist (/?pricelist=<tornId>) is public in the same way: no login, no session. (A path like /pricelist/123 would break the page: the
+    // scripts load from relative addresses. vercel.json sends /pricelist/123 here instead.)
+    const pubPricelist = /^\d{1,10}$/.test(new URLSearchParams(window.location.search).get('pricelist') || '') ? [null, new URLSearchParams(window.location.search).get('pricelist')] : null;
     if (pubPricelist) {
         $('login-view').style.display = 'none';
         $('app-view').style.display = 'block';
