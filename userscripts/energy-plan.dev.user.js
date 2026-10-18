@@ -2,7 +2,7 @@
 // @name         World Wide Labs
 // @namespace    https://worldwidelabs.vercel.app
 // @author       CreaLotte
-// @version      1.39.2
+// @version      1.40.0
 // @updateURL    __WWL_BASE__/worldwidelabs.user.js
 // @downloadURL  __WWL_BASE__/worldwidelabs.user.js
 // @description  Shows your WorldWideLabs weekly energy plan (the checklist from the Energy planner) inside Torn, a To do tab with small personal reminders (revive setting, feedback, timezone map, availability, Discord/Intel/CAT), your My Targets list, a simplified energy/war standing strip, and — if you are in the Mentoring Platform — your mentoring checklist too. Also shows faction banners at the top of every Torn page. A small ⚙ in the header shows the installed version, flags when a newer one is out, lets you set/replace your API key, and — for a leader — add or remove your faction's banners right from Torn. On a computer it is a small window you can drag around and close; in TornPDA it is a menu. Ticks are shared with the WWL site.
@@ -26,7 +26,7 @@
     const KEY_NAME = 'wwl_api_key', POS_NAME = 'wwl_plan_pos', STATE_NAME = 'wwl_plan_state';
     // GM_info gives the version Tampermonkey actually has installed right now — falls back to a
     // hardcoded copy (kept in sync with @version above) for TornPDA, which doesn't grant GM_info.
-    const SCRIPT_VERSION = (typeof GM_info !== 'undefined' && GM_info.script?.version) || '1.39.2';
+    const SCRIPT_VERSION = (typeof GM_info !== 'undefined' && GM_info.script?.version) || '1.40.0';
     const versionGreater = (a, b) => {
         const pa = String(a).split('.').map(Number), pb = String(b).split('.').map(Number);
         for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
@@ -888,4 +888,162 @@
     // 10 minutes: every Torn page load of every member goes through here, so shortening it multiplies
     // database calls across the whole faction. ⚙ Settings refreshes it immediately when a leader changes one.
     if (!(banCached && Date.now() - banCached.at < 600000)) refreshTornBanners();
+
+    // ---- Trade helper: for the traders of Trading Funding (on Torn's trade pages only) ----
+    // Reads the trade page itself (no Torn API key, nothing polled): the total of the other person's items at your WWL pricelist, the money filled in for you,
+    // a check that blocks Accept when the money does not match, and a finished trade saved to your WWL trading ledger. Anyone who is not a trader gets one
+    // "not a trader" answer from WWL, which is remembered for an hour, and then the helper stays silent.
+    (function tradeHelper() {
+        if (location.pathname !== '/trade.php' || !getKey()) return;
+        const NOT_TRADER = 'wwl_trade_not_trader', REC = id => `wwl_trade_${id}`, SAVED = id => `wwl_trade_saved_${id}`;
+        if (Date.now() - Number(store.get(NOT_TRADER) || 0) < 3600000) return;
+        const hashParam = n => new URLSearchParams(location.hash.replace(/^#\/?/, '')).get(n);
+        const moneyOf = s => { const m = String(s || '').match(/\$([\d,]+)/); return m ? parseInt(m[1].replace(/,/g, ''), 10) : 0; };
+        const fmt = n => '$' + Math.round(n).toLocaleString('en-US');
+        const q1 = (s, r = document) => r.querySelector(s);
+        const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+        const readJson = k => { try { return JSON.parse(store.get(k) || 'null'); } catch (e) { return null; } };
+        // records of trades older than a week are cleared once per page load
+        try { for (let i = localStorage.length - 1; i >= 0; i--) { const k = localStorage.key(i); if (k && k.startsWith('wwl_trade_') && k !== NOT_TRADER) { const r = readJson(k); if (!r || Date.now() - (r.at || 0) > 7 * 86400000) localStorage.removeItem(k); } } } catch (e) { /* not cleared */ }
+
+        let stopped = false;
+        const call = async body => {
+            try { return await api(body); } catch (e) {
+                if (/trading ledger is for/i.test(e.message)) { store.set(NOT_TRADER, String(Date.now())); stopped = true; dropBar(); }
+                throw e;
+            }
+        };
+        const bar = () => {
+            let b = document.getElementById('wwl-trade-bar');
+            const anchor = q1('.trade-cont.m-top10') || q1('.init-trade');
+            if (!anchor) return null;
+            if (!b || !b.isConnected) {
+                b = document.createElement('div'); b.id = 'wwl-trade-bar';
+                b.style.cssText = 'margin:8px 0;padding:10px 12px;background:#1b2029;border:1px solid #35d99b;border-radius:6px;color:#e6e9ef;font:13px/1.45 Arial,sans-serif;';
+                anchor.parentNode.insertBefore(b, anchor);
+            }
+            return b;
+        };
+        const setBar = (html, wire) => { const b = bar(); if (!b) return; if (b.dataset.sig !== html) { b.dataset.sig = html; b.innerHTML = html; if (wire) wire(b); } };
+        const dropBar = () => { const b = document.getElementById('wwl-trade-bar'); if (b) b.remove(); };
+        const btn = (id, text) => `<button id="${id}" type="button" style="margin-left:8px;padding:3px 10px;background:#2a3140;color:#e6e9ef;border:1px solid #44506a;border-radius:4px;cursor:pointer;font:12px Arial,sans-serif;">${text}</button>`;
+        const parseItem = n => {
+            const text = ((n.childNodes[0] && n.childNodes[0].nodeValue) || n.textContent || '').trim();
+            if (!text || /no items in trade/i.test(text)) return null;
+            const m = text.match(/^(.+?)(?:\s+x(\d+))?$/); return m ? { name: m[1].trim(), qty: parseInt(m[2] || '1', 10) } : null;
+        };
+        const readItems = (root, sel) => { const out = {}; root.querySelectorAll(sel).forEach(n => { const it = parseItem(n); if (it) out[it.name] = (out[it.name] || 0) + it.qty; }); return out; };
+
+        // ---- an open trade: the total at your pricelist, and the check on Accept ----
+        const prices = {}; let pricing = false, priceError = '';
+        const needPrices = names => {
+            const now = Date.now(), missing = names.filter(n => !prices[n] || now - prices[n].at > 300000);
+            if (!missing.length || pricing) return;
+            pricing = true;
+            call({ action: 'led-prices', names: missing })
+                .then(r => { missing.forEach(n => { prices[n] = { price: (r.prices || {})[n] || 0, at: Date.now() }; }); priceError = ''; })
+                .catch(e => { priceError = e.message; missing.forEach(n => { prices[n] = { price: 0, at: Date.now() - 270000 }; }); })
+                .finally(() => { pricing = false; });
+        };
+        function viewTick(id) {
+            const cont = q1('.trade-cont.m-top10'); if (!cont) return;
+            const items = readItems(cont, '.user.right .cont li.color2 ul.desc li .name.left'), names = Object.keys(items);
+            if (!names.length) { dropBar(); return; }
+            needPrices(names);
+            const inTrade = moneyOf((q1('.user.left .cont li.color1 ul.desc li .name.left', cont) || {}).textContent);
+            let total = 0, unpriced = 0; const rows = [];
+            for (const n of names) {
+                const p = prices[n] ? prices[n].price : 0, line = p * items[n]; total += line; if (!p) unpriced++;
+                rows.push(`<div style="color:${p ? '#aab2c3' : '#f0b432'};">${items[n]}x ${esc(n)} — ${p ? `${fmt(p)} each, ${fmt(line)}` : 'no price on your list'}</div>`);
+            }
+            const waiting = pricing || (!priceError && names.some(n => !prices[n]));
+            const diff = inTrade - total;
+            const status = unpriced || waiting || !total ? '' : inTrade === total ? '<span style="color:#35d99b;">The money matches.</span>' : !inTrade ? 'No money added yet.' : diff < 0 ? `<span style="color:#ff6b6b;">Too low by ${fmt(-diff)}.</span>` : `<span style="color:#ff6b6b;">Too high by ${fmt(diff)}.</span>`;
+            if (total > 0 && !waiting && !unpriced) store.set(REC(id), JSON.stringify({ total, at: Date.now(), items: Object.fromEntries(names.map(n => [n, { qty: items[n], price: prices[n] ? prices[n].price : 0 }])) }));
+            setBar(`<b style="color:#35d99b;">WWL</b> ${waiting ? 'Looking up your prices…' : priceError ? `<span style="color:#ff6b6b;">${esc(priceError)}</span>` : `Total at your pricelist: <b>${fmt(total)}</b>${unpriced ? ` <span style="color:#f0b432;">(${unpriced} without a price)</span>` : ''}`}${total && !waiting && !unpriced ? btn('wwl-tb-copy', 'Copy') + (inTrade !== total ? btn('wwl-tb-add', 'Add money') : '') : ''}${status ? `<div>${status} <span style="color:#8a93a6;">In the trade: ${fmt(inTrade)}</span></div>` : ''}<details style="margin-top:4px;"><summary style="cursor:pointer;color:#8a93a6;">Items</summary>${rows.join('')}</details>`, b => {
+                const c = b.querySelector('#wwl-tb-copy');
+                if (c) c.addEventListener('click', () => { const t = String(total); (navigator.clipboard ? navigator.clipboard.writeText(t) : Promise.reject()).then(() => { c.textContent = 'Copied'; }, () => { c.textContent = t; }); });
+                const a = b.querySelector('#wwl-tb-add');
+                if (a) a.addEventListener('click', () => { location.hash = `#step=addmoney&ID=${id}`; });
+            });
+            // Accept stays blocked while the money in the trade is not the total (only when every item has a price, so the total is complete)
+            const acc = q1('.btn.accept.torn-btn.green');
+            if (acc) {
+                const block = total > 0 && !unpriced && !waiting && inTrade !== total;
+                acc.style.pointerEvents = block ? 'none' : ''; acc.style.opacity = block ? '.35' : ''; acc.title = block ? `WWL: the money in the trade is not ${fmt(total)}` : '';
+            }
+        }
+
+        // ---- the page where the money is typed: filled in with the total ----
+        const filled = {};
+        function addMoneyTick(id) {
+            const rec = readJson(REC(id)), inputs = document.querySelectorAll('input.input-money');
+            if (!rec || !rec.total || !inputs.length || filled[id]) return;
+            filled[id] = true;
+            inputs.forEach(i => { i.value = String(rec.total); i.dispatchEvent(new Event('input', { bubbles: true })); i.dispatchEvent(new Event('change', { bubbles: true })); });
+            setBar(`<b style="color:#35d99b;">WWL</b> Filled in <b>${fmt(rec.total)}</b>, the total at your pricelist.`);
+        }
+
+        // ---- a finished trade: saved to your ledger ----
+        const savedTried = {}; let logBusy = false;
+        const sideOf = u => {
+            const head = q1('.title-black', u);
+            return { name: ((head && head.textContent) || '').trim(), money: moneyOf((q1('.cont li.color1 .name.left', u) || {}).textContent), items: readItems(u, '.cont li.color2 ul.desc li .name.left') };
+        };
+        const logLines = () => [...document.querySelectorAll('#trade-container .log li, ul.log li')].map(li => li.textContent.trim()).join('\n');
+        const logTime = text => {
+            const lines = text.split('\n'), done = lines.filter(l => /completed/i.test(l)), re = /(\d\d:\d\d:\d\d) - (\d\d)\/(\d\d)\/(\d\d)/;
+            for (const l of done.concat(lines.slice().reverse())) { const m = l.match(re); if (m) return `20${m[4]}-${m[3]}-${m[2]} ${m[1]}`; }
+            return new Date().toISOString().slice(0, 19).replace('T', ' '); // TCT = UTC
+        };
+        async function saveTrade(id, cont) {
+            logBusy = true;
+            try {
+                const sides = ['.user.left', '.user.right'].map(s => { const u = q1(s, cont); return u ? sideOf(u) : null; });
+                if (sides.some(s => !s)) { setBar('<b style="color:#35d99b;">WWL</b> <span style="color:#ff6b6b;">This trade page could not be read.</span>'); return; }
+                const rec = readJson(REC(id)), pr = {};
+                const itemSides = sides.filter(s => Object.keys(s.items).length), other = sides.find(s => !Object.keys(s.items).length);
+                // the price per item is only kept when it adds up to exactly the money in the trade
+                if (rec && itemSides.length === 1 && other) {
+                    const names = Object.keys(itemSides[0].items), sum = names.reduce((t, n) => t + ((rec.items[n] ? rec.items[n].price : 0) * itemSides[0].items[n]), 0);
+                    if (names.every(n => rec.items[n] && rec.items[n].price) && sum === other.money) names.forEach(n => { pr[n] = rec.items[n].price; });
+                }
+                const r = await call({ action: 'led-script-add', tradeId: id, at: logTime(logLines()), sides: sides.map(s => ({ name: s.name.replace(/'s items.*$/i, '').trim(), money: s.money, items: s.items })), prices: pr });
+                store.set(SAVED(id), JSON.stringify({ at: Date.now() }));
+                const undo = r.ids && r.ids[0];
+                setBar(`<b style="color:#35d99b;">WWL</b> ${r.added ? `Saved in your trading ledger (${r.kind === 'buy' ? 'bought' : 'sold'}).` : 'This trade is in your trading ledger already.'}${undo ? btn('wwl-tb-undo', 'Undo') : ''}`, b => {
+                    const u = b.querySelector('#wwl-tb-undo');
+                    if (u) u.addEventListener('click', () => { api({ action: 'led-del', id: undo }).then(() => { store.set(SAVED(id), ''); setBar('<b style="color:#35d99b;">WWL</b> Removed from your ledger again.'); }).catch(e => { u.textContent = e.message; }); });
+                });
+            } catch (e) {
+                if (stopped) { dropBar(); return; }
+                setBar(`<b style="color:#35d99b;">WWL</b> <span style="color:#ff6b6b;">${esc(e.message)}</span>${btn('wwl-tb-retry', 'Try again')}`, b => {
+                    const t = b.querySelector('#wwl-tb-retry');
+                    if (t) t.addEventListener('click', () => { savedTried[id] = false; setBar(''); });
+                });
+            } finally { logBusy = false; }
+        }
+        function logTick(id) {
+            const cont = q1('.trade-cont.m-top10'); if (!cont || logBusy || savedTried[id]) return;
+            savedTried[id] = true;
+            if ((readJson(SAVED(id)) || {}).at) { setBar('<b style="color:#35d99b;">WWL</b> This trade was saved in your trading ledger earlier.'); return; }
+            const logText = logLines();
+            if (logText && !/completed/i.test(logText)) { setBar('<b style="color:#35d99b;">WWL</b> This trade was not completed, so it is not saved.'); return; }
+            if (!logText) { // the page shows no log lines, so there is no proof that it finished: ask first
+                setBar(`<b style="color:#35d99b;">WWL</b> Add this trade to your trading ledger?${btn('wwl-tb-save', 'Add it')}`, b => { const s = b.querySelector('#wwl-tb-save'); if (s) s.addEventListener('click', () => saveTrade(id, cont)); });
+                return;
+            }
+            saveTrade(id, cont);
+        }
+
+        // one light look every second while on a trade page: it only reads the page, and WWL is called only when something is new
+        let lastKey = '';
+        setInterval(() => {
+            if (stopped || document.hidden || location.pathname !== '/trade.php') return;
+            const step = hashParam('step'), id = (hashParam('ID') || '').replace(/\D/g, ''), key = `${step}|${id}`;
+            if (key !== lastKey) { lastKey = key; dropBar(); Object.keys(savedTried).forEach(k => delete savedTried[k]); }
+            if (!id) return;
+            if (step === 'view') viewTick(id); else if (step === 'addmoney') addMoneyTick(id); else if (step === 'logview') logTick(id);
+        }, 1000);
+    })();
 })();
