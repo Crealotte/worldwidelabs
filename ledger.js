@@ -10,7 +10,8 @@ const ledItemsText = items => Object.entries(items || {}).map(([n, q]) => `${q}x
 // Lines look like "06:16:51 - 15/10/26 Scheiren traded 17x Cherry Blossom, 23x Crocus to you [view]". Only the lines of a trade that completed count: the ones that say what was traded and the "completed successfully" line.
 function ledItemList(s) {
     const o = {};
-    String(s).split(/,\s*/).forEach(p => { const m = p.trim().match(/^(\d+)x\s+(.+)$/); if (m) o[m[2].trim()] = (o[m[2].trim()] || 0) + Number(m[1]); });
+    // "17x Crocus", or "a 9mm Uzi (Wither)" for a single weapon
+    String(s).split(/,\s*/).forEach(p => { const t = p.trim(), m = t.match(/^(\d+)x\s+(.+)$/) || t.match(/^(a|an)\s+(.+)$/); if (m) o[m[2].trim()] = (o[m[2].trim()] || 0) + (Number(m[1]) || 1); });
     return o;
 }
 function ledParse(text) {
@@ -22,6 +23,15 @@ function ledParse(text) {
         const m = raw.trim().match(/^(\d\d:\d\d:\d\d) - (\d\d)\/(\d\d)\/(\d\d) (.*?)(?: \[view\])?$/); if (!m) continue;
         const [, time, dd, mm, yy, line] = m; let x;
         const at = `20${yy}-${mm}-${dd} ${time}`;
+        // sales and purchases that are not a trade: item market, bazaar, points market (one line each, nothing to wait for)
+        const sum = v => Number(String(v).replace(/,/g, '')), nm = v => (v.toLowerCase() === 'points' ? 'Points' : v);
+        if ((x = line.match(/^You sold (\d+)x (.+?) on the Item Market to (.+?) for \$([\d,]+)(?: after \$[\d,]+ in fees)?\.?$/))) { trades.push({ at, partner: x[3], title: 'Item Market', items: { [nm(x[2])]: Number(x[1]) }, itemsDir: 'out', money: sum(x[4]), moneyDir: 'in' }); continue; }
+        if ((x = line.match(/^You sold (\d+)x (.+?) on your bazaar to (.+?) at \$[\d,]+ each for a total of \$([\d,]+)\.?$/))) { trades.push({ at, partner: x[3], title: 'Bazaar', items: { [nm(x[2])]: Number(x[1]) }, itemsDir: 'out', money: sum(x[4]), moneyDir: 'in' }); continue; }
+        if ((x = line.match(/^You sold (\d+)x (.+?) to (.+?) on the points market at \$[\d,]+ each for a total of \$([\d,]+)\.?$/))) { trades.push({ at, partner: x[3], title: 'Points market', items: { [nm(x[2])]: Number(x[1]) }, itemsDir: 'out', money: sum(x[4]), moneyDir: 'in' }); continue; }
+        // purchases: the wording is a guess (not seen yet), so only lines that name the quantity, the item and a total are taken
+        if ((x = line.match(/^You bought (\d+)x (.+?) (?:on|from|in) .*?(?:for a total of|for) \$([\d,]+)\.?$/))) { trades.push({ at, partner: 'market', title: 'bought', items: { [nm(x[2])]: Number(x[1]) }, itemsDir: 'in', money: sum(x[3]), moneyDir: 'out' }); continue; }
+        // a trade that was cancelled or declined: forget it
+        if ((x = line.match(/^(.+?) has (?:canceled|cancelled|declined) the trade\.?$/)) || (x = line.match(/^You (?:canceled|cancelled|declined) the trade with (.+?)\.?$/))) { if (cur && cur.partner === x[1]) flush(); continue; }
         if ((x = line.match(/^(?:You initiated a trade with (.+?)|(.+?) initiated a trade with you) titled "(.*)"$/))) { flush(); cur = fresh(x[1] || x[2]); cur.title = x[3]; continue; }
         if ((x = line.match(/^(.+?) traded (.+) to you$/)) && !/^\$/.test(x[2])) { cur = cur || fresh(x[1]); cur.partner = cur.partner || x[1]; Object.assign(cur.items, ledItemList(x[2])); cur.itemsDir = 'in'; cur.at = at; continue; }
         if ((x = line.match(/^(.+?) traded \$([\d,]+) to you$/))) { cur = cur || fresh(x[1]); cur.partner = cur.partner || x[1]; cur.money = Number(x[2].replace(/,/g, '')); cur.moneyDir = 'in'; cur.at = at; continue; }
@@ -109,8 +119,8 @@ function ledRender() {
             <div style="font-size:12px;color:var(--muted);margin-bottom:6px;">Paste the lines of your <b>Torn trade log</b>. They are read and added straight away, and you can undo it. A log has one sum for the whole trade, so the cost is split over the items by their market value. Several trades in one go are fine, and a trade that is in the ledger already is skipped.</div>
             <textarea id="led-paste" rows="4" placeholder="Paste your trade log here, lines like 05:34:50 - 15/10/26 Name initiated a trade with you titled ..." style="width:100%;font-family:var(--mono);font-size:12px;"></textarea>
             <div style="margin-top:6px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;"><button id="led-read" type="button">Add what is pasted</button><span id="led-preview" style="font-size:13px;"></span></div></div>
-        <details class="panel"><summary class="av-sum"><b>Add a purchase by hand</b> <span style="font-size:12px;color:var(--muted);">(bought on the market or in a bazaar, so there is no trade log for it)</span></summary>
-            <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:8px;"><input id="led-h-items" type="text" placeholder="5x Armor Cache, 2x Melee Cache" style="width:280px;"><input id="led-h-money" type="text" inputmode="decimal" placeholder="Paid in total (580m)" style="width:150px;text-align:right;font-family:var(--mono);"><input id="led-h-date" type="date" value="${esc(r.today || '')}"><button id="led-h-add" class="ghost small" type="button">Add the purchase</button></div></details>` : ''}
+        <details class="panel"><summary class="av-sum"><b>Add a purchase or a sale by hand</b> <span style="font-size:12px;color:var(--muted);">(bought in a bazaar, sold at the auction house, or anything else that has no line in the log)</span></summary>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:8px;"><select id="led-h-dir"><option value="in">I bought</option><option value="out">I sold</option></select><select id="led-h-where"><option>Bazaar</option><option>Item Market</option><option>Auction house</option><option>Points market</option><option>Other</option></select><input id="led-h-items" type="text" placeholder="5x Armor Cache, 2x Melee Cache, or a 9mm Uzi" style="width:280px;"><input id="led-h-money" type="text" inputmode="decimal" placeholder="Total money (580m)" style="width:150px;text-align:right;font-family:var(--mono);"><input id="led-h-date" type="date" value="${esc(r.today || '')}"><button id="led-h-add" class="ghost small" type="button">Add it</button></div></details>` : ''}
         <div class="panel" style="display:flex;gap:26px;flex-wrap:wrap;font-size:13px;">${box('Bought', ledMoney(c.bought))}${box('Sold', ledMoney(c.sold))}${box('Profit on what is sold', `${c.profit >= 0 ? '+' : ''}${ledMoney(c.profit)}`, `color:${c.profit >= 0 ? 'var(--success,#35d99b)' : 'var(--danger)'};`)}${box('Return on what is sold', c.soldCost ? `${pct.toFixed(1)}%` : '—')}${box('Stock now (at cost)', ledMoney(c.stockCost))}${box('Trades', r.trades.length)}</div>
         ${c.stock.length ? `<div class="panel"><h3 style="margin-top:0;">Stock</h3><table style="border-collapse:collapse;font-size:13px;"><thead><tr style="color:var(--muted);font-size:11px;text-align:left;"><th style="padding:2px 14px 2px 0;">Item</th><th style="padding:2px 14px 2px 0;">Left</th><th style="padding:2px 14px 2px 0;">At cost</th><th style="padding:2px 0;">Since</th></tr></thead><tbody>${c.stock.map(s => `<tr><td style="padding:2px 14px 2px 0;">${esc(s.name)}</td><td style="padding:2px 14px 2px 0;font-family:var(--mono);">${s.qty}</td><td style="padding:2px 14px 2px 0;font-family:var(--mono);">${ledMoney(s.cost)}</td><td style="padding:2px 0;color:var(--muted);">${esc(s.since.slice(0, 10))}</td></tr>`).join('')}</tbody></table></div>` : ''}
         <div class="panel" style="overflow-x:auto;"><h3 style="margin-top:0;">Trades</h3>${r.trades.length ? `<table style="border-collapse:collapse;font-size:13px;width:100%;"><thead><tr style="color:var(--muted);font-size:11px;text-align:left;"><th style="padding:2px 8px;">When</th><th style="padding:2px 8px;">What</th><th style="padding:2px 8px;">With</th><th style="padding:2px 8px;">Items</th><th style="padding:2px 8px;text-align:right;">Money</th><th style="padding:2px 8px;text-align:right;">Profit</th><th></th></tr></thead><tbody>${c.rows.slice().reverse().map(tradeRow).join('')}</tbody></table>` : '<div style="color:var(--muted);font-size:13px;">No trades yet.</div>'}</div>`;
@@ -147,9 +157,10 @@ function ledRender() {
     $('led-h-add').addEventListener('click', async () => {
         const items = ledItemList($('led-h-items').value), money = finParse($('led-h-money').value), date = $('led-h-date').value;
         if (!Object.keys(items).length) { toast('Write the items as 5x Armor Cache, 2x Melee Cache'); return; }
-        if (!money) { toast('Write what you paid, for example 580m'); return; }
-        const res = await ledFetch({ action: 'led-add', trades: [{ at: `${date || r.today} 12:00:00`, partner: 'market / bazaar', title: 'by hand', items, itemsDir: 'in', money, moneyDir: 'out', manual: true }] });
+        if (!money) { toast('Write the total money, for example 580m'); return; }
+        const sold = $('led-h-dir').value === 'out', where = $('led-h-where').value;
+        const res = await ledFetch({ action: 'led-add', trades: [{ at: `${date || r.today} 12:00:00`, partner: where, title: 'by hand', items, itemsDir: sold ? 'out' : 'in', money, moneyDir: sold ? 'in' : 'out', manual: true }] });
         if (res.error) { toast(res.error); return; }
-        toast(res.added ? 'Purchase added' : 'That purchase was already there'); loadLedger();
+        toast(res.added ? (sold ? 'Sale added' : 'Purchase added') : 'That one was already there'); loadLedger();
     });
 }
