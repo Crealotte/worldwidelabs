@@ -468,6 +468,7 @@
         if (page === 'funding') loadFunding();
         if (page === 'ledger') { loadLedger(); if (typeof loadTrading === 'function') loadTrading(); }
         if (page === 'pricelist') loadPricelist();
+        if (page === 'recruitment') loadRecruitment();
         if (page === 'bug-report') loadBugReport();
         if (page === 'labs-funds') loadLabsFunds();
         if (page === 'members-overview') loadMemberOverview();

@@ -12,6 +12,15 @@
 
 const WHATS_NEW = [
     {
+        version: '1.31', date: '2026-10-18',
+        title: 'Recruiting: the Recruiter script and its subscription on WWL',
+        everyone: [
+            'New Recruiting menu with the Recruiter script page. Install the CoreLabs Recruiter script for Torn from there (it updates by itself), and see and renew your subscription: 1 Xanax per 7 days, separate from the Ledger VIP. Press Check my payment after you sent the Xanax, it checks right away and never on a timer.',
+            'The script is faster and lighter: it only loads the players you can see on the user list, saves your F / C / S / U clicks on your computer at once, and has a new minimum activity streak filter. A yellow F fades after a month, and rows with a red button or a yellow F get a faded colour.',
+        ],
+        leaders: [],
+    },
+    {
         version: '1.30', date: '2026-10-18',
         title: 'Userscript 1.40: a trade bar on the trade pages in Torn',
         everyone: [

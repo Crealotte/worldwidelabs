@@ -112,7 +112,7 @@ function checkLedgerAccess(acc) {
 }
 // the Trading pages (Pricelist, Receipts & ledger) are free for everybody: they are in the menu for every login, also in the portals that hide the rest
 function showTradingNav() {
-    document.querySelectorAll('.nav-item[data-page="ledger"], .nav-item[data-page="pricelist"]').forEach(el => { el.style.display = ''; const g = el.closest('.nav-group'); if (g) g.style.display = ''; });
+    document.querySelectorAll('.nav-item[data-page="ledger"], .nav-item[data-page="pricelist"], .nav-item[data-page="recruitment"]').forEach(el => { el.style.display = ''; const g = el.closest('.nav-group'); if (g) g.style.display = ''; });
 }
 async function loadLedger() {
     const st = $('led-status');
