@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         CoreLabs Elite Recruiter v22.0
-// @version      22.8.0
+// @version      23.0.0
 // @updateURL    https://worldwidelabs.vercel.app/crm.user.js
 // @downloadURL  https://worldwidelabs.vercel.app/crm.user.js
 // @description  Test version Corelabs
@@ -11,6 +11,7 @@
 // @grant        GM_xmlhttpRequest
 // @connect      supabase.co
 // @connect      yweufoxazgfmnqndcgmk.supabase.co
+// @connect      worldwidelabs.vercel.app
 // @connect      api.torn.com
 // @connect      discord.com
 // @run-at       document-end
@@ -185,7 +186,7 @@
 		// All DB access goes through the gateway Edge Function. The anon key is GONE
 		// from the client on purpose — the function holds the service_role key
 		// server-side and enforces the paywall. RLS denies the anon key everything.
-		GATEWAY_URL:     'https://yweufoxazgfmnqndcgmk.supabase.co/functions/v1/gateway',
+		GATEWAY_URL:     'https://worldwidelabs.vercel.app/api/war-payout',
 		API_KEY:         '', // loaded from GM at boot via loadApiKey()
 		MY_ID:           null, // resolved at boot via API
 		PAID:            false, // set at boot from licenses self-read; gates write UI
@@ -414,25 +415,26 @@
 	 * Called on every F/C/U button click.
 	 * Fields: recruiter_id, target_id, f, c, u, name, notes, company, updated_at
 	 */
+	// Changes are collected for a moment and sent together (a click, a note, a name: one request for all of them).
+	const CRM_BUF = new Map();
+	let crmTimer = null;
+	async function flushCRM() {
+		clearTimeout(crmTimer); crmTimer = null;
+		if (!CRM_BUF.size) return;
+		const rows = [...CRM_BUF.values()]; CRM_BUF.clear();
+		const saved = await wwl('rec-save', { rows });
+		if (!saved || saved.error) console.warn('[CoreLabs] CRM state NOT saved to the server:', saved ? saved.error : 'no answer');
+	}
+	window.addEventListener('pagehide', flushCRM);
 	async function upsertCRMState(uid) {
 		if (CRM[uid]) CRM[uid].updatedAt = new Date().toISOString();
 		saveCRM(); // the click is kept on this computer at once, whatever the server answers
 		const s = CRM[uid] || {};
-		const saved = await sbRequest('POST', 'crm_states', {
-			recruiter_id: parseInt(CFG.MY_ID),
-			target_id:    parseInt(uid),
-			f:            s.F || 0,
-			c:            s.C || 0,
-			s:            s.S || 0,
-			u:            s.U || 0,
-			name:         s.name    || null,
-			notes:        s.notes   || null,
-			company:      s.company || null,
-			manual_stats: s.manualStats || null,
-			updated_at:   new Date().toISOString(),
-		});
-		if (!saved || saved.error) console.warn('[CoreLabs] CRM state NOT saved to the cloud:', saved ? saved.error : 'no answer');
+		CRM_BUF.set(String(uid), { id: parseInt(uid), f: s.F || 0, c: s.C || 0, s: s.S || 0, u: s.U || 0, name: s.name || null, notes: s.notes || null, company: s.company || null, manual: s.manualStats || null });
+		if (CRM_BUF.size >= 50) flushCRM();
+		else { clearTimeout(crmTimer); crmTimer = setTimeout(flushCRM, 1500); }
 	}
+	
 
 		// A yellow F (contacted, no answer yet) fades after a month: people change their mind. The age is the time of the last change of that player's row.
 	function expireYellowF() {
@@ -450,32 +452,21 @@
 	 * Called once at boot. Returns when done.
 	 */
 	async function loadAllCRMStates() {
-		// PostgREST caps a response at 1000 rows by default. A recruiter with >1000
-		// CRM entries (Crealotte has ~1240) would only get the first 1000 — the rest
-		// render as un-flagged ("state lost after refresh"). Page through in 1000-row
-		// chunks via offset until a short page signals the end.
-		const PAGE = 1000;
+		await migrateToWWL(); // once: the list from the old server is copied to WWL
 		// Only what changed since the last sync is downloaded (a full download once a day, or when there is nothing saved on this computer yet).
 		if (!Object.keys(CRM).length) Object.assign(CRM, load(STORE.CRM, {}));
-		const lastFull = load('RecruiterCrmFull', 0), since = load('RecruiterCrmSince', '');
+		const lastFull = load('RecruiterCrmFull', 0), since = Number(load('RecruiterWwlSince', 0)) || 0;
 		const fullSync = !since || !Object.keys(CRM).length || Date.now() - lastFull > 24 * 60 * 60 * 1000;
-		let maxUpdated = since;
-		let rows = [];
-		for (let offset = 0; ; offset += PAGE) {
-			const page = await sbRequest('GET', 'crm_states', {
-				query: `recruiter_id=eq.${CFG.MY_ID}&select=target_id,f,c,s,u,name,notes,company,created_at,manual_stats,updated_at${fullSync ? '' : '&updated_at=gt.' + encodeURIComponent(new Date((Date.parse(since) || 0) - 10 * 60 * 1000).toISOString())}&order=target_id.asc&offset=${offset}&limit=${PAGE}`,
-			});
-			if (!Array.isArray(page)) break;       // error mid-paging — keep what we have
-			rows = rows.concat(page);
-			if (page.length < PAGE) break;          // last page reached
-		}
+		const reply = await wwl('rec-load', { since: fullSync ? 0 : Math.max(0, since - 10000) });
+		if (!reply || reply.error || !Array.isArray(reply.rows)) return;   // keep what this computer has
+		if (typeof reply.paid === 'boolean') { CFG.PAID = reply.paid; CFG.IS_ADMIN = !!reply.owner; }
 		if (fullSync) save('RecruiterCrmFull', Date.now());
+		if (reply.now) save('RecruiterWwlSince', reply.now);
+		const rows = reply.rows;
 		if (!rows.length) { expireYellowF(); return; }
-		rows.forEach(r => { if (r.updated_at && r.updated_at > maxUpdated) maxUpdated = r.updated_at; });
-		if (maxUpdated) save('RecruiterCrmSince', maxUpdated);
 		const isBadName = (n) => n && /torn|rpg/i.test(n);
 		rows.forEach(row => {
-			const uid = String(row.target_id);
+			const uid = String(row.id);
 			const cleanName = isBadName(row.name) ? null : row.name;
 			CRM[uid] = {
 				F:           row.f       ?? 0,
@@ -485,17 +476,18 @@
 				name:        cleanName    || CRM[uid]?.name    || null,
 				notes:       row.notes    || CRM[uid]?.notes   || null,
 				company:     row.company  || CRM[uid]?.company || null,
-				createdAt:   row.created_at  || CRM[uid]?.createdAt   || null,
-				manualStats: row.manual_stats || CRM[uid]?.manualStats || null,
-					updatedAt:   row.updated_at || CRM[uid]?.updatedAt || null,
+				createdAt:   CRM[uid]?.createdAt || null,
+				manualStats: row.manual   || CRM[uid]?.manualStats || null,
+				updatedAt:   row.at ? new Date(row.at).toISOString() : (CRM[uid]?.updatedAt || null),
 			};
-			// Wipe bad names from DB on next save
+			// Wipe bad names from the server on next save
 			if (isBadName(row.name)) upsertCRMState(uid);
 		});
-		console.log(`[CoreLabs] Loaded ${rows.length} CRM states from Supabase`);
+		console.log(`[CoreLabs] Loaded ${rows.length} CRM states from WWL`);
 		expireYellowF();
 		saveCRM(); // keep a copy on this computer: the next start only asks for what changed
 	}
+	
 
 	/**
 	 * Backfill names for CRM rows that were saved as name:null.
@@ -513,11 +505,14 @@
 		const missing = Object.keys(CRM).filter(uid => isBadName(CRM[uid]?.name));
 		if (!missing.length) return;
 
-		// Pull known names from `targets` in one request (dedupe ids first).
-		const rows = await sbRequest('GET', 'targets', {
-			query: `id=in.(${missing.join(',')})&select=id,name`,
-		});
-		if (!Array.isArray(rows)) return;
+		// Pull known names from the shared stats in a few requests (up to 80 ids each).
+		const rows = [];
+		for (let i = 0; i < missing.length && i < 400; i += 80) {
+			const part = await wwl('rec-stats-get', { ids: missing.slice(i, i + 80) });
+			if (!part || !Array.isArray(part.rows)) { if (!i) return; break; }
+			rows.push(...part.rows);
+		}
+	
 
 		const nameById = new Map();
 		rows.forEach(r => {
@@ -561,101 +556,66 @@
 		}
 	}
 
-	// ── Gateway transport ───────────────────────────────────────────────────────
-	// Single door to the DB. Sends the caller's Torn API key so the function can
-	// prove identity + check the license. The anon/service key is NOT here.
-	async function gateway(op, table, { query, body } = {}) {
-		if (!CFG.API_KEY) return null; // no key = no identity = no access
+	// ── Server transport ────────────────────────────────────────────────────────
+	// Everything goes to WWL (it used to be Supabase): a POST to /api/war-payout with the player's own Torn key and an action `rec-*`.
+	// The server proves who the key belongs to and checks the subscription. No key = no identity = no access.
+	async function wwl(action, body = {}) {
+		if (!CFG.API_KEY) return null;
 		try {
 			const res  = await gmFetch(CFG.GATEWAY_URL, {
 				method:  'POST',
 				headers: { 'Content-Type': 'application/json' },
-				body:    JSON.stringify({ apiKey: CFG.API_KEY, op, table, query, body, tornName: undefined }),
+				body:    JSON.stringify({ key: CFG.API_KEY, action, ...body }),
 			});
 			const text = await res.text();
 			const data = text ? JSON.parse(text) : { ok: true };
-			// The gateway returns { error } on 401/402/403 — surface it for callers
-			// that care (writes) but don't crash reads.
+			// The server answers { error } for a missing subscription or a bad key: surface it for callers that care (writes) but don't crash reads.
 			if (data && data.error) {
-				console.warn(`[CoreLabs] gateway ${op} ${table}:`, data.error);
+				console.warn(`[CoreLabs] ${action}:`, data.error);
 				return { error: data.error };
 			}
 			return data;
 		} catch (e) {
-			console.error('[CoreLabs] gateway:', e);
+			console.error('[CoreLabs] server:', e);
 			return null;
 		}
 	}
-
-	// Back-compat shim: the rest of the codebase calls sbRequest(method, table, {query|body}).
-	// Map the old HTTP-verb signature onto the gateway op vocabulary so callers
-	// don't all need touching.
-	async function sbRequest(method, table, body = null) {
-		const op =
-			method === 'GET'    ? 'select'
-			: method === 'POST'   ? 'insert'
-			: method === 'PATCH'  ? 'update'
-			: method === 'DELETE' ? 'delete'
-			: 'select';
-		if (method === 'GET') return gateway('select', table, { query: body?.query });
-		return gateway(op, table, { body });
-	}
-
+	
 	async function deleteCRMState(uid) {
-		// recruiter_id scoping is enforced server-side by the gateway; we only pass
-		// the target filter. The function appends recruiter_id=eq.<caller>.
-		await gateway('delete', 'crm_states', { query: `target_id=eq.${uid}` });
+		await wwl('rec-del', { ids: [parseInt(uid)] });
 	}
-
-	async function autoHunt(playerIds, cloudIds) {
-		const newIds = playerIds.filter(id => !cloudIds.includes(parseInt(id)));
-		if (!newIds.length) return;
-
-		// Torn API is still queried one player at a time (rate limit), but the DB
-		// writes are BATCHED: we buffer scouted rows and flush them to the gateway in
-		// one multi-row insert every BATCH_SIZE players (and once at the end). This
-		// turns N gateway invocations into ceil(N / BATCH_SIZE) — e.g. a 50-name
-		// UserList page = 50 calls -> ~3. PostgREST accepts a JSON array as a bulk
-		// upsert (PK = id, merge-duplicates), so it's one round-trip per batch.
-		const BATCH_SIZE = 20;
-		let buffer = [];
-
-		const flush = async () => {
-			if (!buffer.length) return;
-			const rows = buffer; buffer = [];
-			const result = await sbRequest('POST', 'targets', rows);
-			if (result?.error) console.error('[CoreLabs] Hunt batch rejected:', result);
-		};
-
-		let dirty = false;
-		for (const uid of newIds) {
-			await new Promise(r => setTimeout(r, CFG.HUNT_DELAY));
-			try {
-				const res  = await gmFetch(`https://api.torn.com/v2/user/${uid}?selections=profile,hof&key=${CFG.API_KEY}`);
-				const data = JSON.parse(await res.text());
-				if (!data || data.error) continue;
-
-				const name = stripFaction(data.name || data.profile?.name || 'Unknown');
-				const ws   = data.hof?.working_stats?.value || 0;
-
-				buffer.push({
-					id: parseInt(uid), name,
-					work_stats: ws, work_total: ws,
-					scouted_by: parseInt(CFG.MY_ID),
-					last_updated: new Date().toISOString(),
-				});
-
-				if (!CRM[uid]) CRM[uid] = {};
-				if (!CRM[uid].name) { CRM[uid].name = name; dirty = true; }
-
-				if (buffer.length >= BATCH_SIZE) await flush();
-			} catch (e) {
-				console.error('[CoreLabs] Hunt error:', e);
+	
+	// ── One-time move from the old server ──────────────────────────────────────────
+	// The list used to live in Supabase. The copy this computer kept (it is saved on every sync) is sent to WWL once; if there is none, the old server is asked for it.
+	async function migrateToWWL() {
+		if (load('RecruiterMovedToWWL', false) || !CFG.API_KEY || !CFG.PAID) return;
+		try {
+			const kept = load(STORE.CRM, {});
+			let rows = Object.entries(kept).filter(([id]) => /^[0-9]+$/.test(id)).map(([id, s]) => ({
+				id, f: s.F || 0, c: s.C || 0, s: s.S || 0, u: s.U || 0, name: s.name || null, notes: s.notes || null, company: s.company || null,
+				manual: s.manualStats || null, at: s.updatedAt ? Date.parse(s.updatedAt) || 0 : 0,
+			}));
+			if (!rows.length) {
+				for (let offset = 0; offset < 20000; offset += 1000) {
+					const res  = await gmFetch('https://yweufoxazgfmnqndcgmk.supabase.co/functions/v1/gateway', {
+						method: 'POST', headers: { 'Content-Type': 'application/json' },
+						body: JSON.stringify({ apiKey: CFG.API_KEY, op: 'select', table: 'crm_states', query: `recruiter_id=eq.${CFG.MY_ID}&select=target_id,f,c,s,u,name,notes,company,manual_stats,updated_at&order=target_id.asc&offset=${offset}&limit=1000` }),
+					});
+					const page = JSON.parse(await res.text());
+					if (!Array.isArray(page)) return;   // the old server did not answer: try again next time
+					rows = rows.concat(page.map(p => ({ id: p.target_id, f: p.f, c: p.c, s: p.s, u: p.u, name: p.name, notes: p.notes, company: p.company, manual: p.manual_stats, at: p.updated_at ? Date.parse(p.updated_at) || 0 : 0 })));
+					if (page.length < 1000) break;
+				}
 			}
-		}
-		await flush();           // flush the tail
-		if (dirty) saveCRM();    // persist names once, not per player
+			for (let i = 0; i < rows.length; i += 1000) {
+				const r = await wwl('rec-import', { rows: rows.slice(i, i + 1000) });
+				if (!r || r.error) { console.warn('[CoreLabs] the move to WWL did not finish:', r && r.error); return; }
+			}
+			save('RecruiterMovedToWWL', true);
+			console.log(`[CoreLabs] ${rows.length} entries moved to WWL`);
+		} catch (e) { console.warn('[CoreLabs] the move to WWL will be tried again next time:', e.message); }
 	}
+	
 
 	// ── License (paid status) ───────────────────────────────────────────────────
 	// Self-read so the UI knows whether to enable write buttons. The gateway only
@@ -708,8 +668,13 @@
 		// 2. Cache miss/stale/forced -> hit the gateway, then store.
 		// A forced refresh (the dashboard's "Refresh status" button) also asks the gateway to look at the xanax the owner received, once: the payment poller no longer runs by itself.
 		let lic = null;
-		if (force) { const chk = await gateway('check-payment', null, {}); if (chk && chk.license) lic = chk.license; }
-		if (!lic) { const rows = await gateway('select', 'licenses', {}); lic = Array.isArray(rows) ? rows[0] : null; }
+		// A forced refresh (the dashboard's "Refresh status" button) also asks the server to look at the Xanax the owner received, once: nothing is checked on a timer.
+		const r = await wwl(force ? 'rec-check' : 'rec-license', {});
+		if (r && !r.error) {
+			const paid = r.paid === true;
+			lic = { status: paid ? 'paid' : 'unpaid', paid_until: paid ? (r.until ? new Date(r.until).toISOString() : 'infinity') : null, is_admin: !!r.owner };
+		}
+	
 		applyLicense(lic);
 		save(STORE.LICENSE, { ts: Date.now(), lic: lic || null });
 		console.log(`[CoreLabs] License (fresh) — paid:${CFG.PAID} admin:${CFG.IS_ADMIN}`);
@@ -722,34 +687,34 @@
 	// (set price, grant/ban users, payments) lives on the separate Vercel admin
 	// site, NOT in this public script.
 	async function loadSettings() {
-		const rows = await gateway('select', 'app_settings', { query: 'id=eq.1&select=*' });
-		return Array.isArray(rows) ? rows[0] : null;
+		// the price and the message to send with the Xanax (the same message stays for every renewal)
+		const r = await wwl('rec-subscribe', {});
+		return { xanax_per_period: 1, days_per_period: 7, code: r && r.code ? r.code : '', owner_id: 2645743 };
 	}
-
+	
+	// ── Tickets (TODO list) ───────────────────────────────────────────────────────
+	const ALLOWED_IDS = ['2353554', '2645743'];
+	function canAccessTickets() { return ALLOWED_IDS.includes(String(CFG.MY_ID)); }
+	
 	async function loadTickets() {
-		return sbRequest('GET', 'tickets', {
-			query: 'select=id,title,description,created_by,status,created_at&order=created_at.desc',
-		});
+		const r = await wwl('rec-tickets', {});
+		return r && Array.isArray(r.tickets) ? r.tickets : [];
 	}
-
+	
 	async function createTicket(title, description) {
-		return sbRequest('POST', 'tickets', {
-			title,
-			description,
-			created_by: String(CFG.MY_ID),
-			status:     'todo',
-			created_at: new Date().toISOString(),
-		});
+		const r = await wwl('rec-ticket-add', { title, description });
+		return r && !r.error ? r.ticket : null;
 	}
-
+	
 	async function updateTicketStatus(id, status) {
-		const res = await gateway('update', 'tickets', { query: `id=eq.${id}`, body: { status } });
+		const res = await wwl('rec-ticket-status', { id, status });
 		return res && !res.error ? { ok: true } : null;
 	}
-
+	
 	async function deleteTicket(id) {
-		await gateway('delete', 'tickets', { query: `id=eq.${id}` });
+		await wwl('rec-ticket-del', { id });
 	}
+	
 
 	async function pageScan(isRetry = false) {
 		// Only the UserList page is scanned, and only the rows that are shown (not hidden by a filter). Players on other pages are no longer collected.
@@ -769,17 +734,9 @@
 		});
 		if (!ids.length) return;
 
-		// Try the extended select (with the shared pill-stat columns). If migration
-		// 0006 hasn't been applied yet, those columns don't exist and PostgREST 400s
-		// — fall back to the base columns so pageScan never breaks during rollout.
-		let cloud = await sbRequest('GET', 'targets', {
-			query: `id=in.(${ids.join(',')})&select=id,name,work_stats,work_total,xanax,war_hits,streak,last_updated`,
-		});
-		if (cloud && cloud.error) {
-			cloud = await sbRequest('GET', 'targets', {
-				query: `id=in.(${ids.join(',')})&select=id,name,work_stats,work_total,last_updated`,
-			});
-		}
+		const cloudReply = await wwl('rec-stats-get', { ids: ids.slice(0, 80) });
+		const cloud = cloudReply && Array.isArray(cloudReply.rows) ? cloudReply.rows : null;
+	
 
 		const cloudIds = [];
 		let dirty = false;
@@ -817,25 +774,26 @@
 	// to be non-null so a name-only row doesn't mask a needed Torn fetch.
 	function seedSharedStat(p) {
 		if (!p || p.id == null) return;
-		const hasStats = p.xanax != null || p.war_hits != null || p.work_stats != null || p.streak != null;
-		if (!hasStats) return;
-		const ts = p.last_updated ? new Date(p.last_updated).getTime() : 0;
+		// a row without real numbers must not hide a needed Torn fetch
+		if (!p.xan && !p.act && !p.ws && !p.streak) return;
 		SHARED_STATS[String(p.id)] = {
-			ts,
+			ts: Number(p.ts) || 0,
 			data: {
-				xan:    Number(p.xanax)     || 0,
-				act:    Number(p.war_hits)  || 0,
-				ws:     Number(p.work_stats) || 0,
-				streak: Number(p.streak)    || 0,
+				xan:    Number(p.xan)    || 0,
+				act:    Number(p.act)    || 0,
+				ws:     Number(p.ws)     || 0,
+				streak: Number(p.streak) || 0,
 				name:   p.name || null,
 			},
 		};
 	}
+	
 
 	// The Discord link lives on the server, not in this script: the gateway builds the post itself and sends it.
 	async function brokerPost(ws, comp, notes) {
-		return gateway('broker-post', null, { body: { ws: String(ws), comp: String(comp), notes: String(notes || '') } });
+		return wwl('rec-broker', { ws: String(ws), comp: String(comp), notes: String(notes || '') });
 	}
+	
 	
 	// Write the pill stats back to the shared targets table after a Torn fetch, so the next user (any account) reads them from the DB instead of Torn.
 	// The rows are collected and sent together (one request for up to 20 players, or after 3 seconds), not one request per player.
@@ -845,25 +803,16 @@
 		clearTimeout(sharedTimer); sharedTimer = null;
 		if (!SHARED_BUF.size) return;
 		const rows = [...SHARED_BUF.values()]; SHARED_BUF.clear();
-		sbRequest('POST', 'targets', rows).then(r => { if (r && r.error) console.warn('[CoreLabs] shared stats not saved:', r.error); }).catch(() => {});
+		wwl('rec-stats-put', { rows }).then(r => { if (r && r.error) console.warn('[CoreLabs] shared stats not saved:', r.error); }).catch(() => {});
 	}
 	window.addEventListener('pagehide', flushSharedStats);
 	async function writeSharedStat(uid, data) {
 		if (!CFG.MY_ID) return;
-		SHARED_BUF.set(String(uid), {
-			id:           parseInt(uid),
-			name:         data.name || null,
-			work_stats:   data.ws || 0,
-			work_total:   data.ws || 0,
-			xanax:        data.xan || 0,
-			war_hits:     data.act || 0,
-			streak:       data.streak || 0,
-			scouted_by:   parseInt(CFG.MY_ID),
-			last_updated: new Date().toISOString(),
-		});
+		SHARED_BUF.set(String(uid), { id: parseInt(uid), name: data.name || null, ws: data.ws || 0, xan: data.xan || 0, act: data.act || 0, streak: data.streak || 0 });
 		if (SHARED_BUF.size >= 20) flushSharedStats();
 		else if (!sharedTimer) sharedTimer = setTimeout(flushSharedStats, 3000);
 	}
+	
 
 	function openFollowUp(uid) {
 		document.getElementById('cl-fu')?.remove();
@@ -1681,8 +1630,8 @@ function setUselessRow(btn, uid) {
 					how.innerHTML =
 						`Price: <b style="color:#74c0fc;">${xp} xanax = ${dp} days</b>.<br>` +
 						`To activate: send <b>${xp} xanax</b> to ${ownerLink} with the message ` +
-						`<code style="background:#000;padding:1px 5px;border-radius:3px;color:#ffd43b;">${CFG.MY_ID} ${tag}</code><br>` +
-						`<span style="color:#666;">Your ID + the tag must both be in the message or it won't be counted. After sending, press ↻ Refresh status below: it checks your payment right away (if it still says inactive, wait half a minute and press it again).</span>`;
+						`<code style="background:#000;padding:1px 5px;border-radius:3px;color:#ffd43b;">${s?.code || '…'}</code><br>` +
+						`<span style="color:#666;">The message must be exactly this, with nothing added, or it is not counted. After sending, press ↻ Refresh status below: it checks your payment right away (if it still says inactive, wait half a minute and press it again).</span>`;
 				});
 
 				// Force a fresh license check (skips the cache) — lets a user who just
