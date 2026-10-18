@@ -10,7 +10,14 @@
     // A trader's shared pricelist (/?pricelist=<tornId>) is public in the same way: no login, no session. (A path like /pricelist/123 would break the page: the
     // scripts load from relative addresses. vercel.json sends /pricelist/123 here instead.)
     const pubPricelist = /^\d{1,10}$/.test(new URLSearchParams(window.location.search).get('pricelist') || '') ? [null, new URLSearchParams(window.location.search).get('pricelist')] : null;
-    if (pubPricelist) {
+    const tradeReceipt = /^[A-Za-z0-9_-]{8,40}$/.test(new URLSearchParams(window.location.search).get('tradereceipt') || '') ? new URLSearchParams(window.location.search).get('tradereceipt') : null;
+    if (tradeReceipt) { // the receipt page of a trade (made by a trader's userscript): public as well
+        $('login-view').style.display = 'none';
+        $('app-view').style.display = 'block';
+        document.querySelector('nav.side').style.display = 'none';
+        goToPage('trade-receipt');
+        loadTradeReceipt(tradeReceipt);
+    } else if (pubPricelist) {
         $('login-view').style.display = 'none';
         $('app-view').style.display = 'block';
         document.querySelector('nav.side').style.display = 'none';

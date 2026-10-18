@@ -2,7 +2,7 @@
 // @name         World Wide Labs
 // @namespace    https://worldwidelabs.vercel.app
 // @author       CreaLotte
-// @version      1.40.0
+// @version      1.40.1
 // @updateURL    __WWL_BASE__/worldwidelabs.user.js
 // @downloadURL  __WWL_BASE__/worldwidelabs.user.js
 // @description  Shows your WorldWideLabs weekly energy plan (the checklist from the Energy planner) inside Torn, a To do tab with small personal reminders (revive setting, feedback, timezone map, availability, Discord/Intel/CAT), your My Targets list, a simplified energy/war standing strip, and — if you are in the Mentoring Platform — your mentoring checklist too. Also shows faction banners at the top of every Torn page. A small ⚙ in the header shows the installed version, flags when a newer one is out, lets you set/replace your API key, and — for a leader — add or remove your faction's banners right from Torn. On a computer it is a small window you can drag around and close; in TornPDA it is a menu. Ticks are shared with the WWL site.
@@ -26,7 +26,7 @@
     const KEY_NAME = 'wwl_api_key', POS_NAME = 'wwl_plan_pos', STATE_NAME = 'wwl_plan_state';
     // GM_info gives the version Tampermonkey actually has installed right now — falls back to a
     // hardcoded copy (kept in sync with @version above) for TornPDA, which doesn't grant GM_info.
-    const SCRIPT_VERSION = (typeof GM_info !== 'undefined' && GM_info.script?.version) || '1.40.0';
+    const SCRIPT_VERSION = (typeof GM_info !== 'undefined' && GM_info.script?.version) || '1.40.1';
     const versionGreater = (a, b) => {
         const pa = String(a).split('.').map(Number), pb = String(b).split('.').map(Number);
         for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
@@ -934,7 +934,7 @@
         };
         const readItems = (root, sel) => { const out = {}; root.querySelectorAll(sel).forEach(n => { const it = parseItem(n); if (it) out[it.name] = (out[it.name] || 0) + it.qty; }); return out; };
 
-        // ---- an open trade: the total at your pricelist, and the check on Accept ----
+        // ---- an open trade: the total at your pricelist, a receipt to share, and the check on Accept ----
         const prices = {}; let pricing = false, priceError = '', setDefs = {}; // setDefs: the sets on your list that this trade has a full set of (name -> parts)
         const needPrices = names => {
             const now = Date.now(), missing = names.filter(n => !prices[n] || now - prices[n].at > 300000);
@@ -945,42 +945,76 @@
                 .catch(e => { priceError = e.message; missing.forEach(n => { prices[n] = { price: 0, at: Date.now() - 270000 }; }); })
                 .finally(() => { pricing = false; });
         };
+        const realAccept = () => q1('.btn.accept.torn-btn.green');
+        const setAcceptBlock = (acc, block, why) => { if (acc) { acc.style.pointerEvents = block ? 'none' : ''; acc.style.opacity = block ? '.35' : ''; acc.title = block ? why : ''; } };
+        const acceptAnyway = {}; // trades where "Accept anyway" was chosen
+        // The receipt: a page anybody can open with the items and prices of this trade. It is saved (again) whenever the items or prices change, and the link is kept with the trade.
+        const receipts = {}; // trade id -> { sig, url, busy }
+        const partnerOf = cont => {
+            const name = ((q1('.user.right .title-black', cont) || {}).textContent || '').trim().replace(/'s items.*$/i, '').replace(/\[\d+\]/g, '').trim();
+            let me = ''; try { me = String(JSON.parse(q1('#torn-user').value).id); } catch (e) { me = ''; }
+            const ids = [...document.querySelectorAll('#trade-container a[href*="XID="]')].map(a => (a.href.match(/XID=(\d+)/) || [])[1]).filter(x => x && x !== me);
+            return { name, id: ids[0] || '' };
+        };
+        function saveReceipt(id, lines, partner) {
+            const sig = JSON.stringify([lines, partner]), r = receipts[id] || (receipts[id] = { sig: '', url: '', busy: false });
+            if (r.busy || r.sig === sig) return;
+            r.busy = true; r.sig = sig;
+            call({ action: 'led-receipt-save', tradeId: id, partner, lines }).then(res => { if (!res.token) throw new Error('no receipt'); r.url = `${WWL}/?tradereceipt=${res.token}`; const rec = readJson(REC(id)); if (rec) { rec.receipt = r.url; store.set(REC(id), JSON.stringify(rec)); } })
+                .catch(() => { r.sig = ''; }).finally(() => { r.busy = false; });
+        }
         function viewTick(id) {
             const cont = q1('.trade-cont.m-top10'); if (!cont) return;
+            const acc = realAccept();
             const items = readItems(cont, '.user.right .cont li.color2 ul.desc li .name.left'), names = Object.keys(items);
-            if (!names.length) { dropBar(); return; }
+            if (!names.length) { setAcceptBlock(acc, false); dropBar(); return; }
             needPrices(names);
             const inTrade = moneyOf((q1('.user.left .cont li.color1 ul.desc li .name.left', cont) || {}).textContent);
-            let total = 0, unpriced = 0; const rows = [], left = { ...items }, setLines = [];
+            let total = 0, unpriced = 0; const rows = [], left = { ...items }, setLines = [], lines = [];
             // a set is not an item: one of each part is priced as the set on your list (as often as there are full sets), and the parts that are left one by one
             for (const [setName, parts] of Object.entries(setDefs)) {
                 const sp = prices[setName] ? prices[setName].price : 0, count = sp ? Math.min(...parts.map(p => left[p] || 0)) : 0;
                 if (!count) continue;
                 parts.forEach(p => { left[p] -= count; });
-                total += count * sp; setLines.push({ name: setName, count, price: sp });
+                total += count * sp; setLines.push({ name: setName, count, price: sp }); lines.push({ name: setName, qty: count, price: sp });
                 rows.push(`<div style="color:#aab2c3;">${count}x ${esc(setName)} (one of each of its ${parts.length} items) — ${fmt(sp)} each, ${fmt(count * sp)}</div>`);
             }
             for (const n of names) {
                 if (!left[n]) continue;
-                const p = prices[n] ? prices[n].price : 0, line = p * left[n]; total += line; if (!p) unpriced++;
+                const p = prices[n] ? prices[n].price : 0, line = p * left[n]; total += line; if (!p) unpriced++; else lines.push({ name: n, qty: left[n], price: p });
                 rows.push(`<div style="color:${p ? '#aab2c3' : '#f0b432'};">${left[n]}x ${esc(n)} — ${p ? `${fmt(p)} each, ${fmt(line)}` : 'no price on your list'}</div>`);
             }
-            const waiting = pricing || (!priceError && names.some(n => !prices[n]));
-            const diff = inTrade - total;
-            const status = unpriced || waiting || !total ? '' : inTrade === total ? '<span style="color:#35d99b;">The money matches.</span>' : !inTrade ? 'No money added yet.' : diff < 0 ? `<span style="color:#ff6b6b;">Too low by ${fmt(-diff)}.</span>` : `<span style="color:#ff6b6b;">Too high by ${fmt(diff)}.</span>`;
-            if (total > 0 && !waiting && !unpriced) store.set(REC(id), JSON.stringify({ total, at: Date.now(), sets: setLines, items: Object.fromEntries(names.map(n => [n, { qty: items[n], price: prices[n] ? prices[n].price : 0 }])) }));
-            setBar(`<b style="color:#35d99b;">WWL</b> ${waiting ? 'Looking up your prices…' : priceError ? `<span style="color:#ff6b6b;">${esc(priceError)}</span>` : `Total at your pricelist: <b>${fmt(total)}</b>${unpriced ? ` <span style="color:#f0b432;">(${unpriced} without a price)</span>` : ''}`}${total && !waiting && !unpriced ? btn('wwl-tb-copy', 'Copy') + (inTrade !== total ? btn('wwl-tb-add', 'Add money') : '') : ''}${status ? `<div>${status} <span style="color:#8a93a6;">In the trade: ${fmt(inTrade)}</span></div>` : ''}<details style="margin-top:4px;"><summary style="cursor:pointer;color:#8a93a6;">Items</summary>${rows.join('')}</details>`, b => {
-                const c = b.querySelector('#wwl-tb-copy');
-                if (c) c.addEventListener('click', () => { const t = String(total); (navigator.clipboard ? navigator.clipboard.writeText(t) : Promise.reject()).then(() => { c.textContent = 'Copied'; }, () => { c.textContent = t; }); });
-                const a = b.querySelector('#wwl-tb-add');
-                if (a) a.addEventListener('click', () => { location.hash = `#step=addmoney&ID=${id}`; });
-            });
-            // Accept stays blocked while the money in the trade is not the total (only when every item has a price, so the total is complete)
-            const acc = q1('.btn.accept.torn-btn.green');
-            if (acc) {
-                const block = total > 0 && !unpriced && !waiting && inTrade !== total;
-                acc.style.pointerEvents = block ? 'none' : ''; acc.style.opacity = block ? '.35' : ''; acc.title = block ? `WWL: the money in the trade is not ${fmt(total)}` : '';
+            const waiting = pricing || (!priceError && names.some(n => !prices[n])), ready = !waiting && !priceError && total > 0 && !unpriced;
+            const diff = inTrade - total, mismatch = ready && inTrade > 0 && inTrade !== total && !acceptAnyway[id];
+            if (ready) {
+                const old = readJson(REC(id)) || {};
+                store.set(REC(id), JSON.stringify({ total, at: Date.now(), sets: setLines, receipt: (receipts[id] && receipts[id].url) || old.receipt || '', items: Object.fromEntries(names.map(n => [n, { qty: items[n], price: prices[n] ? prices[n].price : 0 }])) }));
+                saveReceipt(id, lines, partnerOf(cont));
             }
+            // the real Accept button stays blocked only while there is money in the trade that is not the total ("Accept anyway" lifts it)
+            setAcceptBlock(acc, mismatch, `WWL: the money in the trade is not ${fmt(total)}`);
+            const accepted = !acc && inTrade > 0;
+            const status = !ready ? '' : inTrade === total ? '<span style="color:#35d99b;">The money matches.</span>' : !inTrade ? 'No money added yet.' : diff < 0 ? `<span style="color:#ff6b6b;">Too low by ${fmt(-diff)}.</span>` : `<span style="color:#ff6b6b;">Too high by ${fmt(diff)}.</span>`;
+            const rurl = receipts[id] && receipts[id].url;
+            const b = (bid, text, css = '') => `<button id="${bid}" type="button" style="padding:6px 12px;border:1px solid #44506a;border-radius:5px;cursor:pointer;font:600 13px Arial,sans-serif;color:#e6e9ef;background:#2a3140;${css}">${text}</button>`;
+            let accept = '';
+            if (accepted) accept = b('wwl-tb-acc', 'Accepted', 'background:#6d4fc4;border-color:#6d4fc4;opacity:.8;cursor:default;');
+            else if (acc && ready) accept = inTrade === total ? b('wwl-tb-acc', 'Accept Trade', 'background:#1f9d63;border-color:#1f9d63;') : !inTrade ? b('wwl-tb-acc', 'Add Money', 'background:#c98a14;border-color:#c98a14;') : b('wwl-tb-acc', diff < 0 ? 'Too Low — add money' : 'Too High — fix money', 'background:#b03a3a;border-color:#b03a3a;');
+            else if (acc && !waiting) accept = b('wwl-tb-acc', 'Accept (not checked)', '');
+            const head = waiting ? 'Looking up your prices…' : priceError ? `<span style="color:#ff6b6b;">${esc(priceError)}</span>` : '';
+            setBar(`<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;"><b style="color:#35d99b;">WWL</b>${head}${!head && total ? b('wwl-tb-copy', `Total: ${fmt(total)}`) : ''}${ready ? (rurl ? b('wwl-tb-rcpt', 'Receipt — copy link') + ` <a href="${esc(rurl)}" target="_blank" rel="noopener" style="color:#7fb0ff;font-size:12px;">open</a>` : '<span style="color:#8a93a6;font-size:12px;">receipt…</span>') : ''}${accept}</div>${unpriced && !waiting ? `<div style="color:#f0b432;">${unpriced} item${unpriced === 1 ? '' : 's'} without a price on your list.</div>` : ''}${status ? `<div>${status} <span style="color:#8a93a6;">In the trade: ${fmt(inTrade)}</span>${mismatch ? ' <a href="#" id="wwl-tb-any" style="color:#7fb0ff;">Accept anyway</a>' : ''}</div>` : ''}<details style="margin-top:4px;"><summary style="cursor:pointer;color:#8a93a6;">Items</summary>${rows.join('')}</details>`, el => {
+                const c = el.querySelector('#wwl-tb-copy');
+                if (c) c.addEventListener('click', () => { const t = String(total); (navigator.clipboard ? navigator.clipboard.writeText(t) : Promise.reject()).then(() => { c.textContent = 'Copied'; }, () => { c.textContent = t; }); });
+                const r = el.querySelector('#wwl-tb-rcpt');
+                if (r) r.addEventListener('click', () => { (navigator.clipboard ? navigator.clipboard.writeText(rurl) : Promise.reject()).then(() => { r.textContent = 'Link copied'; }, () => { r.textContent = rurl; }); });
+                const a = el.querySelector('#wwl-tb-acc');
+                if (a) a.addEventListener('click', () => {
+                    const real = realAccept(), state = a.textContent;
+                    if (state === 'Accept Trade' || state === 'Accept (not checked)') { if (real) real.click(); } else if (state !== 'Accepted') location.hash = `#step=addmoney&ID=${id}`;
+                });
+                const any = el.querySelector('#wwl-tb-any');
+                if (any) any.addEventListener('click', e => { e.preventDefault(); if (confirm(`The money in the trade is ${fmt(inTrade)}, not ${fmt(total)}. Accept anyway?`)) { acceptAnyway[id] = true; setAcceptBlock(realAccept(), false, ''); const real = realAccept(); if (real) real.click(); } });
+            });
         }
 
         // ---- the page where the money is typed: filled in with the total ----

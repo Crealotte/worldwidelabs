@@ -48,7 +48,7 @@ const { ltHandle, leaseTodos, tenHandle, isTenant } = require('../lib/labstracki
 const { finHandle, invHandle, isInvestor, isBuddy, finRoles, budHandle, fundRequestTodos } = require('../lib/finances');
 const { joinHandle, joinTodos } = require('../lib/joinlabs');
 const { serviceView, setKnown } = require('../lib/todoKnown');
-const { ledHandle, pricelistPublic, pricelistVote } = require('../lib/ledger');
+const { ledHandle, pricelistPublic, pricelistVote, tradeReceiptPublic } = require('../lib/ledger');
 const { ohHandle } = require('../lib/onlineHours');
 const { labsIsOwner, labsHasOwners, labsHandle, labsRecordReceipt } = require('../lib/labsLedger');
 
@@ -758,6 +758,10 @@ module.exports = async function handler(req, res) {
         // A trader's shared pricelist is public too (only when they chose to share it): no key, no Torn call.
         if (action === 'pricelist-public') {
             const out = await pricelistPublic(redis, req.body.id);
+            return res.status(out.error ? 404 : 200).json(out);
+        }
+        if (action === 'trade-receipt') {
+            const out = await tradeReceiptPublic(redis, req.body.token);
             return res.status(out.error ? 404 : 200).json(out);
         }
         if (action === 'pricelist-vote') {
