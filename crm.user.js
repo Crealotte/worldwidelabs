@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         CoreLabs Elite Recruiter v22.0
-// @version      22.2.0
+// @version      22.4.0
 // @updateURL    https://worldwidelabs.vercel.app/crm.user.js
 // @downloadURL  https://worldwidelabs.vercel.app/crm.user.js
 // @description  Test version Corelabs
@@ -412,6 +412,7 @@
 	 * Fields: recruiter_id, target_id, f, c, u, name, notes, company, updated_at
 	 */
 	async function upsertCRMState(uid) {
+		if (CRM[uid]) CRM[uid].updatedAt = new Date().toISOString();
 		saveCRM(); // the click is kept on this computer at once, whatever the server answers
 		const s = CRM[uid] || {};
 		const saved = await sbRequest('POST', 'crm_states', {
@@ -430,7 +431,18 @@
 		if (!saved || saved.error) console.warn('[CoreLabs] CRM state NOT saved to the cloud:', saved ? saved.error : 'no answer');
 	}
 
-	/**
+		// A yellow F (contacted, no answer yet) fades after a month: people change their mind. The age is the time of the last change of that player's row.
+	function expireYellowF() {
+		const limit = Date.now() - 30 * 24 * 60 * 60 * 1000;
+		let n = 0;
+		for (const uid of Object.keys(CRM)) {
+			const s = CRM[uid];
+			if (s && s.F === 1 && s.updatedAt && Date.parse(s.updatedAt) < limit) { s.F = 0; n++; }
+		}
+		if (n) { saveCRM(); console.log('[CoreLabs] ' + n + ' yellow F faded after 30 days'); }
+	}
+	
+/**
 	 * Load all CRM states for MY_ID from Supabase, merge into CRM object.
 	 * Called once at boot. Returns when done.
 	 */
@@ -455,7 +467,7 @@
 			if (page.length < PAGE) break;          // last page reached
 		}
 		if (fullSync) save('RecruiterCrmFull', Date.now());
-		if (!rows.length) return;
+		if (!rows.length) { expireYellowF(); return; }
 		rows.forEach(r => { if (r.updated_at && r.updated_at > maxUpdated) maxUpdated = r.updated_at; });
 		if (maxUpdated) save('RecruiterCrmSince', maxUpdated);
 		const isBadName = (n) => n && /torn|rpg/i.test(n);
@@ -472,11 +484,13 @@
 				company:     row.company  || CRM[uid]?.company || null,
 				createdAt:   row.created_at  || CRM[uid]?.createdAt   || null,
 				manualStats: row.manual_stats || CRM[uid]?.manualStats || null,
+					updatedAt:   row.updated_at || CRM[uid]?.updatedAt || null,
 			};
 			// Wipe bad names from DB on next save
 			if (isBadName(row.name)) upsertCRMState(uid);
 		});
 		console.log(`[CoreLabs] Loaded ${rows.length} CRM states from Supabase`);
+		expireYellowF();
 		saveCRM(); // keep a copy on this computer: the next start only asks for what changed
 	}
 
@@ -1030,7 +1044,10 @@
 	];
 	const U_DEF = { id: 'U', labels: ['U','U'], colors: ['cl-grey','cl-blue'] }; // U = Useless
 
-	function setUselessRow(btn, uid, isUseless) {
+	// A row is dimmed when the player is marked useless (U), when F is yellow (waiting for an answer) or red, or when C / S is red: easier to look at a list of members.
+function setUselessRow(btn, uid) {
+	const st = CRM[uid] || {};
+	const isUseless = st.U === 1 || st.F === 1 || st.F === 3 || st.C === 3 || st.S === 3;
 		const li = btn.closest('li[class*="user"]');
 		if (li) li.classList.toggle('cl-useless', isUseless);
 	}
@@ -1059,8 +1076,8 @@
 			if (locked) btn.title = 'Subscription required — send xanax to unlock (see CRM Dashboard)';
 
 			// Apply useless dim on mount if U already set
-			if (def.id === 'U' && idx === 1) {
-				requestAnimationFrame(() => setUselessRow(btn, uid, true));
+			if (def === defs[0]) {
+				requestAnimationFrame(() => setUselessRow(btn, uid));
 			}
 
 			btn.onclick = e => {
@@ -1075,7 +1092,7 @@
 				if (!CRM[uid]) CRM[uid] = {};
 				CRM[uid][def.id] = idx;
 				if (CRM[uid].name) CRM[uid].name = stripFaction(CRM[uid].name);
-				if (def.id === 'U') setUselessRow(btn, uid, idx === 1);
+				setUselessRow(btn, uid);
 				upsertCRMState(uid);
 			};
 			group.appendChild(btn);
