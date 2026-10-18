@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         CoreLabs Elite Recruiter v22.0
-// @version      23.2.0
+// @version      23.2.1
 // @updateURL    https://worldwidelabs.vercel.app/crm.user.js
 // @downloadURL  https://worldwidelabs.vercel.app/crm.user.js
 // @description  Test version Corelabs
@@ -240,7 +240,7 @@
 	function saveFilters(f) { save(STORE.FILTERS, f); }
 
 	const DEFAULT_TEMPLATES = [
-		{ label: 'FC', fullName: 'First Contact',     text: `Hi {name}! Looking for a faction that actually talks, loves a good war and feels like family? That is CoreLabs. We supply the Xanax for wars (the cost comes out of the war money before we divide it), pay out 80% on wars and OCs, and have a faction perk that rotates every month. Apply here and leave a funny or original application message, we read them all: https://www.torn.com/factions.php?step=profile&ID=51197` },
+		{ label: 'FC', fullName: 'First Contact',     text: `Hi {name}! Looking for a faction that actually talks, loves a good war and feels like family? That is CoreLabs. We supply the Xanax for wars (the cost comes out of the war money before we divide it), pay out 80% on wars and OCs, have the perks Toleration, Voracity and Flying, and an 8% training bonus that rotates every month. Apply here and leave a funny or original application message, we read them all: https://www.torn.com/factions.php?step=profile&ID=51197` },
 		{ label: 'FU', fullName: 'Follow-Up',          text: `Hi {name}, just following up on my earlier message! We still have a spot open at {company} and your profile looks like a perfect match. Let me know if you have any questions!` },
 		{ label: 'CO', fullName: 'Company Offer',      text: `Hi {name}! I have a position available at {company} that could really boost your income. The perks are great and the team is active. Interested in learning more?` },
 		{ label: 'NR', fullName: 'No Response Nudge',  text: `Hey {name}! Still here if you want to chat about career opportunities 😄 No pressure, just want to make sure you don't miss out!` },
