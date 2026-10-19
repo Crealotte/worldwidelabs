@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         CoreLabs Elite Recruiter v22.0
-// @version      24.1.0
+// @version      24.2.0
 // @updateURL    https://worldwidelabs.vercel.app/crm.user.js
 // @downloadURL  https://worldwidelabs.vercel.app/crm.user.js
 // @description  Test version Corelabs
@@ -9,6 +9,7 @@
 // @grant        GM_setValue
 // @license      MIT
 // @grant        GM_xmlhttpRequest
+// @grant        GM_openInTab
 // @connect      supabase.co
 // @connect      yweufoxazgfmnqndcgmk.supabase.co
 // @connect      worldwidelabs.vercel.app
@@ -259,6 +260,15 @@
 	const DEFAULT_FILTERS = { ws: 0, xan: 0, act: 0, streak: 0 };
 	function loadFilters() { return { ...DEFAULT_FILTERS, ...load(STORE.FILTERS, {}) }; }
 	function saveFilters(f) { save(STORE.FILTERS, f); }
+
+	// The recruiting mail: one subject and one message ({name} = the player's name) that the mail icon and "Mail visible players" put into Torn's mail page. Changed in the dashboard, Templates.
+	const DEFAULT_MASS_MAIL = {
+		subject: 'An invitation to CoreLabs',
+		body: `Hi {name}! Looking for a faction that actually talks, loves a good war and feels like family? That is CoreLabs. We supply the Xanax for wars (the cost comes out of the war money before we divide it), pay out 80% on wars and OCs, have the perks Toleration, Voracity and Flying, and an 8% training bonus that rotates every month. Apply here and leave a funny or original application message, we read them all: https://www.torn.com/factions.php?step=profile&ID=51197`,
+	};
+	function loadMassMail() { return { ...DEFAULT_MASS_MAIL, ...load('RecruiterMassMail', {}) }; }
+	function saveMassMail(m) { save('RecruiterMassMail', m); }
+
 
 	const DEFAULT_TEMPLATES = [
 		{ label: 'FC', fullName: 'First Contact',     text: `Hi {name}! Looking for a faction that actually talks, loves a good war and feels like family? That is CoreLabs. We supply the Xanax for wars (the cost comes out of the war money before we divide it), pay out 80% on wars and OCs, have the perks Toleration, Voracity and Flying, and an 8% training bonus that rotates every month. Apply here and leave a funny or original application message, we read them all: https://www.torn.com/factions.php?step=profile&ID=51197` },
@@ -1082,7 +1092,7 @@
 		btnMail.style.cssText = 'flex:1;background:#2a2a2a;border:1px solid #383838;color:#aaa;padding:8px;border-radius:4px;font-size:12px;font-weight:bold;cursor:pointer;';
 		btnMail.textContent = '✉️ Mail';
 		btnMail.onclick = () => {
-			GM_setValue('cl_pending_msg', JSON.stringify({
+			GM_setValue('cl_pending_msg_' + uid, JSON.stringify({
 				uid,
 				subject: 'An invitation to CoreLabs',
 				body: txtMsg.value,
@@ -1670,6 +1680,33 @@ function setUselessRow(btn, uid) {
 			desc.textContent = 'Use {name} for player name and {company} for company name in templates.';
 			settingsContent.appendChild(desc);
 
+			// ── The recruiting mail: used by the mail icon on every row and by "Mail visible players" ──
+			{
+				const mm = loadMassMail();
+				const box = document.createElement('div');
+				box.style.cssText = 'margin-bottom:22px;padding:12px;border:1px solid #2f9e44;border-radius:6px;background:#10180f;';
+				const title = document.createElement('div');
+				title.style.cssText = 'font-size:12px;font-weight:bold;color:#51cf66;margin-bottom:4px;';
+				title.textContent = 'Recruiting mail (the ✉ icon and "Mail visible players")';
+				const hint = document.createElement('div');
+				hint.style.cssText = 'font-size:10px;color:#777;margin-bottom:8px;';
+				hint.textContent = 'This subject and message go straight into Torn\'s mail page, with {name} replaced by the player\'s name. Shift+click on ✉ opens the template window instead.';
+				const subj = document.createElement('input');
+				subj.type = 'text'; subj.value = mm.subject; subj.placeholder = 'Subject';
+				subj.style.cssText = 'width:100%;background:#111;color:#ccc;border:1px solid #2c2c2c;border-radius:4px;padding:6px 8px;font-size:12px;box-sizing:border-box;margin-bottom:6px;';
+				const body = document.createElement('textarea');
+				body.value = mm.body;
+				body.style.cssText = 'width:100%;background:#111;color:#ccc;border:1px solid #2c2c2c;border-radius:4px;padding:8px;font-size:12px;line-height:1.5;resize:vertical;box-sizing:border-box;min-height:110px;font-family:inherit;';
+				const mailSaveBtn = document.createElement('button');
+				mailSaveBtn.textContent = 'Save';
+				mailSaveBtn.style.cssText = 'margin-top:5px;background:#1a3a1a;border:1px solid #2f9e44;color:#51cf66;padding:5px 14px;border-radius:4px;font-size:11px;cursor:pointer;';
+				mailSaveBtn.onclick = () => { saveMassMail({ subject: subj.value.trim() || 'An invitation to CoreLabs', body: body.value }); mailSaveBtn.textContent = '✓ Saved'; setTimeout(() => { mailSaveBtn.textContent = 'Save'; }, 1500); };
+				box.append(title, hint, subj, body, mailSaveBtn);
+				settingsContent.appendChild(box);
+			}
+	
+
+
 			templates.forEach((t, i) => {
 				const block = document.createElement('div');
 				block.style.cssText = 'margin-bottom:18px;';
@@ -2252,9 +2289,9 @@ function setUselessRow(btn, uid) {
 	// its Mail button opens Torn's mail page in a new tab with the mail already filled in (you press Send yourself).
 	function addMailIcon(cont, uid) {
 		const mail = document.createElement('span');
-		mail.className = 'cl-act-icon cl-mail-icon'; mail.textContent = '✉'; mail.title = 'Write a mail or a message to this player (for players with chat off)';
+		mail.className = 'cl-act-icon cl-mail-icon'; mail.textContent = '✉'; mail.title = 'Open a mail with your recruiting message (Shift+click: pick another template)';
 		mail.style.cssText = 'margin-left:6px;cursor:pointer;';
-		mail.onclick = e => { e.preventDefault(); e.stopPropagation(); openMessageModal(uid); };
+		mail.onclick = e => { e.preventDefault(); e.stopPropagation(); if (e.shiftKey) openMessageModal(uid); else openMail(uid); };
 		cont.appendChild(mail);
 	}
 
@@ -2720,13 +2757,90 @@ function setUselessRow(btn, uid) {
 	// BSP saves a prediction when the leader's profile is opened in another tab: the chips fill in without a reload
 	window.addEventListener('storage', e => { if (e.key && e.key.indexOf(BSP) === 0) factionPass(); });
 
+	// ── The recruiting mail ───────────────────────────────────────────────────────
+	// One subject and one message (set in the dashboard, Templates) that go straight into Torn's mail page: the ✉ icon on a row opens that player's mail with the message already
+	// filled in; "Mail visible players" does the same for the next batch of players you can see, each in its own tab (in the background). Nothing is sent for you: in every tab you
+	// read it over and press Send yourself. A player you opened a mail for is remembered for 14 days and skipped by the batch button, so nobody gets two.
+	const MAILED = 'RecruiterMailed', DAYS14 = 14 * 24 * 60 * 60 * 1000;
+	
+	function mailedMap() {
+		const m = load(MAILED, {}), cut = Date.now() - DAYS14;
+		let dirty = false;
+		for (const k of Object.keys(m)) if (m[k] < cut) { delete m[k]; dirty = true; }
+		if (dirty) save(MAILED, m);
+		return m;
+	}
+	function markMailed(uid) {
+		const m = mailedMap(); m[uid] = Date.now(); save(MAILED, m);
+		document.querySelectorAll(`li[data-cl-uid="${uid}"] .cl-mail-icon`).forEach(i => { i.style.color = '#51cf66'; i.title = 'A mail was opened for this player (kept 14 days)'; });
+	}
+	const wasMailed = uid => !!mailedMap()[uid];
+	
+	// puts the message in a draft for this player (the mail page of that player picks it up) and opens the mail page
+	function openMail(uid, { background = false } = {}) {
+		const mm = loadMassMail();
+		GM_setValue('cl_pending_msg_' + uid, JSON.stringify({ uid, subject: mm.subject, body: mm.body, ts: Date.now() }));
+		const url = `https://www.torn.com/messages.php#/p=compose&XID=${uid}`;
+		if (typeof GM_openInTab === 'function') GM_openInTab(url, { active: !background, insert: true });
+		else window.open(url, '_blank');
+		markMailed(uid);
+	}
+	
+	const uidOf = li => ((li.querySelector('a.user.name') || { getAttribute: () => '' }).getAttribute('href') || '').match(/XID=(\d+)/)?.[1] || '';
+	// the players you can see, in the order they are shown, who were not mailed yet, are not marked as contacted (F) or useless (U), and are not hidden leaders
+	function candidates() {
+		const wrap = document.querySelector('.userlist-wrapper');
+		if (!wrap) return [];
+		const mailed = mailedMap();
+		return [...wrap.querySelectorAll('li[class*="user"]')]
+			.filter(li => !li.classList.contains('cl-fac-leader') && !li.classList.contains('tt-hidden') && li.style.display !== 'none' && li.offsetParent !== null)
+			.sort((a, b) => (Number(a.style.order) || 0) - (Number(b.style.order) || 0))
+			.map(li => ({ li, uid: uidOf(li) }))
+			.filter(c => c.uid && !mailed[c.uid] && !((CRM[c.uid] && CRM[c.uid].F) > 0) && !(CRM[c.uid] && CRM[c.uid].U === 1));
+	}
+	
+	function massBarPass() {
+		if (!window.location.href.includes('sid=UserList')) return;
+		const wrap = document.querySelector('.userlist-wrapper');
+		if (!wrap) return;
+		wrap.querySelectorAll('li[class*="user"]').forEach(li => { if (!li.dataset.clUid) { const u = uidOf(li); if (u) li.dataset.clUid = u; } });
+		let bar = document.getElementById('cl-mass-bar');
+		if (!bar) {
+			bar = document.createElement('div'); bar.id = 'cl-mass-bar'; bar.className = 'cl-fac-bar';
+			const btn = document.createElement('button'); btn.type = 'button'; btn.id = 'cl-mass-btn'; btn.className = 'on';
+			const lab = document.createElement('label'); lab.style.cssText = 'display:inline-flex;gap:5px;align-items:center;';
+			const num = document.createElement('input'); num.type = 'number'; num.min = '1'; num.max = '25'; num.value = String(load('RecruiterMassCount', 10)); num.style.cssText = 'width:52px;background:#111;border:1px solid #444;color:#ccc;border-radius:4px;padding:2px 4px;';
+			num.onchange = () => { save('RecruiterMassCount', Math.max(1, Math.min(25, parseInt(num.value, 10) || 10))); massBarPass(); };
+			lab.append(document.createTextNode('per click'), num);
+			const info = document.createElement('span'); info.id = 'cl-mass-info'; info.style.color = '#999';
+			btn.onclick = () => {
+				const n = Math.max(1, Math.min(25, parseInt(num.value, 10) || 10)), list = candidates().slice(0, n);
+				if (!list.length) return;
+				// a short pause between the tabs: ten pages at the very same moment is heavy for the browser and for Torn
+				list.forEach((c, i) => setTimeout(() => { openMail(c.uid, { background: true }); massBarPass(); }, i * 450));
+			};
+			bar.append(btn, lab, info);
+			wrap.parentElement.insertBefore(bar, document.getElementById('cl-fac-bar') || wrap);
+		}
+		const n = Math.max(1, Math.min(25, parseInt(bar.querySelector('input').value, 10) || 10)), left = candidates().length;
+		bar.querySelector('#cl-mass-btn').textContent = `✉ Mail the next ${Math.min(n, left)} visible players`;
+		bar.querySelector('#cl-mass-btn').disabled = !left;
+		bar.querySelector('#cl-mass-info').textContent = `${left} visible player${left === 1 ? '' : 's'} not mailed yet (players marked F or U and leaders are skipped). Each opens in its own tab with your message filled in: read it and press Send.`;
+		// the icon of a player you already opened a mail for stays green
+		const mailed = mailedMap();
+		wrap.querySelectorAll('li[data-cl-uid] .cl-mail-icon').forEach(i => { const u = i.closest('li').dataset.clUid; if (mailed[u]) { i.style.color = '#51cf66'; i.title = 'A mail was opened for this player (kept 14 days)'; } });
+	}
+
 	// ── Pending message auto-fill (messages.php compose) ─────────────────────────
 	function injectPendingMessage() {
 		if (!window.location.href.includes('messages.php')) return;
 
+		// every player has a draft of their own (many mail tabs can be open at the same time); the old single draft is still read
+		const toUid = (window.location.href.match(/XID=([0-9]+)/) || [])[1];
+		const DRAFT = toUid && GM_getValue('cl_pending_msg_' + toUid, null) ? 'cl_pending_msg_' + toUid : 'cl_pending_msg';
 		let pending;
-		try { pending = JSON.parse(GM_getValue('cl_pending_msg', null)); } catch { return; }
-		if (!pending || Date.now() - pending.ts > 60000) { GM_setValue('cl_pending_msg', null); return; }
+		try { pending = JSON.parse(GM_getValue(DRAFT, null)); } catch { return; }
+		if (!pending || Date.now() - pending.ts > 15 * 60 * 1000) { GM_setValue(DRAFT, null); return; }
 
 		function reactSet(el, val) {
 			const nativeSetter = Object.getOwnPropertyDescriptor(
@@ -2739,7 +2853,7 @@ function setUselessRow(btn, uid) {
 			el.dispatchEvent(new Event('change', { bubbles: true }));
 		}
 
-		let subjectDone = false;
+		let subjectDone = false, tries = 0;
 		const tryInject = () => {
 			if (!subjectDone) {
 				const subjectInput = document.querySelector(
@@ -2758,14 +2872,17 @@ function setUselessRow(btn, uid) {
 				allTextareas.find(t => t.rows > 2) ||
 				document.querySelector('div[contenteditable="true"]');
 			if (!bodyField) return false;
-			if (bodyField.tagName === 'TEXTAREA' || bodyField.tagName === 'INPUT') reactSet(bodyField, pending.body);
-			else { bodyField.focus(); document.execCommand('selectAll', false, null); document.execCommand('insertText', false, pending.body); }
-			GM_setValue('cl_pending_msg', null);
+			// {name} is the name in the recipient field of the mail page (it is filled a moment after the page loads)
+			const toName = ((document.querySelector('input[name="sendto"]') || {}).value || '').replace(/ *\[[0-9]+\] *$/, '').trim();
+			if (/\{name\}/.test(pending.body) && !toName && tries < 20) return false;
+			const text = String(pending.body).replace(/\{name\}/g, toName || 'there');
+			if (bodyField.tagName === 'TEXTAREA' || bodyField.tagName === 'INPUT') reactSet(bodyField, text);
+			else { bodyField.focus(); document.execCommand('selectAll', false, null); document.execCommand('insertText', false, text); }
+			GM_setValue(DRAFT, null);
 			return true;
 		};
 		if (!tryInject()) {
-			let tries = 0;
-			const iv = setInterval(() => { if (tryInject() || ++tries > 30) clearInterval(iv); }, 400);
+			const iv = setInterval(() => { if (tryInject() || ++tries > 40) clearInterval(iv); }, 400);
 		}
 	}
 
@@ -2782,6 +2899,7 @@ function setUselessRow(btn, uid) {
 			document.querySelectorAll('.userlist-wrapper a[href*="XID="]').forEach(injectUserlistPill);
 			reapplyAllFilters();
 			factionPass();
+			massBarPass();
 		}
 		// Chat windows: Torn's chat lives in #chatRoot. A private chat window is a div whose id is the OTHER player's id (digits only; it used to be "private-A-B")
 		// and that holds a textarea once it is open. Group chats (faction, global) have other ids and are skipped.
