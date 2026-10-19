@@ -11,11 +11,12 @@ function recStatusHtml(s) {
     if (s.error) return `<div class="status err">${recEsc(s.error)}</div>`;
     const until = s.until ? new Date(s.until).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' }) : '';
     const state = s.paid
-        ? `<div style="color:var(--green,#51cf66);font-weight:700;">Active${s.owner ? ' (owner)' : until ? ` until ${until}` : ''}: all recruiting features are unlocked.</div>`
+        ? `<div style="color:var(--green,#51cf66);font-weight:700;">Active${s.owner ? ' (owner)' : s.free ? ` (free for a ${recEsc(s.free)})` : until ? ` until ${until}` : ''}: all recruiting features are unlocked.</div>`
         : `<div style="color:#ff8080;font-weight:700;">Not active yet: the F / C / S buttons are locked.</div>`;
-    const how = s.owner ? '' : `<div style="font-size:13px;color:var(--muted);margin-top:8px;line-height:1.6;">Price: <b>${recEsc(s.xanax)} Xanax = ${recEsc(s.days)} days</b>. Send <b>${recEsc(s.xanax)} Xanax</b> to <a href="https://www.torn.com/profiles.php?XID=${recEsc(s.ownerId)}" target="_blank" rel="noopener">CreaLotte [${recEsc(s.ownerId)}]</a> with exactly this message (your own, nothing added):
+    const how = s.owner || s.free ? '' : `<div style="font-size:13px;color:var(--muted);margin-top:8px;line-height:1.6;">Price: <b>${recEsc(s.xanax)} Xanax = ${recEsc(s.days)} days</b>. Send <b>${recEsc(s.xanax)} Xanax</b> to <a href="https://www.torn.com/profiles.php?XID=${recEsc(s.ownerId)}" target="_blank" rel="noopener">CreaLotte [${recEsc(s.ownerId)}]</a> with exactly this message (your own, nothing added):
         <div style="margin:6px 0;"><code id="rec-msg" style="background:var(--bg,#000);padding:3px 8px;border-radius:4px;">${recEsc(s.code)}</code> <a href="#" id="rec-copy" style="font-size:12px;">copy</a></div>
         Then press <b>Check my payment</b>: it looks at the Xanax received right away (if it still says not active, wait half a minute and press it again).</div>`;
+    if (s.owner || s.free) return `${state}`;
     return `${state}${how}<div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;"><button type="button" id="rec-check">Check my payment</button><span id="rec-check-msg" style="font-size:12px;color:var(--muted);"></span></div>`;
 }
 function recWire(s) {

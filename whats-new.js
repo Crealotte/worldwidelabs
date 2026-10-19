@@ -12,6 +12,15 @@
 
 const WHATS_NEW = [
     {
+        version: '1.32', date: '2026-10-19',
+        title: 'Recruiter script: free for directors and faction leaders',
+        everyone: [
+            'The Recruiter script is now free for the directors of the companies registered on WWL and for the leaders and co-leaders of the factions on the WWL list. Install it from the Recruiting menu: it recognises you by your Torn API key, nothing to pay or check.',
+            'New in the script: faction chips in the Advanced Search (faction respect and whether its leader has more battle stats than you, read from BSP), leaders hidden from the results, sorting by faction respect, and a mail button for players with chat off.',
+        ],
+        leaders: [],
+    },
+    {
         version: '1.31', date: '2026-10-18',
         title: 'Recruiting: the Recruiter script and its subscription on WWL',
         everyone: [
