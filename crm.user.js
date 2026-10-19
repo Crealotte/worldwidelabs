@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         CoreLabs Elite Recruiter v22.0
-// @version      24.2.0
+// @version      24.2.1
 // @updateURL    https://worldwidelabs.vercel.app/crm.user.js
 // @downloadURL  https://worldwidelabs.vercel.app/crm.user.js
 // @description  Test version Corelabs
@@ -2832,16 +2832,18 @@ function setUselessRow(btn, uid) {
 	}
 
 	// ── Pending message auto-fill (messages.php compose) ─────────────────────────
+	let mailFillBusy = false; // one fill at a time per page: the observer calls this on every change of the page
 	function injectPendingMessage() {
-		if (!window.location.href.includes('messages.php')) return;
-
+		if (!window.location.href.includes('messages.php') || mailFillBusy) return;
+	
 		// every player has a draft of their own (many mail tabs can be open at the same time); the old single draft is still read
 		const toUid = (window.location.href.match(/XID=([0-9]+)/) || [])[1];
 		const DRAFT = toUid && GM_getValue('cl_pending_msg_' + toUid, null) ? 'cl_pending_msg_' + toUid : 'cl_pending_msg';
 		let pending;
 		try { pending = JSON.parse(GM_getValue(DRAFT, null)); } catch { return; }
 		if (!pending || Date.now() - pending.ts > 15 * 60 * 1000) { GM_setValue(DRAFT, null); return; }
-
+		mailFillBusy = true;
+	
 		function reactSet(el, val) {
 			const nativeSetter = Object.getOwnPropertyDescriptor(
 				el.tagName === 'TEXTAREA' ? window.HTMLTextAreaElement.prototype : window.HTMLInputElement.prototype,
@@ -2852,9 +2854,11 @@ function setUselessRow(btn, uid) {
 			el.dispatchEvent(new Event('input',  { bubbles: true }));
 			el.dispatchEvent(new Event('change', { bubbles: true }));
 		}
-
+	
 		let subjectDone = false, tries = 0;
 		const tryInject = () => {
+			// A mail tab opened in the background is filled when you look at it: Torn builds its mail form late in a hidden tab and a hidden page cannot take typed text properly.
+			if (document.hidden) return false;
 			if (!subjectDone) {
 				const subjectInput = document.querySelector(
 					'input[name="subject"], input[placeholder*="ubject"], input[placeholder*="Subject"]'
@@ -2862,29 +2866,44 @@ function setUselessRow(btn, uid) {
 				if (subjectInput && pending.subject) { reactSet(subjectInput, pending.subject); subjectDone = true; }
 			}
 			if (pending.subject && !subjectDone) return false; // the subject first (the mail page builds its form a moment after loading)
-			const allTextareas = [...document.querySelectorAll('textarea')];
-			// Torn's mail editor is a rich-text box (a contenteditable div); the page also has a chat textarea that must not be filled in by mistake
+			// Torn's mail editor is a rich-text box (a contenteditable div). The same page has a chat textarea ("Type your message here...") that must NEVER be filled in instead:
+			// on the compose page only the real editor counts, and until it exists we wait.
+			const onCompose = /p=compose/.test(window.location.hash);
 			const bodyField =
 				document.querySelector('.mce-content-body[contenteditable="true"], .editor-content[contenteditable="true"]') ||
 				document.querySelector('textarea[name="body"]') ||
-				allTextareas.find(t => (t.placeholder || '').toLowerCase().includes('message')) ||
-				allTextareas.find(t => (t.placeholder || '').toLowerCase().includes('write')) ||
-				allTextareas.find(t => t.rows > 2) ||
-				document.querySelector('div[contenteditable="true"]');
+				(onCompose ? null :
+					[...document.querySelectorAll('textarea')].find(t => (t.placeholder || '').toLowerCase().includes('write')) ||
+					document.querySelector('div[contenteditable="true"]'));
 			if (!bodyField) return false;
 			// {name} is the name in the recipient field of the mail page (it is filled a moment after the page loads)
 			const toName = ((document.querySelector('input[name="sendto"]') || {}).value || '').replace(/ *\[[0-9]+\] *$/, '').trim();
 			if (/\{name\}/.test(pending.body) && !toName && tries < 20) return false;
 			const text = String(pending.body).replace(/\{name\}/g, toName || 'there');
-			if (bodyField.tagName === 'TEXTAREA' || bodyField.tagName === 'INPUT') reactSet(bodyField, text);
-			else { bodyField.focus(); document.execCommand('selectAll', false, null); document.execCommand('insertText', false, text); }
+			if (bodyField.tagName === 'TEXTAREA' || bodyField.tagName === 'INPUT') { reactSet(bodyField, text); GM_setValue(DRAFT, null); return true; }
+			bodyField.focus(); document.execCommand('selectAll', false, null); document.execCommand('insertText', false, text);
+			// check that the text really is in the editor; if the typing did not take, put the text in directly
+			const probe = text.replace(/\s+/g, ' ').slice(0, 25);
+			const has = () => (bodyField.innerText || '').replace(/\s+/g, ' ').includes(probe);
+			if (!has()) {
+				const esc = s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+				bodyField.innerHTML = text.split('\n').map(l => '<p>' + (esc(l) || '<br>') + '</p>').join('');
+				bodyField.dispatchEvent(new Event('input', { bubbles: true }));
+			}
+			if (!has()) return false; // not in yet: try again on the next round
 			GM_setValue(DRAFT, null);
 			return true;
 		};
-		if (!tryInject()) {
-			const iv = setInterval(() => { if (tryInject() || ++tries > 40) clearInterval(iv); }, 400);
-		}
+		const done = () => { mailFillBusy = false; };
+		if (tryInject()) { done(); return; }
+		// try again every second (and the moment the tab is shown) for up to 15 minutes
+		const stop = () => { clearInterval(iv); document.removeEventListener('visibilitychange', onShow); done(); };
+		const step = () => { if (!document.hidden) tries++; if (tryInject() || Date.now() - pending.ts > 15 * 60 * 1000) stop(); };
+		const onShow = () => { if (!document.hidden) step(); };
+		const iv = setInterval(step, 1000);
+		document.addEventListener('visibilitychange', onShow);
 	}
+	
 
 	// ── DOM pass ──────────────────────────────────────────────────────────────────
 	function runPass() {
