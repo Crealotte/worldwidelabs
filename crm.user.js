@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         CoreLabs Elite Recruiter v22.0
-// @version      24.2.1
+// @version      24.3.0
 // @updateURL    https://worldwidelabs.vercel.app/crm.user.js
 // @downloadURL  https://worldwidelabs.vercel.app/crm.user.js
 // @description  Test version Corelabs
@@ -120,6 +120,9 @@
 		.cl-note-input   { background:#111; border:1px solid #444; color:#ccc; width:100%; padding:6px; border-radius:4px; box-sizing:border-box; }
 		.cl-done-btn     { background:#2b5e2d; color:#fff; border:none; padding:6px 12px; cursor:pointer; border-radius:4px; font-weight:bold; }
 		.cl-player-link  { color:#37b3f9; text-decoration:none; font-weight:bold; }
+		/* --- a toggle that is saved (green ring) or not saved yet (red ring) --- */
+		.cl-crm-btn.cl-btn-saved { box-shadow:0 0 0 2px #51cf66; }
+		.cl-crm-btn.cl-btn-unsaved { box-shadow:0 0 0 2px #ff6b6b; }
 		/* --- factions: search chips, bar, reviewed boxes, leader flags --- */
 		.cl-fac-bar { display:flex; gap:12px; flex-wrap:wrap; align-items:center; background:#1a1a1a; border:1px solid #333; border-radius:6px; padding:6px 10px; margin:6px 0; font-size:12px; color:#ccc; }
 		.cl-fac-bar button { background:#2a2a2a; border:1px solid #383838; color:#ccc; border-radius:4px; padding:4px 10px; font-size:11px; cursor:pointer; }
@@ -329,7 +332,21 @@
 	function pushTask(task)    { _tasks.push(task); }
 
 	// saveCRM is kept for legacy callers (notes, company, name patches) — writes to GM only
-	function saveCRM()   { save(STORE.CRM,   CRM);    }
+	// The saved copy on this computer is shared by every Torn tab (also the mail tabs of the batch button). A tab never writes its own, possibly older, picture over it:
+	// each player is merged by the time of the last change, so a toggle made in another tab is kept. pullCRM takes what other tabs saved into this tab.
+	const crmAt = s => (s && s.updatedAt ? Date.parse(s.updatedAt) || 0 : 0);
+	function saveCRM() {
+		const stored = load(STORE.CRM, {});
+		for (const uid of Object.keys(CRM)) if (!stored[uid] || crmAt(CRM[uid]) >= crmAt(stored[uid])) stored[uid] = CRM[uid];
+		save(STORE.CRM, stored);
+	}
+	function forgetCRM(uid) { const stored = load(STORE.CRM, {}); delete stored[uid]; save(STORE.CRM, stored); }
+	function pullCRM() {
+		const stored = load(STORE.CRM, {}), changed = [];
+		for (const uid of Object.keys(stored)) if (!CRM[uid] || crmAt(stored[uid]) > crmAt(CRM[uid])) { CRM[uid] = stored[uid]; changed.push(uid); }
+		return changed;
+	}
+
 	function saveCache() { save(STORE.CACHE, CACHE);  }
 	function saveTasks() { save(STORE.TASKS, _tasks); }
 
@@ -446,6 +463,48 @@
 	 * Called on every F/C/U button click.
 	 * Fields: recruiter_id, target_id, f, c, u, name, notes, company, updated_at
 	 */
+	// A small sign on the F / C / S / U buttons of a player: green for a moment when the server has the toggle, red while it is not saved yet (it is sent again by itself).
+	function markSaved(uid, ok) {
+		document.querySelectorAll(`[data-cl-uid="${uid}"] .cl-crm-btn`).forEach(b => {
+			b.classList.remove('cl-btn-saved', 'cl-btn-unsaved');
+			if (ok) { b.classList.add('cl-btn-saved'); setTimeout(() => b.classList.remove('cl-btn-saved'), 1400); b.title = (b.title || '').replace(/ \(not saved yet\)$/, ''); }
+			else { b.classList.add('cl-btn-unsaved'); if (!/not saved yet/.test(b.title || '')) b.title = (b.title || '') + ' (not saved yet)'; }
+		});
+	}
+	
+	// Compares the F / C / S / U buttons of this computer with the server (everything of this recruiter, downloaded once).
+	// A yellow F that is older than 30 days is grey here on purpose (it faded): it is listed as faded, not as a difference.
+	async function verifyToggles() {
+		const r = await wwl('rec-load', { since: 0 });
+		if (!r || r.error || !Array.isArray(r.rows)) return { error: (r && r.error) || 'The server did not answer.' };
+		const server = {}; r.rows.forEach(x => { server[String(x.id)] = x; });
+		const limit = Date.now() - 30 * 24 * 60 * 60 * 1000, diffs = [];
+		let checked = 0;
+		for (const uid of new Set([...Object.keys(CRM), ...Object.keys(server)])) {
+			const l = CRM[uid], s = server[uid];
+			const lv = l ? [l.F || 0, l.C || 0, l.S || 0, l.U || 0] : null, sv = s ? [s.f || 0, s.c || 0, s.s || 0, s.u || 0] : null;
+			if ((!lv || !lv.some(Boolean)) && (!sv || !sv.some(Boolean))) continue;   // nothing toggled on either side
+			checked++;
+			if (lv && sv && lv.join() === sv.join()) continue;
+			const faded = !!(lv && sv && sv[0] === 1 && lv[0] === 0 && s.at && s.at < limit && lv.slice(1).join() === sv.slice(1).join());
+			diffs.push({ uid, name: (l && l.name) || (s && s.name) || '', local: lv, server: sv, faded, serverAt: s ? s.at : 0 });
+		}
+		return { checked, diffs };
+	}
+	// mode 'server': this computer takes what the server has; mode 'local': this computer's toggles are sent to the server
+	function applyToggleCheck(mode, diffs) {
+		let n = 0;
+		for (const d of diffs) {
+			if (d.faded) continue;
+			if (mode === 'server' && d.server) { CRM[d.uid] = { ...(CRM[d.uid] || {}), F: d.server[0], C: d.server[1], S: d.server[2], U: d.server[3], updatedAt: d.serverAt ? new Date(d.serverAt).toISOString() : ((CRM[d.uid] && CRM[d.uid].updatedAt) || null) }; n++; }
+			if (mode === 'local' && d.local) { if (!CRM[d.uid]) CRM[d.uid] = {}; upsertCRMState(d.uid); n++; }
+		}
+		saveCRM();
+		document.dispatchEvent(new CustomEvent('cl-refresh-crm'));
+		return n;
+	}
+	
+
 	// Changes are collected for a moment and sent together (a click, a note, a name: one request for all of them).
 	const CRM_BUF = new Map();
 	const PENDING = load('RecruiterCrmPending', {}); // changes the server has not confirmed yet: kept across reloads, and never overwritten by an older copy from the server
@@ -457,6 +516,7 @@
 		const saved = await wwl('rec-save', { rows });
 		if (!saved || saved.error) {
 			console.warn('[CoreLabs] CRM state NOT saved to the server' + (saved && /subscription/i.test(saved.error || '') ? '' : ' (will try again)') + ':', saved ? saved.error : 'no answer');
+			rows.forEach(r => markSaved(r.id, false));
 			if (saved && /subscription/i.test(saved.error || '')) return;   // no subscription: nothing to retry, the changes stay marked as pending
 			rows.forEach(r => { if (!CRM_BUF.has(String(r.id))) CRM_BUF.set(String(r.id), r); });
 			clearTimeout(crmTimer); crmTimer = setTimeout(flushCRM, 20000);
@@ -464,6 +524,7 @@
 		}
 		rows.forEach(r => { if (!CRM_BUF.has(String(r.id))) delete PENDING[String(r.id)]; });
 		save('RecruiterCrmPending', PENDING);
+		rows.forEach(r => markSaved(r.id, true));
 	}
 	window.addEventListener('pagehide', flushCRM);
 	async function upsertCRMState(uid) {
@@ -625,6 +686,7 @@
 	}
 	
 	async function deleteCRMState(uid) {
+		forgetCRM(uid);
 		await wwl('rec-del', { ids: [parseInt(uid)] });
 	}
 	
@@ -1874,6 +1936,42 @@ function setUselessRow(btn, uid) {
 				};
 				subBox.appendChild(refreshBtn);
 				configContent.append(subBox);
+
+				// ── Check the saved toggles: this computer against the server ──
+				{
+					const box = document.createElement('div');
+					box.style.cssText = 'margin-top:14px;padding:14px;border-radius:6px;border:1px solid #2c2c2c;background:#111;';
+					box.innerHTML = '<div style="font-size:10px;color:#555;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px;">Check my toggles (F / C / S / U)</div>';
+					const note = document.createElement('div');
+					note.style.cssText = 'font-size:11px;color:#999;line-height:1.6;margin-bottom:8px;';
+					note.textContent = 'Compares the buttons you toggled on this computer with what the server has saved. A yellow F older than 30 days is grey on purpose and is not counted as a difference. After every toggle the button shows a green ring when the server has it, and a red ring while it is not saved yet.';
+					const runBtn = document.createElement('button');
+					runBtn.textContent = 'Check now';
+					runBtn.style.cssText = 'background:#1a1a1a;border:1px solid #333;color:#aaa;padding:5px 12px;border-radius:4px;font-size:11px;cursor:pointer;';
+					const out = document.createElement('div');
+					out.style.cssText = 'font-size:11px;color:#bbb;line-height:1.7;margin-top:8px;';
+					const f4 = v => v ? `F${v[0]} C${v[1]} S${v[2]} U${v[3]}` : 'nothing';
+					runBtn.onclick = async () => {
+						runBtn.textContent = 'Checking…'; runBtn.disabled = true; out.textContent = '';
+						const r = await verifyToggles();
+						runBtn.textContent = 'Check now'; runBtn.disabled = false;
+						if (r.error) { out.style.color = '#ff8080'; out.textContent = r.error; return; }
+						const real = r.diffs.filter(d => !d.faded), faded = r.diffs.length - real.length;
+						out.style.color = real.length ? '#ffd43b' : '#51cf66';
+						const head = document.createElement('div');
+						head.textContent = (real.length ? `${real.length} player${real.length === 1 ? '' : 's'} differ between this computer and the server.` : `All ${r.checked} toggled players match the server.`) + (faded ? ` ${faded} yellow F faded after 30 days.` : '');
+						out.appendChild(head);
+						real.slice(0, 25).forEach(d => { const line = document.createElement('div'); line.textContent = `${d.name || 'ID ' + d.uid} [${d.uid}]: here ${f4(d.local)}, server ${f4(d.server)}`; out.appendChild(line); });
+						if (real.length > 25) { const more = document.createElement('div'); more.textContent = `…and ${real.length - 25} more`; out.appendChild(more); }
+						if (real.length) {
+							const mk = (label, mode) => { const b = document.createElement('button'); b.textContent = label; b.style.cssText = 'margin:8px 8px 0 0;background:#1a3a1a;border:1px solid #2f9e44;color:#51cf66;padding:5px 12px;border-radius:4px;font-size:11px;cursor:pointer;'; b.onclick = () => { const n = applyToggleCheck(mode, real); out.textContent = mode === 'server' ? `${n} player${n === 1 ? '' : 's'} now show what the server has.` : `${n} player${n === 1 ? '' : 's'} sent to the server.`; }; return b; };
+							out.append(mk('Use what the server has', 'server'), mk('Send mine to the server', 'local'));
+						}
+					};
+					box.append(note, runBtn, out);
+					configContent.append(box);
+				}
+
 			}
 		}
 
@@ -2460,6 +2558,8 @@ function setUselessRow(btn, uid) {
 	// Dashboard "refresh status" dispatches this after a user unlocks, so buttons
 	// re-render across the page without a reload.
 	document.addEventListener('cl-refresh-crm', () => { refreshAllCRMGroups(); runPass(); });
+	// A toggle made in another Torn tab shows up here as soon as this tab is looked at again (and is never overwritten by this tab's older picture)
+	document.addEventListener('visibilitychange', () => { if (!document.hidden && pullCRM().length) { refreshAllCRMGroups(); runPass(); } });
 
 	injectStyles();
 	migrateTemplates();
