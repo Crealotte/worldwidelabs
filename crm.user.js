@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         CoreLabs Elite Recruiter v22.0
-// @version      24.4.0
+// @version      24.5.0
 // @updateURL    https://worldwidelabs.vercel.app/crm.user.js
 // @downloadURL  https://worldwidelabs.vercel.app/crm.user.js
 // @description  Test version Corelabs
@@ -322,7 +322,7 @@
 		let removed = 0;
 		for (const uid of Object.keys(CACHE)) {
 			const d = CACHE[uid]?.data;
-			if (d && !d.xan && !d.act && !d.streak) { delete CACHE[uid]; removed++; }
+			if (d && !CACHE[uid].ok && !d.xan && !d.act && !d.streak) { delete CACHE[uid]; removed++; } // entries of an older version only; a player read properly with zeros stays
 		}
 		if (removed) { save(STORE.CACHE, CACHE); console.log(`[CoreLabs] Purged ${removed} stale 0-stat cache entries`); }
 	})();
@@ -881,8 +881,8 @@
 	// to be non-null so a name-only row doesn't mask a needed Torn fetch.
 	function seedSharedStat(p) {
 		if (!p || p.id == null) return;
-		// a row without real numbers must not hide a needed Torn fetch
-		if (!p.xan && !p.act && !p.ws && !p.streak) return;
+		// a row the server has is a player that was read properly, also when all his numbers are zero
+		if (!p.ts) return;
 		SHARED_STATS[String(p.id)] = {
 			ts: Number(p.ts) || 0,
 			data: {
@@ -1359,11 +1359,13 @@ function setUselessRow(btn, uid) {
 	// ── Torn's limit: about 100 calls a minute for everything together ────────────
 	// Every call to Torn waits for its turn here (a little under that limit), so it is never refused for asking too fast: a refusal made the old way wait 4, 8, 12... seconds per player.
 	// When Torn does say "too many requests" the pause grows for a while and shrinks again after a run of good answers.
-	let tornGap = 700, tornNext = 0, tornCalm = 0;
+	let tornGap = 650, tornNext = 0, tornCalm = 0;
+	const tornLog = []; // the times of the calls of the last minute
 	function tornSlot() { const now = Date.now(), at = Math.max(now, tornNext); tornNext = at + tornGap; return new Promise(r => setTimeout(r, at - now)); }
 	function tornBusy() { tornGap = Math.min(3000, Math.round(tornGap * 1.5)); tornCalm = 0; }
-	function tornGood() { if (++tornCalm >= 20 && tornGap > 700) { tornGap = Math.max(700, Math.round(tornGap / 1.2)); tornCalm = 0; } }
-	async function tornGet(url) { await tornSlot(); return gmFetch(url); }
+	function tornGood() { if (++tornCalm >= 20 && tornGap > 650) { tornGap = Math.max(650, Math.round(tornGap / 1.2)); tornCalm = 0; } }
+	function tornStatus() { const cut = Date.now() - 60000; while (tornLog.length && tornLog[0] < cut) tornLog.shift(); return { perMin: tornLog.length, combined: hofCombined, waiting: _queue.length }; }
+	async function tornGet(url) { await tornSlot(); tornLog.push(Date.now()); return gmFetch(url); }
 	
 	// The saved copies on this computer (the stats of players, the CRM) are big: they are written once, a moment after the last change, not after every single player.
 	let cacheTimer = null, crmSaveTimer = null;
@@ -1410,6 +1412,8 @@ function setUselessRow(btn, uid) {
 	function enqueueFetch(uid, pill, attempt = 0) {
 		const job = async () => {
 			if (!pill.isConnected) return;            // pill gone (navigated away) — drop
+			const liRow = pill.closest('li[class*="user"]');
+			if (liRow && rowHidden(liRow)) { watchRow(uid, pill, liRow); return; } // hidden by a filter: not fetched now, watched
 			const ok = await fetchAndRender(uid, pill);
 			if (!ok && attempt < MAX_RETRIES && pill.isConnected) {
 				const delay = RETRY_BASE_MS * (attempt + 1); // 4s, 8s, 12s, …
@@ -1460,33 +1464,30 @@ function setUselessRow(btn, uid) {
 			// a fresh shared entry available.
 			const stillLoading = valEl && valEl.textContent === '…';
 			const shared = SHARED_STATS[uid];
-			const sharedFresh = shared && shared.ts && (Date.now() - shared.ts < SHARED_TTL)
-				&& (shared.data.xan || shared.data.act || shared.data.streak || shared.data.ws);
+			const sharedFresh = shared && shared.ts && (Date.now() - shared.ts < SHARED_TTL);
 			if (stillLoading && sharedFresh) {
 				console.log(`%c[CoreLabs] ${uid} ${shared.data.name || ''} → SUPABASE shared cache (seeded, no Torn call)`, 'color:#74c0fc');
-				CACHE[uid] = { ts: shared.ts, data: shared.data };
+				CACHE[uid] = { ts: shared.ts, data: shared.data, ok: true };
 				saveCacheSoon();
 				updatePill(pill, shared.data);
 			}
 		});
 	}
 
-	// Only the players that are really shown get their stats fetched. Torn's own filters hide rows a moment after they are drawn, so the check waits a little;
-	// a row that is hidden is watched and fetched when it comes back. (Other places, like a chat or a profile, fetch straight away.)
+	// A player is only fetched when his row is really shown. Torn's own filters hide rows a moment after they are drawn: the check is made when it is his turn (not after a fixed wait),
+	// and a hidden row is watched and fetched when it comes back. (Other places, like a chat or a profile, fetch straight away.)
 	const rowHidden = li => !li || li.classList.contains('tt-hidden') || li.style.display === 'none' || li.offsetParent === null;
-	function fetchWhenVisible(uid, pill) {
-		if (!pill.closest('li[class*="user"]')) { enqueueFetch(uid, pill); return; }
-		setTimeout(() => {
-			if (!pill.isConnected) return;
-			const li = pill.closest('li[class*="user"]');
-			if (!rowHidden(li)) { enqueueFetch(uid, pill); return; }
-			const mo = new MutationObserver(() => {
-				if (!pill.isConnected) { mo.disconnect(); return; }
-				if (!rowHidden(li)) { mo.disconnect(); enqueueFetch(uid, pill); }
-			});
-			mo.observe(li, { attributes: true, attributeFilter: ['class', 'style'] });
-		}, 1500);
+	function watchRow(uid, pill, li) {
+		const mo = new MutationObserver(() => {
+			if (!pill.isConnected) { mo.disconnect(); return; }
+			if (!rowHidden(li)) { mo.disconnect(); enqueueFetch(uid, pill); }
+		});
+		mo.observe(li, { attributes: true, attributeFilter: ['class', 'style'] });
 	}
+	function fetchWhenVisible(uid, pill) {
+		enqueueFetch(uid, pill);
+	}
+
 
 	function ensurePill(uid, container) {
 		let pill = container.querySelector('.cl-pill');
@@ -1504,7 +1505,7 @@ function setUselessRow(btn, uid) {
 		// AND 0 streak is vanishingly rare. Treat such entries as stale → re-fetch,
 		// so frozen-zero rows self-heal instead of sticking for 72h. ws is ignored in
 		// this test on purpose (it loads independently).
-		const looksStale = entry && !entry.data.xan && !entry.data.act && !entry.data.streak;
+		const looksStale = entry && !entry.ok && !entry.data.xan && !entry.data.act && !entry.data.streak; // an entry of an older version with only zeros is read once more; a player read properly with zeros is known
 		if (entry && Date.now() - entry.ts < CFG.CACHE_TTL && !looksStale) {
 			const ageH = Math.round((Date.now() - entry.ts) / 3600000);
 			console.log(`%c[CoreLabs] ${uid} ${entry.data.name || ''} → LOCAL cache (${ageH}h old)`, 'color:#51cf66');
@@ -1517,12 +1518,11 @@ function setUselessRow(btn, uid) {
 		// "…". This is what pools everyone's API budget. Also mirror it into the
 		// local cache so subsequent renders this session are instant.
 		const shared = SHARED_STATS[uid];
-		const sharedFresh = shared && shared.ts && (Date.now() - shared.ts < SHARED_TTL)
-			&& (shared.data.xan || shared.data.act || shared.data.streak || shared.data.ws);
+		const sharedFresh = shared && shared.ts && (Date.now() - shared.ts < SHARED_TTL);
 		if (sharedFresh) {
 			const ageH = Math.round((Date.now() - shared.ts) / 3600000);
 			console.log(`%c[CoreLabs] ${uid} ${shared.data.name || ''} → SUPABASE shared cache (${ageH}h old, no Torn call)`, 'color:#74c0fc');
-			CACHE[uid] = { ts: shared.ts, data: shared.data };
+			CACHE[uid] = { ts: shared.ts, data: shared.data, ok: true };
 			saveCacheSoon();
 			updatePill(pill, shared.data);
 			return;
@@ -1591,7 +1591,7 @@ function setUselessRow(btn, uid) {
 				streak: d.personalstats?.activestreak || 0,
 				name:   CRM[uid]?.name || stripFaction(d.name || '') || null,
 			};
-			CACHE[uid] = { ts: Date.now(), data };
+			CACHE[uid] = { ts: Date.now(), data, ok: true };
 			saveCacheSoon();
 			updatePill(pill, data);
 	
@@ -2951,7 +2951,10 @@ function setUselessRow(btn, uid) {
 				// a short pause between the tabs: ten pages at the very same moment is heavy for the browser and for Torn
 				list.forEach((c, i) => setTimeout(() => { openMail(c.uid, { background: true }); massBarPass(); }, i * 450));
 			};
-			bar.append(btn, lab, info);
+			const tinfo = document.createElement('span'); tinfo.id = 'cl-torn-info'; tinfo.style.cssText = 'color:#777;font-size:11px;';
+			const tText = () => { const s = tornStatus(); return `Torn: ${s.perMin} calls in the last minute, ${s.combined ? '1 call' : '2 calls'} per new player, ${s.waiting} waiting`; };
+			tinfo.textContent = tText(); setInterval(() => { const el = document.getElementById('cl-torn-info'); if (el) el.textContent = tText(); }, 1500);
+			bar.append(btn, lab, info, tinfo);
 			wrap.parentElement.insertBefore(bar, document.getElementById('cl-fac-bar') || wrap);
 		}
 		const n = Math.max(1, Math.min(25, parseInt(bar.querySelector('input').value, 10) || 10)), left = candidates().length;
