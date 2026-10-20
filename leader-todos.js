@@ -14,11 +14,11 @@ async function loadLeaderTodos() {
 }
 
 // ---- Friendly reminders for members who are not on WWL yet or did not install the script: the same layout as the other to dos, a message to copy for each member ----
-// The message is the leader's own (kept in this browser); {name} becomes the member's name. A member whose message was copied shows "reminded <date>" so nobody is nagged twice.
+// The message is the leader's own (kept in this browser); The default text has no name in it, so it can be pasted as it is (a {name} in your own text still becomes the member's name). A member whose message was copied shows "reminded <date>" so nobody is nagged twice.
 const LT_INVITE_OPEN = {};
 const ltInviteDefault = kind => kind === 'script'
-    ? `Hey {name}, I have noticed you have not installed the WWL script yet (${location.origin}/worldwidelabs.user.js). Please install it: it shows your to do list and energy plan right inside Torn. You need Tampermonkey on a computer, or add it as a script in TornPDA. Shout if you get stuck!`
-    : `Hey {name}, I have noticed you have not logged into WWL yet (${location.origin}), please join with a limited API key. It takes a minute and gives you your energy plan, welcome chapters and more. Shout if you need help!`;
+    ? `Hey, I have noticed you have not installed the WWL script yet (${location.origin}/worldwidelabs.user.js). Please install it: it shows your to do list and energy plan right inside Torn. You need Tampermonkey on a computer, or add it as a script in TornPDA. Shout if you get stuck!`
+    : `Hey, I have noticed you have not logged into WWL yet (${location.origin}), please join with a limited API key. It takes a minute and gives you your energy plan, welcome chapters and more. Shout if you need help!`;
 const ltInviteMsg = kind => { try { return localStorage.getItem(`wwl_invite_msg_${kind}`) || ltInviteDefault(kind); } catch (e) { return ltInviteDefault(kind); } };
 const ltRemindedAt = (kind, id) => { try { return Number(localStorage.getItem(`wwl_invited_${kind}_${id}`)) || 0; } catch (e) { return 0; } };
 function ltInviteHtml(t) {
@@ -27,7 +27,7 @@ function ltInviteHtml(t) {
         <button type="button" class="ghost small lt-inv-copy" data-kind="${kind}" data-id="${esc(m.id)}" data-name="${esc(m.name)}" style="padding:4px 10px;">Copy message</button>
         <a href="https://www.torn.com/profiles.php?XID=${esc(m.id)}" target="_blank" rel="noopener" class="ghost small" style="padding:4px 10px;border:1px solid var(--line);border-radius:var(--radius);text-decoration:none;color:var(--muted);">Profile</a></div>`; }).join('');
     return `<details class="lt-inv" data-kind="${kind}" ${LT_INVITE_OPEN[kind] ? 'open' : ''} style="padding:8px 0;"><summary class="av-sum" style="cursor:pointer;font-size:14px;list-style:none;"><b>👋 ${t.members.length} member${t.members.length === 1 ? '' : 's'} ${title}</b> <span style="color:var(--muted);font-size:12px;">(click to see who, with a friendly message to copy)</span></summary>
-        <div style="padding:8px 0 4px 12px;"><div style="font-size:11px;color:var(--muted);margin-bottom:4px;">Your message (use {name} for their name):</div>
+        <div style="padding:8px 0 4px 12px;"><div style="font-size:11px;color:var(--muted);margin-bottom:4px;">Your message (this exact text is copied):</div>
             <textarea class="lt-inv-msg" data-kind="${kind}" rows="3" style="width:100%;box-sizing:border-box;font-size:12px;">${esc(ltInviteMsg(kind))}</textarea>
             <div style="margin:4px 0 6px;"><button type="button" class="ghost small lt-inv-save" data-kind="${kind}" style="padding:3px 10px;">Save message</button> <button type="button" class="ghost small lt-inv-reset" data-kind="${kind}" style="padding:3px 10px;">Use the standard message</button> <span class="lt-inv-note" style="font-size:11px;color:var(--muted);"></span></div></div>
         ${rows}</details>`;
