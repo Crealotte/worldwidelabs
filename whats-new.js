@@ -20,6 +20,7 @@ const WHATS_NEW = [
         leaders: [
             'The leader to-do card on the dashboard has two new items: members who have not logged into WWL yet, and members who are on WWL but did not install the script. Each opens up to a list with a friendly message to copy for every member (edit the message once, it is kept in your browser) and shows when you reminded them.',
             'All the leader to dos now also show in the To do list of the script in Torn, the same ones as on the dashboard. You do not need to update the script for this.',
+            'Availability plans can now be edited after creating them: the new Edit this plan button changes the name, the start date and the number of days. Moving the start date keeps every tick at the same real hour (you are asked first if some ticks would fall outside the new dates).',
             'Feedback: in the form editor there is a Close the form button. The form and all answers stay, nobody can fill it in any more, and it stops asking people in the to do lists. You can reopen it at any time.',
         ],
     },

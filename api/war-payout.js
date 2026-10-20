@@ -2222,11 +2222,23 @@ Cancel: ${cancelUrl}`, [], embeds, undefined, true);
             if (!data) return res.status(400).json({ error: 'There is no plan to change — create one first.' });
             const days = Math.min(14, Math.max(1, Math.round(Number(req.body.days)) || data.days));
             const startDate = /^\d{4}-\d{2}-\d{2}$/.test(req.body.startDate) ? req.body.startDate : data.startDate;
+            // Moving the start date: the ticks count their day from the start date, so every tick is moved along and keeps its real hour. A tick that would fall outside the 14 days
+            // of the grid is dropped, and that is only done when the leader confirmed it (force).
+            if (startDate !== data.startDate) {
+                const shift = Math.round((Date.parse(`${data.startDate}T00:00:00Z`) - Date.parse(`${startDate}T00:00:00Z`)) / 86400000);
+                let dropped = 0;
+                const remap = obj => { const out = {}; for (const [k, v] of Object.entries(obj || {})) { const [d, h] = String(k).split('-').map(Number), nd = d + shift; if (!Number.isFinite(nd) || nd < 0 || nd > 13) { dropped++; continue; } out[`${nd}-${h}`] = v; } return out; };
+                const moved = {};
+                for (const [pid, e] of Object.entries(data.entries || {})) moved[pid] = { ...e, slots: remap(e.slots), ...(e.watch ? { watch: remap(e.watch) } : {}) };
+                if (dropped && !req.body.force) return res.status(409).json({ error: `${dropped} tick${dropped === 1 ? '' : 's'} would fall outside the new dates.`, needsConfirm: true, dropped });
+                data.entries = moved;
+            }
+            if (typeof req.body.name === 'string') data.name = req.body.name.trim().slice(0, 40);
             data.days = days; data.startDate = startDate;
             await redis(['SET', availabilityKey(factionId, planId), JSON.stringify(data)]);
             const meta = plans.find(p => p.id === planId);
-            if (meta) { meta.days = days; meta.startDate = startDate; await redis(['SET', availabilityIndexKey(factionId), JSON.stringify(plans)]); }
-            return res.status(200).json({ ok: true, days, startDate });
+            if (meta) { meta.days = days; meta.startDate = startDate; if (typeof req.body.name === 'string') meta.name = data.name; await redis(['SET', availabilityIndexKey(factionId), JSON.stringify(plans)]); }
+            return res.status(200).json({ ok: true, days, startDate, name: data.name || '' });
         }
 
         if (action === 'availability-delete') {

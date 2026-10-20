@@ -426,19 +426,33 @@ $('av-archived-back').addEventListener('click', () => {
     loadAvailability();
 });
 
-$('av-plan-resize-l').addEventListener('click', async () => {
+// Edit this plan: name, start date and the number of days (the old button only asked for the days)
+$('av-plan-resize-l').addEventListener('click', () => {
     const p = avPlans.find(x => x.id === avPlanId);
     if (!p) return;
-    const v = prompt(`How many days should "${avPlanLabel(p)}" show? (1-14)\n\nMembers already on later days keep their ticks even if you shrink it — they just stop showing until you grow it again.`, String(p.days || avConfig?.days || 5));
-    if (v === null) return;
-    const days = Math.min(14, Math.max(1, Math.round(Number(v)) || 0));
-    if (!days) { toast('Enter a number between 1 and 14.'); return; }
+    const box = $('av-plan-edit-l');
+    if (box.style.display === 'block') { box.style.display = 'none'; return; }
+    $('av-edit-name').value = p.name || '';
+    $('av-edit-start').value = p.startDate || '';
+    $('av-edit-days').value = String(p.days || avConfig?.days || 5);
+    box.style.display = 'block';
+});
+$('av-edit-cancel').addEventListener('click', () => { $('av-plan-edit-l').style.display = 'none'; });
+$('av-edit-save').addEventListener('click', async () => {
+    const startDate = $('av-edit-start').value, days = Math.min(14, Math.max(1, Math.round(Number($('av-edit-days').value)) || 0));
+    if (!startDate) { toast('Pick a start date.'); return; }
+    if (!Number($('av-edit-days').value)) { toast('Enter a number of days between 1 and 14.'); return; }
+    const btn = $('av-edit-save'); btn.disabled = true;
     try {
-        const r = await avFetch({ action: 'availability-resize', days });
+        const body = { action: 'availability-resize', name: $('av-edit-name').value.trim(), startDate, days };
+        let r = await avFetch(body);
+        if (r.needsConfirm && confirm(`${r.error} Move the plan anyway? Those ticks are removed.`)) r = await avFetch({ ...body, force: true });
         if (r.error) throw new Error(r.error);
-        toast('Updated');
+        toast('Plan updated');
+        $('av-plan-edit-l').style.display = 'none';
         await loadAvailability();
     } catch (e) { toast(`Couldn't change it: ${e.message}`); }
+    finally { btn.disabled = false; }
 });
 
 $('av-plan-archive-l').addEventListener('click', async () => {
