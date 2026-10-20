@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         CoreLabs Elite Recruiter v22.0
-// @version      24.3.0
+// @version      24.4.0
 // @updateURL    https://worldwidelabs.vercel.app/crm.user.js
 // @downloadURL  https://worldwidelabs.vercel.app/crm.user.js
 // @description  Test version Corelabs
@@ -232,6 +232,8 @@
 				data:    opts.body   || null,
 				onload:  r => resolve({ ok: r.status >= 200 && r.status < 300, text: () => Promise.resolve(r.responseText) }),
 				onerror: e => reject(new Error(`GM_xmlhttpRequest error: ${e.statusText || e}`)),
+				timeout: opts.timeout || 25000,
+				ontimeout: () => reject(new Error('GM_xmlhttpRequest timeout')),
 			});
 		});
 	}
@@ -1354,6 +1356,25 @@ function setUselessRow(btn, uid) {
 		return !!s && ((s.F || 0) > 0 || (s.C || 0) > 0 || (s.S || 0) > 0 || (s.U || 0) > 0 || s.notes || s.company);
 	}
 
+	// ── Torn's limit: about 100 calls a minute for everything together ────────────
+	// Every call to Torn waits for its turn here (a little under that limit), so it is never refused for asking too fast: a refusal made the old way wait 4, 8, 12... seconds per player.
+	// When Torn does say "too many requests" the pause grows for a while and shrinks again after a run of good answers.
+	let tornGap = 700, tornNext = 0, tornCalm = 0;
+	function tornSlot() { const now = Date.now(), at = Math.max(now, tornNext); tornNext = at + tornGap; return new Promise(r => setTimeout(r, at - now)); }
+	function tornBusy() { tornGap = Math.min(3000, Math.round(tornGap * 1.5)); tornCalm = 0; }
+	function tornGood() { if (++tornCalm >= 20 && tornGap > 700) { tornGap = Math.max(700, Math.round(tornGap / 1.2)); tornCalm = 0; } }
+	async function tornGet(url) { await tornSlot(); return gmFetch(url); }
+	
+	// The saved copies on this computer (the stats of players, the CRM) are big: they are written once, a moment after the last change, not after every single player.
+	let cacheTimer = null, crmSaveTimer = null;
+	const saveCacheSoon = () => { clearTimeout(cacheTimer); cacheTimer = setTimeout(saveCache, 1200); };
+	const saveCRMSoon = () => { clearTimeout(crmSaveTimer); crmSaveTimer = setTimeout(saveCRM, 1200); };
+	window.addEventListener('pagehide', () => { clearTimeout(cacheTimer); clearTimeout(crmSaveTimer); saveCache(); saveCRM(); });
+	// Torn can give the hall of fame (work stats) in the same call as the profile and the personal stats: one call a player instead of two. If it does not, this is remembered and the old second call is used.
+	let hofCombined = !load('RecruiterHofSeparate', false);
+	
+
+
 	// ── Torn API concurrency limiter ──────────────────────────────────────────────
 	// A UserList page renders ~50 pills at once, each firing 2 Torn calls = ~100
 	// requests in one burst → Torn's 100/min limit trips → errors → zero/blank rows.
@@ -1444,7 +1465,7 @@ function setUselessRow(btn, uid) {
 			if (stillLoading && sharedFresh) {
 				console.log(`%c[CoreLabs] ${uid} ${shared.data.name || ''} → SUPABASE shared cache (seeded, no Torn call)`, 'color:#74c0fc');
 				CACHE[uid] = { ts: shared.ts, data: shared.data };
-				saveCache();
+				saveCacheSoon();
 				updatePill(pill, shared.data);
 			}
 		});
@@ -1502,7 +1523,7 @@ function setUselessRow(btn, uid) {
 			const ageH = Math.round((Date.now() - shared.ts) / 3600000);
 			console.log(`%c[CoreLabs] ${uid} ${shared.data.name || ''} → SUPABASE shared cache (${ageH}h old, no Torn call)`, 'color:#74c0fc');
 			CACHE[uid] = { ts: shared.ts, data: shared.data };
-			saveCache();
+			saveCacheSoon();
 			updatePill(pill, shared.data);
 			return;
 		}
@@ -1519,55 +1540,65 @@ function setUselessRow(btn, uid) {
 	// response / network). The retry keeps "…" pills from sticking until F5.
 	async function fetchAndRender(uid, pill) {
 		try {
-			const [uRes, hRes] = await Promise.all([
-				gmFetch(`https://api.torn.com/user/${uid}?selections=profile,personalstats&key=${CFG.API_KEY}`),
-				gmFetch(`https://api.torn.com/v2/user/${uid}/hof?key=${CFG.API_KEY}`),
-			]);
-			const d = JSON.parse(await uRes.text());
-			const h = JSON.parse(await hRes.text());
-
+			const rateError = e => e && e.error && Number(e.error.code) === 5;
+			const dRes = await tornGet(`https://api.torn.com/user/${uid}?selections=profile,personalstats${hofCombined ? ',hof' : ''}&key=${CFG.API_KEY}`);
+			const d = JSON.parse(await dRes.text());
+	
 			if (!pill.isConnected) return true; // pill gone — nothing to retry
-
+	
 			// CRITICAL: a Torn error (rate limit code 5, bad key, etc.) is NOT a profile.
 			// d.personalstats is then undefined and every stat would fall back to 0 —
 			// which used to get cached for 72h, freezing the row at "0 / 0 / 0 / 0" even
 			// after Torn recovered (the "sooo many 0s" bug). Detect the error, DON'T
 			// write a zero cache; return false so the queue retries with backoff.
-			if (d?.error || h?.error) {
-				console.warn(`[CoreLabs] Torn API busy for ${uid} (${d?.error?.error || h?.error?.error}) — will retry`);
+			if (d?.error) {
+				if (rateError(d)) tornBusy();
+				else if (hofCombined && ![2, 13, 18].includes(Number(d.error.code))) { hofCombined = false; save('RecruiterHofSeparate', true); } // the hall of fame does not come in the same call: use two calls again
+				console.warn(`[CoreLabs] Torn API busy for ${uid} (${d?.error?.error}) — will retry`);
 				return false;
 			}
 			// Defensive: if the profile block is missing entirely, it's not a usable
 			// response either — retry rather than cache zeros.
 			if (!d.personalstats) return false;
-
+			tornGood();
+	
+			// work stats: from the same answer when Torn gave them, otherwise from the second call
+			let ws = d?.halloffame?.working_stats?.value ?? d?.hof?.working_stats?.value;
+			if (ws === undefined) {
+				if (hofCombined) { hofCombined = false; save('RecruiterHofSeparate', true); }
+				const h = JSON.parse(await (await tornGet(`https://api.torn.com/v2/user/${uid}/hof?key=${CFG.API_KEY}`)).text());
+				if (h?.error) { if (rateError(h)) tornBusy(); console.warn(`[CoreLabs] Torn API busy for ${uid} (${h?.error?.error}) — will retry`); return false; }
+				tornGood();
+				ws = h?.hof?.working_stats?.value || 0;
+			}
+	
 			if (d.name) {
 				if (!CRM[uid]) CRM[uid] = {};
 				const resolved = stripFaction(d.name);
 				const nameChanged = CRM[uid].name !== resolved;
 				CRM[uid].name = resolved;
-				saveCRM();
-				// Persist the name to Supabase too — otherwise a row flagged before the
+				saveCRMSoon();
+				// Persist the name to the server too — otherwise a row flagged before the
 				// name loaded stays name:null forever and shows as "ID: 123" on reload /
 				// other devices. Only push when a CRM row already exists for this uid.
 				if (nameChanged && hasCRMRow(uid)) upsertCRMState(uid);
 			}
-
+	
 			const data = {
 				xan:    d.personalstats?.xantaken || 0,
 				act:    d.personalstats?.rankedwarhits || 0,
-				ws:     h?.hof?.working_stats?.value || 0,
+				ws:     ws || 0,
 				streak: d.personalstats?.activestreak || 0,
 				name:   CRM[uid]?.name || stripFaction(d.name || '') || null,
 			};
 			CACHE[uid] = { ts: Date.now(), data };
-			saveCache();
+			saveCacheSoon();
 			updatePill(pill, data);
-
-			// Push the fresh stats to the SHARED targets table so every other user
-			// reads them from the DB for the next 7 days instead of calling Torn.
+	
+			// Push the fresh stats to the SHARED stats so every other user
+			// reads them from the server for the next 7 days instead of calling Torn.
 			// Fire-and-forget — the pill is already rendered.
-			console.log(`%c[CoreLabs] ${uid} ${data.name || ''} → fetched from Torn, writing to Supabase shared cache`, 'color:#ffa94d');
+			console.log(`%c[CoreLabs] ${uid} ${data.name || ''} → fetched from Torn`, 'color:#ffa94d');
 			writeSharedStat(uid, data).catch(() => {});
 			return true;
 		} catch (e) {
@@ -1575,6 +1606,7 @@ function setUselessRow(btn, uid) {
 			return false; // network blip — let the queue retry
 		}
 	}
+
 
 	function openDashboard(initialTab) {
 		document.getElementById('cl-dash')?.remove();
@@ -2394,14 +2426,13 @@ function setUselessRow(btn, uid) {
 	}
 
 	function injectUserlistPill(link) {
-		if (link.dataset.clDone) return;
+		const liRow = link.closest('li[class*="user"]');
+		if (liRow && liRow.querySelector('.cl-pill-cont')) return; // this row has its pill (Torn re-draws the rows when you change page, which removes it: then it is made again)
 		const uid = link.href.match(/XID=(\d+)/)?.[1];
 		if (!uid || link.textContent.trim().length < 2) return;
-		link.dataset.clDone = '1';
 
-		const li = link.closest('li[class*="user"]');
-		if (!li || li.dataset.clDone) return;
-		li.dataset.clDone = '1';
+		const li = liRow;
+		if (!li) return;
 
 		const iconsWrap = li.querySelector('.icons-wrap');
 		if (iconsWrap) {
@@ -2636,8 +2667,9 @@ function setUselessRow(btn, uid) {
 	}
 	async function facFetch(id) {
 		try {
-			const res = await gmFetch(`https://api.torn.com/faction/${id}?selections=basic&key=${CFG.API_KEY}`);
+			const res = await tornGet(`https://api.torn.com/faction/${id}?selections=basic&key=${CFG.API_KEY}`);
 			const d = JSON.parse(await res.text());
+			if (d && d.error && Number(d.error.code) === 5) tornBusy();
 			if (d && !d.error && d.name !== undefined) {
 				const members = d.members || {}, nameOf = uid => (members[uid] && members[uid].name) || `ID ${uid}`;
 				const coIds = new Set(), coId = d['co-leader'] ?? d.co_leader;
