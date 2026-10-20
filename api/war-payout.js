@@ -40,7 +40,7 @@ const { nightlyHandle, nightlyRun, getVaultKey } = require('../lib/nightly');
 const { usageFor } = require('../lib/tornFetch');
 const { targetsHandle } = require('../lib/targets');
 const { mentoringHandle, loadProgram: mentoringLoadProgram } = require('../lib/mentoring');
-const { welHandle, welcomeTodoItems, promotions: welPromotions } = require('../lib/welcome');
+const { welHandle, welcomeTodoItems, promotions: welPromotions, checkinState: welCheckin, checkinSet: welCheckinSet, isWarChange: welIsWar } = require('../lib/welcome');
 const { factionAllowed, allowedList, resetCache: accessReset, LIST: ACCESS_LIST, DENIED: ACCESS_DENIED } = require('../lib/access');
 const { companyHandle, isDirector, tornCompany: coTorn, normalize: coNormalize, getAll: coGetAll } = require('../lib/company');
 const { runCompanyReports } = require('../lib/companyReports');
@@ -441,7 +441,11 @@ async function leaderTodos(key, factionId) {
     // members who meet the requirements of the next role (Experiment B, Guinea Pig / Lab Rat, Chemist) but still hold the lower position — worked out
     // by lib/welcome.js and kept for 30 minutes, so this costs one cheap lookup most of the time. A leader promotes them in Torn.
     try {
-        const ready = await welPromotions(welDeps(key, factionId), false);
+        const allReady = await welPromotions(welDeps(key, factionId), false);
+        // war related changes (to Chemist, and down from Chemist) come up only after this month's newsletter with the check-in messages was marked as sent; the others straight away
+        const gate = await welCheckin(redis, factionId);
+        const ready = allReady.filter(r => !welIsWar(r) || gate.sent), waiting = allReady.length - ready.length;
+        if (waiting) add('promo-wait', `${waiting} war related role change${waiting === 1 ? '' : 's'} wait${waiting === 1 ? 's' : ''} until this month's newsletter with the check-in messages is sent. Mark it as sent on the Newsletter page when it is.`, 'Open the Newsletter', 'newsletter', null);
         const up = ready.filter(r => r.kind !== 'demote'), down = ready.filter(r => r.kind === 'demote');
         if (up.length) add('promotions', `${up.length} member${up.length === 1 ? ' is' : 's are'} ready for promotion: ${up.slice(0, 5).map(r => `${r.name} (${r.to})`).join(', ')}${up.length > 5 ? ` +${up.length - 5} more` : ''}.`, 'See who', 'welcome-admin', 'wa-promo');
         if (down.length) add('demotions', `${down.length} Chemist${down.length === 1 ? '' : 's'} no longer meet${down.length === 1 ? 's' : ''} the war rule and can move back down: ${down.slice(0, 5).map(r => `${r.name} (${r.to})`).join(', ')}${down.length > 5 ? ` +${down.length - 5} more` : ''}.`, 'See who', 'welcome-admin', 'wa-promo');
@@ -1411,6 +1415,13 @@ Cancel: ${cancelUrl}`, [], embeds, undefined, true);
                 await redis(['SET', bannersKey('global'), JSON.stringify((await loadBanners('global')).filter(x => x.id !== id))]);
             }
             return res.status(200).json({ ok: true });
+        }
+        // The monthly newsletter with the check-in messages: a leader marks it as sent (or takes that back). Until then the war related role changes wait (see lib/welcome.js).
+        if (action === 'checkin-sent-get' || action === 'checkin-sent-set') {
+            if (!(await isLeader(key))) return res.status(403).json({ error: 'Leaders only' });
+            if (action === 'checkin-sent-get') return res.status(200).json(await welCheckin(redis, factionId));
+            let by = ''; try { by = (await getProfile(key))?.name || ''; } catch (e) { /* the name is only a note */ }
+            return res.status(200).json(await welCheckinSet(redis, factionId, req.body.on !== false, by));
         }
         // The leader to-do card (dashboard) — leaders only.
         if (action === 'leader-todos') {

@@ -10,11 +10,32 @@
 const nlNum = n => Math.round(n).toLocaleString();
 const nlPerkName = k => k.replace(/^steadfast (\w+)$/, (m, s) => `${s[0].toUpperCase()}${s.slice(1)} Steadfast`).replace(/^./, c => c.toUpperCase());
 
+// ---- "Sent this month": the war related role changes (to Chemist and back down) wait until the newsletter with the check-in messages is marked as sent here ----
+let nlSent = null;
+function nlRenderSent() {
+    const s = nlSent; if (!s) return;
+    const from = new Date(s.cycle).toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
+    $('nl-sent-text').innerHTML = s.sent
+        ? `<span style="color:var(--reagent);font-weight:700;">✓ Marked as sent</span>${s.at ? ` on ${esc(new Date(s.at).toLocaleDateString(undefined, { day: 'numeric', month: 'short' }))}` : ''}${s.by ? ` by ${esc(s.by)}` : ''} (month from ${esc(from)}): the war related role changes are open.`
+        : `Not marked yet for the month from ${esc(from)}: the war related role changes wait.`;
+    $('nl-sent-btn').textContent = s.sent ? 'Take the mark back' : '✓ Newsletter and check-in messages sent';
+}
+async function nlLoadSent() {
+    try { const r = await moFetch({ action: 'checkin-sent-get' }); if (!r.error) { nlSent = r; nlRenderSent(); } } catch (e) { /* the page still works */ }
+}
+$('nl-sent-btn').addEventListener('click', async () => {
+    const b = $('nl-sent-btn'); b.disabled = true;
+    try { const r = await moFetch({ action: 'checkin-sent-set', on: !(nlSent && nlSent.sent) }); if (!r.error) { nlSent = r; nlRenderSent(); toast(r.sent ? 'Marked as sent: the war related role changes are open' : 'Mark taken back'); } else toast(r.error); }
+    catch (e) { toast('Could not save that'); }
+    finally { b.disabled = false; }
+});
+
 async function loadNewsletter() {
     const locked = !canEditLeaderOnly; // Leader/Co-leader only end to end — see AUDIT.md
     $('nl-locked').style.display = locked ? 'block' : 'none';
     $('nl-body').style.display = locked ? 'none' : 'block';
     if (locked) return;
+    nlLoadSent();
     {
         // Listed running-period-first (if a full week has passed since the last newsletter), then the
         // finished ones, and it DEFAULTS to the running one (the same as Member Overview and the Energy tracker);

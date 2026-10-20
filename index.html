@@ -2220,6 +2220,14 @@
             <div class="status" id="nl-status"></div>
             <div class="panel" id="nl-locked" style="display:none;"><p style="color:var(--muted);margin:0;">🔒 Only leaders and council (faction API access) can see this page.</p></div>
             <div id="nl-body" style="display:none;">
+                <div class="panel" id="nl-sent-panel">
+                    <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;">
+                        <b>Sent this month?</b>
+                        <span id="nl-sent-text" style="color:var(--muted);font-size:13px;flex:1;min-width:240px;">Loading…</span>
+                        <button type="button" id="nl-sent-btn">✓ Newsletter and check-in messages sent</button>
+                    </div>
+                    <p style="color:var(--muted);font-size:12px;margin:6px 0 0;">War related role changes (to Chemist, and back down from Chemist) only come up in the to dos after this is marked. The other role changes (WWL, script, Discord, Intel, CAT) come up right away. The mark resets by itself on the first Sunday of the next month.</p>
+                </div>
                 <div class="panel">
                     <div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;">
                         <div class="field" style="margin:0;"><label for="nl-period">Newsletter period</label><select autocomplete="off" id="nl-period" style="min-width:280px;"></select></div>
