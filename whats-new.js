@@ -15,6 +15,7 @@ const WHATS_NEW = [
         version: '1.33', date: '2026-10-20',
         title: 'Friendly reminders for members, leader to dos in the script, closing a feedback form',
         everyone: [
+            'Labs services has a fourth program: Trading funding. You can send a request there with the amount you would like, what you would trade and who can vouch for you. A request does not mean you get a funding: the owner only grants it to people she trusts or who are vouched for.',
             'A feedback form can now be closed: it shows a short thank-you note and the results, and nobody can fill it in any more.',
         ],
         leaders: [
