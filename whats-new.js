@@ -12,6 +12,18 @@
 
 const WHATS_NEW = [
     {
+        version: '1.33', date: '2026-10-20',
+        title: 'Friendly reminders for members, leader to dos in the script, closing a feedback form',
+        everyone: [
+            'A feedback form can now be closed: it shows a short thank-you note and the results, and nobody can fill it in any more.',
+        ],
+        leaders: [
+            'The leader to-do card on the dashboard has two new items: members who have not logged into WWL yet, and members who are on WWL but did not install the script. Each opens up to a list with a friendly message to copy for every member (edit the message once, it is kept in your browser) and shows when you reminded them.',
+            'All the leader to dos now also show in the To do list of the script in Torn, the same ones as on the dashboard. You do not need to update the script for this.',
+            'Feedback: in the form editor there is a Close the form button. The form and all answers stay, nobody can fill it in any more, and it stops asking people in the to do lists. You can reopen it at any time.',
+        ],
+    },
+    {
         version: '1.32', date: '2026-10-19',
         title: 'Recruiter script: free for directors and faction leaders',
         everyone: [

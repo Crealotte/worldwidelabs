@@ -416,7 +416,7 @@ async function leaderTodos(key, factionId) {
     try {
         const formRaw = await redis(['GET', `wwl:feedback-form:${factionId}`]);
         const form = formRaw ? JSON.parse(formRaw) : null;
-        if (form?.mode === 'native') {
+        if (form?.mode === 'native' && !form.closed) { // a closed form no longer asks anybody anything
             const respondedIds = new Set((await redis(['HKEYS', `wwl:feedback-responses:${factionId}`])) || []);
             const roster = await getRoster(key);
             const missing = roster.filter(m => !respondedIds.has(m.id));
@@ -447,7 +447,29 @@ async function leaderTodos(key, factionId) {
         if (down.length) add('demotions', `${down.length} Chemist${down.length === 1 ? '' : 's'} no longer meet${down.length === 1 ? 's' : ''} the war rule and can move back down: ${down.slice(0, 5).map(r => `${r.name} (${r.to})`).join(', ')}${down.length > 5 ? ` +${down.length - 5} more` : ''}.`, 'See who', 'welcome-admin', 'wa-promo');
     } catch (e) { /* skip */ }
 
+    // members who have not logged into WWL yet, and members on WWL who have not installed the script: the dashboard card lists them with a friendly reminder to copy
+    // (each item carries `members`; the script's To do shows the count and opens the dashboard). Reads: the roster (a cached Torn read) and two small hashes.
+    try {
+        const roster = await getRoster(key);
+        const hashIds = async k => { const f = (await redis(['HGETALL', k])) || [], ids = new Set(); for (let i = 0; i < f.length; i += 2) if (f[i + 1] && f[i + 1] !== '0') ids.add(String(f[i])); return ids; };
+        const [onWwl, withScript] = await Promise.all([hashIds('wwl:logins'), hashIds(userscriptSeenKey(factionId))]);
+        const notWwl = roster.filter(m => !onWwl.has(m.id)), noScript = roster.filter(m => onWwl.has(m.id) && !withScript.has(m.id));
+        const names = a => `${a.slice(0, 5).map(m => m.name).join(', ')}${a.length > 5 ? ` +${a.length - 5} more` : ''}`;
+        const people = a => a.slice(0, 80).map(m => ({ id: m.id, name: m.name }));
+        if (notWwl.length) todos.push({ id: 'invite-wwl', kind: 'wwl', text: `${notWwl.length} member${notWwl.length === 1 ? ' has' : 's have'} not logged into WWL yet: ${names(notWwl)}.`, cta: 'Send a friendly reminder', page: 'dashboard', anchor: 'leader-todos', members: people(notWwl) });
+        if (noScript.length) todos.push({ id: 'invite-script', kind: 'script', text: `${noScript.length} member${noScript.length === 1 ? ' is' : 's are'} on WWL but did not install the script yet: ${names(noScript)}.`, cta: 'Send a friendly reminder', page: 'dashboard', anchor: 'leader-todos', members: people(noScript) });
+    } catch (e) { /* skip */ }
+
     return { todos };
+}
+// the same list for the script's To do (leaders): kept two minutes per faction on this server instance, so a leader's page loads in Torn do not repeat all the reads
+const ltMem = new Map();
+async function leaderTodosCached(key, factionId) {
+    const hit = ltMem.get(factionId);
+    if (hit && Date.now() - hit.at < 120000) return hit.v;
+    const v = await leaderTodos(key, factionId);
+    ltMem.set(factionId, { at: Date.now(), v });
+    return v;
 }
 
 
@@ -1533,7 +1555,7 @@ Cancel: ${cancelUrl}`, [], embeds, undefined, true);
             try {
                 const formRaw = await redis(['GET', `wwl:feedback-form:${factionId}`]);
                 const form = formRaw ? JSON.parse(formRaw) : null;
-                if (form?.mode === 'native') {
+                if (form?.mode === 'native' && !form.closed) {
                     const mineRaw = await redis(['HGET', `wwl:feedback-responses:${factionId}`, playerId]);
                     if (!mineRaw) items.push({ id: 'feedback', text: `Fill in the "${form.title || 'Feedback'}" form.`, cta: 'Open Feedback', url: site ? `${site}/feedback` : null });
                 }
@@ -1565,6 +1587,8 @@ Cancel: ${cancelUrl}`, [], embeds, undefined, true);
             // cached one, so members cost almost nothing extra.
             try {
                 if (await isLeader(key)) {
+                    // everything of the leader to-do card on the dashboard shows here too (the OC requests have their own line below)
+                    try { for (const t of (await leaderTodosCached(key, factionId)).todos) if (!t.group && t.id !== 'oc-requests') items.push({ id: `lt-${t.id}`, text: t.text, cta: t.cta, url: `${site}/${t.page}` }); } catch (e) { /* the other lines still show */ }
                     const flat = async k => { const f = (await redis(['HGETALL', k])) || []; const out = []; for (let i = 0; i < f.length; i += 2) { try { out.push(JSON.parse(f[i + 1])); } catch (e) { /* skip */ } } return out; };
                     const [ocs, banks] = await Promise.all([flat(ocRequestsKey(factionId)), flat(bankRequestsKey(factionId))]);
                     const ocsOpen = ocs.filter(q => q.status !== 'claimed'); if (ocsOpen.length) items.push({ id: 'oc-requests', text: `${ocsOpen.length} OC request${ocsOpen.length === 1 ? '' : 's'}: ${ocsOpen.slice(0, 4).map(r => `${r.name} (level ${r.level})`).join(', ')}${ocsOpen.length > 4 ? ` +${ocsOpen.length - 4} more` : ''}.`, cta: 'See requests', url: `${site}/oc-requests` });
@@ -2027,7 +2051,7 @@ Cancel: ${cancelUrl}`, [], embeds, undefined, true);
             const { message } = req.body;
             const formRaw = await redis(['GET', `wwl:feedback-form:${factionId}`]);
             const form = formRaw ? JSON.parse(formRaw) : null;
-            if (form?.mode !== 'native') return res.status(400).json({ error: 'There is no feedback form open right now.' });
+            if (form?.mode !== 'native' || form.closed) return res.status(400).json({ error: form?.closed ? 'The feedback form is closed.' : 'There is no feedback form open right now.' });
 
             const respondedIds = new Set((await redis(['HKEYS', `wwl:feedback-responses:${factionId}`])) || []);
             let targets;

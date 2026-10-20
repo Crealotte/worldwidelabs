@@ -11,6 +11,7 @@
 // POST { key, action:'submit', answers }   -> any member: save/replace MY OWN answers to a native form
 // POST { key, mode:'native'|'google', ... }-> leaders only: replace THEIR faction's form (clears old answers)
 // POST { key, action:'clear' }             -> leaders only: remove THEIR faction's form and its answers
+// POST { key, action:'close' | 'reopen' }  -> leaders only: stop (or allow again) new answers; the form and every answer stay
 // POST { key, action:'responses' }         -> leaders only: every answer, named, plus full counts
 
 const { tornFetch } = require('../lib/tornFetch');
@@ -188,6 +189,7 @@ module.exports = async function handler(req, res) {
             const raw = await redis(['GET', formKey(factionId)]);
             const form = raw ? JSON.parse(raw) : null;
             if (!form || form.mode !== 'native') return res.status(400).json({ error: 'There is no form open right now.' });
+            if (form.closed) return res.status(400).json({ error: 'This form is closed, thank you for your feedback.' });
             const answers = sanitizeAnswers(form.questions, req.body.answers);
             await redis(['HSET', responsesKey(factionId), playerId, JSON.stringify({ name, answers, submittedAt: Date.now() })]);
             return res.status(200).json({ ok: true });
@@ -199,6 +201,16 @@ module.exports = async function handler(req, res) {
             await redis(['DEL', formKey(factionId)]);
             await redis(['DEL', responsesKey(factionId)]);
             return res.status(200).json({ ok: true });
+        }
+
+        // Closing a form keeps the form and every answer but nobody can fill it in any more (and it stops asking people in the to do lists); reopening puts it back as it was.
+        if (action === 'close' || action === 'reopen') {
+            const raw = await redis(['GET', formKey(factionId)]);
+            const form = raw ? JSON.parse(raw) : null;
+            if (!form) return res.status(400).json({ error: 'There is no form to close.' });
+            if (action === 'close') { form.closed = true; form.closedAt = Date.now(); } else { delete form.closed; delete form.closedAt; }
+            await redis(['SET', formKey(factionId), JSON.stringify(form)]);
+            return res.status(200).json({ ok: true, closed: !!form.closed });
         }
 
         if (action === 'responses') {

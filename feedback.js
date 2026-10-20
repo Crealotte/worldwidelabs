@@ -41,7 +41,7 @@ let fbData = null; // { form, mine, results } from the last load — kept so a s
 function updateFeedbackBadge(data) {
     const nav = $('nav-feedback');
     if (!nav) return;
-    const needsFill = !!(data?.form && data.form.mode === 'native' && data.mine == null);
+    const needsFill = !!(data?.form && data.form.mode === 'native' && !data.form.closed && data.mine == null);
     nav.classList.toggle('has-new', needsFill);
 }
 
@@ -57,8 +57,10 @@ async function loadFeedback() {
         if (!form) return;
 
         $('fb-title').textContent = form.title || 'Feedback';
+        $('fb-closed-note').style.display = form.closed ? 'block' : 'none'; // a closed form keeps its results but can no longer be filled in
         if (form.mode === 'google') {
-            $('fb-form-frame').src = form.formUrl;
+            if (form.closed) $('fb-form-frame').removeAttribute('src'); else $('fb-form-frame').src = form.formUrl;
+            $('fb-form-frame').style.display = form.closed ? 'none' : '';
             if (form.chartUrl) { $('fb-chart-panel').style.display = 'block'; $('fb-chart-frame').src = form.chartUrl; }
             else $('fb-chart-panel').style.display = 'none';
         } else {
@@ -135,6 +137,7 @@ function renderFbNative(form, mine, results) {
 
     // Open by default until answered, then collapsed — so the results below aren't buried under a form
     // you've already filled in. Re-opens itself if you click in to change your answer (see fb-native-submit).
+    $('fb-native-details').style.display = form.closed ? 'none' : ''; // closed: the questions are gone, only the results stay
     $('fb-native-details').open = !mine;
     $('fb-native-summary').textContent = mine ? '✓ You answered this — click to change your answer' : 'Fill in the form';
 
@@ -268,7 +271,11 @@ async function loadFeedbackEditor() {
         // Closed once a form is live, so Responses (below) is what you see while it's running —
         // opens itself back up once the form is cleared, since there's then something to build.
         $('fb-editor-details').open = !form;
-        $('fb-editor-summary').textContent = form ? 'Build / edit the form (a form is currently live)' : 'Build / edit the form';
+        $('fb-editor-summary').textContent = form ? (form.closed ? 'Build / edit the form (the current form is closed)' : 'Build / edit the form (a form is currently live)') : 'Build / edit the form';
+        const closeBtn = $('fb-close'); // keep the form and its answers but stop new answers, or open it again
+        closeBtn.style.display = form ? '' : 'none';
+        closeBtn.textContent = form?.closed ? 'Reopen the form' : 'Close the form';
+        closeBtn.dataset.closed = form?.closed ? '1' : '';
         if (form?.mode === 'google') {
             setFbMode('google');
             $('fb-title-input-g').value = form.title || '';
@@ -362,6 +369,16 @@ $('fb-save').addEventListener('click', async () => {
     } finally {
         btn.disabled = false; btn.textContent = 'Save — replaces the live form';
     }
+});
+
+$('fb-close').addEventListener('click', async () => {
+    const reopen = $('fb-close').dataset.closed === '1';
+    if (!reopen && !confirm('Close the form? Nobody can fill it in any more, but the form and all answers stay.')) return;
+    try {
+        await fbFetch({ action: reopen ? 'reopen' : 'close' });
+        await loadFeedbackEditor();
+        toast(reopen ? 'The form is open again' : 'The form is closed: the answers stay');
+    } catch (e) { toast('Could not change the form'); }
 });
 
 $('fb-clear').addEventListener('click', async () => {

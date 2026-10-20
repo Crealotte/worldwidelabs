@@ -13,6 +13,45 @@ async function loadLeaderTodos() {
     } catch (e) { renderLeaderTodos([]); }
 }
 
+// ---- Friendly reminders for members who are not on WWL yet or did not install the script: the same layout as the other to dos, a message to copy for each member ----
+// The message is the leader's own (kept in this browser); {name} becomes the member's name. A member whose message was copied shows "reminded <date>" so nobody is nagged twice.
+const LT_INVITE_OPEN = {};
+const ltInviteDefault = kind => kind === 'script'
+    ? `Hey {name}, I have noticed you have not installed the WWL script yet (${location.origin}/worldwidelabs.user.js). Please install it: it shows your to do list and energy plan right inside Torn. You need Tampermonkey on a computer, or add it as a script in TornPDA. Shout if you get stuck!`
+    : `Hey {name}, I have noticed you have not logged into WWL yet (${location.origin}), please join with a limited API key. It takes a minute and gives you your energy plan, welcome chapters and more. Shout if you need help!`;
+const ltInviteMsg = kind => { try { return localStorage.getItem(`wwl_invite_msg_${kind}`) || ltInviteDefault(kind); } catch (e) { return ltInviteDefault(kind); } };
+const ltRemindedAt = (kind, id) => { try { return Number(localStorage.getItem(`wwl_invited_${kind}_${id}`)) || 0; } catch (e) { return 0; } };
+function ltInviteHtml(t) {
+    const kind = t.kind === 'script' ? 'script' : 'wwl', title = kind === 'script' ? 'on WWL but did not install the script yet' : 'have not logged into WWL yet';
+    const rows = t.members.map(m => { const at = ltRemindedAt(kind, m.id); return `<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:6px 0 6px 12px;border-top:1px solid var(--line);${at ? 'opacity:.6;' : ''}"><span style="flex:1;min-width:180px;font-size:13px;">${esc(m.name)} <span style="color:var(--muted);font-size:11px;">[${esc(m.id)}]</span>${at ? ` <span style="color:var(--muted);font-size:11px;">reminded ${esc(new Date(at).toLocaleDateString())}</span>` : ''}</span>
+        <button type="button" class="ghost small lt-inv-copy" data-kind="${kind}" data-id="${esc(m.id)}" data-name="${esc(m.name)}" style="padding:4px 10px;">Copy message</button>
+        <a href="https://www.torn.com/profiles.php?XID=${esc(m.id)}" target="_blank" rel="noopener" class="ghost small" style="padding:4px 10px;border:1px solid var(--line);border-radius:var(--radius);text-decoration:none;color:var(--muted);">Profile</a></div>`; }).join('');
+    return `<details class="lt-inv" data-kind="${kind}" ${LT_INVITE_OPEN[kind] ? 'open' : ''} style="padding:8px 0;"><summary class="av-sum" style="cursor:pointer;font-size:14px;list-style:none;"><b>👋 ${t.members.length} member${t.members.length === 1 ? '' : 's'} ${title}</b> <span style="color:var(--muted);font-size:12px;">(click to see who, with a friendly message to copy)</span></summary>
+        <div style="padding:8px 0 4px 12px;"><div style="font-size:11px;color:var(--muted);margin-bottom:4px;">Your message (use {name} for their name):</div>
+            <textarea class="lt-inv-msg" data-kind="${kind}" rows="3" style="width:100%;box-sizing:border-box;font-size:12px;">${esc(ltInviteMsg(kind))}</textarea>
+            <div style="margin:4px 0 6px;"><button type="button" class="ghost small lt-inv-save" data-kind="${kind}" style="padding:3px 10px;">Save message</button> <button type="button" class="ghost small lt-inv-reset" data-kind="${kind}" style="padding:3px 10px;">Use the standard message</button> <span class="lt-inv-note" style="font-size:11px;color:var(--muted);"></span></div></div>
+        ${rows}</details>`;
+}
+function ltWireInvites(panel) {
+    panel.querySelectorAll('.lt-inv').forEach(d => d.addEventListener('toggle', () => { LT_INVITE_OPEN[d.dataset.kind] = d.open; }));
+    panel.querySelectorAll('.lt-inv-save').forEach(b => b.addEventListener('click', () => {
+        const box = b.closest('.lt-inv'), ta = box.querySelector('.lt-inv-msg');
+        try { localStorage.setItem(`wwl_invite_msg_${b.dataset.kind}`, ta.value); box.querySelector('.lt-inv-note').textContent = 'Saved.'; } catch (e) { box.querySelector('.lt-inv-note').textContent = 'Could not save in this browser.'; }
+    }));
+    panel.querySelectorAll('.lt-inv-reset').forEach(b => b.addEventListener('click', () => {
+        const box = b.closest('.lt-inv'); try { localStorage.removeItem(`wwl_invite_msg_${b.dataset.kind}`); } catch (e) { /* nothing saved */ }
+        box.querySelector('.lt-inv-msg').value = ltInviteDefault(b.dataset.kind); box.querySelector('.lt-inv-note').textContent = 'Standard message back.';
+    }));
+    panel.querySelectorAll('.lt-inv-copy').forEach(b => b.addEventListener('click', async () => {
+        const kind = b.dataset.kind, ta = b.closest('.lt-inv').querySelector('.lt-inv-msg'), text = ta.value.replace(/\{name\}/g, b.dataset.name);
+        try { await navigator.clipboard.writeText(text); } catch (e) { toast('Copy this message: ' + text); return; }
+        try { localStorage.setItem(`wwl_invited_${kind}_${b.dataset.id}`, String(Date.now())); } catch (e) { /* not remembered */ }
+        b.textContent = 'Copied ✓';
+        const row = b.parentElement; row.style.opacity = '.6';
+        if (!row.querySelector('.lt-inv-done')) { const s = document.createElement('span'); s.className = 'lt-inv-done'; s.style.cssText = 'color:var(--muted);font-size:11px;'; s.textContent = 'reminded today'; row.children[0].appendChild(document.createTextNode(' ')); row.children[0].appendChild(s); }
+    }));
+}
+
 let ltSvcOpen = false; // the Services to do stays open or closed the way it was left, also after a refresh
 function renderLeaderTodos(todos) {
     const panel = $('leader-todos');
@@ -25,7 +64,7 @@ function renderLeaderTodos(todos) {
         return `<details class="lt-svc" ${ltSvcOpen ? 'open' : ''} style="padding:8px 0;"><summary class="av-sum" style="cursor:pointer;font-size:14px;list-style:none;"><b>🧩 Services</b> <span style="color:${open.length ? '#e0a030' : 'var(--muted)'};">${open.length ? `${open.length} thing${open.length === 1 ? '' : 's'} to look at` : 'nothing needs you now'}</span>${done.length ? ` <span style="color:var(--muted);font-size:12px;">· ${done.length} known or waiting</span>` : ''}</summary>
             ${open.map(x => row(x, false)).join('')}${done.map(x => row(x, true)).join('')}</details>`;
     };
-    $('leader-todos-list').innerHTML = todos.map((t, i) => t.group ? `<div style="${i ? 'border-top:1px solid var(--line);' : ''}">${group(t)}</div>` : `
+    $('leader-todos-list').innerHTML = todos.map((t, i) => t.members ? `<div style="${i ? 'border-top:1px solid var(--line);' : ''}">${ltInviteHtml(t)}</div>` : t.group ?`<div style="${i ? 'border-top:1px solid var(--line);' : ''}">${group(t)}</div>` : `
         <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:8px 0;${i ? 'border-top:1px solid var(--line);' : ''}">
             <span style="flex:1;min-width:220px;font-size:14px;">${esc(t.text)}</span>
             ${goLink(t)}
@@ -37,6 +76,7 @@ function renderLeaderTodos(todos) {
         if (a.dataset.anchor) setTimeout(() => { const el = document.getElementById(a.dataset.anchor); if (el) { if (el.tagName === 'DETAILS') el.open = true; el.scrollIntoView({ behavior: 'smooth', block: 'center' }); } }, 400);
     }));
     panel.querySelector('.lt-svc')?.addEventListener('toggle', e => { ltSvcOpen = e.target.open; });
+    ltWireInvites(panel);
     panel.querySelectorAll('.lt-known').forEach(b => b.addEventListener('click', async () => {
         b.disabled = true;
         try { await fetch('/api/war-payout', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key: apiKey, action: 'todo-known', id: b.dataset.id, sig: b.dataset.sig, on: b.dataset.on === '1' }) }); } catch (e) { /* the list is read again below */ }

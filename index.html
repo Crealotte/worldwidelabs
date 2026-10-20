@@ -978,6 +978,8 @@
                 <p style="color:var(--muted);margin:0;">No open form right now — check back soon.</p>
             </div>
 
+            <div id="fb-closed-note" class="panel" style="display:none;margin-bottom:12px;">🔒 <b>This form is closed.</b> Thank you to everyone who answered, you can no longer fill it in. The results are below.</div>
+
             <!-- a form built into WWL itself — one card per question, like Google Forms. The whole thing lives
                  in one <details>, open by default until you've answered, then closed so the results (below,
                  always visible) aren't buried under a form you've already filled in. -->
@@ -1074,6 +1076,7 @@
 
                 <div class="row" style="margin-top:14px;display:flex;gap:10px;">
                     <button id="fb-save">Save — replaces the live form</button>
+                    <button class="ghost" id="fb-close" style="display:none;" title="Nobody can fill it in any more, the form and all answers stay">Close the form</button>
                     <button class="ghost" id="fb-clear">Clear</button>
                 </div>
                 <div class="status" id="fb-editor-status"></div>
