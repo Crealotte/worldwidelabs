@@ -324,12 +324,24 @@ async function getRoster(key) {
 
 // A plan linked to a war (or given a start time by hand) only counts hours from that start on: a slot before it is
 // not open to tick, and ticks that were made there before are left out of every count.
-function slotBeforeStart(data, slotKey) {
+function slotBeforeStart(data, slotKey) { // an hour outside the plan: before the war start, or (when the plan has an end) at or after the end
+    if (!data?.startDate) return false;
     const start = data?.war?.start;
-    if (!start || !data?.startDate) return false;
     const [y, m, d] = String(data.startDate).split('-').map(Number);
     const [day, hour] = String(slotKey).split('-').map(Number);
-    return Date.UTC(y, m - 1, d) / 1000 + (day * 24 + hour) * 3600 < Math.floor(start / 3600) * 3600;
+    const at = Date.UTC(y, m - 1, d) / 1000 + (day * 24 + hour) * 3600;
+    if (data.endAt && at >= data.endAt) return true;
+    return !!start && at < Math.floor(start / 3600) * 3600;
+}
+// an optional end of a plan: a date and an hour (TCT) the plan runs until. The number of days follows from it (at most 14 from the start date).
+function planEnd(startDate, endDate, endHour) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(String(endDate || ''))) return { endAt: null };
+    const h = Math.min(23, Math.max(0, Math.round(Number(endHour)) || 0));
+    const endAt = Date.parse(`${endDate}T00:00:00Z`) / 1000 + h * 3600, startTs = Date.parse(`${startDate}T00:00:00Z`) / 1000;
+    if (!(endAt > startTs)) return { error: 'The end has to be after the start date.' };
+    const days = Math.ceil((endAt - startTs) / 86400);
+    if (days > 14) return { error: 'A plan shows at most 14 days: pick an end within 14 days of the start date.' };
+    return { endAt, days };
 }
 
 // Blue ring: one primary and one backup per hour. Who holds an hour, in the order they took it (a plain `true` from before is oldest);
@@ -995,7 +1007,7 @@ module.exports = async function handler(req, res) {
                 archivedPlans: leaderFlag ? allPlans.filter(p => p.archived) : [], // leaders only: the separate "pick one to view" list
                 planId, viewingArchived,
                 // war = the ranked war this tracker is linked to ({ id, start, opponent }), if any
-                config: data ? { startDate: data.startDate, days: data.days, war: data.war || null, name: data.name || '' } : null,
+                config: data ? { startDate: data.startDate, days: data.days, endAt: data.endAt || null, war: data.war || null, name: data.name || '' } : null,
                 mine,
                 mineWatch: data?.entries?.[playerId]?.watch || {}, // hours I marked as chain watch / war coordinator
                 myUnavailable: unavailable[playerId] || null, // { name, note, at } if I marked myself out
@@ -2164,8 +2176,11 @@ Cancel: ${cancelUrl}`, [], embeds, undefined, true);
         if (action === 'availability-create') {
             if (!(await isLeader(key))) return res.status(403).json({ error: 'Leaders only' });
             const { startDate, days, warId, warStart, name } = req.body;
-            const dayCount = Math.min(14, Math.max(1, Number(days) || 5));
+            let dayCount = Math.min(14, Math.max(1, Number(days) || 5));
             if (!startDate) return res.status(400).json({ error: 'Missing startDate' });
+            const end = planEnd(startDate, req.body.endDate, req.body.endHour);
+            if (end.error) return res.status(400).json({ error: end.error });
+            if (end.endAt) dayCount = end.days;
             const plans = await loadPlanIndex(factionId);
             if (plans.length >= 10) return res.status(400).json({ error: 'You already have 10 plans — delete an old one first.' });
             let war = null;
@@ -2181,8 +2196,8 @@ Cancel: ${cancelUrl}`, [], embeds, undefined, true);
             }
             const planId = Math.random().toString(36).slice(2, 8);
             const planName = String(name || '').trim().slice(0, 40);
-            await redis(['SET', availabilityKey(factionId, planId), JSON.stringify({ name: planName, startDate, days: dayCount, war, entries: {}, unavailable: {} })]);
-            plans.push({ id: planId, name: planName, startDate, days: dayCount, war, createdAt: Date.now() });
+            await redis(['SET', availabilityKey(factionId, planId), JSON.stringify({ name: planName, startDate, days: dayCount, ...(end.endAt ? { endAt: end.endAt } : {}), war, entries: {}, unavailable: {} })]);
+            plans.push({ id: planId, name: planName, startDate, days: dayCount, ...(end.endAt ? { endAt: end.endAt } : {}), war, createdAt: Date.now() });
             await redis(['SET', availabilityIndexKey(factionId), JSON.stringify(plans)]);
             return res.status(200).json({ ok: true, planId });
         }
@@ -2231,8 +2246,18 @@ Cancel: ${cancelUrl}`, [], embeds, undefined, true);
             if (!(await isLeader(key))) return res.status(403).json({ error: 'Leaders only' });
             const { plans, id: planId, data } = await resolvePlan(factionId, req.body.planId, true);
             if (!data) return res.status(400).json({ error: 'There is no plan to change — create one first.' });
-            const days = Math.min(14, Math.max(1, Math.round(Number(req.body.days)) || data.days));
+            let days = Math.min(14, Math.max(1, Math.round(Number(req.body.days)) || data.days));
             const startDate = /^\d{4}-\d{2}-\d{2}$/.test(req.body.startDate) ? req.body.startDate : data.startDate;
+            // an optional end (date and hour, TCT): given, changed or taken away; the days follow from it
+            let endAt = data.endAt || null;
+            if (req.body.clearEnd) endAt = null;
+            else if (req.body.endDate) { const e = planEnd(startDate, req.body.endDate, req.body.endHour); if (e.error) return res.status(400).json({ error: e.error }); endAt = e.endAt; }
+            if (endAt) {
+                const dEnd = Math.ceil((endAt - Date.parse(`${startDate}T00:00:00Z`) / 1000) / 86400);
+                if (dEnd < 1) return res.status(400).json({ error: 'The end has to be after the start date.' });
+                if (dEnd > 14) return res.status(400).json({ error: 'A plan shows at most 14 days: pick an end within 14 days of the start date.' });
+                days = dEnd;
+            }
             // Moving the start date: the ticks count their day from the start date, so every tick is moved along and keeps its real hour. A tick that would fall outside the 14 days
             // of the grid is dropped, and that is only done when the leader confirmed it (force).
             if (startDate !== data.startDate) {
@@ -2246,10 +2271,11 @@ Cancel: ${cancelUrl}`, [], embeds, undefined, true);
             }
             if (typeof req.body.name === 'string') data.name = req.body.name.trim().slice(0, 40);
             data.days = days; data.startDate = startDate;
+            if (endAt) data.endAt = endAt; else delete data.endAt;
             await redis(['SET', availabilityKey(factionId, planId), JSON.stringify(data)]);
             const meta = plans.find(p => p.id === planId);
-            if (meta) { meta.days = days; meta.startDate = startDate; if (typeof req.body.name === 'string') meta.name = data.name; await redis(['SET', availabilityIndexKey(factionId), JSON.stringify(plans)]); }
-            return res.status(200).json({ ok: true, days, startDate, name: data.name || '' });
+            if (meta) { meta.days = days; meta.startDate = startDate; if (endAt) meta.endAt = endAt; else delete meta.endAt; if (typeof req.body.name === 'string') meta.name = data.name; await redis(['SET', availabilityIndexKey(factionId), JSON.stringify(plans)]); }
+            return res.status(200).json({ ok: true, days, startDate, endAt, name: data.name || '' });
         }
 
         if (action === 'availability-delete') {
