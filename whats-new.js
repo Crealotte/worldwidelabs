@@ -21,7 +21,7 @@ const WHATS_NEW = [
             'The own timezone of the availability tracker now shows the offset you are on today (UTC+2 in Belgium until 25 October).',
         ],
         leaders: [
-            'New members are expected to be a Guinea Pig or Lab Rat within their first week. The promotions list and a new dashboard to-do now show members who are over a week in the faction and not there yet, with what they still miss (clock sign). The Lab Notes roles card says the same to members.',
+            'Members get one week to get through Experiment A and B. The promotions list and a new dashboard to-do now show members who are still Experiment A or B after a week in the faction without the WWL script or Discord (door sign), so you can remove them from the faction in Torn. Nothing is removed automatically. Intel and CAT are not a reason on their own, since you verify those yourself. The Lab Notes roles card tells members about the week.',
             'Role check: the promotions list (dashboard card and Lab Notes editor) now also shows members who hold Experiment B or higher without meeting the earlier requirements (script not installed, not on Discord, Intel or CAT not verified), marked with a warning sign and the role they should be. Unknown Discord answers are not flagged. Click Check again now to refresh it.',
             'Recruiter script 24.7.0: a yellow F older than 30 days no longer fades to grey, it turns orange (the row gets an orange tint) so you can choose to look at that player again.',
         ],
