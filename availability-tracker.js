@@ -135,13 +135,23 @@ async function loadAvailability() {
 const avPad = n => String(n).padStart(2, '0');
 function avStartParts() { return avConfig.startDate.split('-').map(Number); } // [y, m, d]
 
-// My timezone's offset from UTC in hours, evaluated in the middle of the tracker's window (a
-// couple of days is far too short for a DST change to matter in practice). Fractional offsets
-// (e.g. India's +5:30) can't line up with whole-hour slots, so those report as unsupported.
-function avLocalOffset() {
+// My timezone's offset from UTC in hours. A window can span a daylight-saving change, but the grid
+// has one fixed offset, so it is the one in force NOW when the window is running (or at its start when it
+// is still to come, at its end when it is over). Fractional offsets (e.g. India's +5:30) can't line up
+// with whole-hour slots, so those report as unsupported.
+function avOffsetAt(ms) { return -new Date(ms).getTimezoneOffset() / 60; }
+function avWindowEdges() {
     const [y, m, d] = avStartParts();
-    const mid = new Date(Date.UTC(y, m - 1, d + Math.floor(avConfig.days / 2), 12));
-    return -mid.getTimezoneOffset() / 60;
+    return [Date.UTC(y, m - 1, d, 12), Date.UTC(y, m - 1, d + Math.max(0, avConfig.days - 1), 12)];
+}
+function avLocalOffset() {
+    const [from, to] = avWindowEdges();
+    return avOffsetAt(Math.min(Math.max(Date.now(), from), to));
+}
+// true when the clocks change inside the window: the grid then shows the hours an hour off after the change
+function avDstInWindow() {
+    const [from, to] = avWindowEdges();
+    return avOffsetAt(from) !== avOffsetAt(to);
 }
 function avOffsetSupported() { return Number.isInteger(avLocalOffset()); }
 function avOffset() { return (avLocal && avOffsetSupported()) ? avLocalOffset() : 0; }
@@ -753,7 +763,7 @@ function renderAvTzBar() {
     const tzNote = !supported
         ? `(your timezone, UTC${offset >= 0 ? '+' : ''}${offset}, has a half-hour offset that can't line up with hourly slots — showing TCT)`
         : avLocal
-            ? `— showing your local time (${avZoneName(offset)}). Everything is still saved in TCT, so leaders see it in TCT; hover a box for its TCT time.`
+            ? `— showing your local time (${avZoneName(offset)}). Everything is still saved in TCT, so leaders see it in TCT; hover a box for its TCT time.` + (avDstInWindow() ? ' Your clocks change during this plan, so the hours after the change are shown one hour off: use TCT to be exact.' : '')
             : '— currently showing TCT (Torn City Time, UTC).';
     $('av-tz-note').textContent = tzNote;
     $('av-tz-note-l').textContent = tzNote;
