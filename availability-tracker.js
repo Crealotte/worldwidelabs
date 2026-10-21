@@ -436,7 +436,7 @@ $('av-plan-resize-l').addEventListener('click', () => {
     $('av-edit-start').value = p.startDate || '';
     $('av-edit-days').value = String(p.days || avConfig?.days || 5);
     // the end of the plan, when it has one (date and hour in TCT)
-    $('av-edit-start-hour').value = String(p.startHour || 0);
+    $('av-edit-start-hour').value = (p.startHour === undefined || p.startHour === null) ? '' : String(p.startHour);
     $('av-edit-end-date').value = p.endAt ? new Date(p.endAt * 1000).toISOString().slice(0, 10) : '';
     $('av-edit-end-hour').value = p.endAt ? String(new Date(p.endAt * 1000).getUTCHours()) : '0';
     box.style.display = 'block';
@@ -449,7 +449,7 @@ $('av-edit-save').addEventListener('click', async () => {
     const btn = $('av-edit-save'); btn.disabled = true;
     try {
         const endDate = $('av-edit-end-date').value, hadEnd = !!avPlans.find(x => x.id === avPlanId)?.endAt;
-        const body = { action: 'availability-resize', name: $('av-edit-name').value.trim(), startDate, startHour: Number($('av-edit-start-hour').value) || 0, days, ...(endDate ? { endDate, endHour: Number($('av-edit-end-hour').value) || 0 } : hadEnd ? { clearEnd: true } : {}) };
+        const body = { action: 'availability-resize', name: $('av-edit-name').value.trim(), startDate, startHour: $('av-edit-start-hour').value === '' ? '' : Number($('av-edit-start-hour').value), days, ...(endDate ? { endDate, endHour: Number($('av-edit-end-hour').value) || 0 } : hadEnd ? { clearEnd: true } : {}) };
         let r = await avFetch(body);
         if (r.needsConfirm && confirm(`${r.error} Move the plan anyway? Those ticks are removed.`)) r = await avFetch({ ...body, force: true });
         if (r.error) throw new Error(r.error);
@@ -771,7 +771,7 @@ function avBuildTable(cellHtml) {
     // a plan with a start time (linked war, or one typed in) is only open from that hour on
     const [sy, sm, sd] = avStartParts();
     let startIdx = avConfig.war?.start ? Math.max(0, Math.floor((Math.floor(avConfig.war.start / 3600) * 3600 - Date.UTC(sy, sm - 1, sd) / 1000) / 3600)) : 0;
-    if (avConfig.startHour) startIdx = Math.max(startIdx, Number(avConfig.startHour)); // a plan that starts at an hour of its first day
+    if (avConfig.startHour !== undefined && avConfig.startHour !== null) startIdx = Number(avConfig.startHour); // an hour chosen as the start replaces the closing before the war start
     const minCol = Math.floor(offset / 24);
     const maxCol = Math.floor((total - 1 + offset) / 24);
     let html = '<table class="av-table"><thead><tr><th></th>';
@@ -925,7 +925,7 @@ $('av-start-btn').addEventListener('click', async () => {
     const btn = $('av-start-btn');
     btn.disabled = true;
     try {
-        const result = await avFetch({ action: 'availability-create', name: $('av-plan-name').value.trim(), startDate, days, warId, warStart, startHour: Number($('av-start-hour').value) || 0, endDate: $('av-end-date').value, endHour: Number($('av-end-hour').value) || 0 });
+        const result = await avFetch({ action: 'availability-create', name: $('av-plan-name').value.trim(), startDate, days, warId, warStart, startHour: $('av-start-hour').value === '' ? '' : Number($('av-start-hour').value), endDate: $('av-end-date').value, endHour: Number($('av-end-hour').value) || 0 });
         if (result.error) throw new Error(result.error);
         avPlanId = result.planId; try { localStorage.setItem(AV_PLAN_KEY, avPlanId); } catch (e) { /* not critical */ }
         $('av-plan-name').value = ''; $('av-end-date').value = '';
