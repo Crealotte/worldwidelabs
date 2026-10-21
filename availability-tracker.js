@@ -155,8 +155,8 @@ function avDstInWindow() {
 }
 function avOffsetSupported() { return Number.isInteger(avLocalOffset()); }
 function avOffset() { return (avLocal && avOffsetSupported()) ? avLocalOffset() : 0; }
-// when the plan lies after a clock change, its offset differs from today's: say both so it does not look wrong
-function avZoneToday() { const now = avOffsetAt(Date.now()), o = avLocalOffset(); return now === o ? '' : ` (today you are on UTC${now >= 0 ? '+' : ''}${now}; your clocks change before this plan)`; }
+// the zone shown to people is the one they are on today (the grid itself uses the offset of the plan's window)
+function avZoneShown() { return avZoneName(avOffsetAt(Date.now())); }
 function avZoneName(offset) { return offset === 0 && !avLocal ? 'TCT' : `UTC${offset >= 0 ? '+' : ''}${offset}`; }
 
 // A column's date label. In TCT mode that's the UTC calendar date; in local mode it's the local one.
@@ -749,7 +749,7 @@ function renderAvTzBar() {
     // their own hours for TCT (or vice versa) when ticking boxes or reading the heatmap.
     const showBanner = avLocal && supported;
     const bannerText = showBanner
-        ? `🌍 You're viewing YOUR LOCAL TIME (${avZoneName(avLocalOffset())})${avZoneToday()} — not TCT. Boxes you tick are saved as the matching TCT hour.`
+        ? `🌍 You're viewing YOUR LOCAL TIME (${avZoneShown()}) — not TCT. Boxes you tick are saved as the matching TCT hour.`
         : '';
     for (const id of ['av-tz-banner', 'av-tz-banner-2']) {
         $(id).style.display = showBanner ? 'block' : 'none';
@@ -765,7 +765,7 @@ function renderAvTzBar() {
     const tzNote = !supported
         ? `(your timezone, UTC${offset >= 0 ? '+' : ''}${offset}, has a half-hour offset that can't line up with hourly slots — showing TCT)`
         : avLocal
-            ? `— showing your local time (${avZoneName(offset)})${avZoneToday()}. Everything is still saved in TCT, so leaders see it in TCT; hover a box for its TCT time.` + (avDstInWindow() ? ' Your clocks change during this plan, so the hours after the change are shown one hour off: use TCT to be exact.' : '')
+            ? `— showing your local time (${avZoneShown()}). Everything is still saved in TCT, so leaders see it in TCT; hover a box for its TCT time.` + (avDstInWindow() ? ' Your clocks change during this plan: hours after the change may be one hour off.' : '')
             : '— currently showing TCT (Torn City Time, UTC).';
     $('av-tz-note').textContent = tzNote;
     $('av-tz-note-l').textContent = tzNote;
