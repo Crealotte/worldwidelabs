@@ -12,6 +12,18 @@
 
 const WHATS_NEW = [
     {
+        version: '1.34', date: '2026-10-21',
+        title: 'All roles on Lab Notes, availability start hour, own timezone',
+        everyone: [
+            'Lab Notes has a new card: All roles and what they need. It lists the whole ladder from Recruit to Senior Researcher with what each role asks of you and what it gives.',
+            'Availability plans can start at an hour you choose (From, in TCT), next to the end date and hour. A chosen start hour also opens the hours before a linked war.',
+            'The own timezone of the availability tracker now shows the offset you are on today (UTC+2 in Belgium until 25 October).',
+        ],
+        leaders: [
+            'Recruiter script 24.7.0: a yellow F older than 30 days no longer fades to grey, it turns orange (the row gets an orange tint) so you can choose to look at that player again.',
+        ],
+    },
+    {
         version: '1.33', date: '2026-10-20',
         title: 'Friendly reminders for members, leader to dos in the script, closing a feedback form',
         everyone: [
