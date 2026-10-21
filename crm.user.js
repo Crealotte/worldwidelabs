@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         CoreLabs Elite Recruiter v22.0
-// @version      24.7.0
+// @version      24.8.0
 // @updateURL    https://worldwidelabs.vercel.app/crm.user.js
 // @downloadURL  https://worldwidelabs.vercel.app/crm.user.js
 // @description  Test version Corelabs
@@ -1374,7 +1374,9 @@ function setUselessRow(btn, uid) {
 	const saveCRMSoon = () => { clearTimeout(crmSaveTimer); crmSaveTimer = setTimeout(saveCRM, 1200); };
 	window.addEventListener('pagehide', () => { clearTimeout(cacheTimer); clearTimeout(crmSaveTimer); saveCache(); saveCRM(); });
 	// Torn can give the hall of fame (work stats) in the same call as the profile and the personal stats: one call a player instead of two. If it does not, this is remembered and the old second call is used.
-	let hofCombined = !load('RecruiterHofSeparate', false);
+	// Switching to two calls is remembered for 6 hours only (an older version remembered it forever after one odd answer, which doubled the calls).
+let hofCombined = !(Number(load('RecruiterHofSeparate', 0)) > Date.now() - 6 * 3600 * 1000), hofMiss = 0;
+function hofSeparate() { hofCombined = false; save('RecruiterHofSeparate', Date.now()); }
 	
 
 
@@ -1554,7 +1556,7 @@ function setUselessRow(btn, uid) {
 			// write a zero cache; return false so the queue retries with backoff.
 			if (d?.error) {
 				if (rateError(d)) tornBusy();
-				else if (hofCombined && ![2, 13, 18].includes(Number(d.error.code))) { hofCombined = false; save('RecruiterHofSeparate', true); } // the hall of fame does not come in the same call: use two calls again
+				else if (hofCombined && [3, 4].includes(Number(d.error.code))) hofSeparate(); // the hall of fame does not come in the same call: use two calls again
 				console.warn(`[CoreLabs] Torn API busy for ${uid} (${d?.error?.error}) — will retry`);
 				return false;
 			}
@@ -1564,9 +1566,12 @@ function setUselessRow(btn, uid) {
 			tornGood();
 	
 			// work stats: from the same answer when Torn gave them, otherwise from the second call
-			let ws = d?.halloffame?.working_stats?.value ?? d?.hof?.working_stats?.value;
+			const hofBlock = d?.halloffame ?? d?.hof;
+		let ws = hofBlock?.working_stats?.value;
+		if (ws === undefined && hofCombined && hofBlock && typeof hofBlock === 'object') ws = 0;   // the hall of fame came with the answer but this player has no work stats
+		if (ws !== undefined) hofMiss = 0;
 			if (ws === undefined) {
-				if (hofCombined) { hofCombined = false; save('RecruiterHofSeparate', true); }
+				if (hofCombined && ++hofMiss >= 3) hofSeparate();   // three answers in a row without the hall of fame: use two calls for a while
 				const h = JSON.parse(await (await tornGet(`https://api.torn.com/v2/user/${uid}/hof?key=${CFG.API_KEY}`)).text());
 				if (h?.error) { if (rateError(h)) tornBusy(); console.warn(`[CoreLabs] Torn API busy for ${uid} (${h?.error?.error}) — will retry`); return false; }
 				tornGood();
