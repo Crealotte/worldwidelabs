@@ -51,4 +51,31 @@ async function loadRecruitment() {
     if (!s.error && !s.paid && !s.owner && !s.code) { const sub = await recFetch('rec-subscribe'); if (sub.code) s = { ...s, code: sub.code }; } // the personal message is made the first time
     $('rec-sub').innerHTML = recStatusHtml(s);
     recWire(s);
+    if (s.owner) recOwnerPanel(body);
+}
+// the owner sees who has a paid subscription (people with free access as a director or leader are not in this list: they are worked out when they open the script)
+async function recOwnerPanel(body) {
+    const box = document.createElement('div');
+    box.className = 'panel'; box.style.margin = '0 0 12px';
+    box.innerHTML = '<b>Subscribers</b> <span style="font-size:12px;color:var(--muted);">(owner only: players who paid Xanax; free access for company directors and faction leaders is not listed)</span><div id="rec-subs-list" style="margin-top:8px;font-size:13px;color:var(--muted);">Loading…</div>' +
+        '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:10px;font-size:13px;">Give days: <input id="rec-grant-id" placeholder="Torn ID" style="width:110px;"> <input id="rec-grant-days" type="number" min="1" max="365" value="7" style="width:80px;"> <button type="button" class="ghost small" id="rec-grant-go">Give</button> <span id="rec-grant-msg" style="color:var(--muted);"></span></div>';
+    body.appendChild(box);
+    const load = async () => {
+        const r = await recFetch('rec-owner-list');
+        const el = $('rec-subs-list');
+        if (r.error) { el.textContent = r.error; return; }
+        const now = Date.now(), act = r.licenses.filter(l => l.until > now);
+        const day = ms => new Date(ms).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
+        el.innerHTML = `<div style="margin-bottom:6px;"><b style="color:var(--text);">${act.length}</b> active, ${r.licenses.length - act.length} ended</div>` + (r.licenses.length ? `<div class="table-scroll resizable" style="height:260px;overflow:auto;"><table><thead><tr><th>Player</th><th>Torn ID</th><th>Status</th><th>Until</th></tr></thead><tbody>${r.licenses.map(l => `<tr><td>${l.name ? recEsc(l.name) : '<span style="color:var(--muted);">unknown</span>'}</td><td><a href="https://www.torn.com/profiles.php?XID=${recEsc(l.tornId)}" target="_blank" rel="noopener">${recEsc(l.tornId)}</a></td><td style="color:${l.until > now ? 'var(--reagent)' : 'var(--muted)'};">${l.until > now ? 'active' : 'ended'}</td><td>${l.until ? day(l.until) : ''}</td></tr>`).join('')}</tbody></table></div>` : 'Nobody has paid yet.');
+    };
+    load();
+    $('rec-grant-go').addEventListener('click', async () => {
+        const id = $('rec-grant-id').value.trim(), days = Number($('rec-grant-days').value), msg = $('rec-grant-msg');
+        if (!/^[0-9]+$/.test(id)) { msg.textContent = 'Write a Torn ID (numbers only).'; return; }
+        if (!confirm(`Give ${days} day${days === 1 ? '' : 's'} of the Recruiter script to Torn ID ${id}?`)) return;
+        msg.textContent = 'Saving…';
+        const r = await recFetch('rec-owner-grant', { tornId: id, days });
+        msg.textContent = r.error ? r.error : 'Done.';
+        if (!r.error) { $('rec-grant-id').value = ''; load(); }
+    });
 }
