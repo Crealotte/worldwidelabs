@@ -460,9 +460,10 @@ async function leaderTodos(key, factionId) {
         const gate = await welCheckin(redis, factionId);
         const ready = allReady.filter(r => !welIsWar(r) || gate.sent), waiting = allReady.length - ready.length;
         if (waiting) add('promo-wait', `${waiting} war related role change${waiting === 1 ? '' : 's'} wait${waiting === 1 ? 's' : ''} until this month's newsletter with the check-in messages is sent. Mark it as sent on the Newsletter page when it is.`, 'Open the Newsletter', 'newsletter', null);
-        const up = ready.filter(r => !r.kind), down = ready.filter(r => r.kind === 'demote'), below = ready.filter(r => r.kind === 'check');
+        const up = ready.filter(r => !r.kind), down = ready.filter(r => r.kind === 'demote'), below = ready.filter(r => r.kind === 'check'), late = ready.filter(r => r.kind === 'late');
         if (up.length) add('promotions', `${up.length} member${up.length === 1 ? ' is' : 's are'} ready for promotion: ${up.slice(0, 5).map(r => `${r.name} (${r.to})`).join(', ')}${up.length > 5 ? ` +${up.length - 5} more` : ''}.`, 'See who', 'welcome-admin', 'wa-promo');
         if (down.length) add('demotions', `${down.length} Chemist${down.length === 1 ? '' : 's'} no longer meet${down.length === 1 ? 's' : ''} the war rule and can move back down: ${down.slice(0, 5).map(r => `${r.name} (${r.to})`).join(', ')}${down.length > 5 ? ` +${down.length - 5} more` : ''}.`, 'See who', 'welcome-admin', 'wa-promo');
+        if (late.length) add('slow-start', `${late.length} member${late.length === 1 ? ' is' : 's are'} over a week in the faction and not yet a Guinea Pig or Lab Rat: ${late.slice(0, 5).map(r => r.name).join(', ')}${late.length > 5 ? ` +${late.length - 5} more` : ''}.`, 'See who', 'welcome-admin', 'wa-promo');
         if (below.length) add('role-check', `${below.length} member${below.length === 1 ? ' holds' : 's hold'} a role they do not meet the requirements of: ${below.slice(0, 5).map(r => `${r.name} (${r.from})`).join(', ')}${below.length > 5 ? ` +${below.length - 5} more` : ''}.`, 'See who', 'welcome-admin', 'wa-promo');
     } catch (e) { /* skip */ }
 
