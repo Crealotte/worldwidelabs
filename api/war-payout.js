@@ -331,14 +331,15 @@ function slotBeforeStart(data, slotKey) { // an hour outside the plan: before th
     const [day, hour] = String(slotKey).split('-').map(Number);
     const at = Date.UTC(y, m - 1, d) / 1000 + (day * 24 + hour) * 3600;
     if (data.endAt && at >= data.endAt) return true;
+    if (data.startHour && at < Date.UTC(y, m - 1, d) / 1000 + Number(data.startHour) * 3600) return true; // the plan starts at an hour of its first day
     return !!start && at < Math.floor(start / 3600) * 3600;
 }
 // an optional end of a plan: a date and an hour (TCT) the plan runs until. The number of days follows from it (at most 14 from the start date).
-function planEnd(startDate, endDate, endHour) {
+function planEnd(startDate, endDate, endHour, startHour) {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(String(endDate || ''))) return { endAt: null };
     const h = Math.min(23, Math.max(0, Math.round(Number(endHour)) || 0));
-    const endAt = Date.parse(`${endDate}T00:00:00Z`) / 1000 + h * 3600, startTs = Date.parse(`${startDate}T00:00:00Z`) / 1000;
-    if (!(endAt > startTs)) return { error: 'The end has to be after the start date.' };
+    const endAt = Date.parse(`${endDate}T00:00:00Z`) / 1000 + h * 3600, startTs = Date.parse(`${startDate}T00:00:00Z`) / 1000, beginTs = startTs + (Number(startHour) || 0) * 3600;
+    if (!(endAt > beginTs)) return { error: 'The end has to be after the start date.' };
     const days = Math.ceil((endAt - startTs) / 86400);
     if (days > 14) return { error: 'A plan shows at most 14 days: pick an end within 14 days of the start date.' };
     return { endAt, days };
@@ -1007,7 +1008,7 @@ module.exports = async function handler(req, res) {
                 archivedPlans: leaderFlag ? allPlans.filter(p => p.archived) : [], // leaders only: the separate "pick one to view" list
                 planId, viewingArchived,
                 // war = the ranked war this tracker is linked to ({ id, start, opponent }), if any
-                config: data ? { startDate: data.startDate, days: data.days, endAt: data.endAt || null, war: data.war || null, name: data.name || '' } : null,
+                config: data ? { startDate: data.startDate, days: data.days, startHour: data.startHour || 0, endAt: data.endAt || null, war: data.war || null, name: data.name || '' } : null,
                 mine,
                 mineWatch: data?.entries?.[playerId]?.watch || {}, // hours I marked as chain watch / war coordinator
                 myUnavailable: unavailable[playerId] || null, // { name, note, at } if I marked myself out
@@ -2178,7 +2179,8 @@ Cancel: ${cancelUrl}`, [], embeds, undefined, true);
             const { startDate, days, warId, warStart, name } = req.body;
             let dayCount = Math.min(14, Math.max(1, Number(days) || 5));
             if (!startDate) return res.status(400).json({ error: 'Missing startDate' });
-            const end = planEnd(startDate, req.body.endDate, req.body.endHour);
+            const startHour = Math.min(23, Math.max(0, Math.round(Number(req.body.startHour)) || 0));
+            const end = planEnd(startDate, req.body.endDate, req.body.endHour, startHour);
             if (end.error) return res.status(400).json({ error: end.error });
             if (end.endAt) dayCount = end.days;
             const plans = await loadPlanIndex(factionId);
@@ -2196,8 +2198,8 @@ Cancel: ${cancelUrl}`, [], embeds, undefined, true);
             }
             const planId = Math.random().toString(36).slice(2, 8);
             const planName = String(name || '').trim().slice(0, 40);
-            await redis(['SET', availabilityKey(factionId, planId), JSON.stringify({ name: planName, startDate, days: dayCount, ...(end.endAt ? { endAt: end.endAt } : {}), war, entries: {}, unavailable: {} })]);
-            plans.push({ id: planId, name: planName, startDate, days: dayCount, ...(end.endAt ? { endAt: end.endAt } : {}), war, createdAt: Date.now() });
+            await redis(['SET', availabilityKey(factionId, planId), JSON.stringify({ name: planName, startDate, days: dayCount, ...(startHour ? { startHour } : {}), ...(end.endAt ? { endAt: end.endAt } : {}), war, entries: {}, unavailable: {} })]);
+            plans.push({ id: planId, name: planName, startDate, days: dayCount, ...(startHour ? { startHour } : {}), ...(end.endAt ? { endAt: end.endAt } : {}), war, createdAt: Date.now() });
             await redis(['SET', availabilityIndexKey(factionId), JSON.stringify(plans)]);
             return res.status(200).json({ ok: true, planId });
         }
@@ -2249,9 +2251,11 @@ Cancel: ${cancelUrl}`, [], embeds, undefined, true);
             let days = Math.min(14, Math.max(1, Math.round(Number(req.body.days)) || data.days));
             const startDate = /^\d{4}-\d{2}-\d{2}$/.test(req.body.startDate) ? req.body.startDate : data.startDate;
             // an optional end (date and hour, TCT): given, changed or taken away; the days follow from it
+            let startHour = data.startHour || 0;
+            if (req.body.startHour !== undefined) startHour = Math.min(23, Math.max(0, Math.round(Number(req.body.startHour)) || 0));
             let endAt = data.endAt || null;
             if (req.body.clearEnd) endAt = null;
-            else if (req.body.endDate) { const e = planEnd(startDate, req.body.endDate, req.body.endHour); if (e.error) return res.status(400).json({ error: e.error }); endAt = e.endAt; }
+            else if (req.body.endDate) { const e = planEnd(startDate, req.body.endDate, req.body.endHour, startHour); if (e.error) return res.status(400).json({ error: e.error }); endAt = e.endAt; }
             if (endAt) {
                 const dEnd = Math.ceil((endAt - Date.parse(`${startDate}T00:00:00Z`) / 1000) / 86400);
                 if (dEnd < 1) return res.status(400).json({ error: 'The end has to be after the start date.' });
@@ -2271,11 +2275,12 @@ Cancel: ${cancelUrl}`, [], embeds, undefined, true);
             }
             if (typeof req.body.name === 'string') data.name = req.body.name.trim().slice(0, 40);
             data.days = days; data.startDate = startDate;
+            if (startHour) data.startHour = startHour; else delete data.startHour;
             if (endAt) data.endAt = endAt; else delete data.endAt;
             await redis(['SET', availabilityKey(factionId, planId), JSON.stringify(data)]);
             const meta = plans.find(p => p.id === planId);
-            if (meta) { meta.days = days; meta.startDate = startDate; if (endAt) meta.endAt = endAt; else delete meta.endAt; if (typeof req.body.name === 'string') meta.name = data.name; await redis(['SET', availabilityIndexKey(factionId), JSON.stringify(plans)]); }
-            return res.status(200).json({ ok: true, days, startDate, endAt, name: data.name || '' });
+            if (meta) { meta.days = days; meta.startDate = startDate; if (startHour) meta.startHour = startHour; else delete meta.startHour; if (endAt) meta.endAt = endAt; else delete meta.endAt; if (typeof req.body.name === 'string') meta.name = data.name; await redis(['SET', availabilityIndexKey(factionId), JSON.stringify(plans)]); }
+            return res.status(200).json({ ok: true, days, startDate, startHour, endAt, name: data.name || '' });
         }
 
         if (action === 'availability-delete') {
