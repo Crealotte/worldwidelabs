@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         CoreLabs Elite Recruiter v22.0
-// @version      24.6.0
+// @version      24.7.0
 // @updateURL    https://worldwidelabs.vercel.app/crm.user.js
 // @downloadURL  https://worldwidelabs.vercel.app/crm.user.js
 // @description  Test version Corelabs
@@ -60,6 +60,7 @@
 		.cl-locked .cl-act-icon { opacity:.4; pointer-events:none; }
 		.cl-grey   { background:linear-gradient(#555,#444) !important; color:#bbb !important; }
 		.cl-yellow { background:linear-gradient(#e8b800,#c49a00) !important; color:#111 !important; }
+		.cl-orange { background:linear-gradient(#f08c00,#d9480f) !important; color:#111 !important; }
 		.cl-green  { background:linear-gradient(#2f9e44,#236b30) !important; color:#dfd !important; }
 		.cl-red    { background:linear-gradient(#c92a2a,#8c1c1c) !important; color:#fdd !important; }
 		.cl-blue   { background:linear-gradient(#1971c2,#114f8a) !important; color:#ddf !important; }
@@ -150,6 +151,7 @@
 		/* --- row tint: faded red (a red button) and faded yellow (F yellow) --- */
 		li.cl-row-red { box-shadow:inset 0 0 0 999px rgba(220,70,70,.22); }
 		li.cl-row-yellow { box-shadow:inset 0 0 0 999px rgba(230,190,40,.20); }
+		li.cl-row-orange { box-shadow:inset 0 0 0 999px rgba(240,140,0,.24); }
 		/* --- FCU help badge --- */
 		.cl-fcu-help {
 			display:inline-flex; align-items:center; justify-content:center;
@@ -174,6 +176,7 @@
 		}
 		.cl-fcu-dot.grey   { background:#555; }
 		.cl-fcu-dot.yellow { background:#e8b800; }
+		.cl-fcu-dot.orange { background:#f08c00; }
 		.cl-fcu-dot.green  { background:#2f9e44; }
 		.cl-fcu-dot.red    { background:#c92a2a; }
 		.cl-fcu-dot.blue   { background:#1971c2; }
@@ -475,12 +478,11 @@
 	}
 	
 	// Compares the F / C / S / U buttons of this computer with the server (everything of this recruiter, downloaded once).
-	// A yellow F that is older than 30 days is grey here on purpose (it faded): it is listed as faded, not as a difference.
 	async function verifyToggles() {
 		const r = await wwl('rec-load', { since: 0 });
 		if (!r || r.error || !Array.isArray(r.rows)) return { error: (r && r.error) || 'The server did not answer.' };
 		const server = {}; r.rows.forEach(x => { server[String(x.id)] = x; });
-		const limit = Date.now() - 30 * 24 * 60 * 60 * 1000, diffs = [];
+		const diffs = [];
 		let checked = 0;
 		for (const uid of new Set([...Object.keys(CRM), ...Object.keys(server)])) {
 			const l = CRM[uid], s = server[uid];
@@ -488,7 +490,7 @@
 			if ((!lv || !lv.some(Boolean)) && (!sv || !sv.some(Boolean))) continue;   // nothing toggled on either side
 			checked++;
 			if (lv && sv && lv.join() === sv.join()) continue;
-			const faded = !!(lv && sv && sv[0] === 1 && lv[0] === 0 && s.at && s.at < limit && lv.slice(1).join() === sv.slice(1).join());
+			const faded = false;
 			diffs.push({ uid, name: (l && l.name) || (s && s.name) || '', local: lv, server: sv, faded, serverAt: s ? s.at : 0 });
 		}
 		return { checked, diffs };
@@ -540,16 +542,6 @@
 	}
 	
 
-		// A yellow F (contacted, no answer yet) fades after a month: people change their mind. The age is the time of the last change of that player's row.
-	function expireYellowF() {
-		const limit = Date.now() - 30 * 24 * 60 * 60 * 1000;
-		let n = 0;
-		for (const uid of Object.keys(CRM)) {
-			const s = CRM[uid];
-			if (s && s.F === 1 && s.updatedAt && Date.parse(s.updatedAt) < limit) { s.F = 0; n++; }
-		}
-		if (n) { saveCRM(); console.log('[CoreLabs] ' + n + ' yellow F faded after 30 days'); }
-	}
 	
 /**
 	 * Load all CRM states for MY_ID from Supabase, merge into CRM object.
@@ -568,7 +560,7 @@
 		if (reply.now) save('RecruiterWwlSince', reply.now);
 		Object.keys(PENDING).forEach(uid => { if (CRM[uid]) upsertCRMState(uid); else delete PENDING[uid]; }); // changes the server never got (a request that failed or was cut off): sent again
 		const rows = reply.rows;
-		if (!rows.length) { expireYellowF(); return; }
+		if (!rows.length) return;
 		const isBadName = (n) => n && /torn|rpg/i.test(n);
 		rows.forEach(row => {
 			const uid = String(row.id);
@@ -590,7 +582,6 @@
 			if (isBadName(row.name)) upsertCRMState(uid);
 		});
 		console.log(`[CoreLabs] Loaded ${rows.length} CRM states from WWL`);
-		expireYellowF();
 		saveCRM(); // keep a copy on this computer: the next start only asks for what changed
 	}
 	
@@ -1260,17 +1251,22 @@
 	];
 	const U_DEF = { id: 'U', labels: ['U','U'], colors: ['cl-grey','cl-blue'] }; // U = Useless
 
+	// A yellow F (contacted) stays yellow in the data; after 30 days it shows orange: look at this player again.
+	const OLD_F_MS = 30 * 24 * 60 * 60 * 1000;
+	const isOldYellowF = st => !!(st && st.F === 1 && st.updatedAt && Date.parse(st.updatedAt) < Date.now() - OLD_F_MS);
 	// U dims the row. A red button (F, C or S) tints the whole row faded red, a yellow F tints it faded yellow: easier to look at a list of members.
 function setUselessRow(btn, uid) {
 	const st = CRM[uid] || {};
 	const isUseless = st.U === 1;
 	const isRed = st.F === 3 || st.C === 3 || st.S === 3;
-	const isYellow = !isRed && st.F === 1;
+	const isOrange = !isRed && isOldYellowF(st);
+	const isYellow = !isRed && st.F === 1 && !isOrange;
 		const li = btn.closest('li[class*="user"]');
 		if (li) {
 			li.classList.toggle('cl-useless', isUseless);
 			li.classList.toggle('cl-row-red', isRed);
 			li.classList.toggle('cl-row-yellow', isYellow);
+			li.classList.toggle('cl-row-orange', isOrange);
 		}
 	}
 
@@ -1293,7 +1289,9 @@ function setUselessRow(btn, uid) {
 			const state = CRM[uid] || {};
 			let idx = state[def.id] || 0;
 			const btn = document.createElement('div');
-			btn.className = `cl-crm-btn ${def.colors[idx]}${locked ? ' cl-btn-disabled' : ''}`;
+			const old = def.id === 'F' && idx === 1 && isOldYellowF(state);
+		btn.className = `cl-crm-btn ${old ? 'cl-orange' : def.colors[idx]}${locked ? ' cl-btn-disabled' : ''}`;
+		if (old && !locked) btn.title = 'Contacted more than 30 days ago - look again, or click to change';
 			btn.textContent = def.labels[idx];
 			if (locked) btn.title = 'Subscription required — send xanax to unlock (see CRM Dashboard)';
 
@@ -1979,7 +1977,7 @@ function setUselessRow(btn, uid) {
 					box.innerHTML = '<div style="font-size:10px;color:#555;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px;">Check my toggles (F / C / S / U)</div>';
 					const note = document.createElement('div');
 					note.style.cssText = 'font-size:11px;color:#999;line-height:1.6;margin-bottom:8px;';
-					note.textContent = 'Compares the buttons you toggled on this computer with what the server has saved. A yellow F older than 30 days is grey on purpose and is not counted as a difference. After every toggle the button shows a green ring when the server has it, and a red ring while it is not saved yet.';
+					note.textContent = 'Compares the buttons you toggled on this computer with what the server has saved. After every toggle the button shows a green ring when the server has it, and a red ring while it is not saved yet.';
 					const runBtn = document.createElement('button');
 					runBtn.textContent = 'Check now';
 					runBtn.style.cssText = 'background:#1a1a1a;border:1px solid #333;color:#aaa;padding:5px 12px;border-radius:4px;font-size:11px;cursor:pointer;';
@@ -2294,6 +2292,7 @@ function setUselessRow(btn, uid) {
 		<div class="cl-fcu-tooltip-title">F — First Contact</div>
 		<div class="cl-fcu-row"><span class="cl-fcu-dot grey"></span>Not contacted</div>
 		<div class="cl-fcu-row"><span class="cl-fcu-dot yellow"></span>Contacted — awaiting reply</div>
+		<div class="cl-fcu-row"><span class="cl-fcu-dot orange"></span>Contacted over 30 days ago - look again</div>
 		<div class="cl-fcu-row"><span class="cl-fcu-dot green"></span>Responded positively</div>
 		<div class="cl-fcu-row"><span class="cl-fcu-dot red"></span>Declined / not interested</div>
 		<hr class="cl-fcu-sep">
