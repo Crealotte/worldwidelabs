@@ -21,6 +21,7 @@ const WHATS_NEW = [
             'The own timezone of the availability tracker now shows the offset you are on today (UTC+2 in Belgium until 25 October).',
         ],
         leaders: [
+            'Role check: the promotions list (dashboard card and Lab Notes editor) now also shows members who hold Experiment B or higher without meeting the earlier requirements (script not installed, not on Discord, Intel or CAT not verified), marked with a warning sign and the role they should be. Unknown Discord answers are not flagged. Click Check again now to refresh it.',
             'Recruiter script 24.7.0: a yellow F older than 30 days no longer fades to grey, it turns orange (the row gets an orange tint) so you can choose to look at that player again.',
         ],
     },
