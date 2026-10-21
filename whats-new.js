@@ -17,6 +17,7 @@ const WHATS_NEW = [
         everyone: [
             'Lab Notes has a new card: All roles and what they need. It lists the whole ladder from Recruit to Senior Researcher with what each role asks of you and what it gives.',
             'Availability plans can start at an hour you choose (From, in TCT), next to the end date and hour. A chosen start hour also opens the hours before a linked war.',
+            'The tables on Member overview and Who\'s on board can be made taller or shorter by dragging the corner at their bottom right.',
             'The own timezone of the availability tracker now shows the offset you are on today (UTC+2 in Belgium until 25 October).',
         ],
         leaders: [

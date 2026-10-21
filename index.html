@@ -179,6 +179,8 @@
        .table-scroll wrapper is also given a height limit (an inline max-height still wins) — otherwise it would
        never scroll vertically and the header would have nothing to stick to. The availability grid has its own. */
     .table-scroll { overflow: auto; max-height: 75vh; }
+    /* a table box you can make taller or shorter by dragging its bottom-right corner (it keeps scrolling inside, so the header stays in view) */
+    .table-scroll.resizable { resize: vertical; max-height: none; min-height: 160px; }
     table:not(.av-table) thead th { position: sticky; top: 0; z-index: 2; box-shadow: inset 0 -1px 0 var(--line); }
     table:not(.av-table) th:first-child, table:not(.av-table) td:first-child { position: sticky; left: 0; z-index: 1; box-shadow: inset -1px 0 0 var(--line); }
     table:not(.av-table) td:first-child { background: var(--bench); }
@@ -1588,7 +1590,7 @@
                     <div id="mo-period-note" style="color:var(--muted);font-size:12px;margin:-4px 0 4px;"></div>
                     <div id="mo-consumption-note" style="color:var(--muted);font-size:12px;margin:0 0 10px;"></div>
                     <p style="color:var(--muted);font-size:12px;margin:0 0 10px;">Hits are shown as <b>war</b><span style="color:var(--muted);">+chain</span> per war. A war counts for a member at 10 war hits, or 20 chain hits if they did fewer war hits than that (green = counts, red = doesn't). Green overall = it counted in at least 3 of the last 5 wars; red = fewer, so they need a push on warring. Wars from before someone joined show a grey dash and aren't held against them (someone who joined 2 wars ago is judged on those 2). The last-5-wars rule and the <b>last 5 wars</b> hit columns always ignore the period; the <b>this period</b> hit columns are the ones the newsletter competition uses. The period only affects the consumption columns and the War/Chain hit winners above (which only count a war or chain event that ended in the period shown, so one still sitting in the "last 5" doesn't win the same competition twice). Click a column heading to sort. Weeks run Sunday to Sunday (TCT). </p>
-                    <div class="table-scroll" style="overflow:auto;max-height:75vh;">
+                    <div class="table-scroll resizable" style="overflow:auto;height:75vh;" title="Drag the corner at the bottom right to make this table larger or smaller">
                         <div id="mo-table"></div>
                     </div>
                 </div>
@@ -1596,7 +1598,7 @@
                 <div class="panel" id="adoption-mo" style="display:none;">
                     <details><summary class="av-sum"><h3>Who's on board</h3></summary>
                     <p style="color:var(--muted);font-size:12px;margin:0 0 12px;" id="adoption-summary-mo"></p>
-                    <div class="table-scroll" style="max-height:340px;overflow-y:auto;">
+                    <div class="table-scroll resizable" style="height:340px;overflow:auto;" title="Drag the corner at the bottom right to make this table larger or smaller">
                         <table>
                             <thead><tr><th data-sort="name">Member</th><th data-sort="wwl">WWLabs</th><th data-sort="discord">Discord</th><th data-sort="exempt">Discord exempt</th><th data-sort="intel">Intel</th><th data-sort="cat">CAT</th><th data-sort="userscript">Userscript</th><th class="num" data-sort="last">Last login</th></tr></thead>
                             <tbody id="adoption-body-mo"></tbody>
