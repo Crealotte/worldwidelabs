@@ -15,6 +15,7 @@ Members get `energy-plan.user.js` (the **release** file). Every change from now 
 Queue changes below instead of releasing each one. Nothing here is live for members until a release.
 
 ### Queued for the next release
+- Script 1.40.6 (dev): the Energy tab can count the energy really trained instead of the ticks (plan-track, shared with the planner on the site; the server part is live).
 - Script 1.40.5 (dev): the Energy tab opens on the day you are working on (the last day with a tick), not always on day 1. Script 1.40.4 (dev): the Avail grid has the days as columns and the hours as rows, like the site. Script 1.40.3 (dev): the Mentoring tab is removed (the Notes tab has the same chapters; the mentor and the chat are on the site, with a link in the Notes tab).
 - Script 1.40.2 (dev): new Avail tab with the faction overview (everybody, with names when you tap an hour, now-hour framed) and My hours (tap to set green, yellow or off). The server part (crowd numbers in availability-get) is already live.
 - Nothing queued. Last release: script 1.40 (2026-10-18): the Trade helper on Torn's trade pages (total at the WWL pricelist, receipt link and Copy message, Accept button with Accept anyway, the money page filled in, a full Plushie/Flower Set priced as the set, finished trades saved to the ledger with Undo). It stays quiet for anybody without a pricelist.

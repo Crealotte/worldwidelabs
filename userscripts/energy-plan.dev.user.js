@@ -2,7 +2,7 @@
 // @name         World Wide Labs
 // @namespace    https://worldwidelabs.vercel.app
 // @author       CreaLotte
-// @version      1.40.5
+// @version      1.40.6
 // @updateURL    __WWL_BASE__/worldwidelabs.user.js
 // @downloadURL  __WWL_BASE__/worldwidelabs.user.js
 // @description  Shows your WorldWideLabs weekly energy plan (the checklist from the Energy planner) inside Torn, a To do tab with small personal reminders (revive setting, feedback, timezone map, availability, Discord/Intel/CAT), your My Targets list, a simplified energy/war standing strip, and — if you are in the Mentoring Platform — your mentoring checklist too. Also shows faction banners at the top of every Torn page. A small ⚙ in the header shows the installed version, flags when a newer one is out, lets you set/replace your API key, and — for a leader — add or remove your faction's banners right from Torn. On a computer it is a small window you can drag around and close; in TornPDA it is a menu. Ticks are shared with the WWL site.
@@ -242,6 +242,7 @@
     function progress() {
         let done = 0, total = 0;
         for (const b of plan.blocks) for (const it of b.items) { total += it.value; if (plan.checks[it.key]) done += it.value; }
+        if (plan.track === 'counter') done = plan.counter && plan.counter.known ? plan.counter.trained : 0; // the bar counts the energy really trained this week
         return { done, total };
     }
     function showProgress() {
@@ -287,7 +288,11 @@
         if (nextIdx < 0) nextIdx = plan.blocks.findIndex((b, i) => i > lastTick && open(b));
         if (nextIdx < 0) nextIdx = plan.blocks.findIndex(open);
         return `${old}<div style="color:#9aa4b5;margin-bottom:6px;">${esc(plan.summary)}</div>
-            <div style="height:6px;background:#39414f;border-radius:3px;overflow:hidden;margin-bottom:8px;"><div style="height:100%;width:${p.total ? Math.min(100, p.done / p.total * 100) : 0}%;background:#35d99b;"></div></div>
+            <div style="height:6px;background:#39414f;border-radius:3px;overflow:hidden;margin-bottom:6px;"><div style="height:100%;width:${p.total ? Math.min(100, p.done / p.total * 100) : 0}%;background:#35d99b;"></div></div>
+            <div style="display:flex;gap:6px;align-items:center;margin-bottom:8px;font-size:12px;color:#9aa4b5;flex-wrap:wrap;">The bar counts:
+                <button type="button" class="wwl-track" data-mode="boxes" style="padding:2px 8px;border-radius:6px;border:1px solid #3a4352;cursor:pointer;background:${plan.track === 'counter' ? 'transparent' : '#2a2f3a'};color:#e6e9ef;">my ticks</button>
+                <button type="button" class="wwl-track" data-mode="counter" style="padding:2px 8px;border-radius:6px;border:1px solid #3a4352;cursor:pointer;background:${plan.track === 'counter' ? '#2a2f3a' : 'transparent'};color:#e6e9ef;">energy trained</button>
+                ${plan.track === 'counter' ? `<span>${plan.counter && plan.counter.known ? 'from the energy tracker' : 'no numbers for you yet'}</span>` : ''}</div>
             ${plan.blocks.map((b, i) => {
                 const all = b.items.length && b.items.every(it => plan.checks[it.key]);
                 return `<details ${i === nextIdx ? 'open' : ''} style="margin-bottom:4px;"><summary style="cursor:pointer;font-weight:700;padding:${IS_PDA ? 6 : 2}px 0;">${all ? '✅ ' : ''}${esc(b.title)}${i === nextIdx ? ' <span style="color:#35d99b;font-weight:400;">← next</span>' : ''}</summary>
@@ -743,6 +748,10 @@
         wireAvailTab();
         body.querySelector('#wwl-targets-refresh')?.addEventListener('click', refreshTargetStatus);
         body.querySelector('#wwl-daily-check')?.addEventListener('change', e => { setDailyChecked(e.target.checked); render(); });
+        body.querySelectorAll('.wwl-track').forEach(b => b.addEventListener('click', async () => {
+            try { const r = await api({ action: 'plan-track', mode: b.dataset.mode }); if (r.plan) { plan = r.plan; try { store.set('wwl_plan_cache', JSON.stringify({ at: Date.now(), plan })); } catch (e) { /* not critical */ } } } catch (e) { /* the bar stays as it was */ }
+            render();
+        }));
         body.querySelectorAll('.wwl-e-check').forEach(cb => cb.addEventListener('change', async () => {
             if (cb.checked) plan.checks[cb.dataset.k] = true; else delete plan.checks[cb.dataset.k];
             showProgress();

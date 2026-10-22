@@ -651,6 +651,7 @@ function renderGymPlanner() {
     // Tracker leaderboard can know it, since battle stats (what it's based on) are private to this key alone.
     gpPlanFetch({ action: 'plan-save', week: Math.floor(Date.now() / (7 * 86400e3)), stat: inp.stat, method: chosen.name, checks,
         summary: `${chosen.name}: about +${gpN(w.gain)} ${inp.stat} from ${gpN(w.energyUsed)} energy a week`, blocks, weekly: inp.weekly }).then(r => {
+        gpSetPlan(r?.plan); renderGpProgress();
         const server = r?.plan?.checks;
         if (!server) return;
         let changed = false;
@@ -680,12 +681,29 @@ function gpJumpFinishSteps(m, inp) {
     if (m.ecstasy) steps.push({ do: 'Use the Ecstasy — it doubles your Happy' });
     return steps;
 }
+// how the bar counts: the member's own ticks (default) or the energy they really trained this week (the energy tracker's counter). The boxes can be ticked either way.
+let gpTrack = 'boxes', gpCounter = null;
+function gpSetPlan(plan) {
+    gpTrack = plan && plan.track === 'counter' ? 'counter' : 'boxes'; gpCounter = plan && plan.counter || null;
+    if ($('gp-track')) $('gp-track').value = gpTrack;
+}
 function renderGpProgress() {
     let done = 0, total = 0;
     document.querySelectorAll('#gp-plan .gp-check').forEach(cb => { const v = parseInt(cb.dataset.value, 10) || 0; total += v; if (cb.checked) done += v; });
-    $('gp-progress').textContent = `${gpN(done)} / ${gpN(total)} E`;
+    const note = $('gp-track-note');
+    if (gpTrack === 'counter') {
+        if (gpCounter && gpCounter.known) { done = gpCounter.trained; if (note) note.textContent = 'Counted from the energy tracker. You can still tick the boxes as a checklist.'; }
+        else { done = 0; if (note) note.textContent = 'The energy tracker has no numbers for you yet.'; }
+    } else if (note) note.textContent = '';
+    $('gp-progress').textContent = `${gpN(done)} / ${gpN(total)} E${gpTrack === 'counter' ? ' trained' : ''}`;
     $('gp-progress-fill').style.width = `${total ? Math.min(100, done / total * 100) : 0}%`;
 }
+
+$('gp-track').addEventListener('change', async () => {
+    const mode = $('gp-track').value, r = await gpPlanFetch({ action: 'plan-track', mode });
+    if (!r) { toast('Could not change that - open the planner once so a plan is saved, then try again.'); $('gp-track').value = gpTrack; return; }
+    gpSetPlan(r.plan); renderGpProgress();
+});
 
 async function loadGymPlanner() {
     await Promise.all([gpLoadPrices(), gpLoadGyms(), gpLoadPerks()]);

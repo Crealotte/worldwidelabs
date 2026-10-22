@@ -895,6 +895,11 @@
                     <div class="bar-head"><span id="gp-progress"></span></div>
                     <div class="bar-track"><div class="bar-fill" id="gp-progress-fill" style="background:var(--reagent);width:0%;"></div></div>
                 </div>
+                <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:0 0 4px;font-size:13px;">
+                    <label for="gp-track" style="color:var(--muted);">The bar counts:</label>
+                    <select id="gp-track" style="width:auto;font-size:13px;"><option value="boxes">the boxes I tick</option><option value="counter">the energy I really trained (automatic)</option></select>
+                    <span id="gp-track-note" style="color:var(--muted);font-size:12px;"></span>
+                </div>
                 <div id="gp-plan"></div>
                 </details>
             </div>
