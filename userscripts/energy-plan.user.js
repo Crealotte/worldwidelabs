@@ -2,7 +2,7 @@
 // @name         World Wide Labs
 // @namespace    https://worldwidelabs.vercel.app
 // @author       CreaLotte
-// @version      1.40
+// @version      1.41
 // @updateURL    __WWL_BASE__/worldwidelabs.user.js
 // @downloadURL  __WWL_BASE__/worldwidelabs.user.js
 // @description  Shows your WorldWideLabs weekly energy plan (the checklist from the Energy planner) inside Torn, a To do tab with small personal reminders (revive setting, feedback, timezone map, availability, Discord/Intel/CAT), your My Targets list, a simplified energy/war standing strip, and — if you are in the Mentoring Platform — your mentoring checklist too. Also shows faction banners at the top of every Torn page. A small ⚙ in the header shows the installed version, flags when a newer one is out, lets you set/replace your API key, and — for a leader — add or remove your faction's banners right from Torn. On a computer it is a small window you can drag around and close; in TornPDA it is a menu. Ticks are shared with the WWL site.
@@ -26,7 +26,7 @@
     const KEY_NAME = 'wwl_api_key', POS_NAME = 'wwl_plan_pos', STATE_NAME = 'wwl_plan_state';
     // GM_info gives the version Tampermonkey actually has installed right now — falls back to a
     // hardcoded copy (kept in sync with @version above) for TornPDA, which doesn't grant GM_info.
-    const SCRIPT_VERSION = (typeof GM_info !== 'undefined' && GM_info.script?.version) || '1.40';
+    const SCRIPT_VERSION = (typeof GM_info !== 'undefined' && GM_info.script?.version) || '1.41';
     const versionGreater = (a, b) => {
         const pa = String(a).split('.').map(Number), pb = String(b).split('.').map(Number);
         for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
@@ -242,6 +242,7 @@
     function progress() {
         let done = 0, total = 0;
         for (const b of plan.blocks) for (const it of b.items) { total += it.value; if (plan.checks[it.key]) done += it.value; }
+        if (plan.track === 'counter') done = plan.counter && plan.counter.known ? plan.counter.trained : 0; // the bar counts the energy really trained this week
         return { done, total };
     }
     function showProgress() {
@@ -256,8 +257,8 @@
     function tabBar() {
         const n = todoCount();
         const tabs = [['energy', '⚡ Energy'], ['targets', '🎯 Targets']]; // the To do button sits in the top row next to the energy and the war numbers
-        if ((mtPairs && mtPairs.length) || mtIsPupil) tabs.push(['mentoring', '🎓 Mentoring']);
         tabs.push(['labnotes', '🧪 Notes']);
+        tabs.push(['avail', '📅 Avail']);
         tabs.push(['bank', '💰 Bank']);
         if (tabs.length < 2) return '';
         return `<div style="display:flex;gap:6px;margin-bottom:10px;">${tabs.map(([id, label]) =>
@@ -270,6 +271,7 @@
             if (tab === 'todo') refreshTodoItems();
             if (tab === 'targets') loadTargets();
             if (tab === 'bank') loadBankInfo();
+            if (tab === 'avail') loadAvail();
             if (tab === 'labnotes') loadLab();
         }));
     }
@@ -277,10 +279,25 @@
         const footer = `<div style="margin-top:10px;padding-top:8px;border-top:1px solid #3a4352;color:#9aa4b5;">To change your settings (stat, method, candy, cans, refill), use the planner on the tool itself: <a href="${WWL}/energy" target="_blank" rel="noopener" style="color:#35d99b;">${esc(WWL)}/energy</a></div>`;
         if (!plan) return `<div style="padding:6px 0;color:#9aa4b5;">You have no plan yet. Open the Energy planner on WWL once, pick your method, and it will show up here.</div>${footer}`;
         const p = progress();
-        const old = plan.week !== Math.floor(Date.now() / (7 * 86400e3)) ? '<div style="color:#f0b432;margin-bottom:6px;">This plan is from a previous week — open the planner on WWL to make a plan for this week.</div>' : '';
-        const nextIdx = plan.blocks.findIndex(b => b.items.some(it => !plan.checks[it.key]));
+        const old = plan.week !== (plan.currentWeek ?? Math.floor(Date.now() / (7 * 86400e3))) ? '<div style="color:#f0b432;margin-bottom:6px;">This plan is from a previous week — open the planner on WWL to make a plan for this week.</div>' : '';
+        // the day to open: the one you are working on (the last day with a tick, while it still has open boxes), else the first day after it that is not done,
+        // else the first day not done. It used to be the first day with an open box, so ticking day 3 still opened day 1.
+        const open = b => b.items.some(it => !plan.checks[it.key]);
+        let lastTick = -1; plan.blocks.forEach((b, i) => { if (b.items.some(it => plan.checks[it.key])) lastTick = i; });
+        let nextIdx = lastTick >= 0 && open(plan.blocks[lastTick]) ? lastTick : -1;
+        if (nextIdx < 0) nextIdx = plan.blocks.findIndex((b, i) => i > lastTick && open(b));
+        if (nextIdx < 0) nextIdx = plan.blocks.findIndex(open);
         return `${old}<div style="color:#9aa4b5;margin-bottom:6px;">${esc(plan.summary)}</div>
-            <div style="height:6px;background:#39414f;border-radius:3px;overflow:hidden;margin-bottom:8px;"><div style="height:100%;width:${p.total ? Math.min(100, p.done / p.total * 100) : 0}%;background:#35d99b;"></div></div>
+            <div style="height:6px;background:#39414f;border-radius:3px;overflow:hidden;margin-bottom:6px;"><div style="height:100%;width:${p.total ? Math.min(100, p.done / p.total * 100) : 0}%;background:#35d99b;"></div></div>
+            <div style="display:flex;gap:6px;align-items:center;margin-bottom:8px;font-size:12px;color:#9aa4b5;flex-wrap:wrap;">The bar counts:
+                <button type="button" class="wwl-track" data-mode="boxes" style="padding:2px 8px;border-radius:6px;border:1px solid #3a4352;cursor:pointer;background:${plan.track === 'counter' ? 'transparent' : '#2a2f3a'};color:#e6e9ef;">my ticks</button>
+                <button type="button" class="wwl-track" data-mode="counter" style="padding:2px 8px;border-radius:6px;border:1px solid #3a4352;cursor:pointer;background:${plan.track === 'counter' ? '#2a2f3a' : 'transparent'};color:#e6e9ef;">energy trained</button>
+                ${plan.track === 'counter' ? `<span>${plan.counter && plan.counter.known ? 'from the energy tracker' : 'no numbers for you yet'}</span>` : ''}</div>
+            <div style="display:flex;gap:6px;align-items:center;margin-bottom:8px;font-size:12px;color:#9aa4b5;flex-wrap:wrap;">My week starts:
+                <input type="date" id="wwl-start" value="${esc(plan.startDay || '')}" style="background:#12161c;color:#e6e9ef;border:1px solid #3a4352;border-radius:6px;padding:2px 6px;">
+                <button type="button" id="wwl-start-auto" style="padding:2px 8px;border-radius:6px;border:1px solid #3a4352;cursor:pointer;background:transparent;color:#e6e9ef;" title="The week starts after the last war ended">After a war</button>
+                <select id="wwl-afterday" style="background:#12161c;color:#e6e9ef;border:1px solid #3a4352;border-radius:6px;padding:2px 4px;"><option value="same" ${plan.afterDay ? '' : 'selected'}>the day it ended</option><option value="next" ${plan.afterDay ? 'selected' : ''}>the day after</option></select>
+                ${plan.weekStart ? `<span>${esc(new Date(plan.weekStart * 1000).toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' }))} to ${esc(new Date((plan.weekStart + 6 * 86400) * 1000).toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' }))}</span>` : ''}</div>
             ${plan.blocks.map((b, i) => {
                 const all = b.items.length && b.items.every(it => plan.checks[it.key]);
                 return `<details ${i === nextIdx ? 'open' : ''} style="margin-bottom:4px;"><summary style="cursor:pointer;font-weight:700;padding:${IS_PDA ? 6 : 2}px 0;">${all ? '✅ ' : ''}${esc(b.title)}${i === nextIdx ? ' <span style="color:#35d99b;font-weight:400;">← next</span>' : ''}</summary>
@@ -417,7 +434,7 @@
             ${c.intro ? `<div style="color:#9aa4b5;font-size:12px;white-space:pre-wrap;margin:4px 0;">${weRich(c.intro)}</div>` : ''}${c.tasks.map(t => weTask(t, 'wwl-lab-check', '')).join('')}
             ${c.canRemind ? `<label style="display:flex;gap:8px;align-items:center;margin-top:6px;padding-top:6px;border-top:1px solid #3a4352;font-size:12px;"><input type="checkbox" class="wwl-lab-remind" data-id="${esc(c.id)}" ${c.remindersOn ? 'checked' : ''}> Put the daily steps of this note on my To do</label>` : ''}</details>`).join('')
             : `<div style="color:#9aa4b5;font-size:12px;padding:4px 0;">More notes will show up here when they are written.</div>`;
-        return html + `<div style="margin-top:10px;color:#9aa4b5;font-size:12px;">The same notes are on the site: <a href="${WWL}/lab-notes" target="_blank" rel="noopener" style="color:#35d99b;">${esc(WWL)}/lab-notes</a></div>`;
+        return html + `<div style="margin-top:10px;color:#9aa4b5;font-size:12px;">The same notes are on the site: <a href="${WWL}/lab-notes" target="_blank" rel="noopener" style="color:#35d99b;">${esc(WWL)}/lab-notes</a>. Your mentor and the chat with them are on the site too: <a href="${WWL}/mentoring" target="_blank" rel="noopener" style="color:#35d99b;">${esc(WWL)}/mentoring</a></div>`;
     }
     // The mentoring to-dos: one section per pairing (a mentor with several pupils gets one each), each ticked
     // separately — same shared checklist the WWL page itself shows, just without the chat (open the site for that).
@@ -516,6 +533,75 @@
             try { await api({ action: 'bank-cancel', id: bankInfo.request.id }); bankInfo.request = null; } catch (e) { bankMsg = e.message; }
             render();
         });
+    }
+    // ---- Availability tab: the whole faction at a glance (no names) and my own hours, for the running war or chain plan ----
+    let avData = null, avMode = 'all', avPick = null, avMsg = '';
+    async function loadAvail() {
+        try { avData = await api({ action: 'availability-get' }); avMsg = ''; } catch (e) { avData = { error: e.message }; }
+        if (tab === 'avail') render();
+    }
+    // is this hour outside the plan (before its start, after its end)? Same rule as the site and the server (TCT = UTC)
+    function avClosed(c, day, hour) {
+        const [y, m, d] = String(c.startDate).split('-').map(Number), at = Date.UTC(y, m - 1, d) / 1000 + (day * 24 + hour) * 3600;
+        if (c.endAt && at >= c.endAt) return true;
+        if (c.startHour !== undefined && c.startHour !== null) return at < Date.UTC(y, m - 1, d) / 1000 + Number(c.startHour) * 3600;
+        return !!(c.war && c.war.start) && at < Math.floor(c.war.start / 3600) * 3600;
+    }
+    function renderAvailTab() {
+        if (avData === null) return '<div style="padding:6px 0;color:#9aa4b5;">Loading the plan…</div>';
+        if (avData.error) return `<div style="color:#e05555;padding:4px 0;">${esc(avData.error)}</div>`;
+        const c = avData.config;
+        if (!c) return '<div style="padding:6px 0;color:#9aa4b5;">There is no availability plan right now. A leader makes one for a war or a chain.</div>';
+        const crowd = avData.crowd || {}, mine = avData.mine || {}, [y, m, d] = String(c.startDate).split('-').map(Number);
+        const nowIdx = Math.floor((Date.now() / 1000 - Date.UTC(y, m - 1, d) / 1000) / 3600);
+        const total = c.endAt ? Math.min(c.days * 24, Math.ceil((c.endAt - Date.UTC(y, m - 1, d) / 1000) / 3600)) : c.days * 24;
+        const nowSlot = nowIdx >= 0 && nowIdx < total ? `${Math.floor(nowIdx / 24)}-${nowIdx % 24}` : null;
+        const max = Math.max(1, ...Object.values(crowd).map(v => v[0]));
+        const dayLabel = day => new Date(Date.UTC(y, m - 1, d + day)).toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', timeZone: 'UTC' });
+        const cell = (day, hour) => {
+            const k = `${day}-${hour}`;
+            if (day * 24 + hour >= total || avClosed(c, day, hour)) return '<td style="min-width:26px;height:16px;background:#12161c;"></td>';
+            const cr = crowd[k] || [0, 0, 0], v = mine[k];
+            const bg = avMode === 'mine' ? (v === 'maybe' ? '#f0b432' : v ? '#35d99b' : '#1b2029') : (cr[0] ? `rgba(53,217,155,${(0.2 + cr[0] / max * 0.7).toFixed(2)})` : cr[1] ? 'rgba(240,180,50,.3)' : '#1b2029');
+            const ring = avPick === k ? 'outline:2px solid #4da3ff;outline-offset:-2px;' : k === nowSlot ? 'outline:2px solid #fff;outline-offset:-2px;' : (avMode === 'all' && v ? 'box-shadow:inset 0 0 0 2px #fff6;' : '');
+            const txt = avMode === 'all' && cr[0] ? `<span style="font-size:9px;color:#06120d;">${cr[0]}</span>` : '';
+            return `<td class="wwl-av" data-k="${k}" style="min-width:26px;height:16px;text-align:center;cursor:pointer;background:${bg};${ring}">${txt}${avMode === 'all' && cr[2] ? '<span style="font-size:7px;color:#4da3ff;">●</span>' : ''}</td>`;
+        };
+        // like the site: a column per day, a row per hour
+        let rows = '';
+        for (let h = 0; h < 24; h++) rows += `<tr><td style="font-size:9px;color:#9aa4b5;padding-right:3px;text-align:right;">${String(h).padStart(2, '0')}</td>${Array.from({ length: c.days }, (_, day) => cell(day, h)).join('')}</tr>`;
+        const head = `<tr><td></td>${Array.from({ length: c.days }, (_, day) => `<td style="font-size:9px;color:#9aa4b5;text-align:center;white-space:nowrap;">${esc(dayLabel(day))}</td>`).join('')}</tr>`;
+        const nc = nowSlot ? crowd[nowSlot] || [0, 0, 0] : null;
+        let info = '';
+        if (avPick) {
+            const [dd, hh] = avPick.split('-').map(Number), cr = crowd[avPick] || [0, 0, 0], v = mine[avPick];
+            const ppl = avData.people || {}, nm = ids => (ids || []).map(i => esc(ppl[i] || ('#' + i))).join(', ');
+            info = `<div style="margin-top:6px;font-size:12px;"><b>${esc(dayLabel(dd))} ${String(hh).padStart(2, '0')}:00 TCT</b>: ${cr[0]} available${cr[1] ? `, ${cr[1]} maybe` : ''}${cr[2] ? `, ${cr[2]} watching` : ''}${v ? ` · you: ${v === 'maybe' ? 'maybe' : 'available'}` : ''}
+                ${cr[3] && cr[3].length ? `<div style="margin-top:3px;">Available: ${nm(cr[3])}</div>` : ''}
+                ${cr[4] && cr[4].length ? `<div style="margin-top:3px;color:#f0b432;">Maybe: ${nm(cr[4])}</div>` : ''}
+                ${cr[5] && cr[5].length ? `<div style="margin-top:3px;color:#4da3ff;">Watching: ${nm(cr[5])}</div>` : ''}</div>`;
+        }
+        const btn = (id, label) => `<button type="button" class="wwl-av-mode" data-mode="${id}" style="padding:4px 8px;border-radius:6px;border:1px solid #3a4352;cursor:pointer;background:${avMode === id ? '#2a2f3a' : 'transparent'};color:#e6e9ef;">${label}</button>`;
+        return `<div style="font-weight:700;">${esc(c.name || 'Availability')}${c.war && c.war.opponent ? ` <span style="font-weight:400;color:#9aa4b5;">vs ${esc(c.war.opponent)}</span>` : ''}</div>
+            <div style="font-size:12px;margin:4px 0;">${nc ? `Right now: <b>${nc[0]}</b> available${nc[1] ? `, ${nc[1]} maybe` : ''}, <b>${nc[2]}</b> watching.` : '<span style="color:#9aa4b5;">The plan is not running right now.</span>'}</div>
+            <div style="display:flex;gap:6px;margin:6px 0;">${btn('all', 'Everybody')}${btn('mine', 'My hours')}</div>
+            <div style="overflow-x:auto;"><table style="border-collapse:separate;border-spacing:1px;">${head}${rows}</table></div>
+            ${info}
+            ${avMsg ? `<div style="color:#e05555;font-size:12px;margin-top:6px;">${esc(avMsg)}</div>` : ''}
+            <div style="margin-top:6px;color:#9aa4b5;font-size:11px;">${avMode === 'all' ? 'Green = more members available (the number), ● = somebody watches the chain or war. White frame = now. Tap an hour to see who.' : 'Tap an hour: green = available, yellow = maybe, a third tap clears it. Times are TCT. The same hours show on the WWL site.'}</div>`;
+    }
+    function wireAvailTab() {
+        body.querySelectorAll('.wwl-av-mode').forEach(b => b.addEventListener('click', () => { avMode = b.dataset.mode; avPick = null; render(); }));
+        body.querySelectorAll('.wwl-av').forEach(td => td.addEventListener('click', async () => {
+            const k = td.dataset.k;
+            if (avMode === 'all') { avPick = avPick === k ? null : k; render(); return; }
+            const [day, hour] = k.split('-').map(Number), mine = avData.mine || (avData.mine = {}), prev = mine[k];
+            const next = !prev ? true : prev === true ? 'maybe' : undefined;
+            if (next) mine[k] = next; else delete mine[k];
+            avPick = k; render();
+            try { const r = await api({ action: 'availability-set', day, hour, state: next === true ? 'yes' : next === 'maybe' ? 'maybe' : '', planId: avData.planId }); if (r && r.error) throw new Error(r.error); avMsg = ''; }
+            catch (e) { if (prev) mine[k] = prev; else delete mine[k]; avMsg = `Could not save that: ${e.message}`; render(); }
+        }));
     }
     function renderTodoTab() {
         const daily = `<label style="display:flex;gap:8px;align-items:center;padding:${IS_PDA ? 10 : 7}px 0;border-bottom:1px solid #3a4352;cursor:pointer;">
@@ -655,16 +741,32 @@
         </div>`;
     }
     function render() {
+        if (tab === 'mentoring') tab = lastTab = 'labnotes'; // the Mentoring tab is gone from the script: the Notes tab has the same chapters (the chat is on the site)
         if (tab === 'settings') { body.innerHTML = renderSettingsTab(); wireSettingsTab(); wireMyTodo(); try { checkForUpdate(true); } catch (e) { /* the script is still starting up - the passive check will run */ } return; }
-        const tabContent = tab === 'labnotes' ? renderLabTab() : tab === 'mentoring' ? renderMentoringTab() : tab === 'bank' ? renderBankTab() : tab === 'targets' ? renderTargetsTab() : tab === 'todo' ? renderTodoTab() : renderEnergyTab();
+        const tabContent = tab === 'labnotes' ? renderLabTab() : tab === 'bank' ? renderBankTab() : tab === 'avail' ? renderAvailTab() : tab === 'targets' ? renderTargetsTab() : tab === 'todo' ? renderTodoTab() : renderEnergyTab();
         body.innerHTML = updateBanner() + renderStandingStrip() + tabBar() + tabContent;
         showProgress();
         wireTabs();
         wireOcRequest();
         wireMyTodo();
         wireBankTab();
+        wireAvailTab();
         body.querySelector('#wwl-targets-refresh')?.addEventListener('click', refreshTargetStatus);
         body.querySelector('#wwl-daily-check')?.addEventListener('change', e => { setDailyChecked(e.target.checked); render(); });
+        const setStart = async v => {
+            try { const r = await api({ action: 'plan-start', startDay: v }); if (r.plan) { plan = r.plan; try { store.set('wwl_plan_cache', JSON.stringify({ at: Date.now(), plan })); } catch (e) { /* not critical */ } } } catch (e) { alert(e.message); }
+            render();
+        };
+        body.querySelector('#wwl-start')?.addEventListener('change', e => setStart(e.target.value));
+        body.querySelector('#wwl-start-auto')?.addEventListener('click', () => setStart(''));
+        body.querySelector('#wwl-afterday')?.addEventListener('change', async e => {
+            try { const r = await api({ action: 'plan-afterday', next: e.target.value === 'next' }); if (r.plan) { plan = r.plan; try { store.set('wwl_plan_cache', JSON.stringify({ at: Date.now(), plan })); } catch (err) { /* not critical */ } } } catch (err) { alert(err.message); }
+            render();
+        });
+        body.querySelectorAll('.wwl-track').forEach(b => b.addEventListener('click', async () => {
+            try { const r = await api({ action: 'plan-track', mode: b.dataset.mode }); if (r.plan) { plan = r.plan; try { store.set('wwl_plan_cache', JSON.stringify({ at: Date.now(), plan })); } catch (e) { /* not critical */ } } } catch (e) { /* the bar stays as it was */ }
+            render();
+        }));
         body.querySelectorAll('.wwl-e-check').forEach(cb => cb.addEventListener('change', async () => {
             if (cb.checked) plan.checks[cb.dataset.k] = true; else delete plan.checks[cb.dataset.k];
             showProgress();

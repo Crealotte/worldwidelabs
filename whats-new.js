@@ -12,6 +12,18 @@
 
 const WHATS_NEW = [
     {
+        version: '1.35', date: '2026-10-22',
+        title: 'Script 1.41: availability in Torn, a smarter energy plan',
+        everyone: [
+            'The WWL script (update to 1.41) has a new Avail tab: the faction overview of the war or chain plan, with the days as columns and the hours as rows like on the site. Tap an hour to see who is available, who is on maybe and who is watching, and switch to My hours to set your own with a tap (green, yellow, off).',
+            'The Energy plan can count what you really trained: choose on the Energy planner (or in the script) what the progress bar counts, your ticks or the energy trained this week. The boxes can be ticked either way.',
+            'Your training week starts the day the last war ended, or the day after if you pick that, or any day you choose yourself (My training week starts on). The ticks and the energy count follow it.',
+            'The Energy tab now opens on the day you are working on, not always on day 1.',
+            'The Mentoring tab is gone from the script: the Notes tab has the same chapters. Your mentor and the chat are still on the site, and the Notes tab links to them.',
+        ],
+        leaders: [],
+    },
+    {
         version: '1.34', date: '2026-10-21',
         title: 'All roles on Lab Notes, availability start hour, own timezone',
         everyone: [
