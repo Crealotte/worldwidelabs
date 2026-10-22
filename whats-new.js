@@ -12,6 +12,15 @@
 
 const WHATS_NEW = [
     {
+        version: '1.36', date: '2026-10-22',
+        title: 'Script 1.42: watch hours and your own timezone in the Avail tab',
+        everyone: [
+            'The Avail tab of the WWL script (update to 1.42) now lets you add yourself as Chain saver, or War guard when the plan is linked to a war: tap one of your hours in the new blue button. Each hour has room for one and a backup, like on the site.',
+            'The grids have grid lines (a stronger line every 6 hours) and a switch to show the times in your own timezone, like the site. Everything is still saved in TCT.',
+        ],
+        leaders: [],
+    },
+    {
         version: '1.35', date: '2026-10-22',
         title: 'Script 1.41: availability in Torn, a smarter energy plan',
         everyone: [

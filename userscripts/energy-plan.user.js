@@ -2,7 +2,7 @@
 // @name         World Wide Labs
 // @namespace    https://worldwidelabs.vercel.app
 // @author       CreaLotte
-// @version      1.41
+// @version      1.42
 // @updateURL    __WWL_BASE__/worldwidelabs.user.js
 // @downloadURL  __WWL_BASE__/worldwidelabs.user.js
 // @description  Shows your WorldWideLabs weekly energy plan (the checklist from the Energy planner) inside Torn, a To do tab with small personal reminders (revive setting, feedback, timezone map, availability, Discord/Intel/CAT), your My Targets list, a simplified energy/war standing strip, and — if you are in the Mentoring Platform — your mentoring checklist too. Also shows faction banners at the top of every Torn page. A small ⚙ in the header shows the installed version, flags when a newer one is out, lets you set/replace your API key, and — for a leader — add or remove your faction's banners right from Torn. On a computer it is a small window you can drag around and close; in TornPDA it is a menu. Ticks are shared with the WWL site.
@@ -26,7 +26,7 @@
     const KEY_NAME = 'wwl_api_key', POS_NAME = 'wwl_plan_pos', STATE_NAME = 'wwl_plan_state';
     // GM_info gives the version Tampermonkey actually has installed right now — falls back to a
     // hardcoded copy (kept in sync with @version above) for TornPDA, which doesn't grant GM_info.
-    const SCRIPT_VERSION = (typeof GM_info !== 'undefined' && GM_info.script?.version) || '1.41';
+    const SCRIPT_VERSION = (typeof GM_info !== 'undefined' && GM_info.script?.version) || '1.42';
     const versionGreater = (a, b) => {
         const pa = String(a).split('.').map(Number), pb = String(b).split('.').map(Number);
         for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
@@ -534,8 +534,8 @@
             render();
         });
     }
-    // ---- Availability tab: the whole faction at a glance (no names) and my own hours, for the running war or chain plan ----
-    let avData = null, avMode = 'all', avPick = null, avMsg = '';
+    // ---- Availability tab: the whole faction at a glance (with names), my own hours and the chain / war watch, for the running plan ----
+    let avData = null, avMode = 'all', avPick = null, avMsg = '', avLocal = store.get('wwl_av_local') === '1';
     async function loadAvail() {
         try { avData = await api({ action: 'availability-get' }); avMsg = ''; } catch (e) { avData = { error: e.message }; }
         if (tab === 'avail') render();
@@ -547,58 +547,97 @@
         if (c.startHour !== undefined && c.startHour !== null) return at < Date.UTC(y, m - 1, d) / 1000 + Number(c.startHour) * 3600;
         return !!(c.war && c.war.start) && at < Math.floor(c.war.start / 3600) * 3600;
     }
+    // my timezone's offset from UTC in hours, now; a half-hour zone cannot line up with whole-hour slots, so those stay on TCT
+    const avZone = () => -new Date().getTimezoneOffset() / 60;
+    const avZoneOk = () => Number.isInteger(avZone());
     function renderAvailTab() {
         if (avData === null) return '<div style="padding:6px 0;color:#9aa4b5;">Loading the plan…</div>';
         if (avData.error) return `<div style="color:#e05555;padding:4px 0;">${esc(avData.error)}</div>`;
         const c = avData.config;
         if (!c) return '<div style="padding:6px 0;color:#9aa4b5;">There is no availability plan right now. A leader makes one for a war or a chain.</div>';
-        const crowd = avData.crowd || {}, mine = avData.mine || {}, [y, m, d] = String(c.startDate).split('-').map(Number);
-        const nowIdx = Math.floor((Date.now() / 1000 - Date.UTC(y, m - 1, d) / 1000) / 3600);
+        const crowd = avData.crowd || {}, mine = avData.mine || {}, mineWatch = avData.mineWatch || {}, watchTaken = avData.watchTaken || {}, mineRole = avData.mineRole || {};
+        const [y, m, d] = String(c.startDate).split('-').map(Number), isWar = !!(c.war && c.war.id), roleName = isWar ? 'War guard' : 'Chain saver';
+        const local = avLocal && avZoneOk(), offset = local ? avZone() : 0;
         const total = c.endAt ? Math.min(c.days * 24, Math.ceil((c.endAt - Date.UTC(y, m - 1, d) / 1000) / 3600)) : c.days * 24;
-        const nowSlot = nowIdx >= 0 && nowIdx < total ? `${Math.floor(nowIdx / 24)}-${nowIdx % 24}` : null;
+        const nowIdx = Math.floor((Date.now() / 1000 - Date.UTC(y, m - 1, d) / 1000) / 3600);
         const max = Math.max(1, ...Object.values(crowd).map(v => v[0]));
-        const dayLabel = day => new Date(Date.UTC(y, m - 1, d + day)).toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', timeZone: 'UTC' });
-        const cell = (day, hour) => {
-            const k = `${day}-${hour}`;
-            if (day * 24 + hour >= total || avClosed(c, day, hour)) return '<td style="min-width:26px;height:16px;background:#12161c;"></td>';
-            const cr = crowd[k] || [0, 0, 0], v = mine[k];
-            const bg = avMode === 'mine' ? (v === 'maybe' ? '#f0b432' : v ? '#35d99b' : '#1b2029') : (cr[0] ? `rgba(53,217,155,${(0.2 + cr[0] / max * 0.7).toFixed(2)})` : cr[1] ? 'rgba(240,180,50,.3)' : '#1b2029');
-            const ring = avPick === k ? 'outline:2px solid #4da3ff;outline-offset:-2px;' : k === nowSlot ? 'outline:2px solid #fff;outline-offset:-2px;' : (avMode === 'all' && v ? 'box-shadow:inset 0 0 0 2px #fff6;' : '');
+        const tctDay = day => new Date(Date.UTC(y, m - 1, d + day)).toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', timeZone: 'UTC' });
+        const colLabel = col => local && offset !== 0 ? new Date(y, m - 1, d + col).toLocaleDateString(undefined, { weekday: 'short', day: 'numeric' }) : tctDay(col);
+        const base = 'min-width:26px;height:16px;border:1px solid #333b49;';
+        const cell = (idx, rowSoft) => {
+            const day = Math.floor(idx / 24), hour = idx % 24, k = `${day}-${hour}`;
+            if (idx < 0 || idx >= total || avClosed(c, day, hour)) return `<td style="${base}background:#12161c;${rowSoft}"></td>`;
+            const cr = crowd[k] || [0, 0, 0], v = mine[k], watching = !!mineWatch[k], full = (watchTaken[k] || 0) >= 2 && !watching;
+            const bg = avMode === 'all' ? (cr[0] ? `rgba(53,217,155,${(0.2 + cr[0] / max * 0.7).toFixed(2)})` : cr[1] ? 'rgba(240,180,50,.3)' : '#1b2029')
+                : (v === 'maybe' ? '#f0b432' : v ? '#35d99b' : '#1b2029');
+            let ring = '';
+            if (avPick === k) ring = 'outline:2px solid #4da3ff;outline-offset:-2px;';
+            else if (idx === nowIdx) ring = 'outline:2px solid #fff;outline-offset:-2px;';
+            else if (avMode !== 'all' && watching) ring = `outline:2px solid #4da3ff;outline-offset:-2px;${mineRole[k] === 'backup' ? 'outline-style:dashed;' : ''}`;
+            else if (avMode === 'all' && v) ring = 'box-shadow:inset 0 0 0 2px #fff6;';
             const txt = avMode === 'all' && cr[0] ? `<span style="font-size:9px;color:#06120d;">${cr[0]}</span>` : '';
-            return `<td class="wwl-av" data-k="${k}" style="min-width:26px;height:16px;text-align:center;cursor:pointer;background:${bg};${ring}">${txt}${avMode === 'all' && cr[2] ? '<span style="font-size:7px;color:#4da3ff;">●</span>' : ''}</td>`;
+            const dot = avMode === 'all' && cr[2] ? '<span style="font-size:7px;color:#4da3ff;">●</span>' : avMode === 'watch' && full ? '<span style="font-size:9px;color:#9aa4b5;">✕</span>' : '';
+            return `<td class="wwl-av" data-k="${k}" style="${base}text-align:center;cursor:pointer;background:${bg};${ring}${rowSoft}">${txt}${dot}</td>`;
         };
-        // like the site: a column per day, a row per hour
+        // like the site: a column per day, a row per hour; in your own timezone the hours are shifted and the days run midnight to midnight
+        const minCol = Math.floor(offset / 24), maxCol = Math.floor((total - 1 + offset) / 24);
         let rows = '';
-        for (let h = 0; h < 24; h++) rows += `<tr><td style="font-size:9px;color:#9aa4b5;padding-right:3px;text-align:right;">${String(h).padStart(2, '0')}</td>${Array.from({ length: c.days }, (_, day) => cell(day, h)).join('')}</tr>`;
-        const head = `<tr><td></td>${Array.from({ length: c.days }, (_, day) => `<td style="font-size:9px;color:#9aa4b5;text-align:center;white-space:nowrap;">${esc(dayLabel(day))}</td>`).join('')}</tr>`;
-        const nc = nowSlot ? crowd[nowSlot] || [0, 0, 0] : null;
+        for (let row = 0; row < 24; row++) {
+            const rowSoft = (row + 1) % 6 === 0 && row < 23 ? 'border-bottom:1px solid #66748f;' : ''; // a stronger line every 6 hours
+            let tds = '';
+            for (let col = minCol; col <= maxCol; col++) tds += cell(col * 24 + row - offset, rowSoft);
+            rows += `<tr><td style="font-size:9px;color:#9aa4b5;padding-right:3px;text-align:right;${rowSoft}">${String(row).padStart(2, '0')}</td>${tds}</tr>`;
+        }
+        let head = '<tr><td></td>';
+        for (let col = minCol; col <= maxCol; col++) head += `<td style="font-size:9px;color:#9aa4b5;text-align:center;white-space:nowrap;">${esc(colLabel(col))}</td>`;
+        head += '</tr>';
+        const nowSlot = nowIdx >= 0 && nowIdx < total ? `${Math.floor(nowIdx / 24)}-${nowIdx % 24}` : null, nc = nowSlot ? crowd[nowSlot] || [0, 0, 0] : null;
         let info = '';
-        if (avPick) {
+        if (avPick && avMode === 'all') {
             const [dd, hh] = avPick.split('-').map(Number), cr = crowd[avPick] || [0, 0, 0], v = mine[avPick];
             const ppl = avData.people || {}, nm = ids => (ids || []).map(i => esc(ppl[i] || ('#' + i))).join(', ');
-            info = `<div style="margin-top:6px;font-size:12px;"><b>${esc(dayLabel(dd))} ${String(hh).padStart(2, '0')}:00 TCT</b>: ${cr[0]} available${cr[1] ? `, ${cr[1]} maybe` : ''}${cr[2] ? `, ${cr[2]} watching` : ''}${v ? ` · you: ${v === 'maybe' ? 'maybe' : 'available'}` : ''}
+            info = `<div style="margin-top:6px;font-size:12px;"><b>${esc(tctDay(dd))} ${String(hh).padStart(2, '0')}:00 TCT</b>: ${cr[0]} available${cr[1] ? `, ${cr[1]} maybe` : ''}${cr[2] ? `, ${cr[2]} watching` : ''}${v ? ` · you: ${v === 'maybe' ? 'maybe' : 'available'}` : ''}
                 ${cr[3] && cr[3].length ? `<div style="margin-top:3px;">Available: ${nm(cr[3])}</div>` : ''}
                 ${cr[4] && cr[4].length ? `<div style="margin-top:3px;color:#f0b432;">Maybe: ${nm(cr[4])}</div>` : ''}
                 ${cr[5] && cr[5].length ? `<div style="margin-top:3px;color:#4da3ff;">Watching: ${nm(cr[5])}</div>` : ''}</div>`;
         }
         const btn = (id, label) => `<button type="button" class="wwl-av-mode" data-mode="${id}" style="padding:4px 8px;border-radius:6px;border:1px solid #3a4352;cursor:pointer;background:${avMode === id ? '#2a2f3a' : 'transparent'};color:#e6e9ef;">${label}</button>`;
+        const zoneName = local ? `UTC${offset >= 0 ? '+' : ''}${offset}` : 'TCT';
+        const tz = avZoneOk()
+            ? `<label style="display:flex;gap:6px;align-items:center;margin:4px 0;font-size:12px;cursor:pointer;"><input type="checkbox" id="wwl-av-local" ${local ? 'checked' : ''}> Show times in my own timezone <span style="color:#9aa4b5;">(${zoneName})</span></label>`
+            : '<div style="margin:4px 0;font-size:12px;color:#9aa4b5;">Your timezone has a half-hour offset, so the times stay in TCT.</div>';
+        const hints = {
+            all: 'Green = more members available (the number), ● = somebody watches the chain or war. White frame = now. Tap an hour to see who.',
+            mine: 'Tap an hour: green = available, yellow = maybe, a third tap clears it. A blue frame is an hour where you watch. The same hours show on the WWL site.',
+            watch: `Tap one of your hours to add or remove yourself as ${roleName} (blue frame; dashed = you are the backup). Each hour has room for one ${roleName} and one backup, ✕ = full. It also marks you as available.`,
+        };
         return `<div style="font-weight:700;">${esc(c.name || 'Availability')}${c.war && c.war.opponent ? ` <span style="font-weight:400;color:#9aa4b5;">vs ${esc(c.war.opponent)}</span>` : ''}</div>
             <div style="font-size:12px;margin:4px 0;">${nc ? `Right now: <b>${nc[0]}</b> available${nc[1] ? `, ${nc[1]} maybe` : ''}, <b>${nc[2]}</b> watching.` : '<span style="color:#9aa4b5;">The plan is not running right now.</span>'}</div>
-            <div style="display:flex;gap:6px;margin:6px 0;">${btn('all', 'Everybody')}${btn('mine', 'My hours')}</div>
-            <div style="overflow-x:auto;"><table style="border-collapse:separate;border-spacing:1px;">${head}${rows}</table></div>
+            <div style="display:flex;gap:6px;margin:6px 0;flex-wrap:wrap;">${btn('all', 'Everybody')}${btn('mine', 'My hours')}${btn('watch', `🔵 ${roleName}`)}</div>
+            ${tz}
+            <div style="overflow-x:auto;"><table style="border-collapse:collapse;">${head}${rows}</table></div>
             ${info}
             ${avMsg ? `<div style="color:#e05555;font-size:12px;margin-top:6px;">${esc(avMsg)}</div>` : ''}
-            <div style="margin-top:6px;color:#9aa4b5;font-size:11px;">${avMode === 'all' ? 'Green = more members available (the number), ● = somebody watches the chain or war. White frame = now. Tap an hour to see who.' : 'Tap an hour: green = available, yellow = maybe, a third tap clears it. Times are TCT. The same hours show on the WWL site.'}</div>`;
+            <div style="margin-top:6px;color:#9aa4b5;font-size:11px;">${hints[avMode]}${local ? ' Everything is saved in TCT, so the leaders see it in TCT.' : ''}</div>`;
     }
     function wireAvailTab() {
-        body.querySelectorAll('.wwl-av-mode').forEach(b => b.addEventListener('click', () => { avMode = b.dataset.mode; avPick = null; render(); }));
+        body.querySelectorAll('.wwl-av-mode').forEach(b => b.addEventListener('click', () => { avMode = b.dataset.mode; avPick = null; avMsg = ''; render(); }));
+        body.querySelector('#wwl-av-local')?.addEventListener('change', e => { avLocal = e.target.checked; store.set('wwl_av_local', avLocal ? '1' : '0'); render(); });
         body.querySelectorAll('.wwl-av').forEach(td => td.addEventListener('click', async () => {
             const k = td.dataset.k;
             if (avMode === 'all') { avPick = avPick === k ? null : k; render(); return; }
-            const [day, hour] = k.split('-').map(Number), mine = avData.mine || (avData.mine = {}), prev = mine[k];
-            const next = !prev ? true : prev === true ? 'maybe' : undefined;
-            if (next) mine[k] = next; else delete mine[k];
-            avPick = k; render();
+            const [day, hour] = k.split('-').map(Number), mine = avData.mine || (avData.mine = {}), mineWatch = avData.mineWatch || (avData.mineWatch = {});
+            if (avMode === 'watch') {
+                const was = !!mineWatch[k], wasMine = mine[k], isWar = !!(avData.config && avData.config.war && avData.config.war.id);
+                if (!was && ((avData.watchTaken || {})[k] || 0) >= 2) { avMsg = `That hour already has a ${isWar ? 'War guard' : 'Chain saver'} and a backup: pick another hour.`; render(); return; }
+                if (was) delete mineWatch[k]; else { mineWatch[k] = true; if (!mine[k]) mine[k] = true; }
+                avMsg = ''; render();
+                try { const r = await api({ action: 'availability-watch', day, hour, watch: !was, planId: avData.planId }); if (r && r.error) throw new Error(r.error); loadAvail(); } // read it again: who holds what (a backup moves up)
+                catch (e) { if (was) mineWatch[k] = true; else delete mineWatch[k]; if (wasMine) mine[k] = wasMine; else delete mine[k]; avMsg = `Could not save that: ${e.message}`; render(); }
+                return;
+            }
+            const prev = mine[k], next = !prev ? true : prev === true ? 'maybe' : undefined;
+            if (next) mine[k] = next; else { delete mine[k]; delete mineWatch[k]; }
             try { const r = await api({ action: 'availability-set', day, hour, state: next === true ? 'yes' : next === 'maybe' ? 'maybe' : '', planId: avData.planId }); if (r && r.error) throw new Error(r.error); avMsg = ''; }
             catch (e) { if (prev) mine[k] = prev; else delete mine[k]; avMsg = `Could not save that: ${e.message}`; render(); }
         }));
