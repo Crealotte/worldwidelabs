@@ -2,7 +2,7 @@
 // @name         World Wide Labs
 // @namespace    https://worldwidelabs.vercel.app
 // @author       CreaLotte
-// @version      1.40
+// @version      1.40.1
 // @updateURL    __WWL_BASE__/worldwidelabs.user.js
 // @downloadURL  __WWL_BASE__/worldwidelabs.user.js
 // @description  Shows your WorldWideLabs weekly energy plan (the checklist from the Energy planner) inside Torn, a To do tab with small personal reminders (revive setting, feedback, timezone map, availability, Discord/Intel/CAT), your My Targets list, a simplified energy/war standing strip, and — if you are in the Mentoring Platform — your mentoring checklist too. Also shows faction banners at the top of every Torn page. A small ⚙ in the header shows the installed version, flags when a newer one is out, lets you set/replace your API key, and — for a leader — add or remove your faction's banners right from Torn. On a computer it is a small window you can drag around and close; in TornPDA it is a menu. Ticks are shared with the WWL site.
@@ -258,6 +258,7 @@
         const tabs = [['energy', '⚡ Energy'], ['targets', '🎯 Targets']]; // the To do button sits in the top row next to the energy and the war numbers
         if ((mtPairs && mtPairs.length) || mtIsPupil) tabs.push(['mentoring', '🎓 Mentoring']);
         tabs.push(['labnotes', '🧪 Notes']);
+        tabs.push(['avail', '📅 Avail']);
         tabs.push(['bank', '💰 Bank']);
         if (tabs.length < 2) return '';
         return `<div style="display:flex;gap:6px;margin-bottom:10px;">${tabs.map(([id, label]) =>
@@ -270,6 +271,7 @@
             if (tab === 'todo') refreshTodoItems();
             if (tab === 'targets') loadTargets();
             if (tab === 'bank') loadBankInfo();
+            if (tab === 'avail') loadAvail();
             if (tab === 'labnotes') loadLab();
         }));
     }
@@ -517,6 +519,70 @@
             render();
         });
     }
+    // ---- Availability tab: the whole faction at a glance (no names) and my own hours, for the running war or chain plan ----
+    let avData = null, avMode = 'all', avPick = null, avMsg = '';
+    async function loadAvail() {
+        try { avData = await api({ action: 'availability-get' }); avMsg = ''; } catch (e) { avData = { error: e.message }; }
+        if (tab === 'avail') render();
+    }
+    // is this hour outside the plan (before its start, after its end)? Same rule as the site and the server (TCT = UTC)
+    function avClosed(c, day, hour) {
+        const [y, m, d] = String(c.startDate).split('-').map(Number), at = Date.UTC(y, m - 1, d) / 1000 + (day * 24 + hour) * 3600;
+        if (c.endAt && at >= c.endAt) return true;
+        if (c.startHour !== undefined && c.startHour !== null) return at < Date.UTC(y, m - 1, d) / 1000 + Number(c.startHour) * 3600;
+        return !!(c.war && c.war.start) && at < Math.floor(c.war.start / 3600) * 3600;
+    }
+    function renderAvailTab() {
+        if (avData === null) return '<div style="padding:6px 0;color:#9aa4b5;">Loading the plan…</div>';
+        if (avData.error) return `<div style="color:#e05555;padding:4px 0;">${esc(avData.error)}</div>`;
+        const c = avData.config;
+        if (!c) return '<div style="padding:6px 0;color:#9aa4b5;">There is no availability plan right now. A leader makes one for a war or a chain.</div>';
+        const crowd = avData.crowd || {}, mine = avData.mine || {}, [y, m, d] = String(c.startDate).split('-').map(Number);
+        const nowIdx = Math.floor((Date.now() / 1000 - Date.UTC(y, m - 1, d) / 1000) / 3600);
+        const total = c.endAt ? Math.min(c.days * 24, Math.ceil((c.endAt - Date.UTC(y, m - 1, d) / 1000) / 3600)) : c.days * 24;
+        const nowSlot = nowIdx >= 0 && nowIdx < total ? `${Math.floor(nowIdx / 24)}-${nowIdx % 24}` : null;
+        const max = Math.max(1, ...Object.values(crowd).map(v => v[0]));
+        const dayLabel = day => new Date(Date.UTC(y, m - 1, d + day)).toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', timeZone: 'UTC' });
+        const cell = (day, hour) => {
+            const k = `${day}-${hour}`;
+            if (day * 24 + hour >= total || avClosed(c, day, hour)) return '<td style="width:15px;height:17px;background:#12161c;"></td>';
+            const cr = crowd[k] || [0, 0, 0], v = mine[k];
+            const bg = avMode === 'mine' ? (v === 'maybe' ? '#f0b432' : v ? '#35d99b' : '#1b2029') : (cr[0] ? `rgba(53,217,155,${(0.2 + cr[0] / max * 0.7).toFixed(2)})` : cr[1] ? 'rgba(240,180,50,.3)' : '#1b2029');
+            const ring = avPick === k ? 'outline:2px solid #4da3ff;outline-offset:-2px;' : k === nowSlot ? 'outline:2px solid #fff;outline-offset:-2px;' : (avMode === 'all' && v ? 'box-shadow:inset 0 0 0 2px #fff6;' : '');
+            const txt = avMode === 'all' && cr[0] ? `<span style="font-size:9px;color:#06120d;">${cr[0]}</span>` : '';
+            return `<td class="wwl-av" data-k="${k}" style="width:15px;height:17px;text-align:center;cursor:pointer;background:${bg};${ring}">${txt}${avMode === 'all' && cr[2] ? '<span style="font-size:7px;color:#4da3ff;">●</span>' : ''}</td>`;
+        };
+        let rows = '';
+        for (let day = 0; day < c.days; day++) rows += `<tr><td style="font-size:10px;color:#9aa4b5;padding-right:4px;white-space:nowrap;">${esc(dayLabel(day))}</td>${Array.from({ length: 24 }, (_, h) => cell(day, h)).join('')}</tr>`;
+        const head = `<tr><td></td>${Array.from({ length: 24 }, (_, h) => `<td style="font-size:8px;color:#9aa4b5;text-align:center;">${h % 3 === 0 ? h : ''}</td>`).join('')}</tr>`;
+        const nc = nowSlot ? crowd[nowSlot] || [0, 0, 0] : null;
+        let info = '';
+        if (avPick) {
+            const [dd, hh] = avPick.split('-').map(Number), cr = crowd[avPick] || [0, 0, 0], v = mine[avPick];
+            info = `<div style="margin-top:6px;font-size:12px;"><b>${esc(dayLabel(dd))} ${String(hh).padStart(2, '0')}:00 TCT</b>: ${cr[0]} available${cr[1] ? `, ${cr[1]} maybe` : ''}${cr[2] ? `, ${cr[2]} watching` : ''}${v ? ` · you: ${v === 'maybe' ? 'maybe' : 'available'}` : ''}</div>`;
+        }
+        const btn = (id, label) => `<button type="button" class="wwl-av-mode" data-mode="${id}" style="padding:4px 8px;border-radius:6px;border:1px solid #3a4352;cursor:pointer;background:${avMode === id ? '#2a2f3a' : 'transparent'};color:#e6e9ef;">${label}</button>`;
+        return `<div style="font-weight:700;">${esc(c.name || 'Availability')}${c.war && c.war.opponent ? ` <span style="font-weight:400;color:#9aa4b5;">vs ${esc(c.war.opponent)}</span>` : ''}</div>
+            <div style="font-size:12px;margin:4px 0;">${nc ? `Right now: <b>${nc[0]}</b> available${nc[1] ? `, ${nc[1]} maybe` : ''}, <b>${nc[2]}</b> watching.` : '<span style="color:#9aa4b5;">The plan is not running right now.</span>'}</div>
+            <div style="display:flex;gap:6px;margin:6px 0;">${btn('all', 'Everybody')}${btn('mine', 'My hours')}</div>
+            <div style="overflow-x:auto;"><table style="border-collapse:separate;border-spacing:1px;">${head}${rows}</table></div>
+            ${info}
+            ${avMsg ? `<div style="color:#e05555;font-size:12px;margin-top:6px;">${esc(avMsg)}</div>` : ''}
+            <div style="margin-top:6px;color:#9aa4b5;font-size:11px;">${avMode === 'all' ? 'Green = more members available (the number), ● = somebody watches the chain or war. White frame = now. Tap an hour for the numbers.' : 'Tap an hour: green = available, yellow = maybe, a third tap clears it. Times are TCT. The same hours show on the WWL site.'}</div>`;
+    }
+    function wireAvailTab() {
+        body.querySelectorAll('.wwl-av-mode').forEach(b => b.addEventListener('click', () => { avMode = b.dataset.mode; avPick = null; render(); }));
+        body.querySelectorAll('.wwl-av').forEach(td => td.addEventListener('click', async () => {
+            const k = td.dataset.k;
+            if (avMode === 'all') { avPick = avPick === k ? null : k; render(); return; }
+            const [day, hour] = k.split('-').map(Number), mine = avData.mine || (avData.mine = {}), prev = mine[k];
+            const next = !prev ? true : prev === true ? 'maybe' : undefined;
+            if (next) mine[k] = next; else delete mine[k];
+            avPick = k; render();
+            try { const r = await api({ action: 'availability-set', day, hour, state: next === true ? 'yes' : next === 'maybe' ? 'maybe' : '', planId: avData.planId }); if (r && r.error) throw new Error(r.error); avMsg = ''; }
+            catch (e) { if (prev) mine[k] = prev; else delete mine[k]; avMsg = `Could not save that: ${e.message}`; render(); }
+        }));
+    }
     function renderTodoTab() {
         const daily = `<label style="display:flex;gap:8px;align-items:center;padding:${IS_PDA ? 10 : 7}px 0;border-bottom:1px solid #3a4352;cursor:pointer;">
             <input type="checkbox" id="wwl-daily-check" ${getDailyChecked() ? 'checked' : ''} style="width:auto;">
@@ -656,13 +722,14 @@
     }
     function render() {
         if (tab === 'settings') { body.innerHTML = renderSettingsTab(); wireSettingsTab(); wireMyTodo(); try { checkForUpdate(true); } catch (e) { /* the script is still starting up - the passive check will run */ } return; }
-        const tabContent = tab === 'labnotes' ? renderLabTab() : tab === 'mentoring' ? renderMentoringTab() : tab === 'bank' ? renderBankTab() : tab === 'targets' ? renderTargetsTab() : tab === 'todo' ? renderTodoTab() : renderEnergyTab();
+        const tabContent = tab === 'labnotes' ? renderLabTab() : tab === 'mentoring' ? renderMentoringTab() : tab === 'bank' ? renderBankTab() : tab === 'avail' ? renderAvailTab() : tab === 'targets' ? renderTargetsTab() : tab === 'todo' ? renderTodoTab() : renderEnergyTab();
         body.innerHTML = updateBanner() + renderStandingStrip() + tabBar() + tabContent;
         showProgress();
         wireTabs();
         wireOcRequest();
         wireMyTodo();
         wireBankTab();
+        wireAvailTab();
         body.querySelector('#wwl-targets-refresh')?.addEventListener('click', refreshTargetStatus);
         body.querySelector('#wwl-daily-check')?.addEventListener('change', e => { setDailyChecked(e.target.checked); render(); });
         body.querySelectorAll('.wwl-e-check').forEach(cb => cb.addEventListener('change', async () => {
