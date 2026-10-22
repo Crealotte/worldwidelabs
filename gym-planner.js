@@ -689,7 +689,7 @@ function gpSetPlan(plan) {
     if ($('gp-start')) $('gp-start').value = plan && plan.startDay || '';
     if ($('gp-week-note') && plan && plan.weekStart) {
         const f = s => new Date(s * 1000).toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' });
-        $('gp-week-note').textContent = `This training week: ${f(plan.weekStart)} to ${f(plan.weekStart + 6 * 86400)} (TCT)${plan.startDay ? '' : ', counted from the calendar week'}. Set the day your week really started after a war.`;
+        $('gp-week-note').textContent = `This training week: ${f(plan.weekStart)} to ${f(plan.weekStart + 6 * 86400)} (TCT)${plan.startDay ? '' : plan.anchor ? ', starting the day the last war ended' : ', counted from the calendar week'}. Not right? Set the day your week really started.`;
     }
 }
 function renderGpProgress() {

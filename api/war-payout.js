@@ -1481,7 +1481,7 @@ Cancel: ${cancelUrl}`, [], embeds, undefined, true);
                 if (Date.now() - seen > 3600000) await redis(['HSET', userscriptSeenKey(factionId), playerId, String(Date.now())]);
             } catch (e) { /* the plan still loads */ }
         }
-        if (action.startsWith('plan-')) return res.status(200).json(await planHandle(action, req.body, { redis, playerId, factionId }));
+        if (action.startsWith('plan-')) return res.status(200).json(await planHandle(action, req.body, { redis, playerId, factionId, key }));
         // Timezone map — every member reports their own timezone; everyone reads anonymous counts.
         if (action.startsWith('tz-')) return res.status(200).json(await tzHandle(action, req.body, { redis, factionId, playerId }));
 

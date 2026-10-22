@@ -2,7 +2,7 @@
 // @name         World Wide Labs
 // @namespace    https://worldwidelabs.vercel.app
 // @author       CreaLotte
-// @version      1.40.7
+// @version      1.40.8
 // @updateURL    __WWL_BASE__/worldwidelabs.user.js
 // @downloadURL  __WWL_BASE__/worldwidelabs.user.js
 // @description  Shows your WorldWideLabs weekly energy plan (the checklist from the Energy planner) inside Torn, a To do tab with small personal reminders (revive setting, feedback, timezone map, availability, Discord/Intel/CAT), your My Targets list, a simplified energy/war standing strip, and — if you are in the Mentoring Platform — your mentoring checklist too. Also shows faction banners at the top of every Torn page. A small ⚙ in the header shows the installed version, flags when a newer one is out, lets you set/replace your API key, and — for a leader — add or remove your faction's banners right from Torn. On a computer it is a small window you can drag around and close; in TornPDA it is a menu. Ticks are shared with the WWL site.
@@ -295,7 +295,7 @@
                 ${plan.track === 'counter' ? `<span>${plan.counter && plan.counter.known ? 'from the energy tracker' : 'no numbers for you yet'}</span>` : ''}</div>
             <div style="display:flex;gap:6px;align-items:center;margin-bottom:8px;font-size:12px;color:#9aa4b5;flex-wrap:wrap;">My week starts:
                 <input type="date" id="wwl-start" value="${esc(plan.startDay || '')}" style="background:#12161c;color:#e6e9ef;border:1px solid #3a4352;border-radius:6px;padding:2px 6px;">
-                <button type="button" id="wwl-start-auto" style="padding:2px 8px;border-radius:6px;border:1px solid #3a4352;cursor:pointer;background:transparent;color:#e6e9ef;">Automatic</button>
+                <button type="button" id="wwl-start-auto" style="padding:2px 8px;border-radius:6px;border:1px solid #3a4352;cursor:pointer;background:transparent;color:#e6e9ef;" title="The week starts the day the last war ended">After a war</button>
                 ${plan.weekStart ? `<span>${esc(new Date(plan.weekStart * 1000).toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' }))} to ${esc(new Date((plan.weekStart + 6 * 86400) * 1000).toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' }))}</span>` : ''}</div>
             ${plan.blocks.map((b, i) => {
                 const all = b.items.length && b.items.every(it => plan.checks[it.key]);
