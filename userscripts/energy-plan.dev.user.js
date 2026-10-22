@@ -2,7 +2,7 @@
 // @name         World Wide Labs
 // @namespace    https://worldwidelabs.vercel.app
 // @author       CreaLotte
-// @version      1.40.1
+// @version      1.40.2
 // @updateURL    __WWL_BASE__/worldwidelabs.user.js
 // @downloadURL  __WWL_BASE__/worldwidelabs.user.js
 // @description  Shows your WorldWideLabs weekly energy plan (the checklist from the Energy planner) inside Torn, a To do tab with small personal reminders (revive setting, feedback, timezone map, availability, Discord/Intel/CAT), your My Targets list, a simplified energy/war standing strip, and — if you are in the Mentoring Platform — your mentoring checklist too. Also shows faction banners at the top of every Torn page. A small ⚙ in the header shows the installed version, flags when a newer one is out, lets you set/replace your API key, and — for a leader — add or remove your faction's banners right from Torn. On a computer it is a small window you can drag around and close; in TornPDA it is a menu. Ticks are shared with the WWL site.
@@ -559,7 +559,11 @@
         let info = '';
         if (avPick) {
             const [dd, hh] = avPick.split('-').map(Number), cr = crowd[avPick] || [0, 0, 0], v = mine[avPick];
-            info = `<div style="margin-top:6px;font-size:12px;"><b>${esc(dayLabel(dd))} ${String(hh).padStart(2, '0')}:00 TCT</b>: ${cr[0]} available${cr[1] ? `, ${cr[1]} maybe` : ''}${cr[2] ? `, ${cr[2]} watching` : ''}${v ? ` · you: ${v === 'maybe' ? 'maybe' : 'available'}` : ''}</div>`;
+            const ppl = avData.people || {}, nm = ids => (ids || []).map(i => esc(ppl[i] || ('#' + i))).join(', ');
+            info = `<div style="margin-top:6px;font-size:12px;"><b>${esc(dayLabel(dd))} ${String(hh).padStart(2, '0')}:00 TCT</b>: ${cr[0]} available${cr[1] ? `, ${cr[1]} maybe` : ''}${cr[2] ? `, ${cr[2]} watching` : ''}${v ? ` · you: ${v === 'maybe' ? 'maybe' : 'available'}` : ''}
+                ${cr[3] && cr[3].length ? `<div style="margin-top:3px;">Available: ${nm(cr[3])}</div>` : ''}
+                ${cr[4] && cr[4].length ? `<div style="margin-top:3px;color:#f0b432;">Maybe: ${nm(cr[4])}</div>` : ''}
+                ${cr[5] && cr[5].length ? `<div style="margin-top:3px;color:#4da3ff;">Watching: ${nm(cr[5])}</div>` : ''}</div>`;
         }
         const btn = (id, label) => `<button type="button" class="wwl-av-mode" data-mode="${id}" style="padding:4px 8px;border-radius:6px;border:1px solid #3a4352;cursor:pointer;background:${avMode === id ? '#2a2f3a' : 'transparent'};color:#e6e9ef;">${label}</button>`;
         return `<div style="font-weight:700;">${esc(c.name || 'Availability')}${c.war && c.war.opponent ? ` <span style="font-weight:400;color:#9aa4b5;">vs ${esc(c.war.opponent)}</span>` : ''}</div>
@@ -568,7 +572,7 @@
             <div style="overflow-x:auto;"><table style="border-collapse:separate;border-spacing:1px;">${head}${rows}</table></div>
             ${info}
             ${avMsg ? `<div style="color:#e05555;font-size:12px;margin-top:6px;">${esc(avMsg)}</div>` : ''}
-            <div style="margin-top:6px;color:#9aa4b5;font-size:11px;">${avMode === 'all' ? 'Green = more members available (the number), ● = somebody watches the chain or war. White frame = now. Tap an hour for the numbers.' : 'Tap an hour: green = available, yellow = maybe, a third tap clears it. Times are TCT. The same hours show on the WWL site.'}</div>`;
+            <div style="margin-top:6px;color:#9aa4b5;font-size:11px;">${avMode === 'all' ? 'Green = more members available (the number), ● = somebody watches the chain or war. White frame = now. Tap an hour to see who.' : 'Tap an hour: green = available, yellow = maybe, a third tap clears it. Times are TCT. The same hours show on the WWL site.'}</div>`;
     }
     function wireAvailTab() {
         body.querySelectorAll('.wwl-av-mode').forEach(b => b.addEventListener('click', () => { avMode = b.dataset.mode; avPick = null; render(); }));

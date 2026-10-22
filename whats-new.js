@@ -16,7 +16,7 @@ const WHATS_NEW = [
         title: 'All roles on Lab Notes, availability start hour, own timezone',
         everyone: [
             'Lab Notes has a new card: All roles and what they need. It lists the whole ladder from Recruit to Senior Researcher with what each role asks of you and what it gives.',
-            'The availability page now has a Faction overview for every member: per hour how many members are available, maybe, or watching the chain or war (no names), with the current hour framed. Coming online, you can see at once if others are around or if somebody should keep an eye on things.',
+            'The availability page now has a Faction overview for every member: per hour how many members are available, maybe, or watching the chain or war, with the current hour framed. Click an hour to see who. Coming online, you can see at once if others are around or if somebody should keep an eye on things.',
             'Availability plans can start at an hour you choose (From, in TCT), next to the end date and hour. A chosen start hour also opens the hours before a linked war.',
             'The tables on Member overview and Who\'s on board can be made taller or shorter by dragging the corner at their bottom right.',
             'The own timezone of the availability tracker now shows the offset you are on today (UTC+2 in Belgium until 25 October).',

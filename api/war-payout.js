@@ -1022,18 +1022,25 @@ module.exports = async function handler(req, res) {
                 for (const k of slots) { const order = watchOrder(data, k); if (order.length) taken[k] = Math.min(WATCH_MAX, order.length); const i = order.findIndex(o => o.id === playerId); if (i >= 0) role[k] = i === 0 ? 'primary' : 'backup'; }
                 result.watchTaken = taken; result.mineRole = role;
             }
-            { // the whole faction at a glance, for every member and without names: per hour [available, maybe, chain/war watchers]. Members who marked themselves out are left out.
-                const crowd = {};
+            { // the whole faction at a glance, for every member, WITH the names so people can plan around each other: per hour [available, maybe, watchers, ids, maybe ids, watcher ids]
+                // and `people` (id -> name) once. Members who marked themselves out are left out.
+                const crowd = {}, people = {};
                 for (const [id, entry] of Object.entries(data?.entries || {})) {
                     if (unavailable[id]) continue;
                     for (const [slot, val] of Object.entries(entry.slots || {})) {
                         if (slotBeforeStart(data, slot)) continue;
-                        const c = crowd[slot] || (crowd[slot] = [0, 0, 0]);
-                        if (val === 'maybe') c[1]++; else c[0]++;
+                        const c = crowd[slot] || (crowd[slot] = [0, 0, 0, [], [], []]);
+                        people[id] = entry.name || ('#' + id);
+                        if (val === 'maybe') { c[1]++; c[4].push(id); } else { c[0]++; c[3].push(id); }
                     }
                 }
-                for (const [slot, n] of Object.entries(result.watchTaken)) { if (slotBeforeStart(data, slot)) continue; (crowd[slot] || (crowd[slot] = [0, 0, 0]))[2] = n; }
-                result.crowd = crowd;
+                for (const slot of Object.keys(result.watchTaken)) {
+                    if (slotBeforeStart(data, slot)) continue;
+                    const order = watchOrder(data, slot).slice(0, WATCH_MAX), c = crowd[slot] || (crowd[slot] = [0, 0, 0, [], [], []]);
+                    c[2] = order.length; c[5] = order.map(o => String(o.id));
+                    order.forEach(o => { people[String(o.id)] = o.name || people[String(o.id)] || ('#' + o.id); });
+                }
+                result.crowd = crowd; result.people = people;
             }
             if (leaderFlag) {
                 // Everyone who hit "I can't make this war" (the forum-post equivalent) — listed

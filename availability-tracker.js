@@ -19,6 +19,8 @@ let avArchivedPicked = false; // true once an archived plan was picked on purpos
 let avHintsShown = 0; // how many click hints have been shown this visit
 let avWatchMode = false; // the switch: clicking a box adds or removes the ring instead of cycling the colour
 let avWatchTaken = {}; // hour -> how many of the two places (primary + backup) are taken
+let avPeople = {}; // id -> name, for the names in the overview
+let avCrowdSel = null; // the hour whose names are shown under the overview
 let avCrowd = {}; // "day-hour" -> [available, maybe, watchers]: the whole faction, no names, for every member
 let avMineRole = {}; // hour -> 'primary' or 'backup' for the hours I hold
 let avSummary = null; // "day-hour" (TCT) -> { count, names } — present only when the caller is a leader
@@ -109,7 +111,7 @@ async function loadAvailability() {
         avConfig = result.config;
         avMine = result.mine || {};
         avMineWatch = result.mineWatch || {};
-        avWatchTaken = result.watchTaken || {}; avMineRole = result.mineRole || {}; avCrowd = result.crowd || {};
+        avWatchTaken = result.watchTaken || {}; avMineRole = result.mineRole || {}; avCrowd = result.crowd || {}; avPeople = result.people || {};
         avSummary = (typeof memberView !== "undefined" && memberView) ? null : result.summary || null; // only ever present for a leader-tier key
         avMyUnavailable = result.myUnavailable || null;
         avUnavailList = (typeof memberView !== "undefined" && memberView) ? null : result.unavailable || null;
@@ -814,15 +816,27 @@ function renderAvCrowd() {
     if (!body) return;
     const maxCount = Math.max(1, ...Object.values(avCrowd).map(c => c[0]));
     body.innerHTML = avBuildTable((day, hour) => {
-        const c = avCrowd[`${day}-${hour}`] || [0, 0, 0];
+        const c = avCrowd[`${day}-${hour}`] || [0, 0, 0, [], [], []];
         const bg = c[0] ? `rgba(53,217,155,${(0.15 + (c[0] / maxCount) * 0.65).toFixed(2)})` : c[1] ? 'rgba(240,180,50,.25)' : 'transparent';
         const label = c[0] || c[1] || c[2] ? `${c[0] || ''}${c[1] ? `<span style="color:#f0b432;font-size:11px;">${c[0] ? ' +' : ''}${c[1]}?</span>` : ''}${c[2] ? `<span class="av-watch-badge">🔵${c[2]}</span>` : ''}` : '';
         const isNow = now && now.day === day && now.hour === hour ? ' av-cell-now' : '';
         const war = avIsWarSlot(day, hour) ? ' av-cell-war' : '';
         const warLen = avIsWarLenDay(day) ? ' av-cell-warlen' : '';
-        return `<td class="av-cell av-summary-cell${isNow}${war}${warLen}" style="background:${bg};" title="${esc(avTctLabel(day, hour))}: ${c[0]} available${c[1] ? `, ${c[1]} maybe` : ''}${c[2] ? `, ${c[2]} watching` : ''}">${label}</td>`;
+        const sel = avCrowdSel && avCrowdSel.day === day && avCrowdSel.hour === hour ? ' av-cell-selected' : '';
+        const nm = ids => (ids || []).map(i => avPeople[i] || ('#' + i)).join(', ');
+        return `<td class="av-cell av-summary-cell${c[0] || c[1] || c[2] ? ' av-clickable' : ''}${isNow}${sel}${war}${warLen}" data-day="${day}" data-hour="${hour}" style="background:${bg};" title="${esc(avTctLabel(day, hour))}: ${c[0]} available${c[0] ? ' (' + esc(nm(c[3])) + ')' : ''}${c[1] ? `, maybe: ${esc(nm(c[4]))}` : ''}${c[2] ? `, watching: ${esc(nm(c[5]))}` : ''}">${label}</td>`;
     });
-    const c = now ? avCrowd[`${now.day}-${now.hour}`] || [0, 0, 0] : null;
+    body.querySelectorAll('.av-clickable').forEach(td => td.addEventListener('click', () => { avCrowdSel = { day: Number(td.dataset.day), hour: Number(td.dataset.hour) }; renderAvCrowd(); }));
+    const c = now ? avCrowd[`${now.day}-${now.hour}`] || [0, 0, 0, [], [], []] : null;
+    $('av-crowd-names').innerHTML = (() => {
+        const pick = avCrowdSel || now, k = pick ? `${pick.day}-${pick.hour}` : null, s = k && avCrowd[k];
+        if (!s) return '<span style="color:var(--muted);">Click an hour to see who is available.</span>';
+        const chips = (ids, border) => (ids || []).map(i => `<span class="chip" style="cursor:default;${border ? 'border-color:' + border + ';' : ''}">${esc(avPeople[i] || ('#' + i))}</span>`).join(' ');
+        return `<div style="font-weight:700;margin-bottom:6px;">${esc(avTctLabel(pick.day, pick.hour))}${avCrowdSel ? '' : ' (now)'}</div>` +
+            (s[3].length ? `<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:6px;">${chips(s[3])}</div>` : '<div style="color:var(--muted);margin-bottom:6px;">Nobody has marked this hour as available.</div>') +
+            (s[4].length ? `<div style="color:var(--muted);font-size:12px;">Maybe:</div><div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:6px;">${chips(s[4], '#f0b432')}</div>` : '') +
+            (s[5].length ? `<div style="color:#4da3ff;font-size:12px;">🔵 ${avIsWarPlan() ? 'War guards' : 'Chain savers'}:</div><div style="display:flex;flex-wrap:wrap;gap:6px;">${chips(s[5], '#4da3ff')}</div>` : '');
+    })();
     $('av-crowd-now').innerHTML = c ? `<b>Right now:</b> ${c[0]} available${c[1] ? `, ${c[1]} maybe` : ''}, ${c[2]} watching.` : '<span style="color:var(--muted);">The plan is not running right now.</span>';
 }
 

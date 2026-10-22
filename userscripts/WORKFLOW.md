@@ -15,7 +15,7 @@ Members get `energy-plan.user.js` (the **release** file). Every change from now 
 Queue changes below instead of releasing each one. Nothing here is live for members until a release.
 
 ### Queued for the next release
-- Script 1.40.1 (dev): new Avail tab with the faction overview (everybody, no names, now-hour framed) and My hours (tap to set green, yellow or off). The server part (crowd numbers in availability-get) is already live.
+- Script 1.40.2 (dev): new Avail tab with the faction overview (everybody, with names when you tap an hour, now-hour framed) and My hours (tap to set green, yellow or off). The server part (crowd numbers in availability-get) is already live.
 - Nothing queued. Last release: script 1.40 (2026-10-18): the Trade helper on Torn's trade pages (total at the WWL pricelist, receipt link and Copy message, Accept button with Accept anyway, the money page filled in, a full Plushie/Flower Set priced as the set, finished trades saved to the ledger with Undo). It stays quiet for anybody without a pricelist.
 
 ## Releasing (when the list is done and tested)
