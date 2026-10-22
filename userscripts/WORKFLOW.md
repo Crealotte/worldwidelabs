@@ -15,6 +15,7 @@ Members get `energy-plan.user.js` (the **release** file). Every change from now 
 Queue changes below instead of releasing each one. Nothing here is live for members until a release.
 
 ### Queued for the next release
+- Script 1.40.9 (dev): My week starts also has a dropdown: after a war the week starts the day it ended or the day after. Server part live.
 - Script 1.40.8 (dev): the Automatic button of My week starts is now "After a war" (the week starts the day the last war ended). Server part live.
 - Script 1.40.7 (dev): the Energy tab has My week starts (a date, or Automatic), shared with the planner on the site; the server part is live.
 - Script 1.40.6 (dev): the Energy tab can count the energy really trained instead of the ticks (plan-track, shared with the planner on the site; the server part is live).
