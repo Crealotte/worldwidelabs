@@ -2,7 +2,7 @@
 // @name         World Wide Labs
 // @namespace    https://worldwidelabs.vercel.app
 // @author       CreaLotte
-// @version      1.40.3
+// @version      1.40.4
 // @updateURL    __WWL_BASE__/worldwidelabs.user.js
 // @downloadURL  __WWL_BASE__/worldwidelabs.user.js
 // @description  Shows your WorldWideLabs weekly energy plan (the checklist from the Energy planner) inside Torn, a To do tab with small personal reminders (revive setting, feedback, timezone map, availability, Discord/Intel/CAT), your My Targets list, a simplified energy/war standing strip, and — if you are in the Mentoring Platform — your mentoring checklist too. Also shows faction banners at the top of every Torn page. A small ⚙ in the header shows the installed version, flags when a newer one is out, lets you set/replace your API key, and — for a leader — add or remove your faction's banners right from Torn. On a computer it is a small window you can drag around and close; in TornPDA it is a menu. Ticks are shared with the WWL site.
@@ -544,16 +544,17 @@
         const dayLabel = day => new Date(Date.UTC(y, m - 1, d + day)).toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', timeZone: 'UTC' });
         const cell = (day, hour) => {
             const k = `${day}-${hour}`;
-            if (day * 24 + hour >= total || avClosed(c, day, hour)) return '<td style="width:15px;height:17px;background:#12161c;"></td>';
+            if (day * 24 + hour >= total || avClosed(c, day, hour)) return '<td style="min-width:26px;height:16px;background:#12161c;"></td>';
             const cr = crowd[k] || [0, 0, 0], v = mine[k];
             const bg = avMode === 'mine' ? (v === 'maybe' ? '#f0b432' : v ? '#35d99b' : '#1b2029') : (cr[0] ? `rgba(53,217,155,${(0.2 + cr[0] / max * 0.7).toFixed(2)})` : cr[1] ? 'rgba(240,180,50,.3)' : '#1b2029');
             const ring = avPick === k ? 'outline:2px solid #4da3ff;outline-offset:-2px;' : k === nowSlot ? 'outline:2px solid #fff;outline-offset:-2px;' : (avMode === 'all' && v ? 'box-shadow:inset 0 0 0 2px #fff6;' : '');
             const txt = avMode === 'all' && cr[0] ? `<span style="font-size:9px;color:#06120d;">${cr[0]}</span>` : '';
-            return `<td class="wwl-av" data-k="${k}" style="width:15px;height:17px;text-align:center;cursor:pointer;background:${bg};${ring}">${txt}${avMode === 'all' && cr[2] ? '<span style="font-size:7px;color:#4da3ff;">●</span>' : ''}</td>`;
+            return `<td class="wwl-av" data-k="${k}" style="min-width:26px;height:16px;text-align:center;cursor:pointer;background:${bg};${ring}">${txt}${avMode === 'all' && cr[2] ? '<span style="font-size:7px;color:#4da3ff;">●</span>' : ''}</td>`;
         };
+        // like the site: a column per day, a row per hour
         let rows = '';
-        for (let day = 0; day < c.days; day++) rows += `<tr><td style="font-size:10px;color:#9aa4b5;padding-right:4px;white-space:nowrap;">${esc(dayLabel(day))}</td>${Array.from({ length: 24 }, (_, h) => cell(day, h)).join('')}</tr>`;
-        const head = `<tr><td></td>${Array.from({ length: 24 }, (_, h) => `<td style="font-size:8px;color:#9aa4b5;text-align:center;">${h % 3 === 0 ? h : ''}</td>`).join('')}</tr>`;
+        for (let h = 0; h < 24; h++) rows += `<tr><td style="font-size:9px;color:#9aa4b5;padding-right:3px;text-align:right;">${String(h).padStart(2, '0')}</td>${Array.from({ length: c.days }, (_, day) => cell(day, h)).join('')}</tr>`;
+        const head = `<tr><td></td>${Array.from({ length: c.days }, (_, day) => `<td style="font-size:9px;color:#9aa4b5;text-align:center;white-space:nowrap;">${esc(dayLabel(day))}</td>`).join('')}</tr>`;
         const nc = nowSlot ? crowd[nowSlot] || [0, 0, 0] : null;
         let info = '';
         if (avPick) {
