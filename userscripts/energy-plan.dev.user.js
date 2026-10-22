@@ -2,7 +2,7 @@
 // @name         World Wide Labs
 // @namespace    https://worldwidelabs.vercel.app
 // @author       CreaLotte
-// @version      1.40.4
+// @version      1.40.5
 // @updateURL    __WWL_BASE__/worldwidelabs.user.js
 // @downloadURL  __WWL_BASE__/worldwidelabs.user.js
 // @description  Shows your WorldWideLabs weekly energy plan (the checklist from the Energy planner) inside Torn, a To do tab with small personal reminders (revive setting, feedback, timezone map, availability, Discord/Intel/CAT), your My Targets list, a simplified energy/war standing strip, and — if you are in the Mentoring Platform — your mentoring checklist too. Also shows faction banners at the top of every Torn page. A small ⚙ in the header shows the installed version, flags when a newer one is out, lets you set/replace your API key, and — for a leader — add or remove your faction's banners right from Torn. On a computer it is a small window you can drag around and close; in TornPDA it is a menu. Ticks are shared with the WWL site.
@@ -279,7 +279,13 @@
         if (!plan) return `<div style="padding:6px 0;color:#9aa4b5;">You have no plan yet. Open the Energy planner on WWL once, pick your method, and it will show up here.</div>${footer}`;
         const p = progress();
         const old = plan.week !== Math.floor(Date.now() / (7 * 86400e3)) ? '<div style="color:#f0b432;margin-bottom:6px;">This plan is from a previous week — open the planner on WWL to make a plan for this week.</div>' : '';
-        const nextIdx = plan.blocks.findIndex(b => b.items.some(it => !plan.checks[it.key]));
+        // the day to open: the one you are working on (the last day with a tick, while it still has open boxes), else the first day after it that is not done,
+        // else the first day not done. It used to be the first day with an open box, so ticking day 3 still opened day 1.
+        const open = b => b.items.some(it => !plan.checks[it.key]);
+        let lastTick = -1; plan.blocks.forEach((b, i) => { if (b.items.some(it => plan.checks[it.key])) lastTick = i; });
+        let nextIdx = lastTick >= 0 && open(plan.blocks[lastTick]) ? lastTick : -1;
+        if (nextIdx < 0) nextIdx = plan.blocks.findIndex((b, i) => i > lastTick && open(b));
+        if (nextIdx < 0) nextIdx = plan.blocks.findIndex(open);
         return `${old}<div style="color:#9aa4b5;margin-bottom:6px;">${esc(plan.summary)}</div>
             <div style="height:6px;background:#39414f;border-radius:3px;overflow:hidden;margin-bottom:8px;"><div style="height:100%;width:${p.total ? Math.min(100, p.done / p.total * 100) : 0}%;background:#35d99b;"></div></div>
             ${plan.blocks.map((b, i) => {
