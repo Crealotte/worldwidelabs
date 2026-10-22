@@ -2,7 +2,7 @@
 // @name         World Wide Labs
 // @namespace    https://worldwidelabs.vercel.app
 // @author       CreaLotte
-// @version      1.40.2
+// @version      1.40.3
 // @updateURL    __WWL_BASE__/worldwidelabs.user.js
 // @downloadURL  __WWL_BASE__/worldwidelabs.user.js
 // @description  Shows your WorldWideLabs weekly energy plan (the checklist from the Energy planner) inside Torn, a To do tab with small personal reminders (revive setting, feedback, timezone map, availability, Discord/Intel/CAT), your My Targets list, a simplified energy/war standing strip, and — if you are in the Mentoring Platform — your mentoring checklist too. Also shows faction banners at the top of every Torn page. A small ⚙ in the header shows the installed version, flags when a newer one is out, lets you set/replace your API key, and — for a leader — add or remove your faction's banners right from Torn. On a computer it is a small window you can drag around and close; in TornPDA it is a menu. Ticks are shared with the WWL site.
@@ -256,7 +256,6 @@
     function tabBar() {
         const n = todoCount();
         const tabs = [['energy', '⚡ Energy'], ['targets', '🎯 Targets']]; // the To do button sits in the top row next to the energy and the war numbers
-        if ((mtPairs && mtPairs.length) || mtIsPupil) tabs.push(['mentoring', '🎓 Mentoring']);
         tabs.push(['labnotes', '🧪 Notes']);
         tabs.push(['avail', '📅 Avail']);
         tabs.push(['bank', '💰 Bank']);
@@ -419,7 +418,7 @@
             ${c.intro ? `<div style="color:#9aa4b5;font-size:12px;white-space:pre-wrap;margin:4px 0;">${weRich(c.intro)}</div>` : ''}${c.tasks.map(t => weTask(t, 'wwl-lab-check', '')).join('')}
             ${c.canRemind ? `<label style="display:flex;gap:8px;align-items:center;margin-top:6px;padding-top:6px;border-top:1px solid #3a4352;font-size:12px;"><input type="checkbox" class="wwl-lab-remind" data-id="${esc(c.id)}" ${c.remindersOn ? 'checked' : ''}> Put the daily steps of this note on my To do</label>` : ''}</details>`).join('')
             : `<div style="color:#9aa4b5;font-size:12px;padding:4px 0;">More notes will show up here when they are written.</div>`;
-        return html + `<div style="margin-top:10px;color:#9aa4b5;font-size:12px;">The same notes are on the site: <a href="${WWL}/lab-notes" target="_blank" rel="noopener" style="color:#35d99b;">${esc(WWL)}/lab-notes</a></div>`;
+        return html + `<div style="margin-top:10px;color:#9aa4b5;font-size:12px;">The same notes are on the site: <a href="${WWL}/lab-notes" target="_blank" rel="noopener" style="color:#35d99b;">${esc(WWL)}/lab-notes</a>. Your mentor and the chat with them are on the site too: <a href="${WWL}/mentoring" target="_blank" rel="noopener" style="color:#35d99b;">${esc(WWL)}/mentoring</a></div>`;
     }
     // The mentoring to-dos: one section per pairing (a mentor with several pupils gets one each), each ticked
     // separately — same shared checklist the WWL page itself shows, just without the chat (open the site for that).
@@ -725,8 +724,9 @@
         </div>`;
     }
     function render() {
+        if (tab === 'mentoring') tab = lastTab = 'labnotes'; // the Mentoring tab is gone from the script: the Notes tab has the same chapters (the chat is on the site)
         if (tab === 'settings') { body.innerHTML = renderSettingsTab(); wireSettingsTab(); wireMyTodo(); try { checkForUpdate(true); } catch (e) { /* the script is still starting up - the passive check will run */ } return; }
-        const tabContent = tab === 'labnotes' ? renderLabTab() : tab === 'mentoring' ? renderMentoringTab() : tab === 'bank' ? renderBankTab() : tab === 'avail' ? renderAvailTab() : tab === 'targets' ? renderTargetsTab() : tab === 'todo' ? renderTodoTab() : renderEnergyTab();
+        const tabContent = tab === 'labnotes' ? renderLabTab() : tab === 'bank' ? renderBankTab() : tab === 'avail' ? renderAvailTab() : tab === 'targets' ? renderTargetsTab() : tab === 'todo' ? renderTodoTab() : renderEnergyTab();
         body.innerHTML = updateBanner() + renderStandingStrip() + tabBar() + tabContent;
         showProgress();
         wireTabs();
