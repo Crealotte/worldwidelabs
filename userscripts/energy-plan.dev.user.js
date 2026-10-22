@@ -2,7 +2,7 @@
 // @name         World Wide Labs
 // @namespace    https://worldwidelabs.vercel.app
 // @author       CreaLotte
-// @version      1.40.6
+// @version      1.40.7
 // @updateURL    __WWL_BASE__/worldwidelabs.user.js
 // @downloadURL  __WWL_BASE__/worldwidelabs.user.js
 // @description  Shows your WorldWideLabs weekly energy plan (the checklist from the Energy planner) inside Torn, a To do tab with small personal reminders (revive setting, feedback, timezone map, availability, Discord/Intel/CAT), your My Targets list, a simplified energy/war standing strip, and — if you are in the Mentoring Platform — your mentoring checklist too. Also shows faction banners at the top of every Torn page. A small ⚙ in the header shows the installed version, flags when a newer one is out, lets you set/replace your API key, and — for a leader — add or remove your faction's banners right from Torn. On a computer it is a small window you can drag around and close; in TornPDA it is a menu. Ticks are shared with the WWL site.
@@ -279,7 +279,7 @@
         const footer = `<div style="margin-top:10px;padding-top:8px;border-top:1px solid #3a4352;color:#9aa4b5;">To change your settings (stat, method, candy, cans, refill), use the planner on the tool itself: <a href="${WWL}/energy" target="_blank" rel="noopener" style="color:#35d99b;">${esc(WWL)}/energy</a></div>`;
         if (!plan) return `<div style="padding:6px 0;color:#9aa4b5;">You have no plan yet. Open the Energy planner on WWL once, pick your method, and it will show up here.</div>${footer}`;
         const p = progress();
-        const old = plan.week !== Math.floor(Date.now() / (7 * 86400e3)) ? '<div style="color:#f0b432;margin-bottom:6px;">This plan is from a previous week — open the planner on WWL to make a plan for this week.</div>' : '';
+        const old = plan.week !== (plan.currentWeek ?? Math.floor(Date.now() / (7 * 86400e3))) ? '<div style="color:#f0b432;margin-bottom:6px;">This plan is from a previous week — open the planner on WWL to make a plan for this week.</div>' : '';
         // the day to open: the one you are working on (the last day with a tick, while it still has open boxes), else the first day after it that is not done,
         // else the first day not done. It used to be the first day with an open box, so ticking day 3 still opened day 1.
         const open = b => b.items.some(it => !plan.checks[it.key]);
@@ -293,6 +293,10 @@
                 <button type="button" class="wwl-track" data-mode="boxes" style="padding:2px 8px;border-radius:6px;border:1px solid #3a4352;cursor:pointer;background:${plan.track === 'counter' ? 'transparent' : '#2a2f3a'};color:#e6e9ef;">my ticks</button>
                 <button type="button" class="wwl-track" data-mode="counter" style="padding:2px 8px;border-radius:6px;border:1px solid #3a4352;cursor:pointer;background:${plan.track === 'counter' ? '#2a2f3a' : 'transparent'};color:#e6e9ef;">energy trained</button>
                 ${plan.track === 'counter' ? `<span>${plan.counter && plan.counter.known ? 'from the energy tracker' : 'no numbers for you yet'}</span>` : ''}</div>
+            <div style="display:flex;gap:6px;align-items:center;margin-bottom:8px;font-size:12px;color:#9aa4b5;flex-wrap:wrap;">My week starts:
+                <input type="date" id="wwl-start" value="${esc(plan.startDay || '')}" style="background:#12161c;color:#e6e9ef;border:1px solid #3a4352;border-radius:6px;padding:2px 6px;">
+                <button type="button" id="wwl-start-auto" style="padding:2px 8px;border-radius:6px;border:1px solid #3a4352;cursor:pointer;background:transparent;color:#e6e9ef;">Automatic</button>
+                ${plan.weekStart ? `<span>${esc(new Date(plan.weekStart * 1000).toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' }))} to ${esc(new Date((plan.weekStart + 6 * 86400) * 1000).toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' }))}</span>` : ''}</div>
             ${plan.blocks.map((b, i) => {
                 const all = b.items.length && b.items.every(it => plan.checks[it.key]);
                 return `<details ${i === nextIdx ? 'open' : ''} style="margin-bottom:4px;"><summary style="cursor:pointer;font-weight:700;padding:${IS_PDA ? 6 : 2}px 0;">${all ? '✅ ' : ''}${esc(b.title)}${i === nextIdx ? ' <span style="color:#35d99b;font-weight:400;">← next</span>' : ''}</summary>
@@ -748,6 +752,12 @@
         wireAvailTab();
         body.querySelector('#wwl-targets-refresh')?.addEventListener('click', refreshTargetStatus);
         body.querySelector('#wwl-daily-check')?.addEventListener('change', e => { setDailyChecked(e.target.checked); render(); });
+        const setStart = async v => {
+            try { const r = await api({ action: 'plan-start', startDay: v }); if (r.plan) { plan = r.plan; try { store.set('wwl_plan_cache', JSON.stringify({ at: Date.now(), plan })); } catch (e) { /* not critical */ } } } catch (e) { alert(e.message); }
+            render();
+        };
+        body.querySelector('#wwl-start')?.addEventListener('change', e => setStart(e.target.value));
+        body.querySelector('#wwl-start-auto')?.addEventListener('click', () => setStart(''));
         body.querySelectorAll('.wwl-track').forEach(b => b.addEventListener('click', async () => {
             try { const r = await api({ action: 'plan-track', mode: b.dataset.mode }); if (r.plan) { plan = r.plan; try { store.set('wwl_plan_cache', JSON.stringify({ at: Date.now(), plan })); } catch (e) { /* not critical */ } } } catch (e) { /* the bar stays as it was */ }
             render();

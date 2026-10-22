@@ -686,6 +686,11 @@ let gpTrack = 'boxes', gpCounter = null;
 function gpSetPlan(plan) {
     gpTrack = plan && plan.track === 'counter' ? 'counter' : 'boxes'; gpCounter = plan && plan.counter || null;
     if ($('gp-track')) $('gp-track').value = gpTrack;
+    if ($('gp-start')) $('gp-start').value = plan && plan.startDay || '';
+    if ($('gp-week-note') && plan && plan.weekStart) {
+        const f = s => new Date(s * 1000).toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' });
+        $('gp-week-note').textContent = `This training week: ${f(plan.weekStart)} to ${f(plan.weekStart + 6 * 86400)} (TCT)${plan.startDay ? '' : ', counted from the calendar week'}. Set the day your week really started after a war.`;
+    }
 }
 function renderGpProgress() {
     let done = 0, total = 0;
@@ -704,6 +709,14 @@ $('gp-track').addEventListener('change', async () => {
     if (!r) { toast('Could not change that - open the planner once so a plan is saved, then try again.'); $('gp-track').value = gpTrack; return; }
     gpSetPlan(r.plan); renderGpProgress();
 });
+
+async function gpChangeStart(startDay) {
+    const r = await gpPlanFetch({ action: 'plan-start', startDay });
+    if (!r) { toast('Could not change that - pick a day from the last 60 days up to today (and open the planner once so a plan is saved).'); return; }
+    gpSetPlan(r.plan); renderGymPlanner(); // draws it again so the ticks and the bar follow the new week
+}
+$('gp-start').addEventListener('change', () => gpChangeStart($('gp-start').value));
+$('gp-start-auto').addEventListener('click', () => gpChangeStart(''));
 
 async function loadGymPlanner() {
     await Promise.all([gpLoadPrices(), gpLoadGyms(), gpLoadPerks()]);

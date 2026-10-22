@@ -15,6 +15,7 @@ Members get `energy-plan.user.js` (the **release** file). Every change from now 
 Queue changes below instead of releasing each one. Nothing here is live for members until a release.
 
 ### Queued for the next release
+- Script 1.40.7 (dev): the Energy tab has My week starts (a date, or Automatic), shared with the planner on the site; the server part is live.
 - Script 1.40.6 (dev): the Energy tab can count the energy really trained instead of the ticks (plan-track, shared with the planner on the site; the server part is live).
 - Script 1.40.5 (dev): the Energy tab opens on the day you are working on (the last day with a tick), not always on day 1. Script 1.40.4 (dev): the Avail grid has the days as columns and the hours as rows, like the site. Script 1.40.3 (dev): the Mentoring tab is removed (the Notes tab has the same chapters; the mentor and the chat are on the site, with a link in the Notes tab).
 - Script 1.40.2 (dev): new Avail tab with the faction overview (everybody, with names when you tap an hour, now-hour framed) and My hours (tap to set green, yellow or off). The server part (crowd numbers in availability-get) is already live.
