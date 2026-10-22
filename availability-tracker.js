@@ -19,6 +19,7 @@ let avArchivedPicked = false; // true once an archived plan was picked on purpos
 let avHintsShown = 0; // how many click hints have been shown this visit
 let avWatchMode = false; // the switch: clicking a box adds or removes the ring instead of cycling the colour
 let avWatchTaken = {}; // hour -> how many of the two places (primary + backup) are taken
+let avCrowd = {}; // "day-hour" -> [available, maybe, watchers]: the whole faction, no names, for every member
 let avMineRole = {}; // hour -> 'primary' or 'backup' for the hours I hold
 let avSummary = null; // "day-hour" (TCT) -> { count, names } — present only when the caller is a leader
 let avMyUnavailable = null; // { name, note, at } if I marked myself as unable to make this war
@@ -108,7 +109,7 @@ async function loadAvailability() {
         avConfig = result.config;
         avMine = result.mine || {};
         avMineWatch = result.mineWatch || {};
-        avWatchTaken = result.watchTaken || {}; avMineRole = result.mineRole || {};
+        avWatchTaken = result.watchTaken || {}; avMineRole = result.mineRole || {}; avCrowd = result.crowd || {};
         avSummary = (typeof memberView !== "undefined" && memberView) ? null : result.summary || null; // only ever present for a leader-tier key
         avMyUnavailable = result.myUnavailable || null;
         avUnavailList = (typeof memberView !== "undefined" && memberView) ? null : result.unavailable || null;
@@ -531,6 +532,7 @@ function renderAvailabilityPage() {
     renderAvWatchBar();
     renderAvTzBar();
     renderAvUnavailBar();
+    renderAvCrowd();
     renderAvGrid();
     $('av-summary-panel').style.display = avSummary ? 'block' : 'none';
     if (avSummary) renderAvSummaryGrid();
@@ -798,6 +800,30 @@ function avBuildTable(cellHtml) {
         html += '</tr>';
     }
     return html + '</tbody></table>';
+}
+
+// the slot (day, hour) that is the current hour, or null when it is outside the plan
+function avNowSlot() {
+    const [y, m, d] = avStartParts();
+    const idx = Math.floor((Date.now() / 1000 - Date.UTC(y, m - 1, d) / 1000) / 3600);
+    return idx < 0 || idx >= avConfig.days * 24 ? null : { day: Math.floor(idx / 24), hour: idx % 24 };
+}
+// the overview for every member: how many are around in each hour, no names
+function renderAvCrowd() {
+    const body = $('av-crowd-body'), now = avNowSlot();
+    if (!body) return;
+    const maxCount = Math.max(1, ...Object.values(avCrowd).map(c => c[0]));
+    body.innerHTML = avBuildTable((day, hour) => {
+        const c = avCrowd[`${day}-${hour}`] || [0, 0, 0];
+        const bg = c[0] ? `rgba(53,217,155,${(0.15 + (c[0] / maxCount) * 0.65).toFixed(2)})` : c[1] ? 'rgba(240,180,50,.25)' : 'transparent';
+        const label = c[0] || c[1] || c[2] ? `${c[0] || ''}${c[1] ? `<span style="color:#f0b432;font-size:11px;">${c[0] ? ' +' : ''}${c[1]}?</span>` : ''}${c[2] ? `<span class="av-watch-badge">🔵${c[2]}</span>` : ''}` : '';
+        const isNow = now && now.day === day && now.hour === hour ? ' av-cell-now' : '';
+        const war = avIsWarSlot(day, hour) ? ' av-cell-war' : '';
+        const warLen = avIsWarLenDay(day) ? ' av-cell-warlen' : '';
+        return `<td class="av-cell av-summary-cell${isNow}${war}${warLen}" style="background:${bg};" title="${esc(avTctLabel(day, hour))}: ${c[0]} available${c[1] ? `, ${c[1]} maybe` : ''}${c[2] ? `, ${c[2]} watching` : ''}">${label}</td>`;
+    });
+    const c = now ? avCrowd[`${now.day}-${now.hour}`] || [0, 0, 0] : null;
+    $('av-crowd-now').innerHTML = c ? `<b>Right now:</b> ${c[0]} available${c[1] ? `, ${c[1]} maybe` : ''}, ${c[2]} watching.` : '<span style="color:var(--muted);">The plan is not running right now.</span>';
 }
 
 function renderAvGrid() {

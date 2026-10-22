@@ -1022,6 +1022,19 @@ module.exports = async function handler(req, res) {
                 for (const k of slots) { const order = watchOrder(data, k); if (order.length) taken[k] = Math.min(WATCH_MAX, order.length); const i = order.findIndex(o => o.id === playerId); if (i >= 0) role[k] = i === 0 ? 'primary' : 'backup'; }
                 result.watchTaken = taken; result.mineRole = role;
             }
+            { // the whole faction at a glance, for every member and without names: per hour [available, maybe, chain/war watchers]. Members who marked themselves out are left out.
+                const crowd = {};
+                for (const [id, entry] of Object.entries(data?.entries || {})) {
+                    if (unavailable[id]) continue;
+                    for (const [slot, val] of Object.entries(entry.slots || {})) {
+                        if (slotBeforeStart(data, slot)) continue;
+                        const c = crowd[slot] || (crowd[slot] = [0, 0, 0]);
+                        if (val === 'maybe') c[1]++; else c[0]++;
+                    }
+                }
+                for (const [slot, n] of Object.entries(result.watchTaken)) { if (slotBeforeStart(data, slot)) continue; (crowd[slot] || (crowd[slot] = [0, 0, 0]))[2] = n; }
+                result.crowd = crowd;
+            }
             if (leaderFlag) {
                 // Everyone who hit "I can't make this war" (the forum-post equivalent) — listed
                 // for the leader, and their ticked slots are left out of the heatmap below so a
