@@ -2,7 +2,7 @@
 // @name         World Wide Labs
 // @namespace    https://worldwidelabs.vercel.app
 // @author       CreaLotte
-// @version      1.43
+// @version      1.43.1
 // @updateURL    __WWL_BASE__/worldwidelabs.user.js
 // @downloadURL  __WWL_BASE__/worldwidelabs.user.js
 // @description  Shows your WorldWideLabs weekly energy plan (the checklist from the Energy planner) inside Torn, a To do tab with small personal reminders (revive setting, feedback, timezone map, availability, Discord/Intel/CAT), your My Targets list, a simplified energy/war standing strip, and — if you are in the Mentoring Platform — your mentoring checklist too. Also shows faction banners at the top of every Torn page. A small ⚙ in the header shows the installed version, flags when a newer one is out, lets you set/replace your API key, and — for a leader — add or remove your faction's banners right from Torn. On a computer it is a small window you can drag around and close; in TornPDA it is a menu. Ticks are shared with the WWL site.
@@ -1043,11 +1043,14 @@
     let radarData = null, radarBusy = false, radarLast = 0;
     function renderRadar() {
         if (!radarOn() || !radarData) { radarBar.style.display = 'none'; repositionForBanner(); return; }
-        const one = (p, c) => `<a href="https://www.torn.com/profiles.php?XID=${esc(p.id)}" style="color:#e6e9ef;text-decoration:none;white-space:nowrap;"><span style="color:${c};">●</span> ${esc(p.name)}</a>`;
+        // the dot is the status (green online, orange idle); the name is coloured by what that member said about this hour in the availability plan
+        const NAME_COLOR = { yes: '#35d99b', maybe: '#ff922b', watch: '#4da3ff' }, anyPlan = [...radarData.online, ...radarData.idle].some(p => p.a);
+        const one = (p, c) => `<a href="https://www.torn.com/profiles.php?XID=${esc(p.id)}" style="color:${NAME_COLOR[p.a] || '#e6e9ef'};${p.a === 'watch' ? 'font-weight:700;' : ''}text-decoration:none;white-space:nowrap;"><span style="color:${c};">●</span> ${esc(p.name)}</a>`;
         const names = [...radarData.online.map(p => one(p, '#35d99b')), ...radarData.idle.map(p => one(p, '#f0a030'))];
         radarBar.style.display = 'block';
         radarBar.innerHTML = `<div style="display:flex;justify-content:space-between;gap:8px;"><b style="color:#4da3ff;">FACTION RADAR (Online: ${radarData.online.length} | Idle: ${radarData.idle.length})</b><a href="#" id="wwl-radar-refresh" style="color:#9aa4b5;">Refresh</a></div>
-            <div style="display:flex;flex-wrap:wrap;gap:4px 12px;margin-top:2px;">${names.join('') || '<span style="color:#9aa4b5;">Nobody is online right now.</span>'}</div>`;
+            <div style="display:flex;flex-wrap:wrap;gap:4px 12px;margin-top:2px;">${names.join('') || '<span style="color:#9aa4b5;">Nobody is online right now.</span>'}</div>
+            ${radarData.planName !== undefined && (anyPlan || radarData.planName) ? `<div style="margin-top:3px;color:#9aa4b5;font-size:11px;">Name colour, this hour in the plan${radarData.planName ? ` (${esc(radarData.planName)})` : ''}: <span style="color:#35d99b;">available</span> · <span style="color:#ff922b;">maybe</span> · <b style="color:#4da3ff;">watching</b></div>` : ''}`;
         radarBar.querySelector('#wwl-radar-refresh').addEventListener('click', e => { e.preventDefault(); refreshRadar(true); });
         repositionForBanner();
     }

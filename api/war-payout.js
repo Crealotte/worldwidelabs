@@ -981,8 +981,24 @@ module.exports = async function handler(req, res) {
             const dd = await rr.json();
             if (dd.error) return res.status(502).json({ error: dd.error.error || 'Torn would not give the member list' });
             const list = Array.isArray(dd.members) ? dd.members : Object.values(dd.members || {});
-            const pick = st => list.filter(m => m.last_action && String(m.last_action.status).toLowerCase() === st).sort((a, b) => (b.last_action.timestamp || 0) - (a.last_action.timestamp || 0)).map(m => ({ id: String(m.id), name: String(m.name || '').slice(0, 24) }));
-            const data = { online: pick('online'), idle: pick('idle'), total: list.length, at: Date.now() };
+            // what each member has said about THIS hour in the running availability plan: 'watch' (chain saver / war guard), 'yes' (available) or 'maybe'; members marked out are left out
+            const state = {}; let planName = '';
+            try {
+                const { data: plan } = await resolvePlan(String(factionId), undefined);
+                if (plan && plan.startDate) {
+                    const [py, pm, pd] = String(plan.startDate).split('-').map(Number), idx = Math.floor((Date.now() / 1000 - Date.UTC(py, pm - 1, pd) / 1000) / 3600), k = `${Math.floor(idx / 24)}-${idx % 24}`;
+                    if (idx >= 0 && idx < (plan.days || 0) * 24 && !slotBeforeStart(plan, k)) {
+                        planName = String(plan.name || '').slice(0, 40);
+                        for (const [pid, e] of Object.entries(plan.entries || {})) {
+                            if (plan.unavailable && plan.unavailable[pid]) continue;
+                            const v = e.slots && e.slots[k];
+                            if (v) state[pid] = (e.watch && e.watch[k]) ? 'watch' : v === 'maybe' ? 'maybe' : 'yes';
+                        }
+                    }
+                }
+            } catch (e) { /* the radar still works without the colors */ }
+            const pick = st => list.filter(m => m.last_action && String(m.last_action.status).toLowerCase() === st).sort((a, b) => (b.last_action.timestamp || 0) - (a.last_action.timestamp || 0)).map(m => ({ id: String(m.id), name: String(m.name || '').slice(0, 24), a: state[String(m.id)] || '' }));
+            const data = { online: pick('online'), idle: pick('idle'), total: list.length, planName, at: Date.now() };
             if (radarMem.size > 50) radarMem.clear();
             radarMem.set(String(factionId), { at: Date.now(), data });
             return res.status(200).json(data);
