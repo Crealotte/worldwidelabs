@@ -333,7 +333,7 @@ function renderAtShoppingList(report) {
                     <td style="padding:4px 8px;">${esc(it.item)}</td>
                     <td style="padding:4px 8px;font-family:var(--mono);">${it.quantity}x</td>
                     <td style="padding:4px 8px;font-family:var(--mono);">${atRestockedCell(it)}</td>
-                    <td style="padding:4px 8px;font-family:var(--mono);${it.hasPrice ? '' : 'color:var(--muted);'}">${it.hasPrice ? `$${Math.round(it.value).toLocaleString()}` : '—'}</td>
+                    <td style="padding:4px 8px;font-family:var(--mono);${it.hasPrice ? '' : 'color:var(--muted);'}">${it.hasPrice ? `$${Math.round(it.value).toLocaleString()}${it.quantity ? ` <span style="color:var(--muted);font-size:11px;" title="Torn's market value of one">@ $${Math.round(it.value / it.quantity).toLocaleString()}</span>` : ''}` : '—'}</td>
                 </tr>`).join('')}
                 <tr><td colspan="3" style="padding:2px 8px;text-align:right;color:var(--muted);">Subtotal</td><td style="padding:2px 8px;font-family:var(--mono);font-weight:700;">$${Math.round(subtotal).toLocaleString()}</td></tr>
             </tbody>`;
