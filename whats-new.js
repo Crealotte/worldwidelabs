@@ -20,6 +20,7 @@ const WHATS_NEW = [
         ],
         leaders: [
             'Who\'s on board has a new Script exempt column: click it for a member who cannot install scripts (for example a locked-down phone or computer). They then count as having the script for the role path, the promotion list, the removal list and the welcome chapter, and they are no longer asked to install it. Intel and CAT stay as they are: tick CAT by hand for a member who does that in another way (for example the dibs system in Intel).',
+            'Member Overview has a new Battle stats of the faction box: the average, median, highest and lowest total battle stats per member (from the members who have opened WWL), and a What if calculator: add or remove a number of people at a total each and see the new average. The Who\'s on board part also shows how many members are on WWL, Discord, the script, Intel and CAT, with a Copy for council button.',
         ],
     },
     {

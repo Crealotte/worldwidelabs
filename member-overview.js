@@ -250,6 +250,7 @@ function moWinners(rows) {
 function renderMemberOverview() {
     if (!moData) return;
     renderPeriodBar();
+    renderMoBattle();
     const rows = moRows();
     // Every column is clickable (shared helper in core.js — click again to flip direction). Values are the
     // natural ones (bigger = more), so the first click on a number column shows the biggest first; the
@@ -522,3 +523,35 @@ $('mo-usage-btn').addEventListener('click', async () => {
     const kinds = o => Object.entries(o || {}).sort((a, b) => b[1] - a[1]).slice(0, 15).map(([k, n]) => `  ${String(n).padStart(5)}  ${k}`).join('\n') || '  (nothing yet)';
     out.textContent = `Last 2 hours: ${total} calls with your key\nBusiest minute: ${peak.n} calls (${at(peak.minute)}) — Torn allows about 100 a minute for all your tools together\nMinutes with 60+ calls: ${busy}\n\nToday, per kind ("saved" = answered from memory, no call to Torn) — estimates, only 1 call in 10 is recorded to save database writes, so expect steps of 10:\n${kinds(r.today)}\n\nYesterday:\n${kinds(r.yesterday)}`;
 });
+
+// ---- Battle stats of the faction: the average total per member, and a small calculator to play with (what if 10 more people at 10k each join) ----
+// The totals come from what WWL already keeps (each member's own key shows only their own battle stats, so a member counts once they have opened WWL: see mo-me).
+function moBsFigures() {
+    const members = (moData && moData.members) || [], auto = (moData && moData.autoTier) || {};
+    const totals = members.map(m => Number(auto[m.id] && auto[m.id].total) || 0).filter(v => v > 0).sort((a, b) => a - b);
+    const sum = totals.reduce((s, v) => s + v, 0), k = totals.length;
+    return { n: members.length, k, sum, avg: k ? sum / k : 0, median: k ? (k % 2 ? totals[(k - 1) / 2] : (totals[k / 2 - 1] + totals[k / 2]) / 2) : 0, max: k ? totals[k - 1] : 0, min: k ? totals[0] : 0, high: totals.filter(v => v >= 1500000).length };
+}
+const moBsN = v => Math.round(v).toLocaleString('en-US');
+function renderMoBattle() {
+    const box = $('mo-bs-sum');
+    if (!box || !moData) return;
+    const f = moBsFigures();
+    if (!f.k) { box.innerHTML = '<span style="color:var(--muted);">No battle stats known yet: they appear once members have opened WWL with their key.</span>'; $('mo-bs-calc-out').textContent = ''; return; }
+    box.innerHTML = `<div style="display:flex;gap:18px;flex-wrap:wrap;align-items:baseline;"><span>Average total per member: <b style="font-size:16px;color:var(--reagent);">${moBsN(f.avg)}</b></span><span>Median: <b>${moBsN(f.median)}</b></span><span>Highest: <b>${moBsN(f.max)}</b></span><span>Lowest: <b>${moBsN(f.min)}</b></span><span>All together: <b>${moBsN(f.sum)}</b></span><span>1.5m and up: <b>${f.high}</b> of ${f.k}</span></div>
+        <div style="color:var(--muted);font-size:12px;margin-top:4px;">Based on <b>${f.k}</b> of the <b>${f.n}</b> members: a member's total is only known once they have opened WWL (it is refreshed at most every 6 hours). The other ${f.n - f.k} are not in these numbers.</div>`;
+    moBsCalc();
+}
+function moBsCalc() {
+    const out = $('mo-bs-calc-out');
+    if (!out || !moData) return;
+    const f = moBsFigures(), val = id => Math.max(0, Number($(id).value) || 0);
+    const addN = val('mo-bs-add-n'), addT = val('mo-bs-add-t'), remN = Math.min(val('mo-bs-rem-n'), f.k), remT = val('mo-bs-rem-t');
+    const unknown = $('mo-bs-unk').checked; // count the members whose stats we do not know at the average too
+    const baseN = unknown ? f.n : f.k, baseSum = unknown ? f.avg * f.n : f.sum;
+    const newN = baseN + addN - remN, newSum = baseSum + addN * addT - remN * remT;
+    if (!f.k || newN <= 0) { out.textContent = newN <= 0 && f.k ? 'Nobody would be left.' : ''; return; }
+    const newAvg = newSum / newN, diff = newAvg - (baseSum / baseN), pct = baseSum ? diff / (baseSum / baseN) * 100 : 0;
+    out.innerHTML = `<b>${moBsN(baseN)} → ${moBsN(newN)} members</b>: the average goes from <b>${moBsN(baseSum / baseN)}</b> to <b style="color:${diff >= 0 ? 'var(--reagent)' : 'var(--danger)'};">${moBsN(newAvg)}</b> (${diff >= 0 ? '+' : ''}${moBsN(diff)}, ${diff >= 0 ? '+' : ''}${pct.toFixed(1)}%). All together: ${moBsN(newSum)}.`;
+}
+['mo-bs-add-n', 'mo-bs-add-t', 'mo-bs-rem-n', 'mo-bs-rem-t', 'mo-bs-unk'].forEach(id => { const el = $(id); if (el) el.addEventListener('input', moBsCalc); });

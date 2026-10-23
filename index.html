@@ -1609,6 +1609,21 @@
                     </div>
                 </div>
 
+                <div class="panel" id="mo-bs-panel">
+                    <details open><summary class="av-sum"><h3>Battle stats of the faction</h3></summary>
+                    <div id="mo-bs-sum" style="font-size:13px;margin:6px 0 10px;"></div>
+                    <div style="border-top:1px solid var(--line);padding-top:10px;font-size:13px;">
+                        <b>What if…</b> <span style="color:var(--muted);font-size:12px;">(a calculator to play with: nothing is saved)</span>
+                        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:8px 0;">
+                            Add <input id="mo-bs-add-n" type="number" min="0" value="10" style="width:70px;"> people at <input id="mo-bs-add-t" type="number" min="0" value="10000" style="width:120px;"> total each
+                            <span style="color:var(--muted);">and remove</span> <input id="mo-bs-rem-n" type="number" min="0" value="0" style="width:70px;"> people at <input id="mo-bs-rem-t" type="number" min="0" value="0" style="width:120px;"> total each
+                        </div>
+                        <label style="font-size:12px;display:inline-flex;gap:6px;align-items:center;"><input id="mo-bs-unk" type="checkbox" style="width:auto;"> count the members whose stats are not known yet at the average too</label>
+                        <div id="mo-bs-calc-out" style="margin-top:8px;"></div>
+                    </div>
+                    </details>
+                </div>
+
                 <div class="panel" id="adoption-mo" style="display:none;">
                     <details><summary class="av-sum"><h3>Who's on board</h3></summary>
                     <p style="color:var(--muted);font-size:12px;margin:0 0 12px;" id="adoption-summary-mo"></p>
