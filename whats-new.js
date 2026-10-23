@@ -12,6 +12,14 @@
 
 const WHATS_NEW = [
     {
+        version: '1.37', date: '2026-10-24',
+        title: 'Script 1.43: faction radar',
+        everyone: [
+            'The WWL script (update to 1.43) has a Faction radar at the top of every Torn page: how many members are online and idle, with their names (green dot online, orange dot idle). Tap a name for the profile and Refresh for the latest. You can turn it off in the script settings (the cog).',
+        ],
+        leaders: [],
+    },
+    {
         version: '1.36', date: '2026-10-22',
         title: 'Script 1.42: watch hours and your own timezone in the Avail tab',
         everyone: [
