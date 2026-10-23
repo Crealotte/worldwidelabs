@@ -53,6 +53,30 @@ async function redis(command) {
 }
 
 function sleep(ms) { return new Promise(resolve => setTimeout(resolve, ms)); }
+
+// Torn's market value of every item (lowercased name -> { type, price }). The page asks for a long date range in chunks of a few days, one request each, so this list
+// is kept for 10 minutes and asked again up to 4 times when Torn does not answer: a chunk that got no prices used to count its items in the quantity
+// but NOT in the cost (the cost of 508 Xanax came out as 457), without any sign of it. Better an error than a wrong total.
+let itemsMem = { at: 0, catalog: null };
+async function loadCatalog(key) {
+    if (itemsMem.catalog && Date.now() - itemsMem.at < 10 * 60 * 1000) return itemsMem.catalog;
+    let lastErr = '';
+    for (let attempt = 0; attempt < 4; attempt++) {
+        try {
+            const r = await tornFetch(`https://api.torn.com/torn/?selections=items&key=${encodeURIComponent(key)}`), d = await r.json();
+            if (!d.error && d.items && Object.keys(d.items).length) {
+                const catalog = {};
+                for (const it of Object.values(d.items)) catalog[String(it.name).toLowerCase()] = { type: it.type || 'Other', price: it.market_value ?? null };
+                itemsMem = { at: Date.now(), catalog };
+                return catalog;
+            }
+            lastErr = d.error ? d.error.error : 'an empty answer';
+        } catch (e) { lastErr = e.message; }
+        await sleep(1500 * (attempt + 1));
+    }
+    if (itemsMem.catalog) return itemsMem.catalog; // an older list is better than none
+    throw new Error(`Torn would not give the item prices (${lastErr}). Try again in a moment.`);
+}
 function isRateLimited(data) {
     return data?.error?.code === 5 || /too many requests/i.test(data?.error?.error || '');
 }
@@ -306,15 +330,10 @@ module.exports = async function handler(req, res) {
             const { from, to } = req.body;
             if (!from || !to) return res.status(400).json({ error: 'Pick a date range first.' });
 
-            const [newsResult, itemsRes] = await Promise.all([
+            const [newsResult, catalog] = await Promise.all([
                 fetchArmoryNewsCached(key, factionId, from, to),
-                tornFetch(`https://api.torn.com/torn/?selections=items&key=${encodeURIComponent(key)}`),
+                loadCatalog(key),
             ]);
-            const itemsData = await itemsRes.json();
-            const catalog = {}; // lowercased item name -> { type, price }
-            for (const it of Object.values(itemsData.items || {})) {
-                catalog[String(it.name).toLowerCase()] = { type: it.type || 'Other', price: it.market_value ?? null };
-            }
 
             let unparsedCount = 0;
             const unparsedSample = [];
