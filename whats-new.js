@@ -12,6 +12,14 @@
 
 const WHATS_NEW = [
     {
+        version: '1.38', date: '2026-10-24',
+        title: 'Script 1.44: radar names in the colour of your availability',
+        everyone: [
+            'In the Faction radar of the WWL script (update to 1.44) the names are now coloured by what each member put in the availability plan for the current hour: green available, orange maybe, blue watching (chain saver or war guard). Under the names a small legend shows it while a plan is running.',
+        ],
+        leaders: [],
+    },
+    {
         version: '1.37', date: '2026-10-24',
         title: 'Script 1.43: faction radar',
         everyone: [
