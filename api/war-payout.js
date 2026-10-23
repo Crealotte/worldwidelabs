@@ -473,6 +473,8 @@ async function leaderTodos(key, factionId) {
         const roster = await getRoster(key);
         const hashIds = async k => { const f = (await redis(['HGETALL', k])) || [], ids = new Set(); for (let i = 0; i < f.length; i += 2) if (f[i + 1] && f[i + 1] !== '0') ids.add(String(f[i])); return ids; };
         const [onWwl, withScript] = await Promise.all([hashIds('wwl:logins'), hashIds(userscriptSeenKey(factionId))]);
+        // a member a leader marked as unable to use the script (a restricted phone or computer) is not asked to install it
+        try { const vf = (await redis(['HGETALL', manualVerifyKey(factionId)])) || []; for (let i = 0; i < vf.length; i += 2) { try { if (JSON.parse(vf[i + 1]).scriptExempt) withScript.add(String(vf[i])); } catch (e) { /* skip */ } } } catch (e) { /* the reminder still works */ }
         const notWwl = roster.filter(m => !onWwl.has(m.id)), noScript = roster.filter(m => onWwl.has(m.id) && !withScript.has(m.id));
         const names = a => `${a.slice(0, 5).map(m => m.name).join(', ')}${a.length > 5 ? ` +${a.length - 5} more` : ''}`;
         const people = a => a.slice(0, 80).map(m => ({ id: m.id, name: m.name }));
@@ -1388,7 +1390,7 @@ Cancel: ${cancelUrl}`, [], embeds, undefined, true);
         if (action === 'verify-mine') {
             const raw = await redis(['HGET', manualVerifyKey(factionId), playerId]);
             const v = raw ? JSON.parse(raw) : {};
-            return res.status(200).json({ intel: !!v.intel, cat: !!v.cat, discordExempt: !!v.discordExempt });
+            return res.status(200).json({ intel: !!v.intel, cat: !!v.cat, discordExempt: !!v.discordExempt, scriptExempt: !!v.scriptExempt });
         }
         // The userscript stamping "I'm here" — called from Torn itself, at most about once an hour
         // per browser (throttled client-side), so this is a real signal of actual use, not just of
@@ -1854,7 +1856,7 @@ Cancel: ${cancelUrl}`, [], embeds, undefined, true);
             const { id, tool, value } = req.body;
             // 'discordExempt' is not a tool a member joins — it's a leader marking someone (e.g. in a
             // country where Discord is banned) as not expected to link it, so the to-do list stops nagging them.
-            if (!/^\d+$/.test(String(id)) || !['intel', 'cat', 'discordExempt'].includes(tool)) return res.status(400).json({ error: 'Bad request' });
+            if (!/^\d+$/.test(String(id)) || !['intel', 'cat', 'discordExempt', 'scriptExempt'].includes(tool)) return res.status(400).json({ error: 'Bad request' });
             const raw = await redis(['HGET', manualVerifyKey(factionId), String(id)]);
             const v = raw ? JSON.parse(raw) : {};
             v[tool] = !!value; v.updatedAt = Date.now();

@@ -65,6 +65,7 @@ async function loadAdoption(sfx = '') {
             wwl: m => (logins[m.id] ? 1 : 0),
             discord: m => (discordMembers ? (discordMembers[m.id] ? (discordMembers[m.id].verified ? 2 : 1) : 0) : -1),
             exempt: m => (verifyMap[m.id]?.discordExempt ? 1 : 0),
+            sexempt: m => (verifyMap[m.id]?.scriptExempt ? 1 : 0),
             intel: m => (verifyMap[m.id]?.intel ? 1 : 0),
             cat: m => (verifyMap[m.id]?.cat ? 1 : 0),
             userscript: m => { const at = userscriptMap[m.id] || 0; return !at ? 0 : Date.now() - at > US_STALE_MS ? 1 : 2; },
@@ -88,8 +89,8 @@ async function loadAdoption(sfx = '') {
         // Discord exempt: a member in a country where Discord is banned — clicking this stops the
         // userscript's to-do list nagging them to join/link it. Same click handler as intel/cat, since
         // it's stored in the same manual-verify record; just a different label and sense (on = skip it).
-        const exemptBadge = (id, on) => canVerify
-            ? `<span class="adopt-verify" data-id="${esc(id)}" data-tool="discordExempt" style="cursor:pointer;${on ? 'color:var(--happy);' : 'color:var(--muted);'}" title="Click to mark ${on ? 'not exempt' : 'exempt (e.g. Discord banned in their country)'}">${on ? '✓ exempt' : '○ no'}</span>`
+        const exemptBadge = (id, on, tool = 'discordExempt', why = 'exempt (e.g. Discord banned in their country)') => canVerify
+            ? `<span class="adopt-verify" data-id="${esc(id)}" data-tool="${tool}" style="cursor:pointer;${on ? 'color:var(--happy);' : 'color:var(--muted);'}" title="Click to mark ${on ? 'not exempt' : why}">${on ? '✓ exempt' : '○ no'}</span>`
             : `<span style="${on ? 'color:var(--happy);' : 'color:var(--muted);'}">${on ? '✓ exempt' : '○ no'}</span>`;
 
         $('adoption-body' + sfx).innerHTML = sorted.map(m => {
@@ -122,6 +123,7 @@ async function loadAdoption(sfx = '') {
                 <td>${l ? '<span style="color:var(--reagent)">● on board</span>' : '<span style="color:var(--muted)">○ not yet</span>'}</td>
                 <td>${discordCell}</td>
                 <td>${exemptBadge(m.id, !!v.discordExempt)}</td>
+                <td>${exemptBadge(m.id, !!v.scriptExempt, 'scriptExempt', 'exempt (cannot install scripts, e.g. a locked-down phone or computer)')}</td>
                 <td>${manualBadge(m.id, 'intel', !!v.intel)}</td>
                 <td>${manualBadge(m.id, 'cat', !!v.cat)}</td>
                 <td>${usCell}</td>

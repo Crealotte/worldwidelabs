@@ -18,7 +18,9 @@ const WHATS_NEW = [
             'The Avail tab of the WWL script (update to 1.42) now lets you add yourself as Chain saver, or War guard when the plan is linked to a war: tap one of your hours in the new blue button. Each hour has room for one and a backup, like on the site.',
             'The grids have grid lines (a stronger line every 6 hours) and a switch to show the times in your own timezone, like the site. Everything is still saved in TCT.',
         ],
-        leaders: [],
+        leaders: [
+            'Who\'s on board has a new Script exempt column: click it for a member who cannot install scripts (for example a locked-down phone or computer). They then count as having the script for the role path, the promotion list, the removal list and the welcome chapter, and they are no longer asked to install it. Intel and CAT stay as they are: tick CAT by hand for a member who does that in another way (for example the dibs system in Intel).',
+        ],
     },
     {
         version: '1.35', date: '2026-10-22',
