@@ -77,6 +77,24 @@ async function loadAdoption(sfx = '') {
         $('adoption-summary' + sfx).textContent = discordMembers
             ? `${onboard} of ${sorted.length} members have logged into WWLabs · ${sorted.filter(m => discordMembers[m.id]).length} of ${sorted.length} found in Discord.`
             : `${onboard} of ${sorted.length} members have logged in. (Discord check not set up yet.)`;
+        // the numbers for the council, ready to copy: how many of the members are on WWL, Discord, the script, Intel and CAT
+        {
+            const n = sorted.length, cnt = fn => sorted.filter(fn).length, exempt = cnt(m => verifyMap[m.id]?.scriptExempt && !(userscriptMap[m.id] > 0));
+            const parts = [['WWL', cnt(m => logins[m.id])], ...(discordMembers ? [['Discord', cnt(m => discordMembers[m.id])]] : []), ['Userscript', cnt(m => userscriptMap[m.id] > 0)], ['Intel', cnt(m => verifyMap[m.id]?.intel)], ['CAT', cnt(m => verifyMap[m.id]?.cat)]];
+            const line = parts.map(([name, k]) => `${name} ${k}/${n}`).join(' · ') + (exempt ? ` (${exempt} more cannot use the script)` : '');
+            const box = $('adoption-summary' + sfx);
+            const row = document.createElement('div');
+            row.style.cssText = 'margin-top:6px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;color:var(--text);';
+            row.innerHTML = `<b>${esc(line)}</b>`;
+            const btn = document.createElement('button');
+            btn.type = 'button'; btn.className = 'ghost small'; btn.textContent = 'Copy for council';
+            btn.addEventListener('click', () => {
+                const text = `Who's on board (${n} members): ${line}`;
+                navigator.clipboard.writeText(text).then(() => toast('Copied'), () => toast(text));
+            });
+            row.appendChild(btn);
+            box.appendChild(row);
+        }
 
         // Torn Intel and CAT can't be checked automatically — a leader clicks the ○/✓ badge to tick a member
         // by hand once they've confirmed it themselves. Not tracked at all for someone not yet on WWLabs.
