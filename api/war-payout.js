@@ -70,6 +70,7 @@ async function redis(command) {
 const restockedKey = (factionId) => `wwl:restocked-wars:${factionId}`;
 const SVC_BUG_ACTIONS = new Set(['bugs-list', 'bugs-metoo', 'bugs-shot', 'sug-list', 'sug-add', 'sug-vote', 'bug-report']); // what a service user (investor, tenant, director) can do on Bugs & suggestions
 const OWNER_VIEW_ACTIONS = new Set(['mo-get', 'mo-energy', 'mo-consumption', 'mo-war', 'mo-reg-get', 'verify-get', 'userscript-get', 'owner-roster']); // what the owner can read of another faction
+const radarMem = new Map(); // factionId -> { at, data }: the faction radar answer of the last minute
 const manualVerifyKey = (factionId) => `wwl:manual-verify:${factionId}`; // hash: playerId -> { intel, cat, updatedAt } — Torn Intel / CAT have no API to check, so a leader ticks it by hand
 const userscriptSeenKey = (factionId) => `wwl:userscript-seen:${factionId}`; // hash: playerId -> last-seen epoch ms, stamped by the userscript itself (see 'script-checkin') for Who's on board
 const userscriptInfoKey = (factionId) => `wwl:userscript-info:${factionId}`; // hash: playerId -> "version|pda" (or "version|pc"), sent by the script's own check-in
@@ -969,6 +970,22 @@ module.exports = async function handler(req, res) {
                 return res.status(200).json({ ok: true, added: add.length });
             }
             return res.status(400).json({ error: 'Unknown action' });
+        }
+
+        // Faction radar (the WWL script shows it on every Torn page): who of the faction is online or idle right now. Names and the online / idle status are what every faction member can see in Torn anyway.
+        // One read from Torn per minute for the whole faction (kept in this server's memory, nothing is written to the database); the plain fetch skips lib/tornFetch's 10-minute memory of the member list.
+        if (action === 'faction-radar') {
+            const hit = radarMem.get(String(factionId));
+            if (hit && Date.now() - hit.at < 60000) return res.status(200).json(hit.data);
+            const rr = await fetch(`https://api.torn.com/v2/faction/members?striptags=true&key=${encodeURIComponent(key)}`, { headers: { accept: 'application/json' } });
+            const dd = await rr.json();
+            if (dd.error) return res.status(502).json({ error: dd.error.error || 'Torn would not give the member list' });
+            const list = Array.isArray(dd.members) ? dd.members : Object.values(dd.members || {});
+            const pick = st => list.filter(m => m.last_action && String(m.last_action.status).toLowerCase() === st).sort((a, b) => (b.last_action.timestamp || 0) - (a.last_action.timestamp || 0)).map(m => ({ id: String(m.id), name: String(m.name || '').slice(0, 24) }));
+            const data = { online: pick('online'), idle: pick('idle'), total: list.length, at: Date.now() };
+            if (radarMem.size > 50) radarMem.clear();
+            radarMem.set(String(factionId), { at: Date.now(), data });
+            return res.status(200).json(data);
         }
 
         // Open to any logged-in member of the faction, not leader-gated — this is what lets the

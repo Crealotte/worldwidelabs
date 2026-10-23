@@ -2,7 +2,7 @@
 // @name         World Wide Labs
 // @namespace    https://worldwidelabs.vercel.app
 // @author       CreaLotte
-// @version      1.42
+// @version      1.42.1
 // @updateURL    __WWL_BASE__/worldwidelabs.user.js
 // @downloadURL  __WWL_BASE__/worldwidelabs.user.js
 // @description  Shows your WorldWideLabs weekly energy plan (the checklist from the Energy planner) inside Torn, a To do tab with small personal reminders (revive setting, feedback, timezone map, availability, Discord/Intel/CAT), your My Targets list, a simplified energy/war standing strip, and — if you are in the Mentoring Platform — your mentoring checklist too. Also shows faction banners at the top of every Torn page. A small ⚙ in the header shows the installed version, flags when a newer one is out, lets you set/replace your API key, and — for a leader — add or remove your faction's banners right from Torn. On a computer it is a small window you can drag around and close; in TornPDA it is a menu. Ticks are shared with the WWL site.
@@ -698,6 +698,7 @@
             ${updateHtml}
             <button type="button" id="wwl-change-key" style="margin-top:4px;padding:6px 12px;border-radius:6px;border:1px solid #3a4352;background:transparent;color:#e6e9ef;cursor:pointer;">Change API key</button>
             ${undismissHtml}`;
+        html += `<label style="display:flex;gap:8px;align-items:center;margin-top:10px;font-size:13px;cursor:pointer;"><input type="checkbox" id="wwl-radar-on" ${radarOn() ? 'checked' : ''}> Show the faction radar (who is online and idle) at the top of Torn pages</label>`;
         html += myRemindersBlock();
         if (settingsData === null) {
             html += '<div style="padding:10px 0;color:#9aa4b5;">Loading…</div>';
@@ -731,6 +732,7 @@
     }
     function wireSettingsTab() {
         body.querySelector('#wwl-back')?.addEventListener('click', () => { tab = lastTab; render(); });
+        body.querySelector('#wwl-radar-on')?.addEventListener('change', e => { store.set(RADAR_ON, e.target.checked ? '1' : '0'); if (e.target.checked) { radarLast = 0; refreshRadar(true); } else renderRadar(); });
         body.querySelector('#wwl-change-key')?.addEventListener('click', () => {
             const current = store.get(KEY_NAME) || '';
             const masked = current ? `${current.slice(0, 4)}…${current.slice(-4)}` : 'not set';
@@ -963,12 +965,16 @@
     banBar.id = 'wwl-torn-banner';
     banBar.style.cssText = 'display:none;position:relative;z-index:99990;font:13px/1.4 Arial,sans-serif;';
     document.body.insertBefore(banBar, document.body.firstChild);
+    const radarBar = document.createElement('div'); // the faction radar strip, right under the banner (see further down)
+    radarBar.id = 'wwl-radar';
+    radarBar.style.cssText = 'display:none;position:relative;z-index:99989;font:12px/1.5 Arial,sans-serif;background:#12161c;color:#e6e9ef;border-bottom:1px solid #3a4352;padding:4px 10px;';
+    banBar.parentNode.insertBefore(radarBar, banBar.nextSibling);
     let banList = [], banIdx = 0, banTimer = null;
     // The pill uses a fixed "top" — it doesn't know the banner is there, so once one renders it would
     // otherwise sit half-covered by it. Repositioned to sit just below the banner's actual height
     // every time it changes (left for a computer, right on TornPDA — either way, just needs pushing down).
     function repositionForBanner() {
-        const h = banBar.style.display === 'none' ? 0 : banBar.offsetHeight;
+        const h = (banBar.style.display === 'none' ? 0 : banBar.offsetHeight) + (radarBar.style.display === 'none' ? 0 : radarBar.offsetHeight);
         pill.style.top = `${h + (IS_PDA ? 8 : PILL_TOP)}px`;
     }
     function renderTornBanner() {
@@ -1029,6 +1035,36 @@
     // 10 minutes: every Torn page load of every member goes through here, so shortening it multiplies
     // database calls across the whole faction. ⚙ Settings refreshes it immediately when a leader changes one.
     if (!(banCached && Date.now() - banCached.at < 600000)) refreshTornBanners();
+
+    // ---- Faction radar: who of the faction is online or idle right now, in a strip under the banner on every Torn page (switch in ⚙ Settings) ----
+    // One call at most once a minute per page load (the server keeps its answer for a minute for the whole faction), and only the Refresh link asks again sooner (not before 15 seconds).
+    const RADAR_ON = 'wwl_radar_on', RADAR_CACHE = 'wwl_radar_cache';
+    const radarOn = () => store.get(RADAR_ON) !== '0';
+    let radarData = null, radarBusy = false, radarLast = 0;
+    function renderRadar() {
+        if (!radarOn() || !radarData) { radarBar.style.display = 'none'; repositionForBanner(); return; }
+        const one = (p, c) => `<a href="https://www.torn.com/profiles.php?XID=${esc(p.id)}" style="color:#e6e9ef;text-decoration:none;white-space:nowrap;"><span style="color:${c};">●</span> ${esc(p.name)}</a>`;
+        const names = [...radarData.online.map(p => one(p, '#35d99b')), ...radarData.idle.map(p => one(p, '#f0a030'))];
+        radarBar.style.display = 'block';
+        radarBar.innerHTML = `<div style="display:flex;justify-content:space-between;gap:8px;"><b style="color:#4da3ff;">FACTION RADAR (Online: ${radarData.online.length} | Idle: ${radarData.idle.length})</b><a href="#" id="wwl-radar-refresh" style="color:#9aa4b5;">Refresh</a></div>
+            <div style="display:flex;flex-wrap:wrap;gap:4px 12px;margin-top:2px;">${names.join('') || '<span style="color:#9aa4b5;">Nobody is online right now.</span>'}</div>`;
+        radarBar.querySelector('#wwl-radar-refresh').addEventListener('click', e => { e.preventDefault(); refreshRadar(true); });
+        repositionForBanner();
+    }
+    function refreshRadar(force) {
+        if (!getKey() || radarBusy) return;
+        if (!radarOn()) { renderRadar(); return; }
+        if (Date.now() - radarLast < (force ? 15000 : 60000)) return;
+        radarBusy = true;
+        api({ action: 'faction-radar' }).then(r => {
+            if (!r || !Array.isArray(r.online)) return;
+            radarData = r; radarLast = Date.now();
+            store.set(RADAR_CACHE, JSON.stringify({ at: radarLast, data: r }));
+            renderRadar();
+        }).catch(() => { /* the strip just keeps what it had */ }).finally(() => { radarBusy = false; });
+    }
+    try { const c = JSON.parse(store.get(RADAR_CACHE) || 'null'); if (c && c.data && Array.isArray(c.data.online)) { radarData = c.data; radarLast = c.at || 0; renderRadar(); } } catch (e) { /* nothing cached */ }
+    refreshRadar(false);
 
     // ---- Trade helper: for the traders of Trading Funding (on Torn's trade pages only) ----
     // Reads the trade page itself (no Torn API key, nothing polled): the total of the other person's items at your WWL pricelist, the money filled in for you,
