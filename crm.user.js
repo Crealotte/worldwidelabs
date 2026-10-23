@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         CoreLabs Elite Recruiter v22.0
-// @version      24.8.0
+// @version      24.8.1
 // @updateURL    https://worldwidelabs.vercel.app/crm.user.js
 // @downloadURL  https://worldwidelabs.vercel.app/crm.user.js
 // @description  Test version Corelabs
@@ -1357,15 +1357,16 @@ function setUselessRow(btn, uid) {
 	// ── Torn's limit: about 100 calls a minute for everything together ────────────
 	// Every call to Torn waits for its turn here (a little under that limit), so it is never refused for asking too fast: a refusal made the old way wait 4, 8, 12... seconds per player.
 	// When Torn does say "too many requests" the pause grows for a while and shrinks again after a run of good answers.
-	let tornGap = 650, tornNext = 0, tornCalm = 0, tornLat = 0;
+	let tornGap = 650, tornNext = 0, tornCalm = 0, tornLat = 0, tornPauseUntil = 0, lastProblem = null; // lastProblem: the last thing Torn complained about, shown in the bar
+function tornPause(ms) { tornPauseUntil = Date.now() + ms; } // a problem with the key or the address: asking again at once only makes it worse
 	const tornRefused = []; // the times Torn said "too many requests"
 	// Torn answers a call in tornLat milliseconds; calls start every tornGap milliseconds, so this many are on their way at once: more answers a minute without more calls than Torn allows
 	function maxConc() { return Math.max(MAX_CONCURRENT, Math.min(10, Math.ceil(tornLat / tornGap) + 1)); }
 	const tornLog = []; // the times of the calls of the last minute
-	function tornSlot() { const now = Date.now(), at = Math.max(now, tornNext); tornNext = at + tornGap; return new Promise(r => setTimeout(r, at - now)); }
+	function tornSlot() { const now = Date.now(), at = Math.max(now, tornNext, tornPauseUntil); tornNext = at + tornGap; return new Promise(r => setTimeout(r, at - now)); }
 	function tornBusy() { tornGap = Math.min(3000, Math.round(tornGap * 1.5)); tornCalm = 0; tornRefused.push(Date.now()); }
 	function tornGood() { if (++tornCalm >= 8 && tornGap > 650) { tornGap = Math.max(650, Math.round(tornGap / 1.2)); tornCalm = 0; } }
-	function tornStatus() { const cut = Date.now() - 60000; while (tornLog.length && tornLog[0] < cut) tornLog.shift(); while (tornRefused.length && tornRefused[0] < cut) tornRefused.shift(); return { perMin: tornLog.length, combined: hofCombined, waiting: _queue.length, lat: tornLat, gap: tornGap, refused: tornRefused.length, conc: maxConc() }; }
+	function tornStatus() { const cut = Date.now() - 60000; while (tornLog.length && tornLog[0] < cut) tornLog.shift(); while (tornRefused.length && tornRefused[0] < cut) tornRefused.shift(); return { perMin: tornLog.length, combined: hofCombined, waiting: _queue.length, lat: tornLat, gap: tornGap, refused: tornRefused.length, problem: lastProblem && Date.now() - lastProblem.at < 120000 ? lastProblem.text : '', conc: maxConc() }; }
 	async function tornGet(url) { await tornSlot(); tornLog.push(Date.now()); const t0 = Date.now(); try { return await gmFetch(url); } finally { const l = Date.now() - t0; tornLat = tornLat ? Math.round(tornLat * 0.7 + l * 0.3) : l; } }
 	
 	// The saved copies on this computer (the stats of players, the CRM) are big: they are written once, a moment after the last change, not after every single player.
@@ -1388,7 +1389,7 @@ function hofSeparate() { hofCombined = false; save('RecruiterHofSeparate', Date.
 	// more rate-limit wipeouts.
 	const MAX_CONCURRENT = 3;   // the least; more when Torn answers slowly (maxConc below)
 	const GAP_MS = 120;
-	const MAX_RETRIES = 8;        // give up after this many failed attempts per pill
+	const MAX_RETRIES = 4;        // give up after this many failed attempts per pill
 	const RETRY_BASE_MS = 1500;   // backoff base; grows with attempt count (the pacing keeps the rate right, so a short wait is enough)
 	let _active = 0;
 	const _queue = [];
@@ -1555,14 +1556,16 @@ function hofSeparate() { hofCombined = false; save('RecruiterHofSeparate', Date.
 			// after Torn recovered (the "sooo many 0s" bug). Detect the error, DON'T
 			// write a zero cache; return false so the queue retries with backoff.
 			if (d?.error) {
-				if (rateError(d)) tornBusy();
-				else if (hofCombined && [3, 4].includes(Number(d.error.code))) hofSeparate(); // the hall of fame does not come in the same call: use two calls again
+				lastProblem = { text: `${d.error.error} (code ${d.error.code})`, at: Date.now() };
+			if (rateError(d)) tornBusy();
+				else if ([2, 8, 9, 10, 13, 18].includes(Number(d.error.code))) tornPause(60000);
+			else if (hofCombined) hofSeparate(); // any other complaint: the hall of fame may not come with it, so two calls for a while // the hall of fame does not come in the same call: use two calls again
 				console.warn(`[CoreLabs] Torn API busy for ${uid} (${d?.error?.error}) — will retry`);
 				return false;
 			}
 			// Defensive: if the profile block is missing entirely, it's not a usable
 			// response either — retry rather than cache zeros.
-			if (!d.personalstats) return false;
+			if (!d.personalstats) { lastProblem = { text: 'answer without personal stats: ' + JSON.stringify(d).slice(0, 80), at: Date.now() }; if (hofCombined) hofSeparate(); return false; }
 			tornGood();
 	
 			// work stats: from the same answer when Torn gave them, otherwise from the second call
@@ -2959,7 +2962,7 @@ function hofSeparate() { hofCombined = false; save('RecruiterHofSeparate', Date.
 				list.forEach((c, i) => setTimeout(() => { openMail(c.uid, { background: true }); massBarPass(); }, i * 450));
 			};
 			const tinfo = document.createElement('span'); tinfo.id = 'cl-torn-info'; tinfo.style.cssText = 'color:#777;font-size:11px;';
-			const tText = () => { const s = tornStatus(); return `Torn: ${s.perMin} calls a minute (answers take ${s.lat} ms, ${s.conc} at the same time, pause ${s.gap} ms, ${s.refused} refused), ${s.combined ? '1 call' : '2 calls'} per new player, ${s.waiting} waiting`; };
+			const tText = () => { const s = tornStatus(); return `Torn: ${s.perMin} calls a minute (answers take ${s.lat} ms, ${s.conc} at the same time, pause ${s.gap} ms, ${s.refused} refused), ${s.combined ? '1 call' : '2 calls'} per new player, ${s.waiting} waiting${s.problem ? `, last Torn problem: ${s.problem}` : ''}`; };
 			tinfo.textContent = tText(); setInterval(() => { const el = document.getElementById('cl-torn-info'); if (el) el.textContent = tText(); }, 1500);
 			bar.append(btn, lab, info, tinfo);
 			wrap.parentElement.insertBefore(bar, document.getElementById('cl-fac-bar') || wrap);
