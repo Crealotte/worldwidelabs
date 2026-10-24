@@ -12,6 +12,16 @@
 
 const WHATS_NEW = [
     {
+        version: '1.42', date: '2026-10-24',
+        title: 'Script 1.48: recruits that can move up',
+        everyone: [
+            'Small update of the WWL script (1.48).',
+        ],
+        leaders: [
+            'In the role changes drop-down of the script To do, recruits who already meet the requirements for Experiment B or Guinea Pig / Lab Rat show with a clock mark and how many days their recruit status has left.',
+        ],
+    },
+    {
         version: '1.41', date: '2026-10-24',
         title: 'Script 1.47: close requests in the script, no energy check while stacking',
         everyone: [
