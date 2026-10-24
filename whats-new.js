@@ -12,6 +12,19 @@
 
 const WHATS_NEW = [
     {
+        version: '1.44', date: '2026-10-24',
+        title: 'Awards tracker, script 1.50, stay logged in',
+        everyone: [
+            'New page Awards (under Player profile): every honor and medal of Torn with where you are, how far you are and how many days it takes, like YATA. Click a category card on top to filter, click a column title to sort, and press the pin to follow an award. Awards that give 2 or more merits are marked.',
+            'In the WWL script (update to 1.50) the awards you pin show in the To do under your own reminders: an Award tracker with a bar for each one and how many days are left.',
+            'On the WWL login page you can now tick Keep me logged in on this device (it is on by default), so you do not have to paste your key again each time.',
+        ],
+        leaders: [
+            'The recruit timer now counts 3 days from the last time a member joined, so someone who left and came back is a recruit again, with the hours left shown in the role changes.',
+            'The default reminder for members without the script now says that the script is not the website.',
+        ],
+    },
+    {
         version: '1.43', date: '2026-10-24',
         title: 'Script 1.49: see if WWL accepts your key',
         everyone: [
