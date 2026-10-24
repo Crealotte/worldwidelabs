@@ -12,6 +12,16 @@
 
 const WHATS_NEW = [
     {
+        version: '1.41', date: '2026-10-24',
+        title: 'Script 1.47: close requests in the script, no energy check while stacking',
+        everyone: [
+            'In the WWL script (update to 1.47) the Check your energy plan box in the To do is done by itself, with the reason, from 48 hours before a war until its plan ends and during a chain plan: nobody trains in those days, so there is nothing to check.',
+        ],
+        leaders: [
+            'A bank or OC request you claimed from the script stays in your To do (red, counted in the red number) with an Open link and a Paid or Spawned button. The button closes it on the site too: Discord changes to completed and it goes to the History.',
+        ],
+    },
+    {
         version: '1.40', date: '2026-10-24',
         title: 'Script 1.46: a shorter To do for leaders, and a red number for urgent requests',
         everyone: [

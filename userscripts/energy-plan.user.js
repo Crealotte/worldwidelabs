@@ -2,7 +2,7 @@
 // @name         World Wide Labs
 // @namespace    https://worldwidelabs.vercel.app
 // @author       CreaLotte
-// @version      1.46
+// @version      1.47
 // @updateURL    __WWL_BASE__/worldwidelabs.user.js
 // @downloadURL  __WWL_BASE__/worldwidelabs.user.js
 // @description  Shows your WorldWideLabs weekly energy plan (the checklist from the Energy planner) inside Torn, a To do tab with small personal reminders (revive setting, feedback, timezone map, availability, Discord/Intel/CAT), your My Targets list, a simplified energy/war standing strip, and — if you are in the Mentoring Platform — your mentoring checklist too. Also shows faction banners at the top of every Torn page. A small ⚙ in the header shows the installed version, flags when a newer one is out, lets you set/replace your API key, and — for a leader — add or remove your faction's banners right from Torn. On a computer it is a small window you can drag around and close; in TornPDA it is a menu. Ticks are shared with the WWL site.
@@ -26,7 +26,7 @@
     const KEY_NAME = 'wwl_api_key', POS_NAME = 'wwl_plan_pos', STATE_NAME = 'wwl_plan_state';
     // GM_info gives the version Tampermonkey actually has installed right now — falls back to a
     // hardcoded copy (kept in sync with @version above) for TornPDA, which doesn't grant GM_info.
-    const SCRIPT_VERSION = (typeof GM_info !== 'undefined' && GM_info.script?.version) || '1.46';
+    const SCRIPT_VERSION = (typeof GM_info !== 'undefined' && GM_info.script?.version) || '1.47';
     const versionGreater = (a, b) => {
         const pa = String(a).split('.').map(Number), pb = String(b).split('.').map(Number);
         for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
@@ -161,7 +161,11 @@
     // day rather than staying done forever once ticked.
     const DAILY_CHECK_NAME = 'wwl_daily_energy_check'; // { date: 'YYYY-MM-DD', checked }
     const todayStr = () => new Date().toISOString().slice(0, 10); // UTC = TCT, same convention as everywhere else in WWL
+    // while the faction stacks for a war or is in a war / chain plan nobody trains: the server says so (until when, and why) and the daily check of the energy plan is done by itself
+    let energyPause = null;
+    const energyPaused = () => !!(energyPause && energyPause.until * 1000 > Date.now());
     function getDailyChecked() {
+        if (energyPaused()) return true;
         try { const d = JSON.parse(store.get(DAILY_CHECK_NAME) || 'null'); return !!(d && d.date === todayStr() && d.checked); } catch (e) { return false; }
     }
     function setDailyChecked(v) { store.set(DAILY_CHECK_NAME, JSON.stringify({ date: todayStr(), checked: v })); }
@@ -205,7 +209,7 @@
     async function refreshTodoItems(force = false) {
         if (win.style.display === 'none' || (!force && Date.now() - lastTodoFetch < Math.min(180000, todoCacheTtl()))) return;
         lastTodoFetch = Date.now();
-        try { const r = await api({ action: 'member-todo' }); try { store.set('wwl_c_todo', JSON.stringify({ at: Date.now(), data: r })); } catch (e) { /* no cache */ } todoItems = r.items || []; if (tab === 'todo' || tab === 'settings') render(); }
+        try { const r = await api({ action: 'member-todo', close: 1 }); try { store.set('wwl_c_todo', JSON.stringify({ at: Date.now(), data: r })); } catch (e) { /* no cache */ } todoItems = r.items || []; energyPause = r.energyPause || null; if (tab === 'todo' || tab === 'settings') render(); }
         catch (e) { /* keep showing what we already had */ }
     }
     document.addEventListener('visibilitychange', () => { if (!document.hidden) refreshTodoItems(); });
@@ -675,6 +679,15 @@
             <div style="font-size:11px;color:#9aa4b5;margin-top:4px;">Send opens Torn's mail to that member with your message filled in (and copied). Check it and press Torn's own Send.</div></div>`;
     }
     function wireTodoExtras() {
+        body.querySelectorAll('.wwl-close').forEach(b => b.addEventListener('click', async () => { // closes the request here and on the site (the same actions as the buttons there; Discord and the history follow)
+            b.disabled = true; b.textContent = '…';
+            try {
+                await api({ action: b.dataset.close === 'bank' ? 'bank-done' : 'ocreq-done', id: b.dataset.id });
+                claimMsg = b.dataset.close === 'bank' ? 'Marked as paid out: it is closed on the site too.' : 'Marked as spawned: it is closed on the site too.';
+                todoItems = (todoItems || []).filter(i => i.rid !== b.dataset.id || i.close !== b.dataset.close);
+                refreshTodoItems(true); render();
+            } catch (e) { claimMsg = e.message; render(); }
+        }));
         body.querySelectorAll('.wwl-grp').forEach(d => d.addEventListener('toggle', () => { grpOpen[d.dataset.id] = d.open; }));
         body.querySelectorAll('.wwl-claim').forEach(b => b.addEventListener('click', async () => {
             const label = b.textContent; b.disabled = true; b.textContent = 'Claiming…';
@@ -705,8 +718,8 @@
     }
     function renderTodoTab() {
         const daily = `<label style="display:flex;gap:8px;align-items:center;padding:${IS_PDA ? 10 : 7}px 0;border-bottom:1px solid #3a4352;cursor:pointer;">
-            <input type="checkbox" id="wwl-daily-check" ${getDailyChecked() ? 'checked' : ''} style="width:auto;">
-            <span style="flex:1;">Check your energy plan</span>
+            <input type="checkbox" id="wwl-daily-check" ${getDailyChecked() ? 'checked' : ''} ${energyPaused() ? 'disabled' : ''} style="width:auto;">
+            <span style="flex:1;">Check your energy plan${energyPaused() ? ` <span style="color:#9aa4b5;font-size:11px;">· not needed now: ${esc(energyPause.why)}</span>` : ''}</span>
         </label>`;
         const rest = todoItems === null ? '<div style="padding:6px 0;color:#9aa4b5;">Loading…</div>'
             : !todoItems.length ? ''
@@ -717,7 +730,7 @@
                 ${t.mine ? `<input type="checkbox" class="wwl-mt-check" data-id="${esc(t.myId)}" ${t.done ? 'checked' : ''} style="width:auto;">` : ''}
                 <span style="flex:1;${t.mine && t.done ? 'text-decoration:line-through;color:#9aa4b5;' : ''}">${esc(t.text)}</span>
                 ${t.mine ? `<span style="font-size:10px;color:#9aa4b5;border:1px solid #3a4352;border-radius:8px;padding:0 6px;">${t.repeat === 'daily' ? 'daily' : 'once'}</span>` : ''}
-                ${t.claim ? `<button type="button" class="wwl-claim" data-claim="${esc(t.claim)}" style="color:#e05555;white-space:nowrap;background:transparent;border:1px solid #e05555;border-radius:6px;padding:4px 8px;font-size:12px;cursor:pointer;">${esc(t.cta)}</button>` : t.scriptTab ? `<button type="button" class="wwl-t-go" data-tab="${esc(t.scriptTab)}" style="color:#35d99b;white-space:nowrap;background:transparent;border:1px solid #35d99b;border-radius:6px;padding:4px 8px;font-size:12px;cursor:pointer;">${esc(t.cta)}</button>` : t.url ? `<a href="${esc(t.url)}" target="_blank" rel="noopener" style="color:#35d99b;white-space:nowrap;text-decoration:none;border:1px solid #35d99b;border-radius:6px;padding:4px 8px;font-size:12px;">${esc(t.cta)}</a>` : ''}
+                ${t.close ? `${t.link ? `<a href="${esc(t.link)}" target="_blank" rel="noopener" style="color:#9aa4b5;white-space:nowrap;text-decoration:none;border:1px solid #3a4352;border-radius:6px;padding:4px 8px;font-size:12px;">Open</a>` : ''}<button type="button" class="wwl-close" data-close="${esc(t.close)}" data-id="${esc(t.rid)}" style="color:#35d99b;white-space:nowrap;background:transparent;border:1px solid #35d99b;border-radius:6px;padding:4px 8px;font-size:12px;cursor:pointer;">${esc(t.cta)}</button>` : t.claim ? `<button type="button" class="wwl-claim" data-claim="${esc(t.claim)}" style="color:#e05555;white-space:nowrap;background:transparent;border:1px solid #e05555;border-radius:6px;padding:4px 8px;font-size:12px;cursor:pointer;">${esc(t.cta)}</button>` : t.scriptTab ? `<button type="button" class="wwl-t-go" data-tab="${esc(t.scriptTab)}" style="color:#35d99b;white-space:nowrap;background:transparent;border:1px solid #35d99b;border-radius:6px;padding:4px 8px;font-size:12px;cursor:pointer;">${esc(t.cta)}</button>` : t.url ? `<a href="${esc(t.url)}" target="_blank" rel="noopener" style="color:#35d99b;white-space:nowrap;text-decoration:none;border:1px solid #35d99b;border-radius:6px;padding:4px 8px;font-size:12px;">${esc(t.cta)}</a>` : ''}
                 ${t.lease ? `<span style="display:flex;gap:6px;flex-wrap:wrap;">
                     <button type="button" class="wwl-lease-copy" data-amount="${esc(String(t.lease.amount))}" style="background:transparent;border:1px solid #3a4352;border-radius:6px;padding:4px 8px;font-size:12px;color:#e6e9ef;cursor:pointer;">Copy amount</button>
                     ${t.lease.status === 'due' ? `<button type="button" class="wwl-lease" data-act="offer" data-id="${esc(t.lease.id)}" style="background:transparent;border:1px solid #f0b432;border-radius:6px;padding:4px 8px;font-size:12px;color:#f0b432;cursor:pointer;">Offered ✓</button>` : ''}
@@ -921,7 +934,7 @@
             const [planR, mtR, todoR, standingR] = await Promise.all([
                 cachedApi('plan', 300000, { action: 'plan-get' }, force),
                 cachedApi('mentor', 600000, { action: 'mentor-my-status' }, force).catch(() => null), // fine if this member isn't in the program at all
-                cachedApi('todo', todoCacheTtl(), { action: 'member-todo' }, force).catch(() => null),
+                cachedApi('todo', todoCacheTtl(), { action: 'member-todo', close: 1 }, force).catch(() => null),
                 standingFresh ? Promise.resolve(standingCached.data) : api({ action: 'mo-me' }).catch(() => null), // the standing strip — fine if it fails, the strip just stays blank
             ]);
             plan = planR.plan; store.set('wwl_plan_cache', JSON.stringify({ at: Date.now(), plan }));
@@ -933,7 +946,7 @@
             for (const p of mtPairs) if (p.role === 'mentor') welJobs.push(api({ action: 'wel-pupil', pupilId: p.otherId }).then(r => { welPupils[p.otherId] = r; }).catch(() => { /* shows nothing */ }));
             for (const p of mtPairs) if (p.role === 'mentor') welJobs.push(api({ action: 'wel-pupil-insight', pupilId: p.otherId }).then(r => { welInsights[p.otherId] = r; }).catch(() => { /* shows nothing */ }));
             await Promise.all(welJobs);
-            todoItems = todoR?.items || [];
+            todoItems = todoR?.items || []; energyPause = todoR?.energyPause || null;
             standing = standingR;
             if (standingR && !standingFresh) store.set('wwl_standing_cache', JSON.stringify({ at: Date.now(), data: standingR }));
             render();
@@ -956,9 +969,9 @@
     let cached = null; try { cached = JSON.parse(store.get('wwl_plan_cache') || 'null'); } catch (e) { /* none */ }
     if (cached?.plan) { plan = cached.plan; showProgress(); }
     if (last !== 'open' && getKey() && !(cached && Date.now() - cached.at < 600000)) {
-        Promise.all([api({ action: 'plan-get' }), api({ action: 'member-todo' }).catch(() => null)])
+        Promise.all([api({ action: 'plan-get' }), api({ action: 'member-todo', close: 1 }).catch(() => null)])
             .then(([r, todoR]) => {
-                plan = r.plan; if (todoR) todoItems = todoR.items || [];
+                plan = r.plan; if (todoR) { todoItems = todoR.items || []; energyPause = todoR.energyPause || null; }
                 showProgress();
                 store.set('wwl_plan_cache', JSON.stringify({ at: Date.now(), plan }));
             }).catch(() => {});
