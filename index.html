@@ -2382,17 +2382,18 @@
                     <div class="field" style="margin:0;min-width:200px;flex:1;"><label for="aw-q">Search</label><input autocomplete="off" id="aw-q" type="text" placeholder="Name or description"></div>
                     <div class="field" style="margin:0;"><label for="aw-cat">Category</label><select id="aw-cat"><option value="">All categories</option></select></div>
                     <div class="field" style="margin:0;"><label for="aw-type">Type</label><select id="aw-type"><option value="">Honors and medals</option><option value="honor">Honors</option><option value="medal">Medals</option><option value="merit">Merits</option></select></div>
-                    <div class="field" style="margin:0;"><label for="aw-sort">Sort by</label><select id="aw-sort"><option value="cat">Category</option><option value="rarity">Rarest first</option><option value="name">Name</option></select></div>
+                    <div class="field" style="margin:0;"><label for="aw-sort">Sort by</label><select id="aw-sort"><option value="cat">Category</option><option value="merits">Most merits first</option><option value="rarity">Rarest first</option><option value="name">Name</option></select></div>
                 </div>
                 <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:center;margin-bottom:8px;font-size:13px;">
                     <label><input type="checkbox" id="aw-done"> Show achieved awards</label>
                     <label><input type="checkbox" id="aw-onlyfollow"> Only the ones I follow</label>
+                    <label title="Awards that share their goal with another award: you get both at once"><input type="checkbox" id="aw-multi"> Only 2 or more merits</label>
                     <button class="ghost small" id="aw-dl" style="display:none;">Download the list</button>
                     <span id="aw-count" style="color:var(--muted);"></span>
                 </div>
                 <div class="table-scroll" style="overflow:auto;">
                     <table style="width:100%;font-size:13px;border-collapse:collapse;">
-                        <thead><tr style="color:var(--muted);text-align:left;"><th style="padding:4px 8px;">Category</th><th style="padding:4px 8px;">Name</th><th style="padding:4px 8px;text-align:right;" title="How many players have it">Circulation</th><th style="padding:4px 8px;">Description</th><th style="padding:4px 8px;text-align:center;">Follow</th></tr></thead>
+                        <thead><tr style="color:var(--muted);text-align:left;"><th style="padding:4px 8px;">Category</th><th style="padding:4px 8px;">Name</th><th style="padding:4px 8px;text-align:right;" title="How many players have it">Circulation</th><th style="padding:4px 8px;">Description</th><th style="padding:4px 8px;text-align:right;" title="Every honor and medal gives 1 merit. Awards with the same goal unlock together, so a goal shared by 2 awards gives 2 merits.">Merits</th><th style="padding:4px 8px;text-align:center;">Follow</th></tr></thead>
                         <tbody id="aw-body"></tbody>
                     </table>
                 </div>
