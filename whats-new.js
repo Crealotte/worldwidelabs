@@ -12,6 +12,18 @@
 
 const WHATS_NEW = [
     {
+        version: '1.39', date: '2026-10-24',
+        title: 'Script 1.45: crimes and money first, claim and open, reminders with a Send button',
+        everyone: [
+            'The To do in the WWL script (update to 1.45) is kept fresher: the list is asked again sooner when something is waiting.',
+        ],
+        leaders: [
+            'In the script To do the crimes and the money come first: OC and bank requests have a red mark and a Claim and open button. It claims the oldest open request for you (Discord shows Claimed by you) and opens the crimes page, or the vault with the member and amount filled in.',
+            'The friendly reminders for members who are not on WWL or did not install the script now show unfolded in the script, with your message and a Send button per member: it opens Torn mail to that member with your message filled in and copied. You press Torn own Send. Save your message once, it is kept on that device.',
+            'A leader with things waiting gets a fresh To do list every minute while the window is open on the To do tab.',
+        ],
+    },
+    {
         version: '1.38', date: '2026-10-24',
         title: 'Script 1.44: radar names in the colour of your availability',
         everyone: [

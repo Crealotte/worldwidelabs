@@ -2,7 +2,7 @@
 // @name         World Wide Labs
 // @namespace    https://worldwidelabs.vercel.app
 // @author       CreaLotte
-// @version      1.44
+// @version      1.45
 // @updateURL    __WWL_BASE__/worldwidelabs.user.js
 // @downloadURL  __WWL_BASE__/worldwidelabs.user.js
 // @description  Shows your WorldWideLabs weekly energy plan (the checklist from the Energy planner) inside Torn, a To do tab with small personal reminders (revive setting, feedback, timezone map, availability, Discord/Intel/CAT), your My Targets list, a simplified energy/war standing strip, and — if you are in the Mentoring Platform — your mentoring checklist too. Also shows faction banners at the top of every Torn page. A small ⚙ in the header shows the installed version, flags when a newer one is out, lets you set/replace your API key, and — for a leader — add or remove your faction's banners right from Torn. On a computer it is a small window you can drag around and close; in TornPDA it is a menu. Ticks are shared with the WWL site.
@@ -26,7 +26,7 @@
     const KEY_NAME = 'wwl_api_key', POS_NAME = 'wwl_plan_pos', STATE_NAME = 'wwl_plan_state';
     // GM_info gives the version Tampermonkey actually has installed right now — falls back to a
     // hardcoded copy (kept in sync with @version above) for TornPDA, which doesn't grant GM_info.
-    const SCRIPT_VERSION = (typeof GM_info !== 'undefined' && GM_info.script?.version) || '1.44';
+    const SCRIPT_VERSION = (typeof GM_info !== 'undefined' && GM_info.script?.version) || '1.45';
     const versionGreater = (a, b) => {
         const pa = String(a).split('.').map(Number), pb = String(b).split('.').map(Number);
         for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
@@ -198,13 +198,17 @@
     // database's monthly request quota. Now it only re-checks when there's a reason to: you come back to
     // this tab, or click into the To do tab — and never more than once every 30s.
     let lastTodoFetch = Date.now();
+    // how long the To do list may be kept: the server says (a minute for a leader with things waiting, five minutes for everybody else)
+    const todoCacheTtl = () => { try { const c = JSON.parse(store.get('wwl_c_todo') || 'null'); return c && c.data && c.data.ttl ? Math.max(30, c.data.ttl) * 1000 : 300000; } catch (e) { return 300000; } };
     async function refreshTodoItems(force = false) {
-        if (win.style.display === 'none' || (!force && Date.now() - lastTodoFetch < 180000)) return;
+        if (win.style.display === 'none' || (!force && Date.now() - lastTodoFetch < Math.min(180000, todoCacheTtl()))) return;
         lastTodoFetch = Date.now();
         try { const r = await api({ action: 'member-todo' }); try { store.set('wwl_c_todo', JSON.stringify({ at: Date.now(), data: r })); } catch (e) { /* no cache */ } todoItems = r.items || []; if (tab === 'todo' || tab === 'settings') render(); }
         catch (e) { /* keep showing what we already had */ }
     }
     document.addEventListener('visibilitychange', () => { if (!document.hidden) refreshTodoItems(); });
+    // a leader with things waiting (the crimes, the money, the reminders) while the window is open on the To do tab: a fresh list every 90 seconds, only for them
+    setInterval(() => { if (!document.hidden && tab === 'todo' && todoItems && todoItems.some(i => i.priority || /^lt-/.test(i.id))) refreshTodoItems(true); }, 90000);
     function setOpen(on, save = true) {
         win.style.display = on ? 'flex' : 'none';
         pill.style.display = on ? 'none' : 'flex';
@@ -642,6 +646,54 @@
             catch (e) { if (prev) mine[k] = prev; else delete mine[k]; avMsg = `Could not save that: ${e.message}`; render(); }
         }));
     }
+    // ---- To do: priority items (the crimes and the money come first, with a red mark), Claim and open, and the friendly reminders with a Send button per member ----
+    let claimMsg = '';
+    const INV_MSG_KEY = k => 'wwl_invite_msg_' + k, INV_AT_KEY = (k, id) => `wwl_invited_${k}_${id}`;
+    const invDefault = k => k === 'script'
+        ? `Hey, I have noticed you have not installed the WWL script yet (${WWL}/worldwidelabs.user.js). Please install it: it shows your to do list and energy plan right inside Torn. You need Tampermonkey on a computer, or add it as a script in TornPDA. Shout if you get stuck!`
+        : `Hey, I have noticed you have not logged into WWL yet (${WWL}), please join with a limited API key. It takes a minute and gives you your energy plan, welcome chapters and more. Shout if you need help!`;
+    const invMsg = k => store.get(INV_MSG_KEY(k)) || invDefault(k);
+    function inviteHtml(t) {
+        const kind = t.kind === 'script' ? 'script' : 'wwl', btn = 'background:transparent;border-radius:6px;padding:3px 8px;font-size:12px;cursor:pointer;';
+        const rows = (t.members || []).map(m => {
+            const at = Number(store.get(INV_AT_KEY(kind, m.id))) || 0;
+            return `<div style="display:flex;gap:8px;align-items:center;padding:4px 0;border-top:1px solid #2c3442;${at ? 'opacity:.6;' : ''}"><a href="https://www.torn.com/profiles.php?XID=${esc(m.id)}" target="_blank" rel="noopener" style="flex:1;color:#e6e9ef;text-decoration:none;">${esc(m.name)}${at ? ' <span style="color:#9aa4b5;font-size:11px;">· reminded</span>' : ''}</a><button type="button" class="wwl-inv-send" data-kind="${kind}" data-id="${esc(m.id)}" data-name="${esc(m.name)}" style="${btn}border:1px solid #35d99b;color:#35d99b;">Send</button></div>`;
+        }).join('');
+        return `<div class="wwl-inv" data-kind="${kind}" style="margin:2px 0 8px 10px;padding:6px 8px;border:1px solid #3a4352;border-radius:6px;">
+            <div style="font-size:11px;color:#9aa4b5;margin-bottom:3px;">Your message ({name} becomes their name):</div>
+            <textarea class="wwl-inv-msg" rows="3" style="width:100%;box-sizing:border-box;background:#12161c;color:#e6e9ef;border:1px solid #3a4352;border-radius:6px;padding:4px;font-size:12px;">${esc(invMsg(kind))}</textarea>
+            <div style="margin:3px 0 6px;"><button type="button" class="wwl-inv-save" style="${btn}border:1px solid #3a4352;color:#e6e9ef;">Save message</button> <button type="button" class="wwl-inv-reset" style="${btn}border:1px solid #3a4352;color:#e6e9ef;">Standard message</button> <span class="wwl-inv-note" style="font-size:11px;color:#9aa4b5;"></span></div>
+            <div style="max-height:240px;overflow:auto;">${rows}</div>
+            <div style="font-size:11px;color:#9aa4b5;margin-top:4px;">Send opens Torn's mail to that member with your message filled in (and copied). Check it and press Torn's own Send.</div></div>`;
+    }
+    function wireTodoExtras() {
+        body.querySelectorAll('.wwl-claim').forEach(b => b.addEventListener('click', async () => {
+            const label = b.textContent; b.disabled = true; b.textContent = 'Claiming…';
+            const w = IS_PDA ? null : window.open('', '_blank'); // opened at once, on the tap, so the pop-up blocker lets it through; it goes to the right page when the claim is done
+            try {
+                const r = await api({ action: 'todo-claim', kind: b.dataset.claim });
+                claimMsg = `${b.dataset.claim === 'bank' ? 'Bank request' : 'OC request'} of ${r.request.name} is yours${r.lowered ? ' (the amount was lowered to their balance)' : ''}.`;
+                if (w) w.location.href = r.link; else window.location.href = r.link;
+                refreshTodoItems(true);
+                render();
+            } catch (e) { if (w) w.close(); claimMsg = e.message; render(); }
+        }));
+        body.querySelectorAll('.wwl-inv-save').forEach(b => b.addEventListener('click', () => {
+            const box = b.closest('.wwl-inv'); store.set(INV_MSG_KEY(box.dataset.kind), box.querySelector('.wwl-inv-msg').value); box.querySelector('.wwl-inv-note').textContent = 'Saved.';
+        }));
+        body.querySelectorAll('.wwl-inv-reset').forEach(b => b.addEventListener('click', () => {
+            const box = b.closest('.wwl-inv'); store.set(INV_MSG_KEY(box.dataset.kind), ''); box.querySelector('.wwl-inv-msg').value = invDefault(box.dataset.kind); box.querySelector('.wwl-inv-note').textContent = 'Standard message back.';
+        }));
+        body.querySelectorAll('.wwl-inv-send').forEach(b => b.addEventListener('click', () => {
+            const kind = b.dataset.kind, id = b.dataset.id, text = b.closest('.wwl-inv').querySelector('.wwl-inv-msg').value.replace(/\{name\}/g, b.dataset.name);
+            store.set('wwl_pending_mail_' + id, JSON.stringify({ text, ts: Date.now() })); // the mail page fills it in (see pendingMail)
+            store.set(INV_AT_KEY(kind, id), String(Date.now()));
+            try { navigator.clipboard.writeText(text); } catch (e) { /* the page fills it in anyway */ }
+            const url = `https://www.torn.com/messages.php#/p=compose&XID=${encodeURIComponent(id)}`;
+            if (IS_PDA) window.location.href = url; else window.open(url, '_blank');
+            b.textContent = 'Opened ✓'; b.parentElement.style.opacity = '.6';
+        }));
+    }
     function renderTodoTab() {
         const daily = `<label style="display:flex;gap:8px;align-items:center;padding:${IS_PDA ? 10 : 7}px 0;border-bottom:1px solid #3a4352;cursor:pointer;">
             <input type="checkbox" id="wwl-daily-check" ${getDailyChecked() ? 'checked' : ''} style="width:auto;">
@@ -649,20 +701,21 @@
         </label>`;
         const rest = todoItems === null ? '<div style="padding:6px 0;color:#9aa4b5;">Loading…</div>'
             : !todoItems.length ? ''
-            : todoItems.map(t => t.notice
+            : [...todoItems].sort((a, b) => (b.priority ? 1 : 0) - (a.priority ? 1 : 0)).map(t => t.notice
                 // a notice is just a reminder: a full-width amber box with the text, no button, not part of the count
                 ? `<div style="padding:8px 10px;margin:6px 0;border:1px solid #f0b432;border-radius:6px;background:#f0b43218;color:#f0b432;font-weight:600;line-height:1.4;">${esc(t.text)}</div>`
-                : `<div style="display:flex;gap:8px;align-items:center;padding:${IS_PDA ? 10 : 7}px 0;border-bottom:1px solid #3a4352;">
+                : `<div style="display:flex;gap:8px;align-items:center;padding:${IS_PDA ? 10 : 7}px 0;border-bottom:1px solid #3a4352;${t.priority ? 'border-left:3px solid #e05555;padding-left:8px;' : ''}">
                 ${t.mine ? `<input type="checkbox" class="wwl-mt-check" data-id="${esc(t.myId)}" ${t.done ? 'checked' : ''} style="width:auto;">` : ''}
-                <span style="flex:1;${t.mine && t.done ? 'text-decoration:line-through;color:#9aa4b5;' : ''}">${esc(t.text)}</span>
+                <span style="flex:1;${t.mine && t.done ? 'text-decoration:line-through;color:#9aa4b5;' : ''}">${t.priority ? '<span title="Priority" style="margin-right:4px;">🔴</span>' : ''}${esc(t.text)}</span>
                 ${t.mine ? `<span style="font-size:10px;color:#9aa4b5;border:1px solid #3a4352;border-radius:8px;padding:0 6px;">${t.repeat === 'daily' ? 'daily' : 'once'}</span>` : ''}
-                ${t.scriptTab ? `<button type="button" class="wwl-t-go" data-tab="${esc(t.scriptTab)}" style="color:#35d99b;white-space:nowrap;background:transparent;border:1px solid #35d99b;border-radius:6px;padding:4px 8px;font-size:12px;cursor:pointer;">${esc(t.cta)}</button>` : t.url ? `<a href="${esc(t.url)}" target="_blank" rel="noopener" style="color:#35d99b;white-space:nowrap;text-decoration:none;border:1px solid #35d99b;border-radius:6px;padding:4px 8px;font-size:12px;">${esc(t.cta)}</a>` : ''}
+                ${t.claim ? `<button type="button" class="wwl-claim" data-claim="${esc(t.claim)}" style="color:#e05555;white-space:nowrap;background:transparent;border:1px solid #e05555;border-radius:6px;padding:4px 8px;font-size:12px;cursor:pointer;">${esc(t.cta)}</button>` : t.scriptTab ? `<button type="button" class="wwl-t-go" data-tab="${esc(t.scriptTab)}" style="color:#35d99b;white-space:nowrap;background:transparent;border:1px solid #35d99b;border-radius:6px;padding:4px 8px;font-size:12px;cursor:pointer;">${esc(t.cta)}</button>` : t.url ? `<a href="${esc(t.url)}" target="_blank" rel="noopener" style="color:#35d99b;white-space:nowrap;text-decoration:none;border:1px solid #35d99b;border-radius:6px;padding:4px 8px;font-size:12px;">${esc(t.cta)}</a>` : ''}
                 ${t.lease ? `<span style="display:flex;gap:6px;flex-wrap:wrap;">
                     <button type="button" class="wwl-lease-copy" data-amount="${esc(String(t.lease.amount))}" style="background:transparent;border:1px solid #3a4352;border-radius:6px;padding:4px 8px;font-size:12px;color:#e6e9ef;cursor:pointer;">Copy amount</button>
                     ${t.lease.status === 'due' ? `<button type="button" class="wwl-lease" data-act="offer" data-id="${esc(t.lease.id)}" style="background:transparent;border:1px solid #f0b432;border-radius:6px;padding:4px 8px;font-size:12px;color:#f0b432;cursor:pointer;">Offered ✓</button>` : ''}
                     <button type="button" class="wwl-lease" data-act="pay" data-id="${esc(t.lease.id)}" style="background:transparent;border:1px solid #35d99b;border-radius:6px;padding:4px 8px;font-size:12px;color:#35d99b;cursor:pointer;">Paid ✓</button></span>` : ''}
-            </div>${t.id === 'oc' ? ocRequestHtml(t) : ''}`).join('');
-        return daily + rest;
+            </div>${t.id === 'oc' ? ocRequestHtml(t) : ''}${t.members ? inviteHtml(t) : ''}`).join('');
+        const claimNote = claimMsg ? `<div style="padding:6px 10px;margin:6px 0;border:1px solid #35d99b;border-radius:6px;background:#35d99b18;color:#e6e9ef;">${esc(claimMsg)}</div>` : '';
+        return claimNote + daily + rest;
     }
     // The ⚙ view: version + update flag + API key, and — for a leader — the faction's own banners
     // (add/delete), reusing the exact same banners-get/save/delete actions Leader settings on the
@@ -792,6 +845,7 @@
         wireMyTodo();
         wireBankTab();
         wireAvailTab();
+        wireTodoExtras();
         body.querySelector('#wwl-targets-refresh')?.addEventListener('click', refreshTargetStatus);
         body.querySelector('#wwl-daily-check')?.addEventListener('change', e => { setDailyChecked(e.target.checked); render(); });
         const setStart = async v => {
@@ -858,7 +912,7 @@
             const [planR, mtR, todoR, standingR] = await Promise.all([
                 cachedApi('plan', 300000, { action: 'plan-get' }, force),
                 cachedApi('mentor', 600000, { action: 'mentor-my-status' }, force).catch(() => null), // fine if this member isn't in the program at all
-                cachedApi('todo', 300000, { action: 'member-todo' }, force).catch(() => null),
+                cachedApi('todo', todoCacheTtl(), { action: 'member-todo' }, force).catch(() => null),
                 standingFresh ? Promise.resolve(standingCached.data) : api({ action: 'mo-me' }).catch(() => null), // the standing strip — fine if it fails, the strip just stays blank
             ]);
             plan = planR.plan; store.set('wwl_plan_cache', JSON.stringify({ at: Date.now(), plan }));
@@ -1068,6 +1122,42 @@
     }
     try { const c = JSON.parse(store.get(RADAR_CACHE) || 'null'); if (c && c.data && Array.isArray(c.data.online)) { radarData = c.data; radarLast = c.at || 0; renderRadar(); } } catch (e) { /* nothing cached */ }
     refreshRadar(false);
+
+    // ---- Mail fill: the Send button of a friendly reminder (To do) opens Torn's mail page for that member; this fills in the message the leader wrote ----
+    // Only on Torn's mail page, only for a message that was prepared in the last 15 minutes for the member whose page it is, and only into the real mail editor (never the chat box).
+    (function pendingMail() {
+        if (location.pathname !== '/messages.php') return;
+        let busy = false;
+        const setNative = (el, val) => {
+            const setter = Object.getOwnPropertyDescriptor(el.tagName === 'TEXTAREA' ? window.HTMLTextAreaElement.prototype : window.HTMLInputElement.prototype, 'value');
+            if (setter && setter.set) setter.set.call(el, val); else el.value = val;
+            el.dispatchEvent(new Event('input', { bubbles: true })); el.dispatchEvent(new Event('change', { bubbles: true }));
+        };
+        const run = () => {
+            const xid = (location.hash.match(/XID=(\d+)/) || [])[1];
+            if (!xid || busy || !/p=compose/.test(location.hash)) return;
+            const KEY = 'wwl_pending_mail_' + xid;
+            let p = null; try { p = JSON.parse(store.get(KEY) || 'null'); } catch (e) { p = null; }
+            if (!p || Date.now() - p.ts > 15 * 60000) { if (p) store.set(KEY, ''); return; }
+            busy = true;
+            const stop = () => { clearInterval(iv); busy = false; };
+            const iv = setInterval(() => {
+                if (document.hidden) return; // a tab opened in the background is filled when it is shown
+                if (Date.now() - p.ts > 15 * 60000) { store.set(KEY, ''); stop(); return; }
+                const subject = document.querySelector('input[name="subject"], input[placeholder*="ubject"]');
+                if (subject && !subject.value) setNative(subject, 'World Wide Labs');
+                const field = document.querySelector('.mce-content-body[contenteditable="true"], .editor-content[contenteditable="true"]') || document.querySelector('textarea[name="body"]');
+                if (!field) return;
+                if (field.tagName === 'TEXTAREA') { setNative(field, p.text); store.set(KEY, ''); stop(); return; }
+                field.focus(); document.execCommand('selectAll', false, null); document.execCommand('insertText', false, p.text);
+                const probe = p.text.replace(/\s+/g, ' ').slice(0, 25), has = () => (field.innerText || '').replace(/\s+/g, ' ').includes(probe);
+                if (!has()) { field.innerHTML = p.text.split('\n').map(l => '<p>' + (l.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;') || '<br>') + '</p>').join(''); field.dispatchEvent(new Event('input', { bubbles: true })); }
+                if (has()) { store.set(KEY, ''); stop(); }
+            }, 1000);
+        };
+        run();
+        window.addEventListener('hashchange', run);
+    })();
 
     // ---- Trade helper: for the traders of Trading Funding (on Torn's trade pages only) ----
     // Reads the trade page itself (no Torn API key, nothing polled): the total of the other person's items at your WWL pricelist, the money filled in for you,
