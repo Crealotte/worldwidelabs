@@ -10,7 +10,9 @@ const scLess = (a, b) => { const pa = String(a).split('.').map(Number), pb = Str
 async function loadScriptCard() {
     const panel = $('dash-script-panel');
     if (!panel) return;
-    const btn = (label, ghost) => `<a href="${SC_FILE}" target="_blank" rel="noopener" style="text-decoration:none;"><button type="button"${ghost ? ' class="ghost small"' : ''}>${label}</button></a>`;
+    // On a phone (TornPDA especially) the link opens in the SAME page: the app offers to install a script when it is opened itself, which a new tab from a page does not always trigger
+    const sameTab = /TornPDA|Android|iPhone|iPad|Mobile/i.test(navigator.userAgent) || typeof window.flutter_inappwebview !== 'undefined';
+    const btn = (label, ghost) => `<a href="${SC_FILE}"${sameTab ? '' : ' target="_blank" rel="noopener"'} style="text-decoration:none;"><button type="button"${ghost ? ' class="ghost small"' : ''}>${label}</button></a>`;
     const howTo = '<p style="font-size:12px;margin:10px 0 0;"><b>This website is not the script.</b> The script is a separate little add-on that you install in your script manager; after that it shows up inside Torn itself.</p><p style="color:var(--muted);font-size:12px;margin:6px 0 0;">On a computer you need <b>Tampermonkey</b> (or a similar script manager) in your browser first. On TornPDA, add it as a script in the app. Not sure? Ask a leader.</p>';
     // For the case where tapping the button does not offer to install (opened inside the WWL app or an in-app browser, or no
     // script manager yet): the plain link, to paste into the script manager or open in a normal browser.
