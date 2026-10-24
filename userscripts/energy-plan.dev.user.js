@@ -2,7 +2,7 @@
 // @name         World Wide Labs
 // @namespace    https://worldwidelabs.vercel.app
 // @author       CreaLotte
-// @version      1.49.3
+// @version      1.49.4
 // @updateURL    __WWL_BASE__/worldwidelabs.user.js
 // @downloadURL  __WWL_BASE__/worldwidelabs.user.js
 // @description  Shows your WorldWideLabs weekly energy plan (the checklist from the Energy planner) inside Torn, a To do tab with small personal reminders (revive setting, feedback, timezone map, availability, Discord/Intel/CAT), your My Targets list, a simplified energy/war standing strip, and — if you are in the Mentoring Platform — your mentoring checklist too. Also shows faction banners at the top of every Torn page. A small ⚙ in the header shows the installed version, flags when a newer one is out, lets you set/replace your API key, and — for a leader — add or remove your faction's banners right from Torn. On a computer it is a small window you can drag around and close; in TornPDA it is a menu. Ticks are shared with the WWL site.
@@ -171,7 +171,7 @@
     function setDailyChecked(v) { store.set(DAILY_CHECK_NAME, JSON.stringify({ date: todayStr(), checked: v })); }
     // how many OC and bank requests wait (each item says how many): the red number next to the To do count
     function urgentCount() { return todoItems ? todoItems.filter(t => t.priority && !t.done).reduce((s, t) => s + (Number(t.n) || 1), 0) : 0; }
-    function todoCount() { return (todoItems ? todoItems.filter(t => !t.notice && !t.done).length : 0) + (getDailyChecked() ? 0 : 1); } // a notice (like the Xanax stacking reminder) is not something to do, so it is not counted
+    function todoCount() { return (todoItems ? todoItems.filter(t => !t.notice && !t.aw && !t.done).length : 0) + (getDailyChecked() ? 0 : 1); } // a notice (like the Xanax stacking reminder) is not something to do, so it is not counted
 
     // position (PC): remembered, and always kept inside the screen
     const place = (x, y) => {
@@ -661,7 +661,12 @@
         const icon = r => r.kind === 'demote' ? '⬇' : r.kind === 'check' ? '⚠' : r.kind === 'kick' ? '🚪' : r.kind === 'recruit' ? '⏳' : '⬆';
         return `<div style="margin:0 0 8px 10px;max-height:260px;overflow:auto;">${(t.rows || []).map(r => `<div style="display:flex;gap:6px;align-items:baseline;padding:4px 0;border-top:1px solid #2c3442;"><span>${icon(r)}</span><span style="flex:1;"><a href="https://www.torn.com/profiles.php?XID=${esc(r.id)}" target="_blank" rel="noopener" style="color:#e6e9ef;text-decoration:none;font-weight:600;">${esc(r.name)}</a> <span style="color:#9aa4b5;">${r.kind === 'kick' ? esc(r.from) + ': can be removed' : esc(r.from) + ' → ' + esc(r.to)}</span><div style="color:#9aa4b5;font-size:11px;">${esc(r.why || '')}</div></span></div>`).join('')}</div>`;
     }
-    const INV_MSG_KEY = k => 'wwl_invite_msg_' + k, INV_AT_KEY = (k, id) => `wwl_invited_${k}_${id}`;
+    // the awards you follow: a title with ONE Open button, then per award an icon and a bar (filled as far as it is done) with the name on it, and under it "25% - about 108 days to go"
+    function awardBlockHtml(t) {
+        const bar = a => `<div style="display:flex;gap:8px;align-items:center;margin-top:6px;"><span style="width:20px;text-align:center;">${esc(a.icon || '🏅')}</span><div style="flex:1;position:relative;border:1px solid #3a4352;border-radius:6px;overflow:hidden;background:#232a36;"><div style="position:absolute;left:0;top:0;bottom:0;width:${Math.max(0, Math.min(100, Number(a.pct) || 0))}%;background:#1f6b50;"></div><div style="position:relative;padding:4px 8px;font-size:12px;line-height:1.3;">${esc(a.label)}</div></div></div><div style="margin:2px 0 0 28px;color:#9aa4b5;font-size:11px;">${esc(a.line)}</div>`;
+        return `<div style="padding:${IS_PDA ? 10 : 7}px 0;border-bottom:1px solid #3a4352;"><div style="display:flex;gap:8px;align-items:center;"><span style="flex:1;font-weight:700;">${esc(t.text)}</span>${t.url ? `<a href="${esc(t.url)}" target="_blank" rel="noopener" style="color:#35d99b;white-space:nowrap;text-decoration:none;border:1px solid #35d99b;border-radius:6px;padding:4px 8px;font-size:12px;">${esc(t.cta || 'Open')}</a>` : ''}</div>${(t.awards || []).map(bar).join('')}</div>`;
+    }
+    const INV_MSG_KEY = k =>'wwl_invite_msg_' + k, INV_AT_KEY = (k, id) => `wwl_invited_${k}_${id}`;
     const invDefault = k => k === 'script'
         ? `Hey, I have noticed you have not installed the WWL script yet (${WWL}/worldwidelabs.user.js). Please install it: it shows your to do list and energy plan right inside Torn. Note that the script is not the website: it is a separate add-on. You need Tampermonkey on a computer, or add it as a script in TornPDA. Shout if you get stuck!`
         : `Hey, I have noticed you have not logged into WWL yet (${WWL}), please join with a limited API key. It takes a minute and gives you your energy plan, welcome chapters and more. Shout if you need help!`;
@@ -724,7 +729,7 @@
         </label>`;
         const rest = todoItems === null ? '<div style="padding:6px 0;color:#9aa4b5;">Loading…</div>'
             : !todoItems.length ? ''
-            : [...todoItems].sort((a, b) => (b.priority ? 1 : 0) - (a.priority ? 1 : 0)).map(t => (t.members || t.rows) ? `<details class="wwl-grp" data-id="${esc(t.id)}" ${grpOpen[t.id] ? 'open' : ''} style="border-bottom:1px solid #3a4352;"><summary style="cursor:pointer;padding:${IS_PDA ? 10 : 7}px 0;list-style:none;display:flex;gap:8px;align-items:center;"><span style="color:#9aa4b5;">▾</span><span style="flex:1;">${esc(String(t.text).split(':')[0].replace(/[. ]+$/, ''))}</span></summary>${t.members ? inviteHtml(t) : rowsHtml(t)}</details>` : t.notice
+            : [...todoItems].sort((a, b) => (b.priority ? 1 : 0) - (a.priority ? 1 : 0)).map(t => t.aw ? awardBlockHtml(t) : (t.members || t.rows) ? `<details class="wwl-grp" data-id="${esc(t.id)}" ${grpOpen[t.id] ? 'open' : ''} style="border-bottom:1px solid #3a4352;"><summary style="cursor:pointer;padding:${IS_PDA ? 10 : 7}px 0;list-style:none;display:flex;gap:8px;align-items:center;"><span style="color:#9aa4b5;">▾</span><span style="flex:1;">${esc(String(t.text).split(':')[0].replace(/[. ]+$/, ''))}</span></summary>${t.members ? inviteHtml(t) : rowsHtml(t)}</details>` : t.notice
                 // a notice is just a reminder: a full-width amber box with the text, no button, not part of the count
                 ? `<div style="padding:8px 10px;margin:6px 0;border:1px solid #f0b432;border-radius:6px;background:#f0b43218;color:#f0b432;font-weight:600;line-height:1.4;">${esc(t.text)}</div>`
                 : `<div style="display:flex;gap:8px;align-items:center;padding:${IS_PDA ? 10 : 7}px 0;border-bottom:1px solid #3a4352;${t.priority ? 'border-left:3px solid #e05555;padding-left:8px;' : ''}">

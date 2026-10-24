@@ -1618,7 +1618,7 @@ Cancel: ${cancelUrl}`, [], embeds, undefined, true);
             } catch (e) { /* skip */ }
             // the awards this member follows: one line each, right under their own checkbox reminders (only for a script that asks for it with aw: 1, until it is released)
             if (req.body && req.body.aw) {
-                try { items.push(...((await followedTodo(redis, playerId, key, site)) || [])); } catch (e) { /* the rest of the To do stays */ }
+                try { const aw = await followedTodo(redis, playerId, key, site); if (aw) items.push(aw); } catch (e) { /* the rest of the To do stays */ }
             }
 
             // Xanax stacking warning: whenever a war is coming up (an availability plan linked to a war that has not started yet), everyone
