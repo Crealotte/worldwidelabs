@@ -2,7 +2,7 @@
 // @name         World Wide Labs
 // @namespace    https://worldwidelabs.vercel.app
 // @author       CreaLotte
-// @version      1.45
+// @version      1.45.1
 // @updateURL    __WWL_BASE__/worldwidelabs.user.js
 // @downloadURL  __WWL_BASE__/worldwidelabs.user.js
 // @description  Shows your WorldWideLabs weekly energy plan (the checklist from the Energy planner) inside Torn, a To do tab with small personal reminders (revive setting, feedback, timezone map, availability, Discord/Intel/CAT), your My Targets list, a simplified energy/war standing strip, and — if you are in the Mentoring Platform — your mentoring checklist too. Also shows faction banners at the top of every Torn page. A small ⚙ in the header shows the installed version, flags when a newer one is out, lets you set/replace your API key, and — for a leader — add or remove your faction's banners right from Torn. On a computer it is a small window you can drag around and close; in TornPDA it is a menu. Ticks are shared with the WWL site.
@@ -648,6 +648,11 @@
     }
     // ---- To do: priority items (the crimes and the money come first, with a red mark), Claim and open, and the friendly reminders with a Send button per member ----
     let claimMsg = '';
+    const grpOpen = {}; // which drop-downs of the To do are open (kept while the window redraws)
+    function rowsHtml(t) {
+        const icon = r => r.kind === 'demote' ? '⬇' : r.kind === 'check' ? '⚠' : r.kind === 'kick' ? '🚪' : '⬆';
+        return `<div style="margin:0 0 8px 10px;max-height:260px;overflow:auto;">${(t.rows || []).map(r => `<div style="display:flex;gap:6px;align-items:baseline;padding:4px 0;border-top:1px solid #2c3442;"><span>${icon(r)}</span><span style="flex:1;"><a href="https://www.torn.com/profiles.php?XID=${esc(r.id)}" target="_blank" rel="noopener" style="color:#e6e9ef;text-decoration:none;font-weight:600;">${esc(r.name)}</a> <span style="color:#9aa4b5;">${r.kind === 'kick' ? esc(r.from) + ': can be removed' : esc(r.from) + ' → ' + esc(r.to)}</span><div style="color:#9aa4b5;font-size:11px;">${esc(r.why || '')}</div></span></div>`).join('')}</div>`;
+    }
     const INV_MSG_KEY = k => 'wwl_invite_msg_' + k, INV_AT_KEY = (k, id) => `wwl_invited_${k}_${id}`;
     const invDefault = k => k === 'script'
         ? `Hey, I have noticed you have not installed the WWL script yet (${WWL}/worldwidelabs.user.js). Please install it: it shows your to do list and energy plan right inside Torn. You need Tampermonkey on a computer, or add it as a script in TornPDA. Shout if you get stuck!`
@@ -667,6 +672,7 @@
             <div style="font-size:11px;color:#9aa4b5;margin-top:4px;">Send opens Torn's mail to that member with your message filled in (and copied). Check it and press Torn's own Send.</div></div>`;
     }
     function wireTodoExtras() {
+        body.querySelectorAll('.wwl-grp').forEach(d => d.addEventListener('toggle', () => { grpOpen[d.dataset.id] = d.open; }));
         body.querySelectorAll('.wwl-claim').forEach(b => b.addEventListener('click', async () => {
             const label = b.textContent; b.disabled = true; b.textContent = 'Claiming…';
             const w = IS_PDA ? null : window.open('', '_blank'); // opened at once, on the tap, so the pop-up blocker lets it through; it goes to the right page when the claim is done
@@ -701,7 +707,7 @@
         </label>`;
         const rest = todoItems === null ? '<div style="padding:6px 0;color:#9aa4b5;">Loading…</div>'
             : !todoItems.length ? ''
-            : [...todoItems].sort((a, b) => (b.priority ? 1 : 0) - (a.priority ? 1 : 0)).map(t => t.notice
+            : [...todoItems].sort((a, b) => (b.priority ? 1 : 0) - (a.priority ? 1 : 0)).map(t => (t.members || t.rows) ? `<details class="wwl-grp" data-id="${esc(t.id)}" ${grpOpen[t.id] ? 'open' : ''} style="border-bottom:1px solid #3a4352;"><summary style="cursor:pointer;padding:${IS_PDA ? 10 : 7}px 0;list-style:none;display:flex;gap:8px;align-items:center;"><span style="color:#9aa4b5;">▾</span><span style="flex:1;">${t.priority ? '🔴 ' : ''}${esc(String(t.text).split(':')[0].replace(/[. ]+$/, ''))}</span></summary>${t.members ? inviteHtml(t) : rowsHtml(t)}</details>` : t.notice
                 // a notice is just a reminder: a full-width amber box with the text, no button, not part of the count
                 ? `<div style="padding:8px 10px;margin:6px 0;border:1px solid #f0b432;border-radius:6px;background:#f0b43218;color:#f0b432;font-weight:600;line-height:1.4;">${esc(t.text)}</div>`
                 : `<div style="display:flex;gap:8px;align-items:center;padding:${IS_PDA ? 10 : 7}px 0;border-bottom:1px solid #3a4352;${t.priority ? 'border-left:3px solid #e05555;padding-left:8px;' : ''}">
@@ -713,7 +719,7 @@
                     <button type="button" class="wwl-lease-copy" data-amount="${esc(String(t.lease.amount))}" style="background:transparent;border:1px solid #3a4352;border-radius:6px;padding:4px 8px;font-size:12px;color:#e6e9ef;cursor:pointer;">Copy amount</button>
                     ${t.lease.status === 'due' ? `<button type="button" class="wwl-lease" data-act="offer" data-id="${esc(t.lease.id)}" style="background:transparent;border:1px solid #f0b432;border-radius:6px;padding:4px 8px;font-size:12px;color:#f0b432;cursor:pointer;">Offered ✓</button>` : ''}
                     <button type="button" class="wwl-lease" data-act="pay" data-id="${esc(t.lease.id)}" style="background:transparent;border:1px solid #35d99b;border-radius:6px;padding:4px 8px;font-size:12px;color:#35d99b;cursor:pointer;">Paid ✓</button></span>` : ''}
-            </div>${t.id === 'oc' ? ocRequestHtml(t) : ''}${t.members ? inviteHtml(t) : ''}`).join('');
+            </div>${t.id === 'oc' ? ocRequestHtml(t) : ''}`).join('');
         const claimNote = claimMsg ? `<div style="padding:6px 10px;margin:6px 0;border:1px solid #35d99b;border-radius:6px;background:#35d99b18;color:#e6e9ef;">${esc(claimMsg)}</div>` : '';
         return claimNote + daily + rest;
     }

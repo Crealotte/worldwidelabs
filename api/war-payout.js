@@ -387,6 +387,7 @@ const bannerLive = b => !b.expires || b.expires >= new Date().toISOString().slic
 // so it costs (almost) no Torn calls. Every item says where to go: { id, text, cta, page, anchor } — anchor is an element on that page to scroll to.
 async function leaderTodos(key, factionId) {
     const todos = [];
+    let roleRows = [], roleWaiting = 0; // every role change as a row (for the script's To do, which shows them in two drop-downs)
     const add = (id, text, cta, page, anchor) => todos.push({ id, text, cta, page, anchor });
 
     // 1. Discord destination
@@ -460,6 +461,7 @@ async function leaderTodos(key, factionId) {
         // war related changes (to Chemist, and down from Chemist) come up only after this month's newsletter with the check-in messages was marked as sent; the others straight away
         const gate = await welCheckin(redis, factionId);
         const ready = allReady.filter(r => !welIsWar(r) || gate.sent), waiting = allReady.length - ready.length;
+        roleRows = ready.map(r => ({ id: r.id, name: r.name, from: r.from, to: r.to, why: r.why, kind: r.kind || '', war: !!welIsWar(r), verify: !!r.verify })); roleWaiting = waiting;
         if (waiting) add('promo-wait', `${waiting} war related role change${waiting === 1 ? '' : 's'} wait${waiting === 1 ? 's' : ''} until this month's newsletter with the check-in messages is sent. Mark it as sent on the Newsletter page when it is.`, 'Open the Newsletter', 'newsletter', null);
         const up = ready.filter(r => !r.kind), down = ready.filter(r => r.kind === 'demote'), below = ready.filter(r => r.kind === 'check'), kick = ready.filter(r => r.kind === 'kick' && !r.verify), kickVerify = ready.filter(r => r.kind === 'kick' && r.verify);
         if (up.length) add('promotions', `${up.length} member${up.length === 1 ? ' is' : 's are'} ready for promotion: ${up.slice(0, 5).map(r => `${r.name} (${r.to})`).join(', ')}${up.length > 5 ? ` +${up.length - 5} more` : ''}.`, 'See who', 'welcome-admin', 'wa-promo');
@@ -483,7 +485,7 @@ async function leaderTodos(key, factionId) {
         if (noScript.length) todos.push({ id: 'invite-script', kind: 'script', text: `${noScript.length} member${noScript.length === 1 ? ' is' : 's are'} on WWL but did not install the script yet: ${names(noScript)}.`, cta: 'Send a friendly reminder', page: 'dashboard', anchor: 'leader-todos', members: people(noScript) });
     } catch (e) { /* skip */ }
 
-    return { todos };
+    return { todos, roleRows, roleWaiting };
 }
 // the same list for the script's To do (leaders): kept 45 seconds per faction on this server instance, so a leader's page loads in Torn do not repeat all the reads
 const ltMem = new Map();
@@ -1664,13 +1666,14 @@ Cancel: ${cancelUrl}`, [], embeds, undefined, true);
                 }
             } catch (e) { /* skip */ }
 
+            let roleSrc = null; // the leader to-do answer, for the role changes below
             // For leaders and council only: the open requests (OC and bank), so they show in the script's To do too. Worked out
             // here on the server and only displayed by the script — no script update needed. The leader check is the usual
             // cached one, so members cost almost nothing extra.
             try {
                 if (await isLeader(key)) {
                     // everything of the leader to-do card on the dashboard shows here too (the OC requests have their own line below)
-                    try { for (const t of (await leaderTodosCached(key, factionId)).todos) if (!t.group && t.id !== 'oc-requests') items.push({ id: `lt-${t.id}`, text: t.text, cta: t.cta, url: `${site}/${t.page}`, ...(t.members ? { members: t.members, kind: t.kind } : {}) }); } catch (e) { /* the other lines still show */ }
+                    try { const lt = await leaderTodosCached(key, factionId); roleSrc = lt; for (const t of lt.todos) if (!t.group && t.id !== 'oc-requests') items.push({ id: `lt-${t.id}`, text: t.text, cta: t.cta, url: `${site}/${t.page}`, ...(t.members ? { members: t.members, kind: t.kind } : {}) }); } catch (e) { /* the other lines still show */ }
                     const flat = async k => { const f = (await redis(['HGETALL', k])) || []; const out = []; for (let i = 0; i < f.length; i += 2) { try { out.push(JSON.parse(f[i + 1])); } catch (e) { /* skip */ } } return out; };
                     const [ocs, banks] = await Promise.all([flat(ocRequestsKey(factionId)), flat(bankRequestsKey(factionId))]);
                     const ocsOpen = ocs.filter(q => q.status !== 'claimed'); if (ocsOpen.length) items.push({ id: 'oc-requests', text: `${ocsOpen.length} OC request${ocsOpen.length === 1 ? '' : 's'}: ${ocsOpen.slice(0, 4).map(r => `${r.name} (level ${r.level})`).join(', ')}${ocsOpen.length > 4 ? ` +${ocsOpen.length - 4} more` : ''}.`, cta: 'Claim and open', priority: true, claim: 'oc', url: `${site}/oc-requests` });
@@ -1685,6 +1688,14 @@ Cancel: ${cancelUrl}`, [], embeds, undefined, true);
                 }
             } catch (e) { /* skip */ }
 
+            // the role changes: ONE drop-down for the war related ones (to Chemist, down from Chemist) and ONE for all the others, instead of a line for every kind
+            if (roleSrc) {
+                const gone = ['lt-promotions', 'lt-demotions', 'lt-role-check', 'lt-slow-start', 'lt-promo-wait'];
+                for (let i = items.length - 1; i >= 0; i--) if (gone.includes(items[i].id)) items.splice(i, 1);
+                const rows = roleSrc.roleRows || [], war = rows.filter(r => r.war), other = rows.filter(r => !r.war), waiting = roleSrc.roleWaiting || 0, s = n => (n === 1 ? '' : 's');
+                if (war.length || waiting) items.push({ id: 'role-war', text: war.length ? `${war.length} war related role change${s(war.length)}${waiting ? ` (${waiting} more wait for the newsletter)` : ''}` : `${waiting} war related role change${s(waiting)} wait${waiting === 1 ? 's' : ''} for the newsletter`, cta: war.length ? 'Open' : 'Open the Newsletter', url: `${site}/${war.length ? 'welcome-admin' : 'newsletter'}`, ...(war.length ? { rows: war } : {}) });
+                if (other.length) items.push({ id: 'role-other', text: `${other.length} role change${s(other.length)} to look at`, cta: 'Open', url: `${site}/welcome-admin`, rows: other });
+            }
             items.sort((a, b) => (b.priority ? 1 : 0) - (a.priority ? 1 : 0)); // the crimes and the money first (the sort keeps the rest in their order)
             return res.status(200).json({ items, ttl: items.some(i => i.priority) || items.some(i => /^lt-/.test(i.id)) ? 60 : 300 }); // how long the script may keep this: a leader with things waiting gets a fresh list every minute
         }
