@@ -539,6 +539,7 @@
                 <a class="nav-item" data-page="energy" href="/energy">Energy planner</a>
                 <a class="nav-item" data-page="gym-stats" href="/gym-stats">Gym stats</a>
                 <a class="nav-item" data-page="energy-tracker" href="/energy-tracker">Energy tracker</a>
+                <a class="nav-item" data-page="awards" href="/awards">Awards</a>
             </div>
         </div>
 
@@ -2371,6 +2372,34 @@
             </div>
         </section>
 
+        <section class="page" id="page-awards">
+            <div class="lab-label">WWL·28 / for everyone</div>
+            <h2>Awards</h2>
+            <p class="pagedesc">Every honor and medal of Torn, which ones you already have, and a pin to follow the ones you are working towards. The awards you follow show in the To do list of the WWL script.</p>
+            <div class="status" id="aw-status"></div>
+            <div class="panel">
+                <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-bottom:12px;">
+                    <div class="field" style="margin:0;min-width:200px;flex:1;"><label for="aw-q">Search</label><input autocomplete="off" id="aw-q" type="text" placeholder="Name or description"></div>
+                    <div class="field" style="margin:0;"><label for="aw-cat">Category</label><select id="aw-cat"><option value="">All categories</option></select></div>
+                    <div class="field" style="margin:0;"><label for="aw-type">Type</label><select id="aw-type"><option value="">Honors and medals</option><option value="honor">Honors</option><option value="medal">Medals</option><option value="merit">Merits</option></select></div>
+                    <div class="field" style="margin:0;"><label for="aw-sort">Sort by</label><select id="aw-sort"><option value="cat">Category</option><option value="rarity">Rarest first</option><option value="name">Name</option></select></div>
+                </div>
+                <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:center;margin-bottom:8px;font-size:13px;">
+                    <label><input type="checkbox" id="aw-done"> Show achieved awards</label>
+                    <label><input type="checkbox" id="aw-onlyfollow"> Only the ones I follow</label>
+                    <button class="ghost small" id="aw-dl" style="display:none;">Download the list</button>
+                    <span id="aw-count" style="color:var(--muted);"></span>
+                </div>
+                <div class="table-scroll" style="overflow:auto;">
+                    <table style="width:100%;font-size:13px;border-collapse:collapse;">
+                        <thead><tr style="color:var(--muted);text-align:left;"><th style="padding:4px 8px;">Category</th><th style="padding:4px 8px;">Name</th><th style="padding:4px 8px;text-align:right;" title="How many players have it">Circulation</th><th style="padding:4px 8px;">Description</th><th style="padding:4px 8px;text-align:center;">Follow</th></tr></thead>
+                        <tbody id="aw-body"></tbody>
+                    </table>
+                </div>
+                <button class="ghost small" id="aw-more" style="display:none;margin-top:10px;"></button>
+            </div>
+        </section>
+
         <section class="page" id="page-tz-map">
             <div class="lab-label">WWL·24 / for everyone</div>
             <h2>Timezone map</h2>
@@ -3025,6 +3054,7 @@
 <script src="mentoring.js"></script>
 <script src="banners.js"></script>
 <script src="my-targets.js"></script>
+<script src="awards.js"></script>
 <script src="armory-tracker.js"></script>
 <script src="buddy.js"></script>
 <script src="funding.js"></script>

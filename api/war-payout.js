@@ -36,6 +36,7 @@ const { sendBugReport, bugsHandle, suggestHandle } = require('../lib/bugReport')
 const { steadfastHandle, steadfastImage, energyDaily } = require('../lib/steadfast');
 const { tzHandle } = require('../lib/tzMap');
 const { planHandle } = require('../lib/planSync');
+const { awHandle } = require('../lib/awards');
 const { nightlyHandle, nightlyRun, getVaultKey } = require('../lib/nightly');
 const { usageFor } = require('../lib/tornFetch');
 const { targetsHandle } = require('../lib/targets');
@@ -1521,6 +1522,7 @@ Cancel: ${cancelUrl}`, [], embeds, undefined, true);
             } catch (e) { /* the plan still loads */ }
         }
         if (action.startsWith('plan-')) return res.status(200).json(await planHandle(action, req.body, { redis, playerId, factionId, key }));
+        if (action.startsWith('aw-')) return res.status(200).json(await awHandle(action, req.body, { redis, playerId, key }));
         // Timezone map — every member reports their own timezone; everyone reads anonymous counts.
         if (action.startsWith('tz-')) return res.status(200).json(await tzHandle(action, req.body, { redis, factionId, playerId }));
 
