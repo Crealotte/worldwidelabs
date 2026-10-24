@@ -12,6 +12,16 @@
 
 const WHATS_NEW = [
     {
+        version: '1.43', date: '2026-10-24',
+        title: 'Script 1.49: see if WWL accepts your key',
+        everyone: [
+            'In the WWL script (update to 1.49) the settings (the cog) now show whether WWL accepts your API key and when it last saw the script, with your device and version. If the key is not accepted it says why, so you can enter a working one. If WWL has never seen the script, it checks in right away.',
+        ],
+        leaders: [
+            'A member who says they installed the script but is not in Who is on board can now open the cog in the script: it shows at once whether the key works.',
+        ],
+    },
+    {
         version: '1.42', date: '2026-10-24',
         title: 'Script 1.48: recruits that can move up',
         everyone: [
