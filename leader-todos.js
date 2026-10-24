@@ -17,7 +17,7 @@ async function loadLeaderTodos() {
 // The message is the leader's own (kept in this browser); The default text has no name in it, so it can be pasted as it is (a {name} in your own text still becomes the member's name). A member whose message was copied shows "reminded <date>" so nobody is nagged twice.
 const LT_INVITE_OPEN = {};
 const ltInviteDefault = kind => kind === 'script'
-    ? `Hey, I have noticed you have not installed the WWL script yet (${location.origin}/worldwidelabs.user.js). Please install it: it shows your to do list and energy plan right inside Torn. You need Tampermonkey on a computer, or add it as a script in TornPDA. Shout if you get stuck!`
+    ? `Hey, I have noticed you have not installed the WWL script yet (${location.origin}/worldwidelabs.user.js). Please install it: it shows your to do list and energy plan right inside Torn. Note that the script is not this website: it is a separate add-on. You need Tampermonkey on a computer, or add it as a script in TornPDA. Shout if you get stuck!`
     : `Hey, I have noticed you have not logged into WWL yet (${location.origin}), please join with a limited API key. It takes a minute and gives you your energy plan, welcome chapters and more. Shout if you need help!`;
 const ltInviteMsg = kind => { try { return localStorage.getItem(`wwl_invite_msg_${kind}`) || ltInviteDefault(kind); } catch (e) { return ltInviteDefault(kind); } };
 const ltRemindedAt = (kind, id) => { try { return Number(localStorage.getItem(`wwl_invited_${kind}_${id}`)) || 0; } catch (e) { return 0; } };
