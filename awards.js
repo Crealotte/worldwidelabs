@@ -2,7 +2,8 @@
 // (they show in the script's To do). Backend: aw-* actions (lib/awards.js); the rule that says what counts for an award is in lib/awardRules.js.
 'use strict';
 
-const awState = { items: null, mine: null, stats: null, follow: new Set(), shown: 200, cat: '' };
+const awState = { items: null, mine: null, stats: null, follow: new Set(), shown: 200, cat: '', sortKey: 'cat', sortDir: 1 };
+const AW_SORT_DESC_FIRST = new Set(['circ', 'state', 'goal', 'pct', 'merits']); // a first click on these puts the biggest on top
 const AW_INCOME = { nat: ['Natural energy only (720 a day)', 720], refill: ['Natural + the daily refill (870)', 870], xan: ['Natural + 3 Xanax a day (1,470)', 1470], both: ['Natural + refill + 3 Xanax (1,620)', 1620] };
 async function awFetch(body) {
     const res = await fetch('/api/war-payout', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key: apiKey, ...body }) });
@@ -83,9 +84,14 @@ function awFiltered() {
     const q = $('aw-q').value.trim().toLowerCase(), type = $('aw-type').value, showDone = $('aw-done').checked, onlyFollow = $('aw-onlyfollow').checked, multi = $('aw-multi').checked;
     let list = awState.items.filter(i => (type ? i.t === type && (i.t === 'merit' || awVisible(i)) : awVisible(i)) && (!awState.cat || i.cg === awState.cat) && (!q || `${i.n} ${i.d}`.toLowerCase().includes(q)) && (showDone || !awHave(i)) && (!onlyFollow || awState.follow.has(i.k)) && (!multi || i.m > 1));
     for (const i of list) i.calc = awHave(i) ? { pct: 1, left: 0, how: '' } : awCalc(i);
-    const sort = $('aw-sort').value, byCat = (a, b) => awCat(a).localeCompare(awCat(b)) || a.r - b.r;
-    const pc = i => i.calc ? i.calc.pct : -1, lf = i => i.calc && i.calc.left > 0 ? i.calc.left : Infinity;
-    list = list.slice().sort(sort === 'merits' ? (a, b) => b.m - a.m || byCat(a, b) : sort === 'closest' ? (a, b) => (pc(b) - pc(a)) || byCat(a, b) : sort === 'soonest' ? (a, b) => (lf(a) - lf(b)) || byCat(a, b) : sort === 'rarity' ? (a, b) => a.r - b.r || a.n.localeCompare(b.n) : sort === 'name' ? (a, b) => a.n.localeCompare(b.n) : byCat);
+    const key = awState.sortKey, dir = awState.sortDir, text = (a, b) => String(a).localeCompare(String(b));
+    const val = { cat: i => awCat(i), name: i => i.n, desc: i => i.d, circ: i => i.r, merits: i => i.m, state: i => i.calc && i.calc.cur != null ? i.calc.cur : -1, goal: i => i.calc && i.calc.goal != null ? i.calc.goal : -1, pct: i => i.calc ? i.calc.pct : -1, left: i => i.calc && i.calc.left > 0 ? i.calc.left : Infinity }[key];
+    const textual = key === 'cat' || key === 'name' || key === 'desc';
+    list = list.slice().sort((a, b) => {
+        const x = val(a), y = val(b);
+        const c = textual ? text(x, y) : x === y ? 0 : x < y ? -1 : 1;
+        return (c * dir) || text(awCat(a), awCat(b)) || text(a.n, b.n);
+    });
     return list;
 }
 function renderCards() {
@@ -103,6 +109,7 @@ function renderCards() {
 function renderAwards() {
     if (!awState.items) return;
     renderCards();
+    for (const th of $('aw-body').closest('table').querySelectorAll('.aw-th')) th.querySelector('.aw-arrow').textContent = th.dataset.sort === awState.sortKey ? (awState.sortDir > 0 ? ' ▲' : ' ▼') : '';
     const list = awFiltered(), shown = list.slice(0, awState.shown);
     $('aw-count').textContent = `${list.length} award${list.length === 1 ? '' : 's'}${awState.mine ? `, you have ${awState.items.filter(i => awVisible(i) && awHave(i)).length} of ${awState.items.filter(awVisible).length}` : ''}, you follow ${awState.follow.size}`;
     $('aw-body').innerHTML = shown.map(i => {
@@ -127,13 +134,22 @@ $('aw-body').addEventListener('click', async e => {
     awState.follow = new Set(r.follow);
     renderAwards();
 });
+$('aw-body').closest('table').querySelector('thead').addEventListener('click', e => {
+    const th = e.target.closest('.aw-th');
+    if (!th) return;
+    const k = th.dataset.sort;
+    if (awState.sortKey === k) awState.sortDir = -awState.sortDir;
+    else { awState.sortKey = k; awState.sortDir = AW_SORT_DESC_FIRST.has(k) ? -1 : 1; }
+    awState.shown = 200;
+    renderAwards();
+});
 $('aw-cards').addEventListener('click', e => {
     const b = e.target.closest('.aw-card');
     if (!b) return;
     awState.cat = b.dataset.cat === awState.cat ? '' : b.dataset.cat; awState.shown = 200;
     renderAwards();
 });
-['aw-q', 'aw-type', 'aw-done', 'aw-onlyfollow', 'aw-multi', 'aw-sort'].forEach(id => $(id).addEventListener(id === 'aw-q' ? 'input' : 'change', () => { awState.shown = 200; renderAwards(); }));
+['aw-q', 'aw-type', 'aw-done', 'aw-onlyfollow', 'aw-multi'].forEach(id => $(id).addEventListener(id === 'aw-q' ? 'input' : 'change', () => { awState.shown = 200; renderAwards(); }));
 $('aw-income').innerHTML = Object.entries(AW_INCOME).map(([k, v]) => `<option value="${k}">${v[0]}</option>`).join('');
 $('aw-income').addEventListener('change', () => { try { localStorage.setItem('wwl-aw-income', $('aw-income').value); } catch (e) { /* only a convenience */ } renderAwards(); });
 $('aw-more').addEventListener('click', () => { awState.shown += 200; renderAwards(); });
