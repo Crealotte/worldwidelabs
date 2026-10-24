@@ -41,7 +41,7 @@ const { nightlyHandle, nightlyRun, getVaultKey } = require('../lib/nightly');
 const { usageFor } = require('../lib/tornFetch');
 const { targetsHandle } = require('../lib/targets');
 const { mentoringHandle, loadProgram: mentoringLoadProgram } = require('../lib/mentoring');
-const { welHandle, welcomeTodoItems, promotions: welPromotions, checkinState: welCheckin, checkinSet: welCheckinSet, isWarChange: welIsWar } = require('../lib/welcome');
+const { welHandle, welcomeTodoItems, promotions: welPromotions, checkinState: welCheckin, checkinSet: welCheckinSet, isWarChange: welIsWar, joinTimes: welJoinTimes } = require('../lib/welcome');
 const { factionAllowed, allowedList, resetCache: accessReset, LIST: ACCESS_LIST, DENIED: ACCESS_DENIED } = require('../lib/access');
 const { companyHandle, isDirector, tornCompany: coTorn, normalize: coNormalize, getAll: coGetAll } = require('../lib/company');
 const { runCompanyReports } = require('../lib/companyReports');
@@ -300,14 +300,7 @@ function welDeps(key, factionId) {
             const r = await tornFetch(`https://api.torn.com/v2/faction/news?cat=membership&limit=100&sort=DESC&striptags=false&from=${from}&key=${encodeURIComponent(key)}`, { headers: { accept: 'application/json' } });
             const d = await r.json();
             if (d.error) throw new Error(d.error.error);
-            const out = {};
-            for (const n of d.news || []) {
-                const t = String(n.text || ''), id = /XID=(\d+)/.exec(t);
-                if (!id || !/joined/i.test(t)) continue;
-                const ts = (Number(n.timestamp) || 0) * 1000;
-                if (ts > (out[id[1]] || 0)) out[id[1]] = ts;
-            }
-            return out;
+            return welJoinTimes(d.news);
         },
     };
 }
