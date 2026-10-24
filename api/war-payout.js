@@ -294,6 +294,21 @@ function welDeps(key, factionId) {
         },
         discordMany: async ids => (await discordStatus(ids.map(String), { key, redis, guildMap: null, resolve: false })).status,
         warOk: members => moWarOk({ redis, factionId, members }),
+        // when each member last joined the faction (from the faction's membership news, the last 10 days): a member who left and came back has many days_in_faction but a fresh recruit timer
+        joins: async () => {
+            const from = Math.floor(Date.now() / 1000) - 10 * 86400;
+            const r = await tornFetch(`https://api.torn.com/v2/faction/news?cat=membership&limit=100&sort=DESC&striptags=false&from=${from}&key=${encodeURIComponent(key)}`, { headers: { accept: 'application/json' } });
+            const d = await r.json();
+            if (d.error) throw new Error(d.error.error);
+            const out = {};
+            for (const n of d.news || []) {
+                const t = String(n.text || ''), id = /XID=(\d+)/.exec(t);
+                if (!id || !/joined/i.test(t)) continue;
+                const ts = (Number(n.timestamp) || 0) * 1000;
+                if (ts > (out[id[1]] || 0)) out[id[1]] = ts;
+            }
+            return out;
+        },
     };
 }
 // The member's own revive setting and whether they are in an Organized Crime — read live (not cached), only for the welcome steps that tick on these.
