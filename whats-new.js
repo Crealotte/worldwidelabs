@@ -18,7 +18,7 @@ const WHATS_NEW = [
             'In the WWL script (update to 1.47) the Check your energy plan box in the To do is done by itself, with the reason, from 48 hours before a war until its plan ends and during a chain plan: nobody trains in those days, so there is nothing to check.',
         ],
         leaders: [
-            'Recruits who already have what the next roles ask for are listed too: with the script installed they can go to Experiment B, with the script, Discord, Intel and CAT done to Guinea Pig or Lab Rat, shown as after the recruit status wears off with the days left, so you can allow Xanax until then. The same goes for Experiment A: with everything done they are listed for Guinea Pig or Lab Rat directly.
+            'Recruits who already have what the next roles ask for are listed too: with the script installed they can go to Experiment B, with the script, Discord, Intel and CAT done to Guinea Pig or Lab Rat, shown as after the recruit status wears off with the days left, so you can allow Xanax until then. The same goes for Experiment A: with everything done they are listed for Guinea Pig or Lab Rat directly.',
             'A bank or OC request you claimed from the script stays in your To do (red, counted in the red number) with an Open link and a Paid or Spawned button. The button closes it on the site too: Discord changes to completed and it goes to the History.',
         ],
     },
