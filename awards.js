@@ -11,9 +11,9 @@ async function awFetch(body) {
 }
 const awTypeName = { honor: 'Honor', medal: 'Medal', merit: 'Merit' };
 const awCatLabel = c => c.charAt(0).toUpperCase() + c.slice(1);
-// the medals' categories get the honors' names, so the cards group them together
-const awCatMap = { combat: 'attacking', crime: 'crimes', miscellaneous: 'misc', networth: 'money' };
-const awCat = i => i.cc || awCatLabel(awCatMap[String(i.c || 'other').toLowerCase()] || String(i.c || 'other').toLowerCase());
+const awCat = i => i.cc || 'Other';
+const AW_GROUPS = ['Crimes', 'Drugs', 'Attacks', 'Hospital', 'Faction', 'Items', 'Travel', 'Work', 'Gym', 'Money', 'Competitions', 'Commitment', 'Miscellaneous', 'Hall of Fame'];
+const AW_ICON = { Crimes: '🕵️', Drugs: '💊', Attacks: '🎯', Hospital: '🏥', Faction: '✊', Items: '🎒', Travel: '✈️', Work: '🎓', Gym: '🏋️', Money: '💰', Competitions: '🏆', Commitment: '⌛', Miscellaneous: '🏁', 'Hall of Fame': '👑' };
 const awVisible = i => i.t !== 'merit' && (!i.old || awHave(i)); // the awards of the old crimes system only show for those who have them
 const awIncome = () => { try { return localStorage.getItem('wwl-aw-income') || 'refill'; } catch (e) { return 'refill'; } };
 
@@ -30,8 +30,8 @@ async function loadAwards() {
         for (const i of cat.items) i.m = i.t === 'merit' ? 0 : goalSize.get(i.d.trim().toLowerCase());
         // a medal sits in the category of the honor with the same goal (Bar Breaker and Advanced Buster are both Jail) when the server has no category for it
         const honorCat = new Map();
-        for (const i of cat.items) if (i.t === 'honor' && i.cc) honorCat.set(i.d.trim().toLowerCase(), i.cc);
-        for (const i of cat.items) if (!i.cc && i.t === 'medal') i.cc = honorCat.get(i.d.trim().toLowerCase());
+        for (const i of cat.items) if (i.t === 'honor') honorCat.set(i.d.trim().toLowerCase(), i);
+        for (const i of cat.items) { const h = i.t === 'medal' && honorCat.get(i.d.trim().toLowerCase()); if (h && h.cg !== i.cg && (i.cc === 'Other' || !i.cc || i.cg === 'Miscellaneous')) { i.cc = h.cc; i.cg = h.cg; } }
         awState.mine = mine.error ? null : { honors: new Set((mine.honors || []).map(i => 'h' + i)), medals: new Set((mine.medals || []).map(i => 'm' + i)), when: new Map([...(mine.honors || []).map((id, n) => ['h' + id, (mine.hts || [])[n]]), ...(mine.medals || []).map((id, n) => ['m' + id, (mine.mts || [])[n]])]) };
         awState.stats = prog.error ? null : prog.stats;
         awState.air = awState.items.some(i => i.d === 'Own an airstrip' && awHave(i)); // flights are 30% shorter with an airstrip
@@ -81,7 +81,7 @@ const awLeftText = c => c.left == null ? '' : c.left <= 0 ? '' : !Number.isFinit
 
 function awFiltered() {
     const q = $('aw-q').value.trim().toLowerCase(), type = $('aw-type').value, showDone = $('aw-done').checked, onlyFollow = $('aw-onlyfollow').checked, multi = $('aw-multi').checked;
-    let list = awState.items.filter(i => (type ? i.t === type && (i.t === 'merit' || awVisible(i)) : awVisible(i)) && (!awState.cat || awCat(i) === awState.cat) && (!q || `${i.n} ${i.d}`.toLowerCase().includes(q)) && (showDone || !awHave(i)) && (!onlyFollow || awState.follow.has(i.k)) && (!multi || i.m > 1));
+    let list = awState.items.filter(i => (type ? i.t === type && (i.t === 'merit' || awVisible(i)) : awVisible(i)) && (!awState.cat || i.cg === awState.cat) && (!q || `${i.n} ${i.d}`.toLowerCase().includes(q)) && (showDone || !awHave(i)) && (!onlyFollow || awState.follow.has(i.k)) && (!multi || i.m > 1));
     for (const i of list) i.calc = awHave(i) ? { pct: 1, left: 0, how: '' } : awCalc(i);
     const sort = $('aw-sort').value, byCat = (a, b) => awCat(a).localeCompare(awCat(b)) || a.r - b.r;
     const pc = i => i.calc ? i.calc.pct : -1, lf = i => i.calc && i.calc.left > 0 ? i.calc.left : Infinity;
@@ -89,16 +89,16 @@ function awFiltered() {
     return list;
 }
 function renderCards() {
-    const cats = new Map();
+    const groups = new Map(AW_GROUPS.map(g => [g, { total: 0, done: 0 }])), all = { total: 0, done: 0 };
     for (const i of awState.items) {
         if (!awVisible(i)) continue;
-        const c = awCat(i), x = cats.get(c) || { total: 0, done: 0 };
-        x.total++; if (awHave(i)) x.done++;
-        cats.set(c, x);
+        const x = groups.get(i.cg) || groups.get('Miscellaneous');
+        x.total++; all.total++;
+        if (awHave(i)) { x.done++; all.done++; }
     }
-    const card = (key, label, x) => { const on = awState.cat === key, p = x.total ? Math.round(100 * x.done / x.total) : 0; return `<button type="button" class="aw-card" data-cat="${esc(key)}" style="text-align:left;cursor:pointer;min-width:120px;padding:8px 12px;border-radius:8px;border:1px solid ${on ? 'var(--reagent)' : 'var(--border, #2a3a35)'};background:${on ? 'rgba(53,217,155,.10)' : 'transparent'};color:inherit;"><div style="font-weight:600;">${esc(label)}</div><div style="font-size:12px;color:var(--muted);">${x.done} / ${x.total}</div><div style="height:4px;background:rgba(127,127,127,.25);border-radius:2px;margin-top:4px;"><div style="height:4px;width:${p}%;background:var(--reagent);border-radius:2px;"></div></div></button>`; };
-    const all = { total: 0, done: 0 }; for (const x of cats.values()) { all.total += x.total; all.done += x.done; }
-    $('aw-cards').innerHTML = card('', 'All', all) + [...cats.keys()].sort().map(c => card(c, c, cats.get(c))).join('');
+    const chip = (key, label, icon, x) => { const on = awState.cat === key; return `<button type="button" class="aw-card" data-cat="${esc(key)}" style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;padding:6px 12px;border-radius:999px;border:1px solid ${on ? 'var(--reagent)' : 'transparent'};background:${on ? 'rgba(53,217,155,.12)' : 'transparent'};color:${on ? 'var(--reagent)' : 'inherit'};font-size:14px;"><span>${icon}</span><span>${esc(label)}${x ? ` (${x.done}/${x.total})` : ''}</span></button>`; };
+    const order = AW_GROUPS.filter(g => g !== 'Hall of Fame' && groups.get(g).total);
+    $('aw-cards').innerHTML = order.map(g => chip(g, g, AW_ICON[g], groups.get(g))).join('') + chip('', 'All Awards', '🏅', all) + (groups.get('Hall of Fame').total ? chip('Hall of Fame', 'Hall of Fame', AW_ICON['Hall of Fame'], groups.get('Hall of Fame')) : '');
 }
 function renderAwards() {
     if (!awState.items) return;
