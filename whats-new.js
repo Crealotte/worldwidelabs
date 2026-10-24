@@ -17,7 +17,12 @@ const WHATS_NEW = [
         everyone: [
             'In the Faction radar of the WWL script (update to 1.44) the names are now coloured by what each member put in the availability plan for the current hour: green available, orange maybe, blue watching (chain saver or war guard). Under the names a small legend shows it while a plan is running.',
         ],
-        leaders: [],
+        leaders: [
+            'Bank requests: a request that was paid out now moves to the History at once and no longer sits in the open list (claimed ones stay for a day so two bankers do not both pay).',
+            'Faster to dos: the leader to do list is kept 45 seconds (was 2 minutes) and the list of members ready for promotion 3 minutes (was 30), so a member who just installed the script shows up quickly. The script asks for a fresh list every minute while a leader has things waiting.',
+            'Who is on board: the Userscript column now says which device (browser or TornPDA) and which version the script reports, and when it is behind the newest one, so update needed can be checked at a glance.',
+            'In the script (next release): the crimes and the money (OC and bank requests) are at the top of the To do with a red mark and a Claim and open button that claims the oldest open request for you and opens the crimes page or the vault with the amount filled in. The friendly reminders for members without WWL or the script show unfolded, with a message and a Send button per member that opens Torn mail with the message filled in.',
+        ],
     },
     {
         version: '1.37', date: '2026-10-24',

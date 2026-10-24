@@ -131,11 +131,14 @@ async function loadAdoption(sfx = '') {
             const usInfoRow = usInfo[m.id];
             const usOld = usInfoRow && usLatest && versionLess(usInfoRow.v, usLatest);
             const usTip = usAt ? `Last seen ${new Date(usAt).toLocaleString()}${usInfoRow ? ` · script ${usInfoRow.v}${usInfoRow.pda ? ' on TornPDA' : ' on a computer'}` : ' · an older script that does not report its version'}` : 'No check-in from the script yet — it has to be installed, have a key saved in its ⚙ Settings, and a Torn page opened';
+            // what the script reported about itself is shown in the cell: the device (browser or TornPDA) and its version, next to the newest one
+            const usWhat = usInfoRow ? `${usInfoRow.pda ? 'TornPDA' : 'browser'}, v${usInfoRow.v}` : '';
             const usCell = !usAt ? `<span style="color:var(--muted)" title="${esc(usTip)}">○ not seen</span>`
                 : Date.now() - usAt > US_STALE_MS
-                    ? `<span style="color:var(--happy)" title="${esc(usTip)}">● seen, quiet lately</span>`
-                    : usOld || !usInfoRow ? `<span style="color:var(--happy)" title="${esc(usTip)}">● installed, update needed</span>`
-                    : `<span style="color:var(--reagent)" title="${esc(usTip)}">● installed</span>`;
+                    ? `<span style="color:var(--happy)" title="${esc(usTip)}">● seen, quiet lately${usWhat ? ` (${esc(usWhat)})` : ''}</span>`
+                    : !usInfoRow ? `<span style="color:var(--happy)" title="${esc(usTip)}">● an old script (no version reported): update needed</span>`
+                    : usOld ? `<span style="color:var(--happy)" title="${esc(usTip)}">● update needed (${esc(usWhat)}, newest v${esc(usLatest)})</span>`
+                    : `<span style="color:var(--reagent)" title="${esc(usTip)}">● installed (${esc(usWhat)})</span>`;
             return `<tr${l ? '' : ' style="opacity:.5"'}>
                 <td>${esc(m.name)} [${m.id}]</td>
                 <td>${l ? '<span style="color:var(--reagent)">● on board</span>' : '<span style="color:var(--muted)">○ not yet</span>'}</td>

@@ -485,11 +485,11 @@ async function leaderTodos(key, factionId) {
 
     return { todos };
 }
-// the same list for the script's To do (leaders): kept two minutes per faction on this server instance, so a leader's page loads in Torn do not repeat all the reads
+// the same list for the script's To do (leaders): kept 45 seconds per faction on this server instance, so a leader's page loads in Torn do not repeat all the reads
 const ltMem = new Map();
 async function leaderTodosCached(key, factionId) {
     const hit = ltMem.get(factionId);
-    if (hit && Date.now() - hit.at < 120000) return hit.v;
+    if (hit && Date.now() - hit.at < 45000) return hit.v;
     const v = await leaderTodos(key, factionId);
     ltMem.set(factionId, { at: Date.now(), v });
     return v;
@@ -1670,12 +1670,12 @@ Cancel: ${cancelUrl}`, [], embeds, undefined, true);
             try {
                 if (await isLeader(key)) {
                     // everything of the leader to-do card on the dashboard shows here too (the OC requests have their own line below)
-                    try { for (const t of (await leaderTodosCached(key, factionId)).todos) if (!t.group && t.id !== 'oc-requests') items.push({ id: `lt-${t.id}`, text: t.text, cta: t.cta, url: `${site}/${t.page}` }); } catch (e) { /* the other lines still show */ }
+                    try { for (const t of (await leaderTodosCached(key, factionId)).todos) if (!t.group && t.id !== 'oc-requests') items.push({ id: `lt-${t.id}`, text: t.text, cta: t.cta, url: `${site}/${t.page}`, ...(t.members ? { members: t.members, kind: t.kind } : {}) }); } catch (e) { /* the other lines still show */ }
                     const flat = async k => { const f = (await redis(['HGETALL', k])) || []; const out = []; for (let i = 0; i < f.length; i += 2) { try { out.push(JSON.parse(f[i + 1])); } catch (e) { /* skip */ } } return out; };
                     const [ocs, banks] = await Promise.all([flat(ocRequestsKey(factionId)), flat(bankRequestsKey(factionId))]);
-                    const ocsOpen = ocs.filter(q => q.status !== 'claimed'); if (ocsOpen.length) items.push({ id: 'oc-requests', text: `${ocsOpen.length} OC request${ocsOpen.length === 1 ? '' : 's'}: ${ocsOpen.slice(0, 4).map(r => `${r.name} (level ${r.level})`).join(', ')}${ocsOpen.length > 4 ? ` +${ocsOpen.length - 4} more` : ''}.`, cta: 'See requests', url: `${site}/oc-requests` });
+                    const ocsOpen = ocs.filter(q => q.status !== 'claimed'); if (ocsOpen.length) items.push({ id: 'oc-requests', text: `${ocsOpen.length} OC request${ocsOpen.length === 1 ? '' : 's'}: ${ocsOpen.slice(0, 4).map(r => `${r.name} (level ${r.level})`).join(', ')}${ocsOpen.length > 4 ? ` +${ocsOpen.length - 4} more` : ''}.`, cta: 'Claim and open', priority: true, claim: 'oc', url: `${site}/oc-requests` });
                     const openBanks = banks.filter(r => r.status === 'open');
-                    if (openBanks.length) items.push({ id: 'bank-requests', text: `${openBanks.length} bank request${openBanks.length === 1 ? '' : 's'}: ${openBanks.slice(0, 4).map(r => `${r.name} ($${Number(r.amount).toLocaleString('en-US')})`).join(', ')}${openBanks.length > 4 ? ` +${openBanks.length - 4} more` : ''}.`, cta: 'Open bank requests', url: `${site}/bank` });
+                    if (openBanks.length) items.push({ id: 'bank-requests', text: `${openBanks.length} bank request${openBanks.length === 1 ? '' : 's'}: ${openBanks.slice(0, 4).map(r => `${r.name} ($${Number(r.amount).toLocaleString('en-US')})`).join(', ')}${openBanks.length > 4 ? ` +${openBanks.length - 4} more` : ''}.`, cta: 'Claim and open', priority: true, claim: 'bank', url: `${site}/bank` });
                     if (await labsIsOwner(redis, playerId)) { // the owner: leases that are due keep their Offered / Paid buttons; everything else from the Labs services is ONE line (the list with the Known buttons is on the dashboard)
                         const svc = await serviceView(redis, [...(await leaseTodos(redis, key)), ...(await fundRequestTodos(redis)), ...(await joinTodos(redis))]);
                         items.push(...svc.filter(x => !x.known && x.lease && x.lease.status === 'due').map(x => { const { svc: s0, waiting, sig, known, ...rest } = x; return rest; }));
@@ -1685,7 +1685,8 @@ Cancel: ${cancelUrl}`, [], embeds, undefined, true);
                 }
             } catch (e) { /* skip */ }
 
-            return res.status(200).json({ items });
+            items.sort((a, b) => (b.priority ? 1 : 0) - (a.priority ? 1 : 0)); // the crimes and the money first (the sort keeps the rest in their order)
+            return res.status(200).json({ items, ttl: items.some(i => i.priority) || items.some(i => /^lt-/.test(i.id)) ? 60 : 300 }); // how long the script may keep this: a leader with things waiting gets a fresh list every minute
         }
         // Names for the "who" lists only leaders see (reporters, "I have this too", thumbs): one roster read (cached), best effort.
         const bugNames = async () => { const o = {}; try { for (const m of await getRoster(key)) o[m.id] = m.name; } catch (e) { /* ids are shown instead */ } return o; };
@@ -1816,6 +1817,38 @@ Cancel: ${cancelUrl}`, [], embeds, undefined, true);
             }
             return res.status(200).json({ ok: true, link: OC_CRIMES_URL, request: r });
         }
+        // The script's To do: Claim and open. Claims the OLDEST open request of that kind for the one who tapped (the same exclusive claim as the Discord button, the Discord
+        // message turns into Claimed by ...) and answers with the Torn page to open: the crimes page, or the vault screen with the member and the amount filled in.
+        if (action === 'todo-claim') {
+            const kind = req.body.kind === 'bank' ? 'bank' : 'oc';
+            const flat = (await redis(['HGETALL', kind === 'bank' ? bankRequestsKey(factionId) : ocRequestsKey(factionId)])) || [];
+            const open = [];
+            for (let i = 0; i < flat.length; i += 2) { try { const r = JSON.parse(flat[i + 1]); if (kind === 'bank' ? r.status === 'open' : (r.status !== 'claimed' && r.rid)) open.push(r); } catch (e) { /* skip */ } }
+            open.sort((a, b) => (a.at || 0) - (b.at || 0));
+            // a request this leader claimed in the last 10 minutes comes first: tapping again (the page did not open, say) goes back to it; after that the next open one is claimed
+            const mineFlat = [];
+            for (let i = 0; i < flat.length; i += 2) { try { const r = JSON.parse(flat[i + 1]); if (r.status === 'claimed' && r.claimedBy === playerName && Date.now() - (r.claimedAt || 0) < 10 * 60000) mineFlat.push(r); } catch (e) { /* skip */ } }
+            if (kind === 'oc') {
+                for (const r of [...mineFlat.filter(x => x.rid), ...open]) {
+                    const got = await redis(['SET', `wwl:oc-claim:${factionId}:${r.rid}`, playerId, 'NX', 'EX', String(7 * 86400)]);
+                    if (!got) { const by = await redis(['GET', `wwl:oc-claim:${factionId}:${r.rid}`]); if (by !== playerId) continue; }
+                    else { r.status = 'claimed'; r.claimedBy = playerName; r.claimedAt = Date.now(); await redis(['HSET', ocRequestsKey(factionId), r.id, JSON.stringify(r)]); await ocMarkDiscord(factionId, r, 'claimed', playerName); }
+                    return res.status(200).json({ ok: true, link: OC_CRIMES_URL, request: { name: r.name, level: r.level } });
+                }
+                return res.status(404).json({ error: 'Nothing left to claim: the OC requests are all taken or done.' });
+            }
+            for (const r of [...mineFlat, ...open]) {
+                const live = await bankBalanceOf(factionId, r.playerId, { leaderKey: key });
+                let pay = r.amount, lowered = false;
+                if (live.balance !== null && live.balance < r.amount) { pay = live.balance; lowered = true; }
+                if (pay < 1) continue; // nothing left to pay out to this one
+                const got = await redis(['SET', `wwl:bank-claim:${factionId}:${r.id}`, playerId, 'NX', 'EX', String(7 * 86400)]);
+                if (!got) { const by = await redis(['GET', `wwl:bank-claim:${factionId}:${r.id}`]); if (by !== playerId) continue; }
+                else { r.status = 'claimed'; r.claimedBy = playerName; r.claimedAt = Date.now(); r.pay = pay; r.balanceBefore = live.balance; await redis(['HSET', bankRequestsKey(factionId), r.id, JSON.stringify(r)]); await bankMarkDiscord(factionId, r, 'claimed', playerName); }
+                return res.status(200).json({ ok: true, link: `https://www.torn.com/factions.php?step=your#/tab=controls&giveMoneyTo=${encodeURIComponent(r.playerId)}&money=${encodeURIComponent(pay)}`, request: { name: r.name, amount: pay }, lowered });
+            }
+            return res.status(404).json({ error: 'Nothing left to claim: the bank requests are all taken or done.' });
+        }
         // Hands a banker (anyone with faction API access) the signed cookie that lets the Discord Claim button redirect straight to Torn.
         if (action === 'bank-token') {
             res.setHeader('Set-Cookie', `wwl_banker=${bankCookieValue(playerId, playerName, factionId)}; Path=/; Max-Age=${30 * 86400}; HttpOnly; Secure; SameSite=Lax`);
@@ -1872,9 +1905,9 @@ Cancel: ${cancelUrl}`, [], embeds, undefined, true);
                     if (now.balance !== null && now.balance <= r.balanceBefore - r.pay) await bankComplete(factionId, r, r.claimedBy || 'a banker', 'detected');
                 } catch (e) { /* stays claimed; it can still be marked paid by hand */ }
             }
-            // claimed and completed ones stay visible for a day (so two bankers do not both pay), then drop out
+            // open ones stay, claimed ones stay for a day (so two bankers do not both pay); a paid one goes to the history (Bank request, History) at once
             const day = 86400000, newest = r => r.completedAt || r.claimedAt || 0;
-            return res.status(200).json({ requests: list.filter(r => r.status === 'open' || Date.now() - newest(r) < day).sort((a, b) => a.at - b.at) });
+            return res.status(200).json({ requests: list.filter(r => r.status === 'open' || (r.status === 'claimed' && Date.now() - newest(r) < day)).sort((a, b) => a.at - b.at) });
         }
 
         // The leader's side of manual verification (see 'verify-mine' above): the whole faction's Intel/CAT
