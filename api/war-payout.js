@@ -1699,8 +1699,19 @@ Cancel: ${cancelUrl}`, [], embeds, undefined, true);
                 if (war.length || waiting) items.push({ id: 'role-war', text: war.length ? `${war.length} war related role change${s(war.length)}${waiting ? ` (${waiting} more wait for the newsletter)` : ''}` : `${waiting} war related role change${s(waiting)} wait${waiting === 1 ? 's' : ''} for the newsletter`, cta: war.length ? 'Open' : 'Open the Newsletter', url: `${site}/${war.length ? 'welcome-admin' : 'newsletter'}`, ...(war.length ? { rows: war } : {}) });
                 if (other.length) items.push({ id: 'role-other', text: `${other.length} role change${s(other.length)} to look at`, cta: 'Open', url: `${site}/welcome-admin`, rows: other });
             }
+            // The energy plan is paused while the faction stacks for a war or is inside a war / chain plan: nobody trains in those days, so the daily check of the energy plan is not
+            // needed until that plan is over. A war plan counts from 48 hours before the war starts (the stacking), a chain plan from its start; both until their end.
+            let energyPause = null;
+            try {
+                const nowS = Math.floor(Date.now() / 1000);
+                for (const p of (await loadPlanIndex(factionId)).filter(x => !x.archived && x.startDate)) {
+                    const day0 = Date.parse(`${p.startDate}T00:00:00Z`) / 1000, end = Number(p.endAt) || day0 + (Number(p.days) || 1) * 86400;
+                    const from = p.war && p.war.start ? Number(p.war.start) - 48 * 3600 : day0 + (Number(p.startHour) || 0) * 3600;
+                    if (nowS >= from && nowS < end && (!energyPause || end > energyPause.until)) energyPause = { until: end, why: p.war ? `stacking and warring${p.war.opponent ? ` vs ${p.war.opponent}` : ''}` : `the chain plan${p.name ? ` ${p.name}` : ''}` };
+                }
+            } catch (e) { /* the daily check just stays */ }
             items.sort((a, b) => (b.priority ? 1 : 0) - (a.priority ? 1 : 0)); // the crimes and the money first (the sort keeps the rest in their order)
-            return res.status(200).json({ items, ttl: items.some(i => i.priority) || items.some(i => /^lt-/.test(i.id)) ? 60 : 300 }); // how long the script may keep this: a leader with things waiting gets a fresh list every minute
+            return res.status(200).json({ items, energyPause, ttl: items.some(i => i.priority) || items.some(i => /^lt-/.test(i.id)) ? 60 : 300 }); // how long the script may keep this: a leader with things waiting gets a fresh list every minute
         }
         // Names for the "who" lists only leaders see (reporters, "I have this too", thumbs): one roster read (cached), best effort.
         const bugNames = async () => { const o = {}; try { for (const m of await getRoster(key)) o[m.id] = m.name; } catch (e) { /* ids are shown instead */ } return o; };
