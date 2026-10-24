@@ -2,7 +2,7 @@
 // @name         World Wide Labs
 // @namespace    https://worldwidelabs.vercel.app
 // @author       CreaLotte
-// @version      1.48
+// @version      1.48.1
 // @updateURL    __WWL_BASE__/worldwidelabs.user.js
 // @downloadURL  __WWL_BASE__/worldwidelabs.user.js
 // @description  Shows your WorldWideLabs weekly energy plan (the checklist from the Energy planner) inside Torn, a To do tab with small personal reminders (revive setting, feedback, timezone map, availability, Discord/Intel/CAT), your My Targets list, a simplified energy/war standing strip, and — if you are in the Mentoring Platform — your mentoring checklist too. Also shows faction banners at the top of every Torn page. A small ⚙ in the header shows the installed version, flags when a newer one is out, lets you set/replace your API key, and — for a leader — add or remove your faction's banners right from Torn. On a computer it is a small window you can drag around and close; in TornPDA it is a menu. Ticks are shared with the WWL site.
@@ -230,6 +230,7 @@
     win.querySelector('#wwl-settings').addEventListener('click', () => {
         tab = 'settings';
         render();
+        loadConn();
         if (settingsData === null) loadSettings();
     });
 
@@ -770,6 +771,7 @@
         const undismissHtml = dismissedCount ? `<button type="button" id="wwl-ban-undismiss" style="margin-top:8px;padding:6px 12px;border-radius:6px;border:1px solid #3a4352;background:transparent;color:#e6e9ef;cursor:pointer;">Show ${dismissedCount} dismissed banner${dismissedCount === 1 ? '' : 's'} again</button>` : '';
         let html = `<button type="button" id="wwl-back" style="margin-bottom:10px;padding:4px 10px;border-radius:6px;border:1px solid #3a4352;background:transparent;color:#e6e9ef;cursor:pointer;">← Back</button>
             <div style="font-weight:700;margin-bottom:4px;">World Wide Labs v${esc(SCRIPT_VERSION)}</div>
+            ${connLine()}
             ${updateHtml}
             <button type="button" id="wwl-change-key" style="margin-top:4px;padding:6px 12px;border-radius:6px;border:1px solid #3a4352;background:transparent;color:#e6e9ef;cursor:pointer;">Change API key</button>
             ${undismissHtml}`;
@@ -800,6 +802,22 @@
         }
         return html;
     }
+    // ⚙ Settings says whether WWL accepts this key and when it last saw this script (and from which device), so a member can see at once why they are not in Who is on board
+    let connInfo = null;
+    async function loadConn() {
+        try {
+            const r = await api({ action: 'script-status' });
+            connInfo = { ok: true, ...r };
+            if (!r.seen) { store.set(CHECKIN_NAME, '0'); checkIn(); } // never seen yet: check in right now
+        } catch (e) { connInfo = { ok: false, error: e.message === 'NO_KEY' ? 'No API key set yet.' : e.message }; }
+        if (tab === 'settings') render();
+    }
+    function connLine() {
+        if (!connInfo) return '<div style="color:#9aa4b5;font-size:12px;margin:2px 0 6px;">Checking the connection with WWL…</div>';
+        if (!connInfo.ok) return `<div style="color:#e05555;font-size:12px;margin:2px 0 6px;">WWL does not accept this key: ${esc(connInfo.error)} Use Change API key below to enter a working one.</div>`;
+        const when = connInfo.seen ? new Date(connInfo.seen).toLocaleString() : 'not yet';
+        return `<div style="color:#35d99b;font-size:12px;margin:2px 0 6px;">Connected. WWL last saw this script: ${esc(when)}${connInfo.version ? ` (v${esc(connInfo.version)}, ${connInfo.pda ? 'TornPDA' : 'browser'})` : ''}.</div>`;
+    }
     async function loadSettings() {
         try { settingsData = await api({ action: 'banners-get', manage: true }); }
         catch (e) { settingsData = { banners: [], leader: false, owner: false }; } // not a leader, or a hiccup — just hide the banner section
@@ -818,6 +836,7 @@
             store.set(KEY_NAME, trimmed);
             store.set(CHECKIN_NAME, '0'); // a new key may be a different member — check in straight away, not after the hour is up
             checkIn();
+            connInfo = null; setTimeout(loadConn, 1500); // and show what WWL says about the new key
             refreshTornBanners();
             load();
         });
