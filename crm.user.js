@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         CoreLabs Elite Recruiter v22.0
-// @version      24.8.2
+// @version      24.8.3
 // @updateURL    https://worldwidelabs.vercel.app/crm.user.js
 // @downloadURL  https://worldwidelabs.vercel.app/crm.user.js
 // @description  Test version Corelabs
@@ -1505,7 +1505,8 @@ function hofSeparate(why) { hofCombined = false; hofSince = Date.now(); hofWhy =
 		}
 
 		const entry = CACHE[uid];
-		const handled = hasCRMRow(uid); // a player you already marked (F, C, S, U, a note or a company) is never read again on his own: what is known stays
+		const handled = hasCRMRow(uid); // a player you already marked (F, C, S, U, a note or a company) is only read again after 30 days (the others after 3 days, or 7 days from the shared stats)
+		const HANDLED_TTL = 30 * 24 * 60 * 60 * 1000;
 		// A cached entry where xan AND act AND streak are all 0 is almost always a
 		// stale rate-limit artifact: those three come from the profile+personalstats
 		// call, and when THAT call failed the old code cached three zeros (while ws,
@@ -1515,7 +1516,7 @@ function hofSeparate(why) { hofCombined = false; hofSince = Date.now(); hofWhy =
 		// so frozen-zero rows self-heal instead of sticking for 72h. ws is ignored in
 		// this test on purpose (it loads independently).
 		const looksStale = entry && !entry.ok && !entry.data.xan && !entry.data.act && !entry.data.streak; // an entry of an older version with only zeros is read once more; a player read properly with zeros is known
-		if (entry && (handled || (Date.now() - entry.ts < CFG.CACHE_TTL && !looksStale))) {
+		if (entry && (handled ? Date.now() - entry.ts < HANDLED_TTL : (Date.now() - entry.ts < CFG.CACHE_TTL && !looksStale))) {
 			const ageH = Math.round((Date.now() - entry.ts) / 3600000);
 			console.log(`%c[CoreLabs] ${uid} ${entry.data.name || ''} → LOCAL cache (${ageH}h old)`, 'color:#51cf66');
 			updatePill(pill, entry.data);
@@ -1528,7 +1529,7 @@ function hofSeparate(why) { hofCombined = false; hofSince = Date.now(); hofWhy =
 		// local cache so subsequent renders this session are instant.
 		const shared = SHARED_STATS[uid];
 		const sharedFresh = shared && shared.ts && (Date.now() - shared.ts < SHARED_TTL);
-		if (sharedFresh || (handled && shared && shared.data)) {
+		if (sharedFresh || (handled && shared && shared.data && shared.ts && Date.now() - shared.ts < HANDLED_TTL)) {
 			const ageH = Math.round((Date.now() - shared.ts) / 3600000);
 			console.log(`%c[CoreLabs] ${uid} ${shared.data.name || ''} → SUPABASE shared cache (${ageH}h old, no Torn call)`, 'color:#74c0fc');
 			CACHE[uid] = { ts: shared.ts, data: shared.data, ok: true };
