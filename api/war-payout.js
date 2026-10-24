@@ -1697,9 +1697,12 @@ Cancel: ${cancelUrl}`, [], embeds, undefined, true);
             if (roleSrc) {
                 const gone = ['lt-promotions', 'lt-demotions', 'lt-role-check', 'lt-slow-start', 'lt-promo-wait', 'lt-promo-recruits'];
                 for (let i = items.length - 1; i >= 0; i--) if (gone.includes(items[i].id)) items.splice(i, 1);
-                const rows = roleSrc.roleRows || [], war = rows.filter(r => r.war), other = rows.filter(r => !r.war), waiting = roleSrc.roleWaiting || 0, s = n => (n === 1 ? '' : 's');
+                const rows = roleSrc.roleRows || [], war = rows.filter(r => r.war), promo = rows.filter(r => !r.war && !r.kind), recruit = rows.filter(r => !r.war && r.kind === 'recruit'), other = rows.filter(r => !r.war && r.kind && r.kind !== 'recruit'), waiting = roleSrc.roleWaiting || 0, s = n => (n === 1 ? '' : 's');
                 if (war.length || waiting) items.push({ id: 'role-war', text: war.length ? `${war.length} war related role change${s(war.length)}${waiting ? ` (${waiting} more wait for the newsletter)` : ''}` : `${waiting} war related role change${s(waiting)} wait${waiting === 1 ? 's' : ''} for the newsletter`, cta: war.length ? 'Open' : 'Open the Newsletter', url: `${site}/${war.length ? 'welcome-admin' : 'newsletter'}`, ...(war.length ? { rows: war } : {}) });
-                if (other.length) items.push({ id: 'role-other', text: `${other.length} role change${s(other.length)} to look at`, cta: 'Open', url: `${site}/welcome-admin`, rows: other });
+                // as before: the members who can be promoted now are a line of their own, the recruits who can move up later too, and the rest (roles held without the requirements, removals) together
+                if (promo.length) items.push({ id: 'role-promo', text: `${promo.length} member${promo.length === 1 ? ' is' : 's are'} ready for promotion`, cta: 'Open', url: `${site}/welcome-admin`, rows: promo });
+                if (recruit.length) items.push({ id: 'role-recruit', text: `${recruit.length} recruit${s(recruit.length)} can move up when the recruit status wears off`, cta: 'Open', url: `${site}/welcome-admin`, rows: recruit });
+                if (other.length) items.push({ id: 'role-other', text: `${other.length} role${s(other.length)} to look at`, cta: 'Open', url: `${site}/welcome-admin`, rows: other });
             }
             // The energy plan is paused while the faction stacks for a war or is inside a war / chain plan: nobody trains in those days, so the daily check of the energy plan is not
             // needed until that plan is over. A war plan counts from 48 hours before the war starts (the stacking), a chain plan from its start; both until their end.

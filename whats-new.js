@@ -18,7 +18,7 @@ const WHATS_NEW = [
             'Small update of the WWL script (1.48).',
         ],
         leaders: [
-            'In the role changes drop-down of the script To do, recruits who already meet the requirements for Experiment B or Guinea Pig / Lab Rat show with a clock mark and how many days their recruit status has left.',
+            'In the role changes drop-down of the script To do, recruits who already meet the requirements for Experiment B or Guinea Pig / Lab Rat show with a clock mark and how many days their recruit status has left. Members who can be promoted now are a line of their own again, the recruits who can move up later too, and the rest (roles held without the requirements, removals) together.',
         ],
     },
     {
