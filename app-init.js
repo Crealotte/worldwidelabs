@@ -36,9 +36,15 @@
         goToPage('payout-receipt');
         loadPayoutReceipt(receiptId);
     } else if (apiKey) {
+        autoLogin();
+    } else if (wwlRemember()) {
+        // no key in this browser (its storage was cleaned, or a new tab on a browser that keeps nothing): the cookie of a "Keep me logged in" login may still have it
+        keyCall({ action: 'key-recall' }).then(r => { if (r && r.key && !apiKey) { apiKey = r.key; try { localStorage.setItem(KEY_STORAGE, r.key); } catch (e) { /* storage blocked */ } autoLogin(); } }).catch(() => { /* just the login page */ });
+    }
+    function autoLogin() {
         login(apiKey).catch(async e => {
             if (e.tornCode === 2 || e.denied) { // a rejected key, or a faction that is not on the owner's list: forget the saved key and say why
-                localStorage.removeItem(KEY_STORAGE);
+                forgetKey();
                 apiKey = '';
                 $('login-error').textContent = e.message;
                 $('login-error').style.display = 'block';

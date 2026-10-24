@@ -476,6 +476,7 @@
             <label for="login-key">Torn API key</label>
             <input type="password" id="login-key" placeholder="Paste your API key" autocomplete="off">
         </div>
+        <label for="login-remember" style="display:flex;gap:8px;align-items:center;margin:0 0 12px;font-size:13px;color:var(--muted);cursor:pointer;"><input type="checkbox" id="login-remember" checked style="width:auto;margin:0;"> Keep me logged in on this device</label>
         <button id="login-btn" style="width:100%;">Enter the lab</button>
         <div id="login-error"></div>
         <p class="login-note">
@@ -2079,7 +2080,7 @@
                     <tr><th>Data storage</th><td>Both. Your key and your settings stay in your own browser. What WWL works out for you (see the second table) is kept on WWL's server.</td></tr>
                     <tr><th>Data sharing</th><td>It depends on the part of WWL: faction leadership can see faction members' stats and logins, the owner can see the ledger of traders with a Trading Funding, and public pages (a pricelist, a receipt) show only what the trader chose to share. Nothing is sold or given to anybody else.</td></tr>
                     <tr><th>Purpose of use</th><td>Faction tools (energy planning and tracking, war payouts, mentoring), the Labs services (investments, rentals, companies), and the Trading tools (pricelist, receipts, ledger).</td></tr>
-                    <tr><th>Key storage and sharing</th><td>Your key is kept in your browser and is sent to WWL's server over HTTPS with each request, to ask Torn about you. The server does <b>not</b> store it and does not share it. One optional exception for leaders: see "Your key" below.</td></tr>
+                    <tr><th>Key storage and sharing</th><td>Your key is kept in your browser and is sent to WWL's server over HTTPS with each request, to ask Torn about you. The server does <b>not</b> store it and does not share it. With "Keep me logged in on this device" ticked (it is by default), your key is also kept in a protected cookie in your own browser for up to a year, so you stay logged in even when your browser cleans its storage; the server only hands it back to you. Untick the box, or press Log out, and both are removed. One optional exception for leaders: see "Your key" below.</td></tr>
                     <tr><th>Key access level</th><td>Anybody with a Torn key can log in. A <b>Public</b> key is enough for the Trading tools and the Labs services. A <b>Limited Access</b> key is recommended for faction members (energy bars) and is what leaders need for the faction tools. A Full Access key is never needed and never asked for.</td></tr>
                 </table>
             </div>

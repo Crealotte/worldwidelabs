@@ -841,6 +841,21 @@ module.exports = async function handler(req, res) {
         // serves, so it is the one source of truth. It sits ABOVE the key and profile checks on purpose: the version number
         // is public anyway, and answering it with no key means no Torn call and no database command at all — the cheapest
         // way to check for an update, so it can be asked as often as needed.
+        // "Keep me logged in" on the site: the key is also kept in a protected cookie (HttpOnly, one year) as a backup for browsers that clean their storage. No Torn call, no database; the
+        // server only hands the cookie back to the same browser (a cookie of another site is never sent here: SameSite=Lax, and no other site may read the answer).
+        if (action === 'key-remember' || action === 'key-recall' || action === 'key-forget') {
+            const secure = /https/i.test(String(req.headers['x-forwarded-proto'] || '')) ? '; Secure' : '';
+            res.setHeader('Cache-Control', 'no-store');
+            if (action === 'key-remember') {
+                const k = String((req.body && req.body.key) || '');
+                if (!/^[A-Za-z0-9]{16}$/.test(k)) return res.status(400).json({ error: 'That does not look like a Torn API key.' });
+                res.setHeader('Set-Cookie', `wwl_k=${k}; Path=/; Max-Age=31536000; HttpOnly; SameSite=Lax${secure}`);
+                return res.status(200).json({ ok: true });
+            }
+            if (action === 'key-forget') { res.setHeader('Set-Cookie', `wwl_k=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax${secure}`); return res.status(200).json({ ok: true }); }
+            const m = /(?:^|;\s*)wwl_k=([A-Za-z0-9]{16})(?:;|$)/.exec(String(req.headers.cookie || ''));
+            return res.status(200).json({ key: m ? m[1] : null });
+        }
         if (action === 'env-info') return res.status(200).json(require('../lib/env').envInfo()); // lets the site show the TEST banner on the dev site (no key, no database)
         if (action === 'script-version') {
             const src = require('fs').readFileSync(require('path').join(process.cwd(), 'userscripts', req.body?.channel === 'dev' ? 'energy-plan.dev.user.js' : 'energy-plan.user.js'), 'utf8');

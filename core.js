@@ -87,7 +87,26 @@
         });
     }
 
-    let apiKey = localStorage.getItem(KEY_STORAGE) || '';
+    // Keeping the key on this device: "Keep me logged in" (ticked by default) puts it in the browser's storage and, as a backup that survives the browser cleaning its storage
+    // (Safari does that after a week), in a protected cookie of the server (up to a year). Unticked: it only lives while this tab is open.
+    const REMEMBER_KEY = 'wwl_remember', SYNC_KEY = 'wwl_key_cookie';
+    const wwlRemember = () => { try { return localStorage.getItem(REMEMBER_KEY) !== '0'; } catch (e) { return true; } };
+    const keyCall = body => fetch('/api/war-payout', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).then(r => r.json());
+    function saveKey(key) {
+        try { sessionStorage.setItem(KEY_STORAGE, key); } catch (e) { /* storage blocked */ }
+        if (!wwlRemember()) { forgetKey(true); return; }
+        try { localStorage.setItem(KEY_STORAGE, key); } catch (e) { /* storage blocked */ }
+        try { if (navigator.storage && navigator.storage.persist) navigator.storage.persist(); } catch (e) { /* only a request */ }
+        if (!/^[A-Za-z0-9]{16}$/.test(key)) return; // a test person's key is never sent anywhere
+        let synced = ''; try { synced = localStorage.getItem(SYNC_KEY) || ''; } catch (e) { /* none */ }
+        if (synced === key.slice(-6)) return; // the cookie already has this key
+        keyCall({ action: 'key-remember', key }).then(r => { if (r && r.ok) { try { localStorage.setItem(SYNC_KEY, key.slice(-6)); } catch (e) { /* none */ } } }).catch(() => { /* the storage still has it */ });
+    }
+    function forgetKey(keepSession) {
+        try { localStorage.removeItem(KEY_STORAGE); localStorage.removeItem(SYNC_KEY); if (!keepSession) sessionStorage.removeItem(KEY_STORAGE); } catch (e) { /* storage blocked */ }
+        keyCall({ action: 'key-forget' }).catch(() => { /* nothing to remove */ });
+    }
+    let apiKey = localStorage.getItem(KEY_STORAGE) || sessionStorage.getItem(KEY_STORAGE) || '';
     let profile = null;
 
     function friendlyApiError(err) {
@@ -164,21 +183,21 @@
         if (typeof checkBuddyAccess === 'function') checkBuddyAccess(acc); // shows "My buddy plan" for buddies of buddy banking
         if (typeof checkLedgerAccess === 'function') checkLedgerAccess(acc); // shows the Trading ledger for the owner and the traders of Trading Funding
         if (acc && acc.director && (acc.allowed === false || limitedErr)) { // a company director outside the allowed factions: WWL is just their company page
-            localStorage.setItem(KEY_STORAGE, key);
+            saveKey(key);
             $('login-view').style.display = 'none';
             $('app-view').style.display = 'block';
             if (typeof enterDirectorMode === 'function') enterDirectorMode();
             return;
         }
         if (acc && (acc.investor || acc.tenant || acc.buddy || acc.trader) && !acc.owner && (limitedErr || acc.allowed === false)) { // an investor of the fund outside the allowed factions (or with a small key): WWL is just their investments page
-            localStorage.setItem(KEY_STORAGE, key);
+            saveKey(key);
             $('login-view').style.display = 'none';
             $('app-view').style.display = 'block';
             if (typeof enterInvestorMode === 'function') enterInvestorMode(acc);
             return;
         }
         if (acc && acc.allowed === false && !acc.owner && !acc.director && !acc.investor && !acc.tenant && !acc.buddy && !acc.trader && typeof enterJoinMode === 'function') { // somebody with nothing to do with Labs yet: WWL is just the page with the three programs
-            localStorage.setItem(KEY_STORAGE, key);
+            saveKey(key);
             $('login-view').style.display = 'none';
             $('app-view').style.display = 'block';
             enterJoinMode();
@@ -186,7 +205,7 @@
         }
         if (limitedErr) { apiKey = ''; throw limitedErr; } // a small key is only enough for the pages above
         if (acc && acc.allowed === false) { const denied = new Error('Your faction is not on the list of factions that can use WWL yet. Ask the WWL owner to add it.'); denied.denied = true; apiKey = ''; throw denied; }
-        localStorage.setItem(KEY_STORAGE, key);
+        saveKey(key);
         $('login-view').style.display = 'none';
         $('app-view').style.display = 'block';
         renderDashboard();
@@ -356,8 +375,10 @@
         location.reload(); // simplest way to re-draw every page consistently
     });
 
+    $('login-remember').checked = wwlRemember();
+    $('login-remember').addEventListener('change', () => { try { localStorage.setItem(REMEMBER_KEY, $('login-remember').checked ? '1' : '0'); } catch (e) { /* storage blocked */ } });
     $('logout-btn').addEventListener('click', () => {
-        localStorage.removeItem(KEY_STORAGE);
+        forgetKey();
         sessionStorage.removeItem(CURRENT_PAGE_KEY);
         apiKey = ''; profile = null;
         $('app-view').style.display = 'none';
