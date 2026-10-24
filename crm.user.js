@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         CoreLabs Elite Recruiter v22.0
-// @version      24.8.3
+// @version      24.8.4
 // @updateURL    https://worldwidelabs.vercel.app/crm.user.js
 // @downloadURL  https://worldwidelabs.vercel.app/crm.user.js
 // @description  Test version Corelabs
@@ -1367,7 +1367,7 @@ function tornPause(ms) { tornPauseUntil = Date.now() + ms; } // a problem with t
 	function tornBusy() { tornGap = Math.min(3000, Math.round(tornGap * 1.5)); tornCalm = 0; tornRefused.push(Date.now()); }
 	function tornGood() { if (++tornCalm >= 8 && tornGap > 650) { tornGap = Math.max(650, Math.round(tornGap / 1.2)); tornCalm = 0; } }
 	function tornStatus() { const cut = Date.now() - 60000; while (tornLog.length && tornLog[0] < cut) tornLog.shift(); while (tornRefused.length && tornRefused[0] < cut) tornRefused.shift(); return { perMin: tornLog.length, combined: hofCombined, why: hofWhy, waiting: _queue.length, lat: tornLat, gap: tornGap, refused: tornRefused.length, problem: lastProblem && Date.now() - lastProblem.at < 120000 ? lastProblem.text : '', conc: maxConc() }; }
-	async function tornGet(url) { await tornSlot(); tornLog.push(Date.now()); const t0 = Date.now(); try { return await gmFetch(url); } finally { const l = Date.now() - t0; tornLat = tornLat ? Math.round(tornLat * 0.7 + l * 0.3) : l; } }
+	async function tornGet(url) { url += (url.includes('?') ? '&' : '?') + 'comment=CoreLabsRecruiter'; await tornSlot(); tornLog.push(Date.now()); const t0 = Date.now(); try { return await gmFetch(url); } finally { const l = Date.now() - t0; tornLat = tornLat ? Math.round(tornLat * 0.7 + l * 0.3) : l; } }
 	
 	// The saved copies on this computer (the stats of players, the CRM) are big: they are written once, a moment after the last change, not after every single player.
 	let cacheTimer = null, crmSaveTimer = null;
