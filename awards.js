@@ -48,36 +48,8 @@ const awHave = i => !!(awState.mine && (i.t === 'honor' ? awState.mine.honors.ha
 const awDate = i => { const ts = awState.mine && awState.mine.when.get(i.k); if (!ts) return ''; const d = new Date(ts * 1000); return `${d.getFullYear()}/${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getDate()).padStart(2, '0')}`; };
 const awFmt = n => Number.isFinite(n) ? (Math.abs(n) >= 100 || Number.isInteger(n) ? Math.round(n) : Math.round(n * 10) / 10).toLocaleString('en-US') : '';
 
-// how far an award is: { cur, goal, pct (0..1), left (days, Infinity when it never moves, null when there is no estimate), how (explanation of the time) }, or null when it cannot be measured
-function awCalc(i) {
-    const rl = i.rl, stats = awState.stats;
-    if (!rl || !stats) return null;
-    const parts = rl.p || [[rl.s, rl.g]], d = rl.d || 1;
-    let remaining = 0, cur = 0, goal = 0;
-    for (const [s, g] of parts) {
-        const raw = stats[s];
-        if (typeof raw !== 'number') return null;
-        const v = Math.min(raw / d, parts.length > 1 ? g : Infinity); // with several goals, what is beyond a goal does not count for the others
-        cur += v; goal += g; remaining += Math.max(0, g - v);
-    }
-    const pct = Math.min(1, cur / goal);
-    if (remaining <= 0) return { cur, goal, pct: 1, left: 0, how: '' };
-    let left = null, how = '';
-    const e = rl.e, inc = AW_INCOME[awIncome()][1], f = awFmt;
-    const days = (perDay, text) => { left = perDay > 0 ? remaining / perDay : Infinity; how = perDay > 0 ? `${f(remaining)} to go. ${text}` : `${f(remaining)} to go, but this has not happened at all yet, so there is nothing to base a time on.`; };
-    if (e && e.m === 'energy') days(inc / e.per, `${e.per} energy each, ${f(inc)} energy a day = ${f(inc / e.per)} a day (every action counted as a success).`);
-    else if (e && e.m === 'nerve') days(288 / e.per, `${e.per} nerve each, 288 nerve a day (1 per 5 minutes) = ${f(288 / e.per)} a day.`);
-    else if (e && e.m === 'fixed') days(e.perDay, `About ${f(e.perDay)} a day.`);
-    else if (e && e.m === 'flight') { const mult = awState.air ? 0.7 : 1, trip = 2 * e.min * mult; days(1440 / trip, `A round trip takes ${f(trip)} minutes${awState.air ? ' (30% shorter, because you own an airstrip)' : ''}, back to back = ${f(1440 / trip)} a day.`); }
-    else if (e && e.m === 'cooldown') days(1440 / e.min, `One every ${e.min} minutes (the cooldown) = ${f(1440 / e.min)} a day.`);
-    else if (e && e.m === 'calendar') { left = remaining; how = `${f(remaining)} days have to pass.`; }
-    else if (e && e.m === 'rate') { const age = stats.age; if (age > 0) days(cur / age, `At your pace over the ${f(age)} days since you joined (${f(cur / age * 100) / 100} a day).`); }
-    else if (e && e.m === 'share') {
-        const base = stats[e.base];
-        if (base > 0) days(cur / base * (inc / e.per) * e.mult, `Of what you did so far this grows in step with ${e.base.endsWith('won') ? 'the attacks you win' : 'the rounds you fire'}, and you can do ${f(inc / e.per)} of those a day.`);
-    }
-    return { cur, goal, pct, left, how };
-}
+// how far an award is (the calculation itself is in award-calc.js, shared with the server): { cur, goal, pct, left, how }, or null when it cannot be measured
+function awCalc(i) { return awardCalc(i, awState.stats, { income: AW_INCOME[awIncome()][1], air: awState.air }); }
 const awLeftText = c => c.left == null ? '' : c.left <= 0 ? '' : !Number.isFinite(c.left) ? '∞' : c.left < 1 ? '<1' : c.left < 100 ? (Math.round(c.left * 10) / 10).toString() : Math.round(c.left).toLocaleString('en-US');
 
 function awFiltered() {

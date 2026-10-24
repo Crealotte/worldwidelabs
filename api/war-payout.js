@@ -36,7 +36,7 @@ const { sendBugReport, bugsHandle, suggestHandle } = require('../lib/bugReport')
 const { steadfastHandle, steadfastImage, energyDaily } = require('../lib/steadfast');
 const { tzHandle } = require('../lib/tzMap');
 const { planHandle } = require('../lib/planSync');
-const { awHandle } = require('../lib/awards');
+const { awHandle, followedTodo } = require('../lib/awards');
 const { nightlyHandle, nightlyRun, getVaultKey } = require('../lib/nightly');
 const { usageFor } = require('../lib/tornFetch');
 const { targetsHandle } = require('../lib/targets');
@@ -1705,6 +1705,10 @@ Cancel: ${cancelUrl}`, [], embeds, undefined, true);
                 if (promo.length) items.push({ id: 'role-promo', text: `${promo.length} member${promo.length === 1 ? ' is' : 's are'} ready for promotion`, cta: 'Open', url: `${site}/welcome-admin`, rows: promo });
                 if (recruit.length) items.push({ id: 'role-recruit', text: `${recruit.length} recruit${s(recruit.length)} can move up when the recruit status wears off`, cta: 'Open', url: `${site}/welcome-admin`, rows: recruit });
                 if (other.length) items.push({ id: 'role-other', text: `${other.length} role${s(other.length)} to look at`, cta: 'Open', url: `${site}/welcome-admin`, rows: other });
+            }
+            // the awards this member follows (a drop-down with the progress of each): only for a script that asks for it (aw: 1), the older versions would draw its rows as role changes
+            if (req.body && req.body.aw) {
+                try { const aw = await followedTodo(redis, playerId, key, site); if (aw) items.push(aw); } catch (e) { /* the rest of the To do stays */ }
             }
             // The energy plan is paused while the faction stacks for a war or is inside a war / chain plan: nobody trains in those days, so the daily check of the energy plan is not
             // needed until that plan is over. A war plan counts from 48 hours before the war starts (the stacking), a chain plan from its start; both until their end.
