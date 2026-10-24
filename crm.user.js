@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         CoreLabs Elite Recruiter v22.0
-// @version      24.8.1
+// @version      24.8.2
 // @updateURL    https://worldwidelabs.vercel.app/crm.user.js
 // @downloadURL  https://worldwidelabs.vercel.app/crm.user.js
 // @description  Test version Corelabs
@@ -1366,7 +1366,7 @@ function tornPause(ms) { tornPauseUntil = Date.now() + ms; } // a problem with t
 	function tornSlot() { const now = Date.now(), at = Math.max(now, tornNext, tornPauseUntil); tornNext = at + tornGap; return new Promise(r => setTimeout(r, at - now)); }
 	function tornBusy() { tornGap = Math.min(3000, Math.round(tornGap * 1.5)); tornCalm = 0; tornRefused.push(Date.now()); }
 	function tornGood() { if (++tornCalm >= 8 && tornGap > 650) { tornGap = Math.max(650, Math.round(tornGap / 1.2)); tornCalm = 0; } }
-	function tornStatus() { const cut = Date.now() - 60000; while (tornLog.length && tornLog[0] < cut) tornLog.shift(); while (tornRefused.length && tornRefused[0] < cut) tornRefused.shift(); return { perMin: tornLog.length, combined: hofCombined, waiting: _queue.length, lat: tornLat, gap: tornGap, refused: tornRefused.length, problem: lastProblem && Date.now() - lastProblem.at < 120000 ? lastProblem.text : '', conc: maxConc() }; }
+	function tornStatus() { const cut = Date.now() - 60000; while (tornLog.length && tornLog[0] < cut) tornLog.shift(); while (tornRefused.length && tornRefused[0] < cut) tornRefused.shift(); return { perMin: tornLog.length, combined: hofCombined, why: hofWhy, waiting: _queue.length, lat: tornLat, gap: tornGap, refused: tornRefused.length, problem: lastProblem && Date.now() - lastProblem.at < 120000 ? lastProblem.text : '', conc: maxConc() }; }
 	async function tornGet(url) { await tornSlot(); tornLog.push(Date.now()); const t0 = Date.now(); try { return await gmFetch(url); } finally { const l = Date.now() - t0; tornLat = tornLat ? Math.round(tornLat * 0.7 + l * 0.3) : l; } }
 	
 	// The saved copies on this computer (the stats of players, the CRM) are big: they are written once, a moment after the last change, not after every single player.
@@ -1376,8 +1376,12 @@ function tornPause(ms) { tornPauseUntil = Date.now() + ms; } // a problem with t
 	window.addEventListener('pagehide', () => { clearTimeout(cacheTimer); clearTimeout(crmSaveTimer); saveCache(); saveCRM(); });
 	// Torn can give the hall of fame (work stats) in the same call as the profile and the personal stats: one call a player instead of two. If it does not, this is remembered and the old second call is used.
 	// Switching to two calls is remembered for 6 hours only (an older version remembered it forever after one odd answer, which doubled the calls).
-let hofCombined = !(Number(load('RecruiterHofSeparate', 0)) > Date.now() - 6 * 3600 * 1000), hofMiss = 0;
-function hofSeparate() { hofCombined = false; save('RecruiterHofSeparate', Date.now()); }
+// The two calls are only used for 30 minutes at a time (then one call is tried again), and only when Torn really refuses the hall of fame in the same call: a problem of one player (a deleted
+// account) or a busy Torn is no reason for it. The bar says why it is on two calls.
+const HOF_SEPARATE_MS = 30 * 60 * 1000;
+let hofSince = Number(load('RecruiterHofSeparate', 0)) || 0, hofWhy = String(load('RecruiterHofWhy', '') || '');
+let hofCombined = !(hofSince > Date.now() - HOF_SEPARATE_MS), hofMiss = 0, oddErr = 0;
+function hofSeparate(why) { hofCombined = false; hofSince = Date.now(); hofWhy = why || 'Torn did not give the hall of fame in the same call'; save('RecruiterHofSeparate', hofSince); save('RecruiterHofWhy', hofWhy); }
 	
 
 
@@ -1389,7 +1393,7 @@ function hofSeparate() { hofCombined = false; save('RecruiterHofSeparate', Date.
 	// more rate-limit wipeouts.
 	const MAX_CONCURRENT = 3;   // the least; more when Torn answers slowly (maxConc below)
 	const GAP_MS = 120;
-	const MAX_RETRIES = 4;        // give up after this many failed attempts per pill
+	const MAX_RETRIES = 2;        // give up after this many failed attempts per pill (every retry is another call to Torn)
 	const RETRY_BASE_MS = 1500;   // backoff base; grows with attempt count (the pacing keeps the rate right, so a short wait is enough)
 	let _active = 0;
 	const _queue = [];
@@ -1501,6 +1505,7 @@ function hofSeparate() { hofCombined = false; save('RecruiterHofSeparate', Date.
 		}
 
 		const entry = CACHE[uid];
+		const handled = hasCRMRow(uid); // a player you already marked (F, C, S, U, a note or a company) is never read again on his own: what is known stays
 		// A cached entry where xan AND act AND streak are all 0 is almost always a
 		// stale rate-limit artifact: those three come from the profile+personalstats
 		// call, and when THAT call failed the old code cached three zeros (while ws,
@@ -1510,7 +1515,7 @@ function hofSeparate() { hofCombined = false; save('RecruiterHofSeparate', Date.
 		// so frozen-zero rows self-heal instead of sticking for 72h. ws is ignored in
 		// this test on purpose (it loads independently).
 		const looksStale = entry && !entry.ok && !entry.data.xan && !entry.data.act && !entry.data.streak; // an entry of an older version with only zeros is read once more; a player read properly with zeros is known
-		if (entry && Date.now() - entry.ts < CFG.CACHE_TTL && !looksStale) {
+		if (entry && (handled || (Date.now() - entry.ts < CFG.CACHE_TTL && !looksStale))) {
 			const ageH = Math.round((Date.now() - entry.ts) / 3600000);
 			console.log(`%c[CoreLabs] ${uid} ${entry.data.name || ''} → LOCAL cache (${ageH}h old)`, 'color:#51cf66');
 			updatePill(pill, entry.data);
@@ -1523,7 +1528,7 @@ function hofSeparate() { hofCombined = false; save('RecruiterHofSeparate', Date.
 		// local cache so subsequent renders this session are instant.
 		const shared = SHARED_STATS[uid];
 		const sharedFresh = shared && shared.ts && (Date.now() - shared.ts < SHARED_TTL);
-		if (sharedFresh) {
+		if (sharedFresh || (handled && shared && shared.data)) {
 			const ageH = Math.round((Date.now() - shared.ts) / 3600000);
 			console.log(`%c[CoreLabs] ${uid} ${shared.data.name || ''} → SUPABASE shared cache (${ageH}h old, no Torn call)`, 'color:#74c0fc');
 			CACHE[uid] = { ts: shared.ts, data: shared.data, ok: true };
@@ -1545,6 +1550,7 @@ function hofSeparate() { hofCombined = false; save('RecruiterHofSeparate', Date.
 	async function fetchAndRender(uid, pill) {
 		try {
 			const rateError = e => e && e.error && Number(e.error.code) === 5;
+			if (!hofCombined && Date.now() - hofSince > HOF_SEPARATE_MS) { hofCombined = true; hofMiss = 0; oddErr = 0; } // the 30 minutes are over: one call again
 			const dRes = await tornGet(`https://api.torn.com/user/${uid}?selections=profile,personalstats${hofCombined ? ',hof' : ''}&key=${CFG.API_KEY}`);
 			const d = JSON.parse(await dRes.text());
 	
@@ -1556,17 +1562,19 @@ function hofSeparate() { hofCombined = false; save('RecruiterHofSeparate', Date.
 			// after Torn recovered (the "sooo many 0s" bug). Detect the error, DON'T
 			// write a zero cache; return false so the queue retries with backoff.
 			if (d?.error) {
-				lastProblem = { text: `${d.error.error} (code ${d.error.code})`, at: Date.now() };
-			if (rateError(d)) tornBusy();
-				else if ([2, 8, 9, 10, 13, 18].includes(Number(d.error.code))) tornPause(60000);
-			else if (hofCombined) hofSeparate(); // any other complaint: the hall of fame may not come with it, so two calls for a while // the hall of fame does not come in the same call: use two calls again
+				const code = Number(d.error.code);
+				lastProblem = { text: `${d.error.error} (code ${code})`, at: Date.now() };
+				if (rateError(d) || code === 15 || code === 17) tornBusy();                      // too fast, or a temporary problem at Torn: slow down
+				else if ([2, 8, 9, 10, 13, 18].includes(code)) tornPause(60000);                // the key or the address: wait
+				else if (code === 6 || code === 7) { pill.querySelectorAll('.cl-pill-val').forEach(v => { v.textContent = '–'; }); return true; } // this player does not exist (any more): nothing to ask again
+				else if (hofCombined && ([3, 4, 16].includes(code) || ++oddErr >= 3)) hofSeparate(`Torn refused it with the hall of fame (code ${code}: ${d.error.error})`);
 				console.warn(`[CoreLabs] Torn API busy for ${uid} (${d?.error?.error}) — will retry`);
 				return false;
 			}
 			// Defensive: if the profile block is missing entirely, it's not a usable
 			// response either — retry rather than cache zeros.
-			if (!d.personalstats) { lastProblem = { text: 'answer without personal stats: ' + JSON.stringify(d).slice(0, 80), at: Date.now() }; if (hofCombined) hofSeparate(); return false; }
-			tornGood();
+			if (!d.personalstats) { lastProblem = { text: 'answer without personal stats: ' + JSON.stringify(d).slice(0, 80), at: Date.now() }; if (hofCombined && ++oddErr >= 3) hofSeparate('Torn answered three times without the personal stats'); return false; }
+			tornGood(); oddErr = 0;
 	
 			// work stats: from the same answer when Torn gave them, otherwise from the second call
 			const hofBlock = d?.halloffame ?? d?.hof;
@@ -1574,7 +1582,7 @@ function hofSeparate() { hofCombined = false; save('RecruiterHofSeparate', Date.
 		if (ws === undefined && hofCombined && hofBlock && typeof hofBlock === 'object') ws = 0;   // the hall of fame came with the answer but this player has no work stats
 		if (ws !== undefined) hofMiss = 0;
 			if (ws === undefined) {
-				if (hofCombined && ++hofMiss >= 3) hofSeparate();   // three answers in a row without the hall of fame: use two calls for a while
+				if (hofCombined && ++hofMiss >= 3) hofSeparate('Torn left the hall of fame out of three answers in a row');   // use two calls for a while
 				const h = JSON.parse(await (await tornGet(`https://api.torn.com/v2/user/${uid}/hof?key=${CFG.API_KEY}`)).text());
 				if (h?.error) { if (rateError(h)) tornBusy(); console.warn(`[CoreLabs] Torn API busy for ${uid} (${h?.error?.error}) — will retry`); return false; }
 				tornGood();
@@ -2962,7 +2970,7 @@ function hofSeparate() { hofCombined = false; save('RecruiterHofSeparate', Date.
 				list.forEach((c, i) => setTimeout(() => { openMail(c.uid, { background: true }); massBarPass(); }, i * 450));
 			};
 			const tinfo = document.createElement('span'); tinfo.id = 'cl-torn-info'; tinfo.style.cssText = 'color:#777;font-size:11px;';
-			const tText = () => { const s = tornStatus(); return `Torn: ${s.perMin} calls a minute (answers take ${s.lat} ms, ${s.conc} at the same time, pause ${s.gap} ms, ${s.refused} refused), ${s.combined ? '1 call' : '2 calls'} per new player, ${s.waiting} waiting${s.problem ? `, last Torn problem: ${s.problem}` : ''}`; };
+			const tText = () => { const s = tornStatus(); return `Torn: ${s.perMin} calls a minute (answers take ${s.lat} ms, ${s.conc} at the same time, pause ${s.gap} ms, ${s.refused} refused), ${s.combined ? '1 call per new player' : `2 calls per new player (${s.why || 'reason unknown'})`}, ${s.waiting} waiting${s.problem ? `, last Torn problem: ${s.problem}` : ''}`; };
 			tinfo.textContent = tText(); setInterval(() => { const el = document.getElementById('cl-torn-info'); if (el) el.textContent = tText(); }, 1500);
 			bar.append(btn, lab, info, tinfo);
 			wrap.parentElement.insertBefore(bar, document.getElementById('cl-fac-bar') || wrap);
