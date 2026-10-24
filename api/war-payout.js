@@ -1601,6 +1601,10 @@ Cancel: ${cancelUrl}`, [], embeds, undefined, true);
                 const mine = await redis(['HGET', `wwl:my-todos:${factionId}`, playerId]);
                 if (mine) { const today = new Date().toISOString().slice(0, 10); for (const x of JSON.parse(mine)) items.push({ id: `my-${x.id}`, text: x.text, mine: true, myId: x.id, repeat: x.repeat || 'once', done: x.repeat === 'daily' ? x.doneDay === today : !!x.done }); }
             } catch (e) { /* skip */ }
+            // the awards this member follows: one line each, right under their own checkbox reminders (only for a script that asks for it with aw: 1, until it is released)
+            if (req.body && req.body.aw) {
+                try { items.push(...((await followedTodo(redis, playerId, key, site)) || [])); } catch (e) { /* the rest of the To do stays */ }
+            }
 
             // Xanax stacking warning: whenever a war is coming up (an availability plan linked to a war that has not started yet), everyone
             // is told clearly to stack Xanax from 48 hours before the start. Worked out here from the stored plans, so it shows in the
@@ -1705,10 +1709,6 @@ Cancel: ${cancelUrl}`, [], embeds, undefined, true);
                 if (promo.length) items.push({ id: 'role-promo', text: `${promo.length} member${promo.length === 1 ? ' is' : 's are'} ready for promotion`, cta: 'Open', url: `${site}/welcome-admin`, rows: promo });
                 if (recruit.length) items.push({ id: 'role-recruit', text: `${recruit.length} recruit${s(recruit.length)} can move up when the recruit status wears off`, cta: 'Open', url: `${site}/welcome-admin`, rows: recruit });
                 if (other.length) items.push({ id: 'role-other', text: `${other.length} role${s(other.length)} to look at`, cta: 'Open', url: `${site}/welcome-admin`, rows: other });
-            }
-            // the awards this member follows (a drop-down with the progress of each): only for a script that asks for it (aw: 1), the older versions would draw its rows as role changes
-            if (req.body && req.body.aw) {
-                try { const aw = await followedTodo(redis, playerId, key, site); if (aw) items.push(aw); } catch (e) { /* the rest of the To do stays */ }
             }
             // The energy plan is paused while the faction stacks for a war or is inside a war / chain plan: nobody trains in those days, so the daily check of the energy plan is not
             // needed until that plan is over. A war plan counts from 48 hours before the war starts (the stacking), a chain plan from its start; both until their end.

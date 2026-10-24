@@ -2,7 +2,7 @@
 // @name         World Wide Labs
 // @namespace    https://worldwidelabs.vercel.app
 // @author       CreaLotte
-// @version      1.49.2
+// @version      1.49.3
 // @updateURL    __WWL_BASE__/worldwidelabs.user.js
 // @downloadURL  __WWL_BASE__/worldwidelabs.user.js
 // @description  Shows your WorldWideLabs weekly energy plan (the checklist from the Energy planner) inside Torn, a To do tab with small personal reminders (revive setting, feedback, timezone map, availability, Discord/Intel/CAT), your My Targets list, a simplified energy/war standing strip, and — if you are in the Mentoring Platform — your mentoring checklist too. Also shows faction banners at the top of every Torn page. A small ⚙ in the header shows the installed version, flags when a newer one is out, lets you set/replace your API key, and — for a leader — add or remove your faction's banners right from Torn. On a computer it is a small window you can drag around and close; in TornPDA it is a menu. Ticks are shared with the WWL site.
@@ -658,10 +658,6 @@
     let claimMsg = '';
     const grpOpen = {}; // which drop-downs of the To do are open (kept while the window redraws)
     function rowsHtml(t) {
-        if (t.aw) { // the awards you follow: the name, how far you are and how many days it takes
-            const left = r => r.never ? 'not started' : r.left == null ? '' : r.left <= 0 ? '' : r.left < 1 ? '<1 day' : (r.left < 100 ? r.left : Math.round(r.left).toLocaleString('en-US')) + ' days';
-            return `<div style="margin:0 0 8px 10px;max-height:260px;overflow:auto;">${(t.rows || []).map(r => `<div style="display:flex;gap:6px;align-items:baseline;padding:4px 0;border-top:1px solid #2c3442;"><span>🏅</span><span style="flex:1;"><b>${esc(r.name)}</b> <span style="color:#9aa4b5;">${r.pct == null ? '' : r.pct + '%'}${left(r) ? ' · ' + left(r) : ''}</span><div style="color:#9aa4b5;font-size:11px;">${esc(r.why || '')}</div></span></div>`).join('')}</div>`;
-        }
         const icon = r => r.kind === 'demote' ? '⬇' : r.kind === 'check' ? '⚠' : r.kind === 'kick' ? '🚪' : r.kind === 'recruit' ? '⏳' : '⬆';
         return `<div style="margin:0 0 8px 10px;max-height:260px;overflow:auto;">${(t.rows || []).map(r => `<div style="display:flex;gap:6px;align-items:baseline;padding:4px 0;border-top:1px solid #2c3442;"><span>${icon(r)}</span><span style="flex:1;"><a href="https://www.torn.com/profiles.php?XID=${esc(r.id)}" target="_blank" rel="noopener" style="color:#e6e9ef;text-decoration:none;font-weight:600;">${esc(r.name)}</a> <span style="color:#9aa4b5;">${r.kind === 'kick' ? esc(r.from) + ': can be removed' : esc(r.from) + ' → ' + esc(r.to)}</span><div style="color:#9aa4b5;font-size:11px;">${esc(r.why || '')}</div></span></div>`).join('')}</div>`;
     }
