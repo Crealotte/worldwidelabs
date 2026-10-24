@@ -12,6 +12,17 @@
 
 const WHATS_NEW = [
     {
+        version: '1.40', date: '2026-10-24',
+        title: 'Script 1.46: a shorter To do for leaders, and a red number for urgent requests',
+        everyone: [
+            'Nothing changes for members in this update, apart from the small fixes.',
+        ],
+        leaders: [
+            'The To do in the script is shorter: the members who have not logged into WWL, the members without the script, the war related role changes and the other role changes are each ONE line with the count, for example 5 members have not logged into WWL yet. Tap a line to drop it down: the message and a Send button per member, or the members with what changes for them.',
+            'Next to the yellow To do count there is now a red number for the waiting OC and bank requests together, so you can see at a glance that something is urgent. The lines no longer have a red ball in front of them.',
+        ],
+    },
+    {
         version: '1.39', date: '2026-10-24',
         title: 'Script 1.45: crimes and money first, claim and open, reminders with a Send button',
         everyone: [

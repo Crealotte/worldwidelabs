@@ -2,7 +2,7 @@
 // @name         World Wide Labs
 // @namespace    https://worldwidelabs.vercel.app
 // @author       CreaLotte
-// @version      1.45
+// @version      1.46
 // @updateURL    __WWL_BASE__/worldwidelabs.user.js
 // @downloadURL  __WWL_BASE__/worldwidelabs.user.js
 // @description  Shows your WorldWideLabs weekly energy plan (the checklist from the Energy planner) inside Torn, a To do tab with small personal reminders (revive setting, feedback, timezone map, availability, Discord/Intel/CAT), your My Targets list, a simplified energy/war standing strip, and — if you are in the Mentoring Platform — your mentoring checklist too. Also shows faction banners at the top of every Torn page. A small ⚙ in the header shows the installed version, flags when a newer one is out, lets you set/replace your API key, and — for a leader — add or remove your faction's banners right from Torn. On a computer it is a small window you can drag around and close; in TornPDA it is a menu. Ticks are shared with the WWL site.
@@ -26,7 +26,7 @@
     const KEY_NAME = 'wwl_api_key', POS_NAME = 'wwl_plan_pos', STATE_NAME = 'wwl_plan_state';
     // GM_info gives the version Tampermonkey actually has installed right now — falls back to a
     // hardcoded copy (kept in sync with @version above) for TornPDA, which doesn't grant GM_info.
-    const SCRIPT_VERSION = (typeof GM_info !== 'undefined' && GM_info.script?.version) || '1.45';
+    const SCRIPT_VERSION = (typeof GM_info !== 'undefined' && GM_info.script?.version) || '1.46';
     const versionGreater = (a, b) => {
         const pa = String(a).split('.').map(Number), pb = String(b).split('.').map(Number);
         for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
@@ -165,6 +165,8 @@
         try { const d = JSON.parse(store.get(DAILY_CHECK_NAME) || 'null'); return !!(d && d.date === todayStr() && d.checked); } catch (e) { return false; }
     }
     function setDailyChecked(v) { store.set(DAILY_CHECK_NAME, JSON.stringify({ date: todayStr(), checked: v })); }
+    // how many OC and bank requests wait (each item says how many): the red number next to the To do count
+    function urgentCount() { return todoItems ? todoItems.filter(t => t.priority && !t.done).reduce((s, t) => s + (Number(t.n) || 1), 0) : 0; }
     function todoCount() { return (todoItems ? todoItems.filter(t => !t.notice && !t.done).length : 0) + (getDailyChecked() ? 0 : 1); } // a notice (like the Xanax stacking reminder) is not something to do, so it is not counted
 
     // position (PC): remembered, and always kept inside the screen
@@ -253,9 +255,10 @@
         const p = plan ? progress() : null;
         const energyText = p ? `${num(p.done)} / ${num(p.total)} E` : '';
         const n = todoCount();
-        const todoBadge = n ? `<span style="color:#f0b432;" title="${n} to do">●${n}</span>` : '';
+        const u = urgentCount();
+        const todoBadge = (n ? `<span style="color:#f0b432;" title="${n} to do">●${n}</span>` : '') + (u ? ` <span style="color:#e05555;font-weight:700;" title="${u} urgent: crimes and money">●${u}</span>` : '');
         prog2.innerHTML = [energyText, todoBadge].filter(Boolean).join(' ');
-        if (IS_PDA) { prog.textContent = n; prog.style.display = n ? 'flex' : 'none'; }
+        if (IS_PDA) { prog.textContent = u ? `${n} · ${u}` : n; prog.style.display = n ? 'flex' : 'none'; prog.style.boxShadow = u ? '0 0 0 2px #e05555' : ''; }
         else prog.innerHTML = [energyText, todoBadge].filter(Boolean).join(' ');
     }
     function tabBar() {
@@ -318,7 +321,7 @@
         // the top row of the window: this month's energy and the war rule (when known) and, at the right, the To do button (it used to be one of the tabs, which made the tab row too crowded)
         const s = standing && !standing.error ? standing : null;
         const n = todoCount();
-        const todoBtn = `<button type="button" class="wwl-tab" data-tab="todo" style="margin-left:auto;padding:${IS_PDA ? 6 : 3}px 10px;border-radius:6px;border:1px solid #3a4352;cursor:pointer;background:${tab === 'todo' ? '#2a2f3a' : 'transparent'};color:#e6e9ef;font-size:12px;white-space:nowrap;">✅ To do${n ? ` (${n})` : ''}</button>`;
+        const todoBtn = `<button type="button" class="wwl-tab" data-tab="todo" style="margin-left:auto;padding:${IS_PDA ? 6 : 3}px 10px;border-radius:6px;border:1px solid #3a4352;cursor:pointer;background:${tab === 'todo' ? '#2a2f3a' : 'transparent'};color:#e6e9ef;font-size:12px;white-space:nowrap;">✅ To do${n ? ` (${n})` : ''}${urgentCount() ? ` <span style="background:#e05555;color:#fff;border-radius:8px;padding:0 6px;font-weight:700;" title="urgent: crimes and money">${urgentCount()}</span>` : ''}</button>`;
         let strip = '';
         if (s) {
             const energyText = s.energy ? `${num(s.energy.month.trained)}${s.tier ? ` / ${num(s.energyNeeded)}` : ''}` : '—';
@@ -648,6 +651,11 @@
     }
     // ---- To do: priority items (the crimes and the money come first, with a red mark), Claim and open, and the friendly reminders with a Send button per member ----
     let claimMsg = '';
+    const grpOpen = {}; // which drop-downs of the To do are open (kept while the window redraws)
+    function rowsHtml(t) {
+        const icon = r => r.kind === 'demote' ? '⬇' : r.kind === 'check' ? '⚠' : r.kind === 'kick' ? '🚪' : '⬆';
+        return `<div style="margin:0 0 8px 10px;max-height:260px;overflow:auto;">${(t.rows || []).map(r => `<div style="display:flex;gap:6px;align-items:baseline;padding:4px 0;border-top:1px solid #2c3442;"><span>${icon(r)}</span><span style="flex:1;"><a href="https://www.torn.com/profiles.php?XID=${esc(r.id)}" target="_blank" rel="noopener" style="color:#e6e9ef;text-decoration:none;font-weight:600;">${esc(r.name)}</a> <span style="color:#9aa4b5;">${r.kind === 'kick' ? esc(r.from) + ': can be removed' : esc(r.from) + ' → ' + esc(r.to)}</span><div style="color:#9aa4b5;font-size:11px;">${esc(r.why || '')}</div></span></div>`).join('')}</div>`;
+    }
     const INV_MSG_KEY = k => 'wwl_invite_msg_' + k, INV_AT_KEY = (k, id) => `wwl_invited_${k}_${id}`;
     const invDefault = k => k === 'script'
         ? `Hey, I have noticed you have not installed the WWL script yet (${WWL}/worldwidelabs.user.js). Please install it: it shows your to do list and energy plan right inside Torn. You need Tampermonkey on a computer, or add it as a script in TornPDA. Shout if you get stuck!`
@@ -667,6 +675,7 @@
             <div style="font-size:11px;color:#9aa4b5;margin-top:4px;">Send opens Torn's mail to that member with your message filled in (and copied). Check it and press Torn's own Send.</div></div>`;
     }
     function wireTodoExtras() {
+        body.querySelectorAll('.wwl-grp').forEach(d => d.addEventListener('toggle', () => { grpOpen[d.dataset.id] = d.open; }));
         body.querySelectorAll('.wwl-claim').forEach(b => b.addEventListener('click', async () => {
             const label = b.textContent; b.disabled = true; b.textContent = 'Claiming…';
             const w = IS_PDA ? null : window.open('', '_blank'); // opened at once, on the tap, so the pop-up blocker lets it through; it goes to the right page when the claim is done
@@ -701,19 +710,19 @@
         </label>`;
         const rest = todoItems === null ? '<div style="padding:6px 0;color:#9aa4b5;">Loading…</div>'
             : !todoItems.length ? ''
-            : [...todoItems].sort((a, b) => (b.priority ? 1 : 0) - (a.priority ? 1 : 0)).map(t => t.notice
+            : [...todoItems].sort((a, b) => (b.priority ? 1 : 0) - (a.priority ? 1 : 0)).map(t => (t.members || t.rows) ? `<details class="wwl-grp" data-id="${esc(t.id)}" ${grpOpen[t.id] ? 'open' : ''} style="border-bottom:1px solid #3a4352;"><summary style="cursor:pointer;padding:${IS_PDA ? 10 : 7}px 0;list-style:none;display:flex;gap:8px;align-items:center;"><span style="color:#9aa4b5;">▾</span><span style="flex:1;">${esc(String(t.text).split(':')[0].replace(/[. ]+$/, ''))}</span></summary>${t.members ? inviteHtml(t) : rowsHtml(t)}</details>` : t.notice
                 // a notice is just a reminder: a full-width amber box with the text, no button, not part of the count
                 ? `<div style="padding:8px 10px;margin:6px 0;border:1px solid #f0b432;border-radius:6px;background:#f0b43218;color:#f0b432;font-weight:600;line-height:1.4;">${esc(t.text)}</div>`
                 : `<div style="display:flex;gap:8px;align-items:center;padding:${IS_PDA ? 10 : 7}px 0;border-bottom:1px solid #3a4352;${t.priority ? 'border-left:3px solid #e05555;padding-left:8px;' : ''}">
                 ${t.mine ? `<input type="checkbox" class="wwl-mt-check" data-id="${esc(t.myId)}" ${t.done ? 'checked' : ''} style="width:auto;">` : ''}
-                <span style="flex:1;${t.mine && t.done ? 'text-decoration:line-through;color:#9aa4b5;' : ''}">${t.priority ? '<span title="Priority" style="margin-right:4px;">🔴</span>' : ''}${esc(t.text)}</span>
+                <span style="flex:1;${t.mine && t.done ? 'text-decoration:line-through;color:#9aa4b5;' : ''}">${esc(t.text)}</span>
                 ${t.mine ? `<span style="font-size:10px;color:#9aa4b5;border:1px solid #3a4352;border-radius:8px;padding:0 6px;">${t.repeat === 'daily' ? 'daily' : 'once'}</span>` : ''}
                 ${t.claim ? `<button type="button" class="wwl-claim" data-claim="${esc(t.claim)}" style="color:#e05555;white-space:nowrap;background:transparent;border:1px solid #e05555;border-radius:6px;padding:4px 8px;font-size:12px;cursor:pointer;">${esc(t.cta)}</button>` : t.scriptTab ? `<button type="button" class="wwl-t-go" data-tab="${esc(t.scriptTab)}" style="color:#35d99b;white-space:nowrap;background:transparent;border:1px solid #35d99b;border-radius:6px;padding:4px 8px;font-size:12px;cursor:pointer;">${esc(t.cta)}</button>` : t.url ? `<a href="${esc(t.url)}" target="_blank" rel="noopener" style="color:#35d99b;white-space:nowrap;text-decoration:none;border:1px solid #35d99b;border-radius:6px;padding:4px 8px;font-size:12px;">${esc(t.cta)}</a>` : ''}
                 ${t.lease ? `<span style="display:flex;gap:6px;flex-wrap:wrap;">
                     <button type="button" class="wwl-lease-copy" data-amount="${esc(String(t.lease.amount))}" style="background:transparent;border:1px solid #3a4352;border-radius:6px;padding:4px 8px;font-size:12px;color:#e6e9ef;cursor:pointer;">Copy amount</button>
                     ${t.lease.status === 'due' ? `<button type="button" class="wwl-lease" data-act="offer" data-id="${esc(t.lease.id)}" style="background:transparent;border:1px solid #f0b432;border-radius:6px;padding:4px 8px;font-size:12px;color:#f0b432;cursor:pointer;">Offered ✓</button>` : ''}
                     <button type="button" class="wwl-lease" data-act="pay" data-id="${esc(t.lease.id)}" style="background:transparent;border:1px solid #35d99b;border-radius:6px;padding:4px 8px;font-size:12px;color:#35d99b;cursor:pointer;">Paid ✓</button></span>` : ''}
-            </div>${t.id === 'oc' ? ocRequestHtml(t) : ''}${t.members ? inviteHtml(t) : ''}`).join('');
+            </div>${t.id === 'oc' ? ocRequestHtml(t) : ''}`).join('');
         const claimNote = claimMsg ? `<div style="padding:6px 10px;margin:6px 0;border:1px solid #35d99b;border-radius:6px;background:#35d99b18;color:#e6e9ef;">${esc(claimMsg)}</div>` : '';
         return claimNote + daily + rest;
     }
