@@ -2,7 +2,7 @@
 // @name         World Wide Labs
 // @namespace    https://worldwidelabs.vercel.app
 // @author       CreaLotte
-// @version      1.51
+// @version      1.51.1
 // @updateURL    __WWL_BASE__/worldwidelabs.user.js
 // @downloadURL  __WWL_BASE__/worldwidelabs.user.js
 // @description  Shows your WorldWideLabs weekly energy plan (the checklist from the Energy planner) inside Torn, a To do tab with small personal reminders (revive setting, feedback, timezone map, availability, Discord/Intel/CAT), your My Targets list, a simplified energy/war standing strip, and — if you are in the Mentoring Platform — your mentoring checklist too. Also shows faction banners at the top of every Torn page. A small ⚙ in the header shows the installed version, flags when a newer one is out, lets you set/replace your API key, and — for a leader — add or remove your faction's banners right from Torn. On a computer it is a small window you can drag around and close; in TornPDA it is a menu. Ticks are shared with the WWL site.
@@ -664,8 +664,9 @@
     }
     // the awards you follow: a title with ONE Open button, then per award an icon and a bar (filled as far as it is done) with the name on it, and under it "25% - about 108 days to go"
     function awardBlockHtml(t) {
+        const awOpen = store.get('wwl_aw_open') !== '0'; // the block stays where it is; the title opens and closes it (remembered)
         const bar = a => `<div style="display:flex;gap:8px;align-items:center;margin-top:6px;"><span style="width:20px;text-align:center;">${esc(a.icon || '🏅')}</span><div style="flex:1;position:relative;border:1px solid #3a4352;border-radius:6px;overflow:hidden;background:#232a36;"><div style="position:absolute;left:0;top:0;bottom:0;width:${Math.max(0, Math.min(100, Number(a.pct) || 0))}%;background:#1f6b50;"></div><div style="position:relative;padding:4px 8px;font-size:12px;line-height:1.3;">${esc(a.label)}</div></div></div><div style="margin:2px 0 0 28px;color:#9aa4b5;font-size:11px;">${esc(a.line)}</div>`;
-        return `<div style="padding:${IS_PDA ? 10 : 7}px 0;border-bottom:1px solid #3a4352;"><div style="display:flex;gap:8px;align-items:center;"><span style="flex:1;font-weight:700;">${esc(t.text)}</span>${t.url ? `<a href="${esc(t.url)}" target="_blank" rel="noopener" style="color:#35d99b;white-space:nowrap;text-decoration:none;border:1px solid #35d99b;border-radius:6px;padding:4px 8px;font-size:12px;">${esc(t.cta || 'Open')}</a>` : ''}</div>${(t.awards || []).map(bar).join('')}</div>`;
+        return `<div style="padding:${IS_PDA ? 10 : 7}px 0;border-bottom:1px solid #3a4352;"><div style="display:flex;gap:8px;align-items:center;"><span class="wwl-aw-head" data-title="${esc(t.text)}" data-n="${(t.awards || []).length}" title="Click to open or close" style="flex:1;font-weight:700;cursor:pointer;user-select:none;">${awOpen ? '▾' : '▸'} ${esc(t.text)}${awOpen ? '' : ` <span style="font-weight:400;color:#9aa4b5;">(${(t.awards || []).length})</span>`}</span>${t.url ? `<a href="${esc(t.url)}" target="_blank" rel="noopener" style="color:#35d99b;white-space:nowrap;text-decoration:none;border:1px solid #35d99b;border-radius:6px;padding:4px 8px;font-size:12px;">${esc(t.cta || 'Open')}</a>` : ''}</div><div class="wwl-aw-list" style="${awOpen ? '' : 'display:none;'}">${(t.awards || []).map(bar).join('')}</div></div>`;
     }
     const INV_MSG_KEY = k =>'wwl_invite_msg_' + k, INV_AT_KEY = (k, id) => `wwl_invited_${k}_${id}`;
     const invDefault = k => k === 'script'
@@ -696,6 +697,12 @@
             } catch (e) { claimMsg = e.message; render(); }
         }));
         body.querySelectorAll('.wwl-grp').forEach(d => d.addEventListener('toggle', () => { grpOpen[d.dataset.id] = d.open; }));
+        body.querySelectorAll('.wwl-aw-head').forEach(h => h.addEventListener('click', () => { // open or close the Award tracker (it stays in its place; the choice is remembered)
+            const list = h.parentElement.parentElement.querySelector('.wwl-aw-list'), open = list.style.display === 'none';
+            list.style.display = open ? '' : 'none';
+            h.innerHTML = `${open ? '▾' : '▸'} ${esc(h.dataset.title)}${open ? '' : ` <span style="font-weight:400;color:#9aa4b5;">(${esc(h.dataset.n)})</span>`}`;
+            store.set('wwl_aw_open', open ? '1' : '0');
+        }));
         body.querySelectorAll('.wwl-claim').forEach(b => b.addEventListener('click', async () => {
             const label = b.textContent; b.disabled = true; b.textContent = 'Claiming…';
             const w = IS_PDA ? null : window.open('', '_blank'); // opened at once, on the tap, so the pop-up blocker lets it through; it goes to the right page when the claim is done

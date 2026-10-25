@@ -15,7 +15,8 @@ Members get `energy-plan.user.js` (the **release** file). Every change from now 
 Queue changes below instead of releasing each one. Nothing here is live for members until a release.
 
 ### Queued for the next release
-- Nothing queued. Last release: script 1.51 (2026-10-25): the OC join rules (a slot outside the range from Leader settings gets a greyed-out Join button, reason as tooltip; the level is only read from a small "Level N" element outside the slots), the OC numbers refresh when the OC page is opened, and the availability calendar redraws at once. Before that, script 1.50 (2026-10-24): the Award tracker in the To do.
+- Script 1.51.1 (dev): the Award tracker block in the To do can be opened and closed by clicking its title; it stays in the same place, the choice is remembered, and the closed title shows the number of awards.
+- (Last release: script 1.51 (2026-10-25): the OC join rules (a slot outside the range from Leader settings gets a greyed-out Join button, reason as tooltip; the level is only read from a small "Level N" element outside the slots), the OC numbers refresh when the OC page is opened, and the availability calendar redraws at once. Before that, script 1.50 (2026-10-24): the Award tracker in the To do.
 
 ## Releasing (when the list is done and tested)
 1. Copy the work file over the release file: `cp userscripts/energy-plan.dev.user.js userscripts/energy-plan.user.js`.
