@@ -32,9 +32,9 @@ const finCellState = (p, date) => {
     const d = p.days[date]; if (!d) return null;
     const lines0 = d.lines.map(k => finData.investors[k]);
     if (lines0.every(i => !finIsPaid(i, date) && finIsPausedAt(i, date))) return 'paused'; // held: the investor is on pause mode, released in full when they are back
-    if (date > finSrv.today) return 'later'; // a payout of a coming Sunday: nothing to colour yet
     const lines = d.lines.map(k => finData.investors[k]);
-    if (lines.every(i => finIsPaid(i, date))) return 'paid';
+    if (lines.every(i => finIsPaid(i, date))) return 'paid'; // (also for a coming Sunday: a payout marked in advance shows as paid)
+    if (date > finSrv.today) return 'later'; // a payout of a coming Sunday: nothing to colour yet
     return lines.every(i => !finTracked(i)) ? 'unknown' : 'due';
 };
 
