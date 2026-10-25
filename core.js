@@ -469,7 +469,7 @@
         if (page === 'newsletter') loadNewsletter();
         if (page === 'my-targets') loadMyTargets();
         if (page === 'awards' && typeof loadAwards === 'function') loadAwards();
-        if (page === 'leader-settings') loadLeaderSettings();
+        if (page === 'leader-settings') { loadLeaderSettings(); if (typeof loadOcRules === 'function') loadOcRules(); }
         if (page === 'mentoring') loadMentoring();
         if (page === 'mentoring-admin') loadMentoringAdmin();
         if (page === 'welcome-admin') loadWelcomeAdmin();

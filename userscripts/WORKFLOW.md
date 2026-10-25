@@ -15,7 +15,8 @@ Members get `energy-plan.user.js` (the **release** file). Every change from now 
 Queue changes below instead of releasing each one. Nothing here is live for members until a release.
 
 ### Queued for the next release
-- Nothing queued. Last release: script 1.50 (2026-10-24): the Award tracker in the To do (a block under your own reminders, with an Open button, a bar per followed award and the days left) and the new default reminder for members without the script. Before that, script 1.49 (2026-10-24): the Settings (cog) show whether WWL accepts the key and when it last saw the script.
+- Script 1.50.1 (dev): OC join rules - on the faction OC page the Join button of a slot is greyed out (with the reason) when its success chance is outside the range set in Leader settings for that OC level (rules from the site, kept 10 min). Test mode in the script cog ("Show what the OC check reads"). Reads the page only, never joins. Still to check on the real page: how the level of an OC is shown.
+- (Last release: script 1.50 (2026-10-24): the Award tracker in the To do (a block under your own reminders, with an Open button, a bar per followed award and the days left) and the new default reminder for members without the script. Before that, script 1.49 (2026-10-24): the Settings (cog) show whether WWL accepts the key and when it last saw the script.
 
 ## Releasing (when the list is done and tested)
 1. Copy the work file over the release file: `cp userscripts/energy-plan.dev.user.js userscripts/energy-plan.user.js`.

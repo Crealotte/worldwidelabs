@@ -37,6 +37,7 @@ const { steadfastHandle, steadfastImage, energyDaily } = require('../lib/steadfa
 const { tzHandle } = require('../lib/tzMap');
 const { planHandle } = require('../lib/planSync');
 const { awHandle, followedTodo } = require('../lib/awards');
+const { ocRulesHandle } = require('../lib/ocrules');
 const { nightlyHandle, nightlyRun, getVaultKey } = require('../lib/nightly');
 const { usageFor } = require('../lib/tornFetch');
 const { targetsHandle } = require('../lib/targets');
@@ -1546,6 +1547,7 @@ Cancel: ${cancelUrl}`, [], embeds, undefined, true);
         }
         if (action.startsWith('plan-')) return res.status(200).json(await planHandle(action, req.body, { redis, playerId, factionId, key }));
         if (action.startsWith('aw-')) return res.status(200).json(await awHandle(action, req.body, { redis, playerId, key }));
+        if (action.startsWith('ocrules-')) return res.status(200).json(await ocRulesHandle(action, req.body, { redis, factionId, leader: () => isLeader(key) })); // the OC join rules (the script greys out a Join button outside them)
         // Timezone map — every member reports their own timezone; everyone reads anonymous counts.
         if (action.startsWith('tz-')) return res.status(200).json(await tzHandle(action, req.body, { redis, factionId, playerId }));
 

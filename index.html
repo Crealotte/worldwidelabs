@@ -2318,6 +2318,17 @@
                     </div>
             </div>
 
+            <div class="panel" id="ls-ocrules-panel">
+                <h3 style="margin-top:0;">OC join rules</h3>
+                <p style="color:var(--muted);font-size:12px;margin:0 0 10px;">Which success chance a member may have to join an organized crime of each level (both numbers are allowed). In the WWL script the Join button of a slot outside the range is greyed out, with the reason next to it. Leave both empty for a level without a rule.</p>
+                <div class="status" id="ocr-status"></div>
+                <div class="table-scroll" style="overflow:auto;"><table style="font-size:13px;border-collapse:collapse;"><thead><tr style="color:var(--muted);text-align:left;"><th style="padding:4px 10px;">OC level</th><th style="padding:4px 10px;">Lowest chance %</th><th style="padding:4px 10px;">Highest chance %</th></tr></thead><tbody id="ocr-body"></tbody></table></div>
+                <div style="display:flex;gap:18px;flex-wrap:wrap;margin:10px 0;font-size:13px;">
+                    <label><input type="checkbox" id="ocr-members" checked> The rules apply to members</label>
+                    <label><input type="checkbox" id="ocr-leaders" checked> The rules apply to leaders</label>
+                </div>
+                <button class="ghost small" id="ocr-save">Save the rules</button>
+            </div>
             <div class="panel" id="ls-banners-panel">
                 <h3 style="margin-top:0;">📢 Banners</h3>
                 <p style="color:var(--muted);font-size:12px;margin:0 0 10px;">A banner shows at the top of every page for your own faction — for a new feature, a Torn event or a reminder. (Owners can also show one to all factions.) Members can close it; it is gone by itself after the expiry date. Up to 6 at a time.</p>
@@ -3057,6 +3068,7 @@
 <script src="banners.js"></script>
 <script src="my-targets.js"></script>
 <script src="award-calc.js"></script>
+<script src="oc-rules.js"></script>
 <script src="awards.js"></script>
 <script src="armory-tracker.js"></script>
 <script src="buddy.js"></script>
