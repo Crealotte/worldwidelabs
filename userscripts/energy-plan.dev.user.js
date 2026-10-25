@@ -2,7 +2,7 @@
 // @name         World Wide Labs
 // @namespace    https://worldwidelabs.vercel.app
 // @author       CreaLotte
-// @version      1.50.1
+// @version      1.50.2
 // @updateURL    __WWL_BASE__/worldwidelabs.user.js
 // @downloadURL  __WWL_BASE__/worldwidelabs.user.js
 // @description  Shows your WorldWideLabs weekly energy plan (the checklist from the Energy planner) inside Torn, a To do tab with small personal reminders (revive setting, feedback, timezone map, availability, Discord/Intel/CAT), your My Targets list, a simplified energy/war standing strip, and — if you are in the Mentoring Platform — your mentoring checklist too. Also shows faction banners at the top of every Torn page. A small ⚙ in the header shows the installed version, flags when a newer one is out, lets you set/replace your API key, and — for a leader — add or remove your faction's banners right from Torn. On a computer it is a small window you can drag around and close; in TornPDA it is a menu. Ticks are shared with the WWL site.
@@ -1209,7 +1209,7 @@
 
     // ---- OC join rules: greys out the Join button of an organized crime slot whose success chance is outside the range the leaders set for that OC level ----
     // (Leader settings on the site: both numbers are allowed.) It only reads and styles the page, it never joins anything. The rules come from WWL and are remembered for 10 minutes;
-    // a leader can switch them off for members or for leaders. With "Show what the OC check reads" (⚙ Settings) every slot shows what was read, even when Torn itself already disabled the button.
+    // a leader can switch them off for members or for leaders. A blocked slot only gets a greyed-out button (the reason shows when hovering it). With "Show what the OC check reads" (⚙ Settings) every slot shows what was read, even when Torn itself already disabled the button.
     (function ocJoinRules() {
         if (location.pathname !== '/factions.php' || !getKey()) return;
         const RULES = 'wwl_oc_rules', DEBUG = 'wwl_oc_debug';
@@ -1245,7 +1245,7 @@
         function mark(btn, why, info) {
             const host = btn.parentElement;
             let note = host.querySelector('.wwl-oc-note');
-            const text = why || info || '';
+            const text = info || ''; // no text next to a blocked button (the reason is only the hover tooltip); the small line is for the test mode only
             if (text && !note) { note = document.createElement('div'); note.className = 'wwl-oc-note'; host.appendChild(note); }
             if (note) {
                 if (note.textContent !== text) note.textContent = text;
@@ -1268,7 +1268,7 @@
             document.querySelectorAll('button[class*="joinButton"]').forEach(btn => {
                 const read = readSlot(btn);
                 const why = on && read.level != null && read.chance != null ? verdict(read.level, read.chance) : null;
-                const info = debug ? `WWL read: level ${read.level == null ? '?' : read.level}, chance ${read.chance == null ? '?' : read.chance + '%'}${on ? (why ? '' : ', allowed') : ', rules off for you'}` : '';
+                const info = debug ? `WWL read: level ${read.level == null ? '?' : read.level}, chance ${read.chance == null ? '?' : read.chance + '%'}${on ? (why ? ', blocked' : ', allowed') : ', rules off for you'}` : '';
                 mark(btn, why, info);
             });
         }
