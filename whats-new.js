@@ -12,6 +12,20 @@
 
 const WHATS_NEW = [
     {
+        version: '1.45', date: '2026-10-25',
+        title: 'Script 1.51: OC join rules, availability click fixed',
+        everyone: [
+            'In the WWL script (update to 1.51) the availability calendar now shows your click at once, instead of only after a refresh.',
+            'On the faction OC page the script greys out the Join button of a slot when your success chance is outside the range the leaders set for that OC level, so you do not join a crime that is not meant for you. Hover over the button to see why.',
+            'When you open the OC page, the script also keeps your success chances up to date for the OC Fit Tracker and the OC team builder of the leaders.',
+        ],
+        leaders: [
+            'New in Leader settings: OC join rules. For each OC level you set the lowest and highest success chance (both allowed), with a switch for members and a switch for leaders. The script reads them and keeps them for 10 minutes.',
+            'The OC team builder now lists the members who have no numbers yet, so you know who the suggestions leave out.',
+            'The payout calendar now uses the real TCT date (it was a day behind until 18:10 TCT) and shows a payout you marked in advance as paid.',
+        ],
+    },
+    {
         version: '1.44', date: '2026-10-24',
         title: 'Awards tracker, script 1.50, stay logged in',
         everyone: [

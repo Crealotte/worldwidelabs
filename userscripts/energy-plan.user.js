@@ -2,7 +2,7 @@
 // @name         World Wide Labs
 // @namespace    https://worldwidelabs.vercel.app
 // @author       CreaLotte
-// @version      1.50
+// @version      1.51
 // @updateURL    __WWL_BASE__/worldwidelabs.user.js
 // @downloadURL  __WWL_BASE__/worldwidelabs.user.js
 // @description  Shows your WorldWideLabs weekly energy plan (the checklist from the Energy planner) inside Torn, a To do tab with small personal reminders (revive setting, feedback, timezone map, availability, Discord/Intel/CAT), your My Targets list, a simplified energy/war standing strip, and — if you are in the Mentoring Platform — your mentoring checklist too. Also shows faction banners at the top of every Torn page. A small ⚙ in the header shows the installed version, flags when a newer one is out, lets you set/replace your API key, and — for a leader — add or remove your faction's banners right from Torn. On a computer it is a small window you can drag around and close; in TornPDA it is a menu. Ticks are shared with the WWL site.
@@ -26,7 +26,7 @@
     const KEY_NAME = 'wwl_api_key', POS_NAME = 'wwl_plan_pos', STATE_NAME = 'wwl_plan_state';
     // GM_info gives the version Tampermonkey actually has installed right now — falls back to a
     // hardcoded copy (kept in sync with @version above) for TornPDA, which doesn't grant GM_info.
-    const SCRIPT_VERSION = (typeof GM_info !== 'undefined' && GM_info.script?.version) || '1.50';
+    const SCRIPT_VERSION = (typeof GM_info !== 'undefined' && GM_info.script?.version) || '1.51';
     const versionGreater = (a, b) => {
         const pa = String(a).split('.').map(Number), pb = String(b).split('.').map(Number);
         for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
@@ -650,6 +650,7 @@
             }
             const prev = mine[k], next = !prev ? true : prev === true ? 'maybe' : undefined;
             if (next) mine[k] = next; else { delete mine[k]; delete mineWatch[k]; }
+            avMsg = ''; render(); // show the click at once (it is saved right after, and undone with a message if that fails)
             try { const r = await api({ action: 'availability-set', day, hour, state: next === true ? 'yes' : next === 'maybe' ? 'maybe' : '', planId: avData.planId }); if (r && r.error) throw new Error(r.error); avMsg = ''; }
             catch (e) { if (prev) mine[k] = prev; else delete mine[k]; avMsg = `Could not save that: ${e.message}`; render(); }
         }));
@@ -781,6 +782,7 @@
             <button type="button" id="wwl-change-key" style="margin-top:4px;padding:6px 12px;border-radius:6px;border:1px solid #3a4352;background:transparent;color:#e6e9ef;cursor:pointer;">Change API key</button>
             ${undismissHtml}`;
         html += `<label style="display:flex;gap:8px;align-items:center;margin-top:10px;font-size:13px;cursor:pointer;"><input type="checkbox" id="wwl-radar-on" ${radarOn() ? 'checked' : ''}> Show the faction radar (who is online and idle) at the top of Torn pages</label>`;
+        html += `<label style="display:flex;gap:8px;align-items:center;margin-top:8px;font-size:13px;cursor:pointer;"><input type="checkbox" id="wwl-oc-debug" ${store.get('wwl_oc_debug') === '1' ? 'checked' : ''}> Show what the OC check reads on every slot (for testing, reload the page after)</label>`;
         html += myRemindersBlock();
         if (settingsData === null) {
             html += '<div style="padding:10px 0;color:#9aa4b5;">Loading…</div>';
@@ -830,6 +832,7 @@
     }
     function wireSettingsTab() {
         body.querySelector('#wwl-back')?.addEventListener('click', () => { tab = lastTab; render(); });
+        body.querySelector('#wwl-oc-debug')?.addEventListener('change', e => store.set('wwl_oc_debug', e.target.checked ? '1' : '0'));
         body.querySelector('#wwl-radar-on')?.addEventListener('change', e => { store.set(RADAR_ON, e.target.checked ? '1' : '0'); if (e.target.checked) { radarLast = 0; refreshRadar(true); } else renderRadar(); });
         body.querySelector('#wwl-change-key')?.addEventListener('click', () => {
             const current = store.get(KEY_NAME) || '';
@@ -1203,6 +1206,91 @@
         };
         run();
         window.addEventListener('hashchange', run);
+    })();
+
+    // ---- OC join rules: greys out the Join button of an organized crime slot whose success chance is outside the range the leaders set for that OC level ----
+    // (Leader settings on the site: both numbers are allowed.) It only reads and styles the page, it never joins anything. The rules come from WWL and are remembered for 10 minutes;
+    // a leader can switch them off for members or for leaders. A blocked slot only gets a greyed-out button (the reason shows when hovering it). With "Show what the OC check reads" (⚙ Settings) every slot shows what was read, even when Torn itself already disabled the button.
+    (function ocJoinRules() {
+        if (location.pathname !== '/factions.php' || !getKey()) return;
+        const RULES = 'wwl_oc_rules', DEBUG = 'wwl_oc_debug';
+        let rules = null, timer = null;
+        const cached = () => { try { const c = JSON.parse(store.get(RULES) || 'null'); return c && Date.now() - c.at < 600000 ? c.r : null; } catch (e) { return null; } };
+        async function loadRules() {
+            const c = cached();
+            if (c) { rules = c; return; }
+            try { rules = await api({ action: 'ocrules-get' }); store.set(RULES, JSON.stringify({ at: Date.now(), r: rules })); } catch (e) { rules = null; }
+        }
+        const applies = () => !!rules && (rules.leader ? rules.leaders !== false : rules.members !== false);
+        const rangeText = r => r.min > 0 && r.max < 100 ? `${r.min}% to ${r.max}%` : r.min > 0 ? `${r.min}% and up` : `up to ${r.max}%`;
+        const verdict = (level, chance) => {
+            const r = rules && rules.levels && rules.levels[level];
+            if (!r || (chance >= r.min && chance <= r.max)) return null;
+            return `Level ${level} is for ${rangeText(r)}, yours is ${chance}%`;
+        };
+        // what the page says about this slot: its success chance (the number in the slot's own header, shown without a % sign: "70") and the level of the crime (found above the slot)
+        function readSlot(btn) {
+            const body = btn.closest('[class*="slotBody"]') || btn.parentElement, slot = body && body.parentElement;
+            const sc = slot && slot.querySelector('[class*="successChance"]');
+            let chance = sc ? parseInt(String(sc.textContent).replace(/\D/g, ''), 10) : NaN;
+            if (!Number.isFinite(chance)) chance = null;
+            let level = null;
+            for (let a = body; a && a !== document.body && level == null; a = a.parentElement) {
+                if (a.querySelectorAll && a.querySelectorAll('[class*="slotBody"]').length > 8) break; // far too wide: that is more than one crime
+                const lv = a.querySelector && a.querySelector('[class*="levelValue"], [class*="crimeLevel"], [class*="difficulty"]');
+                let m = lv && !lv.closest('[class*="slot"]') && /(\d{1,2})/.exec(lv.textContent || '');
+                if (!m && a.querySelectorAll) { // otherwise a small element that says only "Level 4" / "Lvl 4", never one inside a slot (the badge of the player in it is "Lvl 53")
+                    for (const el of a.querySelectorAll('*')) { if (el.children.length || el.closest('[class*="slot"]')) continue; const x = /^(?:Level|Lvl\.?)\s*:?\s*(\d{1,2})$/i.exec((el.textContent || '').trim()); if (x) { m = x; break; } }
+                }
+                if (m) level = Number(m[1]);
+            }
+            return { chance, level };
+        }
+        function mark(btn, why, info) {
+            const host = btn.parentElement;
+            let note = host.querySelector('.wwl-oc-note');
+            const text = info || ''; // no text next to a blocked button (the reason is only the hover tooltip); the small line is for the test mode only
+            if (text && !note) { note = document.createElement('div'); note.className = 'wwl-oc-note'; host.appendChild(note); }
+            if (note) {
+                if (note.textContent !== text) note.textContent = text;
+                const color = why ? '#e05555' : '#9aa4b5';
+                if (note.style.color !== color) note.style.cssText = `font:11px/1.3 Arial,sans-serif;margin-top:4px;color:${color};`;
+                if (!text) note.remove();
+            }
+            if (why) {
+                if (btn.dataset.wwlBlock !== '1') { btn.dataset.wwlWas = btn.disabled ? '1' : '0'; btn.dataset.wwlBlock = '1'; }
+                if (!btn.disabled) btn.disabled = true;
+                if (btn.title !== why) btn.title = why;
+                if (btn.style.opacity !== '0.45') { btn.style.opacity = '0.45'; btn.style.cursor = 'not-allowed'; }
+            } else if (btn.dataset.wwlBlock === '1') { // it was blocked before and is allowed now (the rules or the chance changed)
+                delete btn.dataset.wwlBlock;
+                btn.disabled = btn.dataset.wwlWas === '1'; btn.title = ''; btn.style.opacity = ''; btn.style.cursor = '';
+            }
+        }
+        function scan() {
+            const debug = store.get(DEBUG) === '1', on = applies();
+            document.querySelectorAll('button[class*="joinButton"]').forEach(btn => {
+                const read = readSlot(btn);
+                const why = on && read.level != null && read.chance != null ? verdict(read.level, read.chance) : null;
+                const info = debug ? `WWL read: level ${read.level == null ? '?' : read.level}, chance ${read.chance == null ? '?' : read.chance + '%'}${on ? (why ? ', blocked' : ', allowed') : ', rules off for you'}` : '';
+                mark(btn, why, info);
+            });
+        }
+        // a click on a blocked button never goes through, even if the page switches the button on again
+        document.addEventListener('click', e => { const b = e.target && e.target.closest && e.target.closest('button[data-wwl-block="1"]'); if (b) { e.preventDefault(); e.stopPropagation(); } }, true);
+        // the same visit keeps the OC planner current: at most once every 30 minutes WWL refreshes this member's own success chances (the OC Fit Tracker and the team builder use them)
+        const FIT_AT = 'wwl_ocfit_at';
+        function refreshFit() {
+            if (!/crimes/.test(location.hash) || Date.now() - Number(store.get(FIT_AT) || 0) < 30 * 60000) return;
+            store.set(FIT_AT, String(Date.now()));
+            post(`${WWL}/api/oc-fit`, { key: getKey(), action: 'refresh' }).catch(() => { /* the next visit tries again */ });
+        }
+        refreshFit();
+        window.addEventListener('hashchange', refreshFit);
+        loadRules().then(() => {
+            scan();
+            new MutationObserver(() => { clearTimeout(timer); timer = setTimeout(scan, 300); }).observe(document.body, { childList: true, subtree: true });
+        });
     })();
 
     // ---- Trade helper: for the traders of Trading Funding (on Torn's trade pages only) ----
