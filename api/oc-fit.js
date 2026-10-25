@@ -277,7 +277,7 @@ module.exports = async function handler(req, res) {
             const membersData = await membersRes.json();
             const members = membersData.members || [];
 
-            const merged = {}; // sKey -> { scenario, difficulty, roles: { normRole: { role, candidates:[] } } }
+            const merged = {}, have = new Set(); // sKey -> { scenario, difficulty, roles: { normRole: { role, candidates:[] } } }; have = the members with at least one real number
             for (const m of members) {
                 const id = String(m.id);
                 const raw = await redis(['GET', fitKey(id)]);
@@ -294,6 +294,7 @@ module.exports = async function handler(req, res) {
                     const rKey = normRole(entry.role);
                     if (!merged[sKey].roles[rKey]) merged[sKey].roles[rKey] = { role: entry.role, candidates: [] };
                     merged[sKey].roles[rKey].candidates.push({ id, name: m.name, cpr: entry.cpr, live: entry.live, lastSeenLive: entry.lastSeenLive });
+                    have.add(id);
                 }
             }
             // Every role in every currently-live OC instance needs to show up, even ones nobody's
@@ -331,7 +332,7 @@ module.exports = async function handler(req, res) {
                 };
             }).sort((a, b) => (Number(a.difficulty) || 0) - (Number(b.difficulty) || 0));
 
-            return res.status(200).json({ scenarios });
+            return res.status(200).json({ scenarios, noData: members.filter(m => !have.has(String(m.id))).map(m => m.name) }); // noData: the members whose numbers are not known yet
         }
 
         if (action === 'team-plan-save') {
@@ -362,7 +363,9 @@ module.exports = async function handler(req, res) {
             return res.status(200).json({ ok: true });
         }
 
-        if (action !== 'read') return res.status(400).json({ error: 'Unknown action' });
+        // 'refresh' is the same work as 'read' (the member's own numbers are read from Torn and stored for the Fit Tracker and the team builder), but answers with just a short confirmation:
+        // the WWL script asks for it when a member opens the OC page, so the data stays current without anybody visiting the site.
+        if (action !== 'read' && action !== 'refresh') return res.status(400).json({ error: 'Unknown action' });
 
         // Live pull: whatever this member's faction currently has spawned, from their own POV.
         const liveRes = await tornFetch(`https://api.torn.com/v2/user?selections=organizedcrimes,profile&key=${encodeURIComponent(key)}`,
@@ -475,6 +478,7 @@ module.exports = async function handler(req, res) {
 
         await redis(['SET', fitKey(myId), JSON.stringify(catalog)]);
 
+        if (action === 'refresh') return res.status(200).json({ ok: true, live: seenNow.size, known: Object.keys(catalog).length });
         return res.status(200).json({ catalog: Object.values(catalog), weightsSource });
     } catch (e) {
         return res.status(500).json({ error: String(e.message || e) });

@@ -102,6 +102,12 @@ async function loadOcFitTeamBuilder() {
         const data = await res.json();
         if (data.error) throw new Error(data.error);
         renderOcFitTeamCatalog(data.scenarios || []);
+        // who has no numbers yet (so the suggestions below are known to leave them out)
+        let nd = $('ocfit-team-nodata');
+        if (!nd) { nd = document.createElement('div'); nd.id = 'ocfit-team-nodata'; $('ocfit-team-body').parentElement.insertBefore(nd, $('ocfit-team-body')); }
+        const names = data.noData || [];
+        nd.style.cssText = names.length ? 'font-size:12px;color:var(--muted);margin:0 0 10px;' : 'display:none;';
+        nd.textContent = names.length ? `No numbers yet for ${names.length} member${names.length === 1 ? '' : 's'}, so they are not in the lists below: ${names.slice(0, 25).join(', ')}${names.length > 25 ? ` and ${names.length - 25} more` : ''}. They show up as soon as they open the OC page in Torn with the WWL script, or their OC Fit Tracker.` : '';
     } catch (e) {
         $('ocfit-team-body').innerHTML = `<p style="color:var(--muted);">${esc(e.message)}</p>`;
     }

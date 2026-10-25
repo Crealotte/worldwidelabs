@@ -15,7 +15,7 @@ Members get `energy-plan.user.js` (the **release** file). Every change from now 
 Queue changes below instead of releasing each one. Nothing here is live for members until a release.
 
 ### Queued for the next release
-- Script 1.50.2 (dev): OC join rules - on the faction OC page the Join button of a slot is greyed out (no text, the reason only as a hover tooltip) when its success chance is outside the range set in Leader settings for that OC level (rules from the site, kept 10 min). Test mode in the script cog ("Show what the OC check reads"). Reads the page only, never joins. Still to check on the real page: how the level of an OC is shown.
+- Script 1.50.3 (dev): on the OC page the script also asks WWL to refresh the member's own OC success chances (api/oc-fit action refresh, at most once per 30 minutes), so the OC Fit Tracker and the team builder stay current. Together with: OC join rules - on the faction OC page the Join button of a slot is greyed out (no text, the reason only as a hover tooltip) when its success chance is outside the range set in Leader settings for that OC level (rules from the site, kept 10 min). Test mode in the script cog ("Show what the OC check reads"). Reads the page only, never joins. Still to check on the real page: how the level of an OC is shown.
 - (Last release: script 1.50 (2026-10-24): the Award tracker in the To do (a block under your own reminders, with an Open button, a bar per followed award and the days left) and the new default reminder for members without the script. Before that, script 1.49 (2026-10-24): the Settings (cog) show whether WWL accepts the key and when it last saw the script.
 
 ## Releasing (when the list is done and tested)

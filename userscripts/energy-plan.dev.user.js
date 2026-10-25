@@ -2,7 +2,7 @@
 // @name         World Wide Labs
 // @namespace    https://worldwidelabs.vercel.app
 // @author       CreaLotte
-// @version      1.50.2
+// @version      1.50.3
 // @updateURL    __WWL_BASE__/worldwidelabs.user.js
 // @downloadURL  __WWL_BASE__/worldwidelabs.user.js
 // @description  Shows your WorldWideLabs weekly energy plan (the checklist from the Energy planner) inside Torn, a To do tab with small personal reminders (revive setting, feedback, timezone map, availability, Discord/Intel/CAT), your My Targets list, a simplified energy/war standing strip, and — if you are in the Mentoring Platform — your mentoring checklist too. Also shows faction banners at the top of every Torn page. A small ⚙ in the header shows the installed version, flags when a newer one is out, lets you set/replace your API key, and — for a leader — add or remove your faction's banners right from Torn. On a computer it is a small window you can drag around and close; in TornPDA it is a menu. Ticks are shared with the WWL site.
@@ -1274,6 +1274,15 @@
         }
         // a click on a blocked button never goes through, even if the page switches the button on again
         document.addEventListener('click', e => { const b = e.target && e.target.closest && e.target.closest('button[data-wwl-block="1"]'); if (b) { e.preventDefault(); e.stopPropagation(); } }, true);
+        // the same visit keeps the OC planner current: at most once every 30 minutes WWL refreshes this member's own success chances (the OC Fit Tracker and the team builder use them)
+        const FIT_AT = 'wwl_ocfit_at';
+        function refreshFit() {
+            if (!/crimes/.test(location.hash) || Date.now() - Number(store.get(FIT_AT) || 0) < 30 * 60000) return;
+            store.set(FIT_AT, String(Date.now()));
+            post(`${WWL}/api/oc-fit`, { key: getKey(), action: 'refresh' }).catch(() => { /* the next visit tries again */ });
+        }
+        refreshFit();
+        window.addEventListener('hashchange', refreshFit);
         loadRules().then(() => {
             scan();
             new MutationObserver(() => { clearTimeout(timer); timer = setTimeout(scan, 300); }).observe(document.body, { childList: true, subtree: true });
