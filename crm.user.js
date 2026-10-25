@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         CoreLabs Elite Recruiter v22.0
-// @version      24.8.4
+// @version      24.8.5
 // @updateURL    https://worldwidelabs.vercel.app/crm.user.js
 // @downloadURL  https://worldwidelabs.vercel.app/crm.user.js
 // @description  Test version Corelabs
@@ -1378,10 +1378,12 @@ function tornPause(ms) { tornPauseUntil = Date.now() + ms; } // a problem with t
 	// Switching to two calls is remembered for 6 hours only (an older version remembered it forever after one odd answer, which doubled the calls).
 // The two calls are only used for 30 minutes at a time (then one call is tried again), and only when Torn really refuses the hall of fame in the same call: a problem of one player (a deleted
 // account) or a busy Torn is no reason for it. The bar says why it is on two calls.
-const HOF_SEPARATE_MS = 30 * 60 * 1000;
-let hofSince = Number(load('RecruiterHofSeparate', 0)) || 0, hofWhy = String(load('RecruiterHofWhy', '') || '');
-let hofCombined = !(hofSince > Date.now() - HOF_SEPARATE_MS), hofMiss = 0, oddErr = 0;
-function hofSeparate(why) { hofCombined = false; hofSince = Date.now(); hofWhy = why || 'Torn did not give the hall of fame in the same call'; save('RecruiterHofSeparate', hofSince); save('RecruiterHofWhy', hofWhy); }
+// When Torn says the access level of the KEY is too low (code 16) that will not change by itself: the two calls then stay for a day, and until another key is entered.
+const HOF_SEPARATE_MS = 30 * 60 * 1000, HOF_KEYLEVEL_MS = 24 * 60 * 60 * 1000;
+const hofKeyTag = () => String(CFG.API_KEY || '').slice(-6);
+let hofUntil = Number(load('RecruiterHofUntil', 0)) || 0, hofKey = String(load('RecruiterHofKey', '') || ''), hofWhy = String(load('RecruiterHofWhy', '') || '');
+let hofCombined = !(hofUntil > Date.now()), hofMiss = 0, oddErr = 0;
+function hofSeparate(why, ms) { hofCombined = false; hofUntil = Date.now() + (ms || HOF_SEPARATE_MS); hofKey = hofKeyTag(); hofWhy = why || 'Torn did not give the hall of fame in the same call'; save('RecruiterHofUntil', hofUntil); save('RecruiterHofKey', hofKey); save('RecruiterHofWhy', hofWhy); }
 	
 
 
@@ -1551,7 +1553,7 @@ function hofSeparate(why) { hofCombined = false; hofSince = Date.now(); hofWhy =
 	async function fetchAndRender(uid, pill) {
 		try {
 			const rateError = e => e && e.error && Number(e.error.code) === 5;
-			if (!hofCombined && Date.now() - hofSince > HOF_SEPARATE_MS) { hofCombined = true; hofMiss = 0; oddErr = 0; } // the 30 minutes are over: one call again
+			if (!hofCombined && (Date.now() >= hofUntil || (hofKey && hofKey !== hofKeyTag()))) { hofCombined = true; hofMiss = 0; oddErr = 0; } // the time is over, or another key was entered: one call again
 			const dRes = await tornGet(`https://api.torn.com/user/${uid}?selections=profile,personalstats${hofCombined ? ',hof' : ''}&key=${CFG.API_KEY}`);
 			const d = JSON.parse(await dRes.text());
 	
@@ -1568,7 +1570,8 @@ function hofSeparate(why) { hofCombined = false; hofSince = Date.now(); hofWhy =
 				if (rateError(d) || code === 15 || code === 17) tornBusy();                      // too fast, or a temporary problem at Torn: slow down
 				else if ([2, 8, 9, 10, 13, 18].includes(code)) tornPause(60000);                // the key or the address: wait
 				else if (code === 6 || code === 7) { pill.querySelectorAll('.cl-pill-val').forEach(v => { v.textContent = '–'; }); return true; } // this player does not exist (any more): nothing to ask again
-				else if (hofCombined && ([3, 4, 16].includes(code) || ++oddErr >= 3)) hofSeparate(`Torn refused it with the hall of fame (code ${code}: ${d.error.error})`);
+				else if (hofCombined && code === 16) hofSeparate(`your key is not allowed to ask for the hall of fame in the same call (code 16: ${d.error.error}); a key with a higher access level, like Limited, may allow one call`, HOF_KEYLEVEL_MS);
+				else if (hofCombined && ([3, 4].includes(code) || ++oddErr >= 3)) hofSeparate(`Torn refused it with the hall of fame (code ${code}: ${d.error.error})`);
 				console.warn(`[CoreLabs] Torn API busy for ${uid} (${d?.error?.error}) — will retry`);
 				return false;
 			}
