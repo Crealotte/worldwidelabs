@@ -16,9 +16,11 @@ async function loadLeaderTodos() {
 // ---- Friendly reminders for members who are not on WWL yet or did not install the script: the same layout as the other to dos, a message to copy for each member ----
 // The message is the leader's own (kept in this browser); The default text has no name in it, so it can be pasted as it is (a {name} in your own text still becomes the member's name). A member whose message was copied shows "reminded <date>" so nobody is nagged twice.
 const LT_INVITE_OPEN = {};
+// a link in a message must stand alone: Torn makes a ")", "." or "," stuck to it part of the link, and then it does not work (also cleans a message saved earlier)
+const ltCleanLinks = text => String(text).replace(/(\(?)(https?:\/\/\S+)/g, (m, open, url, off, all) => { const core = url.replace(/[).,;:!?\]]+$/, ''), next = all.charAt(off + m.length); return core + (core !== url && next && !/\s/.test(next) ? ' ' : ''); });
 const ltInviteDefault = kind => kind === 'script'
-    ? `Hey, I have noticed you have not installed the WWL script yet (${location.origin}/worldwidelabs.user.js). Please install it: it shows your to do list and energy plan right inside Torn. Note that the script is not this website: it is a separate add-on. You need Tampermonkey on a computer, or add it as a script in TornPDA. Shout if you get stuck!`
-    : `Hey, I have noticed you have not logged into WWL yet (${location.origin}), please join with a limited API key. It takes a minute and gives you your energy plan, welcome chapters and more. Shout if you need help!`;
+    ? `Hey, I have noticed you have not installed the WWL script yet. You can install it from ${location.origin}/worldwidelabs.user.js and then it shows your to do list and energy plan right inside Torn. Note that the script is not this website: it is a separate add-on. You need Tampermonkey on a computer, or add it as a script in TornPDA. Shout if you get stuck!`
+    : `Hey, I have noticed you have not logged into WWL yet. Please join at ${location.origin} with a limited API key. It takes a minute and gives you your energy plan, welcome chapters and more. Shout if you need help!`;
 const ltInviteMsg = kind => { try { return localStorage.getItem(`wwl_invite_msg_${kind}`) || ltInviteDefault(kind); } catch (e) { return ltInviteDefault(kind); } };
 const ltRemindedAt = (kind, id) => { try { return Number(localStorage.getItem(`wwl_invited_${kind}_${id}`)) || 0; } catch (e) { return 0; } };
 function ltInviteHtml(t) {
@@ -43,7 +45,7 @@ function ltWireInvites(panel) {
         box.querySelector('.lt-inv-msg').value = ltInviteDefault(b.dataset.kind); box.querySelector('.lt-inv-note').textContent = 'Standard message back.';
     }));
     panel.querySelectorAll('.lt-inv-copy').forEach(b => b.addEventListener('click', async () => {
-        const kind = b.dataset.kind, ta = b.closest('.lt-inv').querySelector('.lt-inv-msg'), text = ta.value.replace(/\{name\}/g, b.dataset.name);
+        const kind = b.dataset.kind, ta = b.closest('.lt-inv').querySelector('.lt-inv-msg'), text = ltCleanLinks(ta.value.replace(/\{name\}/g, b.dataset.name));
         try { await navigator.clipboard.writeText(text); } catch (e) { toast('Copy this message: ' + text); return; }
         try { localStorage.setItem(`wwl_invited_${kind}_${b.dataset.id}`, String(Date.now())); } catch (e) { /* not remembered */ }
         b.textContent = 'Copied ✓';

@@ -15,7 +15,7 @@ Members get `energy-plan.user.js` (the **release** file). Every change from now 
 Queue changes below instead of releasing each one. Nothing here is live for members until a release.
 
 ### Queued for the next release
-- Script 1.51.1 (dev): the Award tracker block in the To do can be opened and closed by clicking its title; it stays in the same place, the choice is remembered, and the closed title shows the number of awards.
+- Script 1.51.2 (dev): in the reminder messages to send, no ")" "." or "," stays next to a link (new default texts, and a cleaner when sending that also fixes a message saved earlier); the same on the site (leader-todos.js) and for the trade receipt message (lib/ledger.js, live already). Together with 1.51.1: the Award tracker block in the To do can be opened and closed by clicking its title; it stays in the same place, the choice is remembered, and the closed title shows the number of awards.
 - (Last release: script 1.51 (2026-10-25): the OC join rules (a slot outside the range from Leader settings gets a greyed-out Join button, reason as tooltip; the level is only read from a small "Level N" element outside the slots), the OC numbers refresh when the OC page is opened, and the availability calendar redraws at once. Before that, script 1.50 (2026-10-24): the Award tracker in the To do.
 
 ## Releasing (when the list is done and tested)

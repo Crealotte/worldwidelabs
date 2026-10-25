@@ -2,7 +2,7 @@
 // @name         World Wide Labs
 // @namespace    https://worldwidelabs.vercel.app
 // @author       CreaLotte
-// @version      1.51.1
+// @version      1.51.2
 // @updateURL    __WWL_BASE__/worldwidelabs.user.js
 // @downloadURL  __WWL_BASE__/worldwidelabs.user.js
 // @description  Shows your WorldWideLabs weekly energy plan (the checklist from the Energy planner) inside Torn, a To do tab with small personal reminders (revive setting, feedback, timezone map, availability, Discord/Intel/CAT), your My Targets list, a simplified energy/war standing strip, and — if you are in the Mentoring Platform — your mentoring checklist too. Also shows faction banners at the top of every Torn page. A small ⚙ in the header shows the installed version, flags when a newer one is out, lets you set/replace your API key, and — for a leader — add or remove your faction's banners right from Torn. On a computer it is a small window you can drag around and close; in TornPDA it is a menu. Ticks are shared with the WWL site.
@@ -669,9 +669,11 @@
         return `<div style="padding:${IS_PDA ? 10 : 7}px 0;border-bottom:1px solid #3a4352;"><div style="display:flex;gap:8px;align-items:center;"><span class="wwl-aw-head" data-title="${esc(t.text)}" data-n="${(t.awards || []).length}" title="Click to open or close" style="flex:1;font-weight:700;cursor:pointer;user-select:none;">${awOpen ? '▾' : '▸'} ${esc(t.text)}${awOpen ? '' : ` <span style="font-weight:400;color:#9aa4b5;">(${(t.awards || []).length})</span>`}</span>${t.url ? `<a href="${esc(t.url)}" target="_blank" rel="noopener" style="color:#35d99b;white-space:nowrap;text-decoration:none;border:1px solid #35d99b;border-radius:6px;padding:4px 8px;font-size:12px;">${esc(t.cta || 'Open')}</a>` : ''}</div><div class="wwl-aw-list" style="${awOpen ? '' : 'display:none;'}">${(t.awards || []).map(bar).join('')}</div></div>`;
     }
     const INV_MSG_KEY = k =>'wwl_invite_msg_' + k, INV_AT_KEY = (k, id) => `wwl_invited_${k}_${id}`;
+    // a link in a message must stand alone: Torn makes a ")", "." or "," stuck to it part of the link, and then it does not work (also cleans a message a leader saved earlier)
+    const cleanLinks = text => String(text).replace(/(\(?)(https?:\/\/\S+)/g, (m, open, url, off, all) => { const core = url.replace(/[).,;:!?\]]+$/, ''), next = all.charAt(off + m.length); return core + (core !== url && next && !/\s/.test(next) ? ' ' : ''); });
     const invDefault = k => k === 'script'
-        ? `Hey, I have noticed you have not installed the WWL script yet (${WWL}/worldwidelabs.user.js). Please install it: it shows your to do list and energy plan right inside Torn. Note that the script is not the website: it is a separate add-on. You need Tampermonkey on a computer, or add it as a script in TornPDA. Shout if you get stuck!`
-        : `Hey, I have noticed you have not logged into WWL yet (${WWL}), please join with a limited API key. It takes a minute and gives you your energy plan, welcome chapters and more. Shout if you need help!`;
+        ? `Hey, I have noticed you have not installed the WWL script yet. You can install it from ${WWL}/worldwidelabs.user.js and then it shows your to do list and energy plan right inside Torn. Note that the script is not the website: it is a separate add-on. You need Tampermonkey on a computer, or add it as a script in TornPDA. Shout if you get stuck!`
+        : `Hey, I have noticed you have not logged into WWL yet. Please join at ${WWL} with a limited API key. It takes a minute and gives you your energy plan, welcome chapters and more. Shout if you need help!`;
     const invMsg = k => store.get(INV_MSG_KEY(k)) || invDefault(k);
     function inviteHtml(t) {
         const kind = t.kind === 'script' ? 'script' : 'wwl', btn = 'background:transparent;border-radius:6px;padding:3px 8px;font-size:12px;cursor:pointer;';
@@ -721,7 +723,7 @@
             const box = b.closest('.wwl-inv'); store.set(INV_MSG_KEY(box.dataset.kind), ''); box.querySelector('.wwl-inv-msg').value = invDefault(box.dataset.kind); box.querySelector('.wwl-inv-note').textContent = 'Standard message back.';
         }));
         body.querySelectorAll('.wwl-inv-send').forEach(b => b.addEventListener('click', () => {
-            const kind = b.dataset.kind, id = b.dataset.id, text = b.closest('.wwl-inv').querySelector('.wwl-inv-msg').value.replace(/\{name\}/g, b.dataset.name);
+            const kind = b.dataset.kind, id = b.dataset.id, text = cleanLinks(b.closest('.wwl-inv').querySelector('.wwl-inv-msg').value.replace(/\{name\}/g, b.dataset.name));
             store.set('wwl_pending_mail_' + id, JSON.stringify({ text, ts: Date.now() })); // the mail page fills it in (see pendingMail)
             store.set(INV_AT_KEY(kind, id), String(Date.now()));
             try { navigator.clipboard.writeText(text); } catch (e) { /* the page fills it in anyway */ }
