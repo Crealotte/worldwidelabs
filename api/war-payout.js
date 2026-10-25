@@ -1737,15 +1737,22 @@ Cancel: ${cancelUrl}`, [], embeds, undefined, true);
             }
             // The energy plan is paused while the faction stacks for a war or is inside a war / chain plan: nobody trains in those days, so the daily check of the energy plan is not
             // needed until that plan is over. A war plan counts from 48 hours before the war starts (the stacking), a chain plan from its start; both until their end.
-            let energyPause = null;
+            let energyPause = null, eventPlan = null; // eventPlan: a chain plan or event (not a war) that is running now: the To do says so, for as long as it runs
             try {
                 const nowS = Math.floor(Date.now() / 1000);
                 for (const p of (await loadPlanIndex(factionId)).filter(x => !x.archived && x.startDate)) {
                     const day0 = Date.parse(`${p.startDate}T00:00:00Z`) / 1000, end = Number(p.endAt) || day0 + (Number(p.days) || 1) * 86400;
                     const from = p.war && p.war.start ? Number(p.war.start) - 48 * 3600 : day0 + (Number(p.startHour) || 0) * 3600;
+                    if (nowS >= from && nowS < end && !p.war && (!eventPlan || end > eventPlan.end)) eventPlan = { name: String(p.name || '').trim(), end };
                     if (nowS >= from && nowS < end && (!energyPause || end > energyPause.until)) energyPause = { until: end, why: p.war ? `stacking and warring${p.war.opponent ? ` vs ${p.war.opponent}` : ''}` : `the chain plan${p.name ? ` ${p.name}` : ''}` };
                 }
             } catch (e) { /* the daily check just stays */ }
+            if (eventPlan) { // an amber reminder (no button, not counted) at the top, as long as the event runs
+                const e = new Date(eventPlan.end * 1000), dayEnd = eventPlan.end % 86400 === 0, last = new Date((eventPlan.end - (dayEnd ? 1 : 0)) * 1000);
+                const when = `${last.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' })}${dayEnd ? '' : ` ${e.toISOString().slice(11, 16)} TCT`}`;
+                const name = eventPlan.name ? (/event|chain|war|plan/i.test(eventPlan.name) ? eventPlan.name : `${eventPlan.name} event`) : 'The event';
+                items.unshift({ id: 'event-running', text: `${name} is running until ${when}! Keep stacking and keep the chains going!`, notice: true });
+            }
             items.sort((a, b) => (b.priority ? 1 : 0) - (a.priority ? 1 : 0)); // the crimes and the money first (the sort keeps the rest in their order)
             return res.status(200).json({ items, energyPause, ttl: items.some(i => i.priority) || items.some(i => /^lt-/.test(i.id)) ? 60 : 300 }); // how long the script may keep this: a leader with things waiting gets a fresh list every minute
         }
