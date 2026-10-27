@@ -2,7 +2,7 @@
 // @name         World Wide Labs
 // @namespace    https://worldwidelabs.vercel.app
 // @author       CreaLotte
-// @version      1.51.2
+// @version      1.51.3
 // @updateURL    __WWL_BASE__/worldwidelabs.user.js
 // @downloadURL  __WWL_BASE__/worldwidelabs.user.js
 // @description  Shows your WorldWideLabs weekly energy plan (the checklist from the Energy planner) inside Torn, a To do tab with small personal reminders (revive setting, feedback, timezone map, availability, Discord/Intel/CAT), your My Targets list, a simplified energy/war standing strip, and — if you are in the Mentoring Platform — your mentoring checklist too. Also shows faction banners at the top of every Torn page. A small ⚙ in the header shows the installed version, flags when a newer one is out, lets you set/replace your API key, and — for a leader — add or remove your faction's banners right from Torn. On a computer it is a small window you can drag around and close; in TornPDA it is a menu. Ticks are shared with the WWL site.
@@ -662,6 +662,32 @@
         const icon = r => r.kind === 'demote' ? '⬇' : r.kind === 'check' ? '⚠' : r.kind === 'kick' ? '🚪' : r.kind === 'recruit' ? '⏳' : '⬆';
         return `<div style="margin:0 0 8px 10px;max-height:260px;overflow:auto;">${(t.rows || []).map(r => `<div style="display:flex;gap:6px;align-items:baseline;padding:4px 0;border-top:1px solid #2c3442;"><span>${icon(r)}</span><span style="flex:1;"><a href="https://www.torn.com/profiles.php?XID=${esc(r.id)}" target="_blank" rel="noopener" style="color:#e6e9ef;text-decoration:none;font-weight:600;">${esc(r.name)}</a> <span style="color:#9aa4b5;">${r.kind === 'kick' ? esc(r.from) + ': can be removed' : esc(r.from) + ' → ' + esc(r.to)}</span><div style="color:#9aa4b5;font-size:11px;">${esc(r.why || '')}</div></span></div>`).join('')}</div>`;
     }
+    // ---- The onboarding overview in the leader To do: two sections (Recruit to Experiment B, and to Guinea Pig / Lab Rat), the same as on the site. The counts are always in sight, the members
+    // are in the drop-down, each with a message to copy and a Notified button (kept on the server: everybody sees who was already reminded) ----
+    const OB_DEF = {
+        1: { title: 'Recruit → Experiment B', reqs: [['wwl', 'not on WWL'], ['script', 'on WWL without the script']] },
+        2: { title: 'To Guinea Pig / Lab Rat', reqs: [['discord', 'without Discord'], ['intel', 'without Intel'], ['cat', 'without CAT']] },
+    };
+    const OB_DEFAULTS = {
+        discord: 'Hey, I have noticed you have not joined our Discord yet. It is one of the steps for becoming a Guinea Pig or Lab Rat, and it is where we plan wars and chat. Shout if you need the invite or any help!',
+        intel: 'Hey, I have noticed your Intel is not set up yet. It is one of the steps for becoming a Guinea Pig or Lab Rat. Shout if you need help with it!',
+        cat: 'Hey, I have noticed CAT is not installed yet. It is our war tool and one of the steps for becoming a Guinea Pig or Lab Rat. Shout if you need help with it!',
+    };
+    const obDefault = k => OB_DEFAULTS[k] || invDefault(k), obMsg = k => store.get(INV_MSG_KEY(k)) || obDefault(k);
+    const obDate = ts => new Date(ts).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+    function obHtml(t) {
+        const o = t.ob, def = OB_DEF[o.stage], past = new Set((o.past || []).map(p => p.id)), n = a => (a || []).length, btn = 'background:transparent;border-radius:6px;padding:3px 8px;font-size:12px;cursor:pointer;color:#e6e9ef;border:1px solid #3a4352;';
+        const count = (k, label) => { const c = n(o[k]); return `<div style="font-size:12px;color:${c ? '#e6e9ef' : '#9aa4b5'};">${c} member${c === 1 ? '' : 's'} ${esc(label)}</div>`; };
+        const summary = `<summary style="cursor:pointer;padding:${IS_PDA ? 10 : 7}px 0;list-style:none;"><div style="display:flex;gap:8px;align-items:center;"><span style="color:#9aa4b5;">▾</span><b>${esc(def.title)}</b> <span style="color:#9aa4b5;font-size:11px;">(${o.days} days)</span></div>
+            <div style="margin:3px 0 0 20px;">${def.reqs.map(([k, label]) => count(k, label)).join('')}${n(o.past) ? `<div style="font-size:12px;color:#e05555;font-weight:700;">! ${n(o.past)} member${n(o.past) === 1 ? ' is' : 's are'} past their ${o.days} days</div>` : ''}</div></summary>`;
+        const rowsOf = (k, label) => !n(o[k]) ? '' : `<div style="margin:0 0 8px 10px;"><div style="font-size:11px;color:#9aa4b5;margin:4px 0;">${esc(label)} (${n(o[k])}): message to copy</div>
+            <textarea class="wwl-ob-msg" data-kind="${k}" rows="3" style="width:100%;box-sizing:border-box;background:#11141a;color:#e6e9ef;border:1px solid #3a4352;border-radius:6px;padding:5px;font-size:11px;">${esc(obMsg(k))}</textarea>
+            <div style="margin:4px 0;"><button type="button" class="wwl-ob-save" data-kind="${k}" style="${btn}">Save message</button> <button type="button" class="wwl-ob-reset" data-kind="${k}" style="${btn}">Standard message</button> <span class="wwl-ob-note" style="font-size:11px;color:#9aa4b5;"></span></div>
+            <div style="max-height:240px;overflow:auto;">${o[k].map(m => `<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;padding:4px 0;border-top:1px solid #2c3442;"><span style="flex:1;min-width:110px;">${past.has(m.id) ? '<b style="color:#e05555;">!</b> ' : ''}<a href="https://www.torn.com/profiles.php?XID=${esc(m.id)}" target="_blank" rel="noopener" style="color:#e6e9ef;text-decoration:none;font-weight:600;">${esc(m.name)}</a> <span style="color:#9aa4b5;font-size:11px;">${m.days == null ? '' : `day ${m.days + 1}`}</span></span>
+                <button type="button" class="wwl-ob-copy" data-kind="${k}" data-name="${esc(m.name)}" style="${btn}">Copy message</button>
+                <button type="button" class="wwl-ob-notified" data-kind="${k}" data-id="${esc(m.id)}" data-on="${m.notified ? 1 : 0}" style="${btn}${m.notified ? 'color:#35d99b;border-color:#35d99b;' : ''}">${m.notified ? `Notified ${obDate(m.notified)}` : 'Notified'}</button></div>`).join('')}</div></div>`;
+        return `<details class="wwl-ob" data-id="${esc(t.id)}" ${grpOpen[t.id] ? 'open' : ''} style="border-bottom:1px solid #3a4352;">${summary}${def.reqs.map(([k, label]) => rowsOf(k, label.replace(/^./, c => c.toUpperCase()))).join('')}</details>`;
+    }
     // the awards you follow: a title with ONE Open button, then per award an icon and a bar (filled as far as it is done) with the name on it, and under it "25% - about 108 days to go"
     function awardBlockHtml(t) {
         const awOpen = store.get('wwl_aw_open') !== '0'; // the block stays where it is; the title opens and closes it (remembered)
@@ -699,6 +725,30 @@
             } catch (e) { claimMsg = e.message; render(); }
         }));
         body.querySelectorAll('.wwl-grp').forEach(d => d.addEventListener('toggle', () => { grpOpen[d.dataset.id] = d.open; }));
+        body.querySelectorAll('.wwl-ob').forEach(d => d.addEventListener('toggle', () => { grpOpen[d.dataset.id] = d.open; }));
+        body.querySelectorAll('.wwl-ob-copy').forEach(b => b.addEventListener('click', () => { // it only copies: the leader decides when somebody counts as notified
+            const text = cleanLinks(b.closest('details').querySelector(`.wwl-ob-msg[data-kind="${b.dataset.kind}"]`).value.replace(/\{name\}/g, b.dataset.name));
+            try { navigator.clipboard.writeText(text); b.textContent = 'Copied ✓'; setTimeout(() => { b.textContent = 'Copy message'; }, 1800); } catch (e) { b.textContent = 'Could not copy'; }
+        }));
+        body.querySelectorAll('.wwl-ob-notified').forEach(b => b.addEventListener('click', async () => {
+            const on = b.dataset.on !== '1';
+            b.disabled = true;
+            try {
+                await api({ action: 'ob-notify', kind: b.dataset.kind, id: b.dataset.id, on });
+                b.dataset.on = on ? '1' : '0'; b.textContent = on ? `Notified ${obDate(Date.now())}` : 'Notified';
+                b.style.color = on ? '#35d99b' : '#e6e9ef'; b.style.borderColor = on ? '#35d99b' : '#3a4352';
+            } catch (e) { b.textContent = 'Could not save'; setTimeout(() => { b.textContent = on ? 'Notified' : `Notified ${obDate(Date.now())}`; }, 1800); }
+            b.disabled = false;
+        }));
+        body.querySelectorAll('.wwl-ob-save').forEach(b => b.addEventListener('click', () => {
+            store.set(INV_MSG_KEY(b.dataset.kind), b.closest('details').querySelector(`.wwl-ob-msg[data-kind="${b.dataset.kind}"]`).value);
+            b.parentElement.querySelector('.wwl-ob-note').textContent = 'Saved.';
+        }));
+        body.querySelectorAll('.wwl-ob-reset').forEach(b => b.addEventListener('click', () => {
+            store.set(INV_MSG_KEY(b.dataset.kind), '');
+            b.closest('details').querySelector(`.wwl-ob-msg[data-kind="${b.dataset.kind}"]`).value = obDefault(b.dataset.kind);
+            b.parentElement.querySelector('.wwl-ob-note').textContent = 'Standard message back.';
+        }));
         body.querySelectorAll('.wwl-aw-head').forEach(h => h.addEventListener('click', () => { // open or close the Award tracker (it stays in its place; the choice is remembered)
             const list = h.parentElement.parentElement.querySelector('.wwl-aw-list'), open = list.style.display === 'none';
             list.style.display = open ? '' : 'none';
@@ -739,7 +789,7 @@
         </label>`;
         const rest = todoItems === null ? '<div style="padding:6px 0;color:#9aa4b5;">Loading…</div>'
             : !todoItems.length ? ''
-            : [...todoItems].sort((a, b) => (b.priority ? 1 : 0) - (a.priority ? 1 : 0)).map(t => t.aw ? awardBlockHtml(t) : (t.members || t.rows) ? `<details class="wwl-grp" data-id="${esc(t.id)}" ${grpOpen[t.id] ? 'open' : ''} style="border-bottom:1px solid #3a4352;"><summary style="cursor:pointer;padding:${IS_PDA ? 10 : 7}px 0;list-style:none;display:flex;gap:8px;align-items:center;"><span style="color:#9aa4b5;">▾</span><span style="flex:1;">${esc(String(t.text).split(':')[0].replace(/[. ]+$/, ''))}</span></summary>${t.members ? inviteHtml(t) : rowsHtml(t)}</details>` : t.notice
+            : [...todoItems].sort((a, b) => (b.priority ? 1 : 0) - (a.priority ? 1 : 0)).map(t => t.aw ? awardBlockHtml(t) : t.ob ? obHtml(t) : (t.members || t.rows) ? `<details class="wwl-grp" data-id="${esc(t.id)}" ${grpOpen[t.id] ? 'open' : ''} style="border-bottom:1px solid #3a4352;"><summary style="cursor:pointer;padding:${IS_PDA ? 10 : 7}px 0;list-style:none;display:flex;gap:8px;align-items:center;"><span style="color:#9aa4b5;">▾</span><span style="flex:1;">${esc(String(t.text).split(':')[0].replace(/[. ]+$/, ''))}</span></summary>${t.members ? inviteHtml(t) : rowsHtml(t)}</details>` : t.notice
                 // a notice is just a reminder: a full-width amber box with the text, no button, not part of the count
                 ? `<div style="padding:8px 10px;margin:6px 0;border:1px solid #f0b432;border-radius:6px;background:#f0b43218;color:#f0b432;font-weight:600;line-height:1.4;">${esc(t.text)}</div>`
                 : `<div style="display:flex;gap:8px;align-items:center;padding:${IS_PDA ? 10 : 7}px 0;border-bottom:1px solid #3a4352;${t.priority ? 'border-left:3px solid #e05555;padding-left:8px;' : ''}">

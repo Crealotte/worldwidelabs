@@ -42,7 +42,7 @@ const { nightlyHandle, nightlyRun, getVaultKey } = require('../lib/nightly');
 const { usageFor } = require('../lib/tornFetch');
 const { targetsHandle } = require('../lib/targets');
 const { mentoringHandle, loadProgram: mentoringLoadProgram } = require('../lib/mentoring');
-const { welHandle, welcomeTodoItems, promotions: welPromotions, checkinState: welCheckin, checkinSet: welCheckinSet, isWarChange: welIsWar, joinTimes: welJoinTimes } = require('../lib/welcome');
+const { welHandle, welcomeTodoItems, promotions: welPromotions, checkinState: welCheckin, checkinSet: welCheckinSet, isWarChange: welIsWar, joinTimes: welJoinTimes, onboarding: welOnboarding, obNotify: welObNotify } = require('../lib/welcome');
 const { factionAllowed, allowedList, resetCache: accessReset, LIST: ACCESS_LIST, DENIED: ACCESS_DENIED } = require('../lib/access');
 const { companyHandle, isDirector, tornCompany: coTorn, normalize: coNormalize, getAll: coGetAll } = require('../lib/company');
 const { runCompanyReports } = require('../lib/companyReports');
@@ -295,6 +295,8 @@ function welDeps(key, factionId) {
         },
         discordMany: async ids => (await discordStatus(ids.map(String), { key, redis, guildMap: null, resolve: false })).status,
         warOk: members => moWarOk({ redis, factionId, members }),
+        // who has logged into WWL (for the onboarding overview of the leader to do)
+        wwlIds: async () => { const f = (await redis(['HGETALL', 'wwl:logins'])) || [], ids = new Set(); for (let i = 0; i < f.length; i += 2) if (f[i + 1] && f[i + 1] !== '0') ids.add(String(f[i])); return ids; },
         // when each member last joined the faction (from the faction's membership news, the last 10 days): a member who left and came back has many days_in_faction but a fresh recruit timer
         joins: async () => {
             const from = Math.floor(Date.now() / 1000) - 10 * 86400;
@@ -478,23 +480,18 @@ async function leaderTodos(key, factionId) {
         const recruits = ready.filter(r => r.kind === 'recruit');
         if (recruits.length) add('promo-recruits', `${recruits.length} recruit${recruits.length === 1 ? '' : 's'} already meet${recruits.length === 1 ? 's' : ''} the requirements and can move up when the recruit status wears off: ${recruits.slice(0, 5).map(r => `${r.name} (${r.to})`).join(', ')}${recruits.length > 5 ? ` +${recruits.length - 5} more` : ''}.`, 'See who', 'welcome-admin', 'wa-promo');
         if (down.length) add('demotions', `${down.length} Chemist${down.length === 1 ? '' : 's'} no longer meet${down.length === 1 ? 's' : ''} the war rule and can move back down: ${down.slice(0, 5).map(r => `${r.name} (${r.to})`).join(', ')}${down.length > 5 ? ` +${down.length - 5} more` : ''}.`, 'See who', 'welcome-admin', 'wa-promo');
-        if (kick.length) add('slow-start', `${kick.length} member${kick.length === 1 ? ' is' : 's are'} still Experiment A or B after a week and can be removed from the faction: ${kick.slice(0, 5).map(r => `${r.name} (${r.why.replace(/^.*?: /, '')})`).join('; ')}${kick.length > 5 ? ` +${kick.length - 5} more` : ''}.${kickVerify.length ? ` ${kickVerify.length} more are Experiment B with Intel or CAT not verified yet: check those on Who's on board first.` : ''}`, 'See who', 'welcome-admin', 'wa-promo');
+        if (kick.length) add('slow-start', `${kick.length} member${kick.length === 1 ? ' is' : 's are'} still Experiment A or B past their days (4 for the script, 7 in all) and can be removed from the faction: ${kick.slice(0, 5).map(r => `${r.name} (${r.why.replace(/^.*?: /, '')})`).join('; ')}${kick.length > 5 ? ` +${kick.length - 5} more` : ''}.${kickVerify.length ? ` ${kickVerify.length} more are Experiment B with Intel or CAT not verified yet: check those on Who's on board first.` : ''}`, 'See who', 'welcome-admin', 'wa-promo');
         if (below.length) add('role-check', `${below.length} member${below.length === 1 ? ' holds' : 's hold'} a role they do not meet the requirements of: ${below.slice(0, 5).map(r => `${r.name} (${r.from})`).join(', ')}${below.length > 5 ? ` +${below.length - 5} more` : ''}.`, 'See who', 'welcome-admin', 'wa-promo');
     } catch (e) { /* skip */ }
 
-    // members who have not logged into WWL yet, and members on WWL who have not installed the script: the dashboard card lists them with a friendly reminder to copy
-    // (each item carries `members`; the script's To do shows the count and opens the dashboard). Reads: the roster (a cached Torn read) and two small hashes.
+    // the onboarding overview (Recruit to Experiment B, and to Guinea Pig / Lab Rat): who still misses WWL, the script, Discord, Intel or CAT, and who is past the days. The site and the script draw it.
     try {
-        const roster = await getRoster(key);
-        const hashIds = async k => { const f = (await redis(['HGETALL', k])) || [], ids = new Set(); for (let i = 0; i < f.length; i += 2) if (f[i + 1] && f[i + 1] !== '0') ids.add(String(f[i])); return ids; };
-        const [onWwl, withScript] = await Promise.all([hashIds('wwl:logins'), hashIds(userscriptSeenKey(factionId))]);
-        // a member a leader marked as unable to use the script (a restricted phone or computer) is not asked to install it
-        try { const vf = (await redis(['HGETALL', manualVerifyKey(factionId)])) || []; for (let i = 0; i < vf.length; i += 2) { try { if (JSON.parse(vf[i + 1]).scriptExempt) withScript.add(String(vf[i])); } catch (e) { /* skip */ } } } catch (e) { /* the reminder still works */ }
-        const notWwl = roster.filter(m => !onWwl.has(m.id)), noScript = roster.filter(m => onWwl.has(m.id) && !withScript.has(m.id));
-        const names = a => `${a.slice(0, 5).map(m => m.name).join(', ')}${a.length > 5 ? ` +${a.length - 5} more` : ''}`;
-        const people = a => a.slice(0, 80).map(m => ({ id: m.id, name: m.name }));
-        if (notWwl.length) todos.push({ id: 'invite-wwl', kind: 'wwl', text: `${notWwl.length} member${notWwl.length === 1 ? ' has' : 's have'} not logged into WWL yet: ${names(notWwl)}.`, cta: 'Send a friendly reminder', page: 'dashboard', anchor: 'leader-todos', members: people(notWwl) });
-        if (noScript.length) todos.push({ id: 'invite-script', kind: 'script', text: `${noScript.length} member${noScript.length === 1 ? ' is' : 's are'} on WWL but did not install the script yet: ${names(noScript)}.`, cta: 'Send a friendly reminder', page: 'dashboard', anchor: 'leader-todos', members: people(noScript) });
+        const ob = await welOnboarding(welDeps(key, factionId));
+        if (ob) {
+            const n = a => (a || []).length, s1 = ob.s1, s2 = ob.s2;
+            if (n(s1.wwl) + n(s1.script) + n(s1.past)) todos.push({ id: 'onboard-1', ob: { stage: 1, ...s1 }, text: `Recruit to Experiment B: ${n(s1.wwl)} not on WWL, ${n(s1.script)} without the script${n(s1.past) ? `, ${n(s1.past)} past their ${s1.days} days` : ''}.`, cta: 'Open', page: 'dashboard', anchor: 'leader-todos' });
+            if (n(s2.discord) + n(s2.intel) + n(s2.cat) + n(s2.past)) todos.push({ id: 'onboard-2', ob: { stage: 2, ...s2 }, text: `To Guinea Pig or Lab Rat: ${n(s2.discord)} without Discord, ${n(s2.intel)} Intel, ${n(s2.cat)} CAT${n(s2.past) ? `, ${n(s2.past)} past their ${s2.days} days` : ''}.`, cta: 'Open', page: 'dashboard', anchor: 'leader-todos' });
+        }
     } catch (e) { /* skip */ }
 
     return { todos, roleRows, roleWaiting };
@@ -1524,6 +1521,12 @@ Cancel: ${cancelUrl}`, [], embeds, undefined, true);
             return res.status(200).json(await welCheckinSet(redis, factionId, req.body.on !== false, by));
         }
         // The leader to-do card (dashboard) — leaders only.
+        if (action === 'ob-notify') { // a leader marks a member "notified" (or takes it back) in the onboarding overview; kept on the server so the site, the script and every leader see it
+            if (!(await isLeader(key))) return res.status(403).json({ error: 'Leaders only' });
+            await welObNotify(welDeps(key, factionId), req.body.kind, req.body.id, !!req.body.on);
+            ltMem.delete(factionId);
+            return res.status(200).json({ ok: true });
+        }
         if (action === 'leader-todos') {
             if (!(await isLeader(key))) return res.status(403).json({ error: 'Leaders only' });
             const lt = await leaderTodos(key, factionId);
@@ -1706,7 +1709,7 @@ Cancel: ${cancelUrl}`, [], embeds, undefined, true);
             try {
                 if (await isLeader(key)) {
                     // everything of the leader to-do card on the dashboard shows here too (the OC requests have their own line below)
-                    try { const lt = await leaderTodosCached(key, factionId); roleSrc = lt; for (const t of lt.todos) if (!t.group && t.id !== 'oc-requests') items.push({ id: `lt-${t.id}`, text: t.text, cta: t.cta, url: `${site}/${t.page}`, ...(t.members ? { members: t.members, kind: t.kind } : {}) }); } catch (e) { /* the other lines still show */ }
+                    try { const lt = await leaderTodosCached(key, factionId); roleSrc = lt; for (const t of lt.todos) if (!t.group && t.id !== 'oc-requests') items.push({ id: `lt-${t.id}`, text: t.text, cta: t.cta, url: `${site}/${t.page}`, ...(t.members ? { members: t.members, kind: t.kind } : {}), ...(t.ob ? { ob: t.ob } : {}) }); } catch (e) { /* the other lines still show */ }
                     const flat = async k => { const f = (await redis(['HGETALL', k])) || []; const out = []; for (let i = 0; i < f.length; i += 2) { try { out.push(JSON.parse(f[i + 1])); } catch (e) { /* skip */ } } return out; };
                     const [ocs, banks] = await Promise.all([flat(ocRequestsKey(factionId)), flat(bankRequestsKey(factionId))]);
                     const ocsOpen = ocs.filter(q => q.status !== 'claimed'); if (ocsOpen.length) items.push({ id: 'oc-requests', text: `${ocsOpen.length} OC request${ocsOpen.length === 1 ? '' : 's'}: ${ocsOpen.slice(0, 4).map(r => `${r.name} (level ${r.level})`).join(', ')}${ocsOpen.length > 4 ? ` +${ocsOpen.length - 4} more` : ''}.`, cta: 'Claim and open', priority: true, claim: 'oc', n: ocsOpen.length, url: `${site}/oc-requests` });

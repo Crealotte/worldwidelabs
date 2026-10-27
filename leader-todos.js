@@ -18,7 +18,12 @@ async function loadLeaderTodos() {
 const LT_INVITE_OPEN = {};
 // a link in a message must stand alone: Torn makes a ")", "." or "," stuck to it part of the link, and then it does not work (also cleans a message saved earlier)
 const ltCleanLinks = text => String(text).replace(/(\(?)(https?:\/\/\S+)/g, (m, open, url, off, all) => { const core = url.replace(/[).,;:!?\]]+$/, ''), next = all.charAt(off + m.length); return core + (core !== url && next && !/\s/.test(next) ? ' ' : ''); });
-const ltInviteDefault = kind => kind === 'script'
+const LT_OB_DEFAULTS = {
+    discord: 'Hey, I have noticed you have not joined our Discord yet. It is one of the steps for becoming a Guinea Pig or Lab Rat, and it is where we plan wars and chat. Shout if you need the invite or any help!',
+    intel: 'Hey, I have noticed your Intel is not set up yet. It is one of the steps for becoming a Guinea Pig or Lab Rat. Shout if you need help with it!',
+    cat: 'Hey, I have noticed CAT is not installed yet. It is our war tool and one of the steps for becoming a Guinea Pig or Lab Rat. Shout if you need help with it!',
+};
+const ltInviteDefault = kind => LT_OB_DEFAULTS[kind] ? LT_OB_DEFAULTS[kind] : kind === 'script'
     ? `Hey, I have noticed you have not installed the WWL script yet. You can install it from ${location.origin}/worldwidelabs.user.js and then it shows your to do list and energy plan right inside Torn. Note that the script is not this website: it is a separate add-on. You need Tampermonkey on a computer, or add it as a script in TornPDA. Shout if you get stuck!`
     : `Hey, I have noticed you have not logged into WWL yet. Please join at ${location.origin} with a limited API key. It takes a minute and gives you your energy plan, welcome chapters and more. Shout if you need help!`;
 const ltInviteMsg = kind => { try { return localStorage.getItem(`wwl_invite_msg_${kind}`) || ltInviteDefault(kind); } catch (e) { return ltInviteDefault(kind); } };
@@ -54,6 +59,54 @@ function ltWireInvites(panel) {
     }));
 }
 
+// ---- The onboarding overview: two sections (Recruit to Experiment B, and to Guinea Pig / Lab Rat). The counts are always in sight, the members are in the drop-down, each with a message to copy and a Notified button ----
+const LT_OB_OPEN = {};
+const LT_OB = {
+    1: { title: 'Recruit → Experiment B', reqs: [['wwl', 'not on WWL'], ['script', 'on WWL without the script']] },
+    2: { title: 'To Guinea Pig / Lab Rat', reqs: [['discord', 'without Discord'], ['intel', 'without Intel'], ['cat', 'without CAT']] },
+};
+const ltObDate = ts => new Date(ts).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+function ltObHtml(t) {
+    const o = t.ob, def = LT_OB[o.stage], past = new Set((o.past || []).map(p => p.id)), n = a => (a || []).length;
+    const count = (k, label) => { const c = n(o[k]); return `<div style="font-size:13px;color:${c ? 'inherit' : 'var(--muted)'};">${c} member${c === 1 ? '' : 's'} ${esc(label)}</div>`; };
+    const summary = `<summary class="av-sum" style="cursor:pointer;list-style:none;"><b style="font-size:14px;">${esc(def.title)}</b> <span style="color:var(--muted);font-size:12px;">(${o.days} days)</span>
+        <div style="margin:4px 0 0 2px;">${def.reqs.map(([k, label]) => count(k, label)).join('')}${n(o.past) ? `<div style="font-size:13px;color:#e05555;font-weight:600;">! ${n(o.past)} member${n(o.past) === 1 ? ' is' : 's are'} past their ${o.days} days</div>` : ''}</div></summary>`;
+    const rowsOf = (k, label) => !n(o[k]) ? '' : `<div style="padding:8px 0 4px 12px;"><div style="font-size:12px;color:var(--muted);margin-bottom:4px;">${esc(label)} (${n(o[k])}): message to copy</div>
+        <textarea class="lt-ob-msg" data-kind="${k}" rows="2" style="width:100%;box-sizing:border-box;font-size:12px;">${esc(ltInviteMsg(k))}</textarea>
+        <div style="margin:4px 0 6px;"><button type="button" class="ghost small lt-inv-save" data-kind="${k}" style="padding:3px 10px;">Save message</button> <button type="button" class="ghost small lt-inv-reset" data-kind="${k}" style="padding:3px 10px;">Use the standard message</button> <span class="lt-inv-note" style="font-size:11px;color:var(--muted);"></span></div>
+        ${o[k].map(m => `<div class="lt-ob-row" data-kind="${k}" data-id="${esc(m.id)}" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:5px 0;border-top:1px solid var(--line);"><span style="flex:1;min-width:170px;font-size:13px;">${past.has(m.id) ? '<b style="color:#e05555;">!</b> ' : ''}<a href="https://www.torn.com/profiles.php?XID=${esc(m.id)}" target="_blank" rel="noopener" style="color:inherit;">${esc(m.name)}</a> <span style="color:var(--muted);font-size:11px;">${m.days == null ? '' : `day ${m.days + 1}`}</span></span>
+            <button type="button" class="ghost small lt-ob-copy" data-kind="${k}" data-name="${esc(m.name)}" style="padding:4px 10px;">Copy message</button>
+            <button type="button" class="ghost small lt-ob-notified" data-kind="${k}" data-id="${esc(m.id)}" data-on="${m.notified ? 1 : 0}" style="padding:4px 10px;${m.notified ? 'color:var(--reagent);border-color:var(--reagent);' : ''}">${m.notified ? `Notified ${ltObDate(m.notified)}` : 'Notified'}</button></div>`).join('')}</div>`;
+    return `<details class="lt-ob" data-id="${esc(t.id)}" ${LT_OB_OPEN[t.id] ? 'open' : ''} style="padding:8px 0;">${summary}${def.reqs.map(([k, label]) => rowsOf(k, label.replace(/^./, c => c.toUpperCase()))).join('')}</details>`;
+}
+function ltWireOb(panel) {
+    panel.querySelectorAll('.lt-ob').forEach(d => d.addEventListener('toggle', () => { LT_OB_OPEN[d.dataset.id] = d.open; }));
+    panel.querySelectorAll('.lt-ob-copy').forEach(b => b.addEventListener('click', async () => { // only copies: the leader decides when the member counts as notified
+        const text = ltCleanLinks(b.closest('details').querySelector(`.lt-ob-msg[data-kind="${b.dataset.kind}"]`).value.replace(/\{name\}/g, b.dataset.name));
+        try { await navigator.clipboard.writeText(text); b.textContent = 'Copied ✓'; setTimeout(() => { b.textContent = 'Copy message'; }, 1800); } catch (e) { toast('Copy this message: ' + text); }
+    }));
+    panel.querySelectorAll('.lt-ob-notified').forEach(b => b.addEventListener('click', async () => {
+        const on = b.dataset.on !== '1';
+        b.disabled = true;
+        try {
+            const r = await (await fetch('/api/war-payout', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key: apiKey, action: 'ob-notify', kind: b.dataset.kind, id: b.dataset.id, on }) })).json();
+            if (r.error) throw new Error(r.error);
+            b.dataset.on = on ? '1' : '0'; b.textContent = on ? `Notified ${ltObDate(Date.now())}` : 'Notified';
+            b.style.color = on ? 'var(--reagent)' : ''; b.style.borderColor = on ? 'var(--reagent)' : '';
+        } catch (e) { toast(e.message || 'Could not save that'); }
+        b.disabled = false;
+    }));
+    panel.querySelectorAll('.lt-ob .lt-inv-save').forEach(b => b.addEventListener('click', () => {
+        const ta = b.closest('details').querySelector(`.lt-ob-msg[data-kind="${b.dataset.kind}"]`), note = b.parentElement.querySelector('.lt-inv-note');
+        try { localStorage.setItem(`wwl_invite_msg_${b.dataset.kind}`, ta.value); note.textContent = 'Saved.'; } catch (e) { note.textContent = 'Could not save in this browser.'; }
+    }));
+    panel.querySelectorAll('.lt-ob .lt-inv-reset').forEach(b => b.addEventListener('click', () => {
+        const ta = b.closest('details').querySelector(`.lt-ob-msg[data-kind="${b.dataset.kind}"]`);
+        try { localStorage.removeItem(`wwl_invite_msg_${b.dataset.kind}`); } catch (e) { /* nothing saved */ }
+        ta.value = ltInviteDefault(b.dataset.kind); b.parentElement.querySelector('.lt-inv-note').textContent = 'Standard message back.';
+    }));
+}
+
 let ltSvcOpen = false; // the Services to do stays open or closed the way it was left, also after a refresh
 function renderLeaderTodos(todos) {
     const panel = $('leader-todos');
@@ -66,7 +119,7 @@ function renderLeaderTodos(todos) {
         return `<details class="lt-svc" ${ltSvcOpen ? 'open' : ''} style="padding:8px 0;"><summary class="av-sum" style="cursor:pointer;font-size:14px;list-style:none;"><b>🧩 Services</b> <span style="color:${open.length ? '#e0a030' : 'var(--muted)'};">${open.length ? `${open.length} thing${open.length === 1 ? '' : 's'} to look at` : 'nothing needs you now'}</span>${done.length ? ` <span style="color:var(--muted);font-size:12px;">· ${done.length} known or waiting</span>` : ''}</summary>
             ${open.map(x => row(x, false)).join('')}${done.map(x => row(x, true)).join('')}</details>`;
     };
-    $('leader-todos-list').innerHTML = todos.map((t, i) => t.members ? `<div style="${i ? 'border-top:1px solid var(--line);' : ''}">${ltInviteHtml(t)}</div>` : t.group ?`<div style="${i ? 'border-top:1px solid var(--line);' : ''}">${group(t)}</div>` : `
+    $('leader-todos-list').innerHTML = todos.map((t, i) => t.ob ? `<div style="${i ? 'border-top:1px solid var(--line);' : ''}">${ltObHtml(t)}</div>` : t.members ? `<div style="${i ? 'border-top:1px solid var(--line);' : ''}">${ltInviteHtml(t)}</div>` : t.group ?`<div style="${i ? 'border-top:1px solid var(--line);' : ''}">${group(t)}</div>` : `
         <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:8px 0;${i ? 'border-top:1px solid var(--line);' : ''}">
             <span style="flex:1;min-width:220px;font-size:14px;">${esc(t.text)}</span>
             ${goLink(t)}
@@ -79,6 +132,7 @@ function renderLeaderTodos(todos) {
     }));
     panel.querySelector('.lt-svc')?.addEventListener('toggle', e => { ltSvcOpen = e.target.open; });
     ltWireInvites(panel);
+    ltWireOb(panel);
     panel.querySelectorAll('.lt-known').forEach(b => b.addEventListener('click', async () => {
         b.disabled = true;
         try { await fetch('/api/war-payout', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key: apiKey, action: 'todo-known', id: b.dataset.id, sig: b.dataset.sig, on: b.dataset.on === '1' }) }); } catch (e) { /* the list is read again below */ }
