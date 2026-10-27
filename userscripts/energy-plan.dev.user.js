@@ -2,7 +2,7 @@
 // @name         World Wide Labs
 // @namespace    https://worldwidelabs.vercel.app
 // @author       CreaLotte
-// @version      1.51.3
+// @version      1.51.4
 // @updateURL    __WWL_BASE__/worldwidelabs.user.js
 // @downloadURL  __WWL_BASE__/worldwidelabs.user.js
 // @description  Shows your WorldWideLabs weekly energy plan (the checklist from the Energy planner) inside Torn, a To do tab with small personal reminders (revive setting, feedback, timezone map, availability, Discord/Intel/CAT), your My Targets list, a simplified energy/war standing strip, and — if you are in the Mentoring Platform — your mentoring checklist too. Also shows faction banners at the top of every Torn page. A small ⚙ in the header shows the installed version, flags when a newer one is out, lets you set/replace your API key, and — for a leader — add or remove your faction's banners right from Torn. On a computer it is a small window you can drag around and close; in TornPDA it is a menu. Ticks are shared with the WWL site.
@@ -1219,7 +1219,7 @@
     function refreshRadar(force) {
         if (!getKey() || radarBusy) return;
         if (!radarOn()) { renderRadar(); return; }
-        if (Date.now() - radarLast < (force ? 15000 : 60000)) return;
+        if (Date.now() - radarLast < (force ? 15000 : 300000)) return; // at most every 5 minutes (it was 1: every page of every member asks, and the free hosting time is limited)
         radarBusy = true;
         api({ action: 'faction-radar' }).then(r => {
             if (!r || !Array.isArray(r.online)) return;

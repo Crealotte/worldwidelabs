@@ -500,7 +500,7 @@ async function leaderTodos(key, factionId) {
 const ltMem = new Map();
 async function leaderTodosCached(key, factionId) {
     const hit = ltMem.get(factionId);
-    if (hit && Date.now() - hit.at < 45000) return hit.v;
+    if (hit && Date.now() - hit.at < 120000) return hit.v; // 2 minutes (it was 45 seconds): every leader's To do asks for it
     const v = await leaderTodos(key, factionId);
     ltMem.set(factionId, { at: Date.now(), v });
     return v;
@@ -1002,7 +1002,7 @@ module.exports = async function handler(req, res) {
         // One read from Torn per minute for the whole faction (kept in this server's memory, nothing is written to the database); the plain fetch skips lib/tornFetch's 10-minute memory of the member list.
         if (action === 'faction-radar') {
             const hit = radarMem.get(String(factionId));
-            if (hit && Date.now() - hit.at < 60000) return res.status(200).json(hit.data);
+            if (hit && Date.now() - hit.at < 300000) return res.status(200).json(hit.data); // 5 minutes: the strip is asked for on every page of every member, and who is online hardly changes in that time
             const rr = await fetch(`https://api.torn.com/v2/faction/members?striptags=true&key=${encodeURIComponent(key)}`, { headers: { accept: 'application/json' } });
             const dd = await rr.json();
             if (dd.error) return res.status(502).json({ error: dd.error.error || 'Torn would not give the member list' });
@@ -1757,7 +1757,7 @@ Cancel: ${cancelUrl}`, [], embeds, undefined, true);
                 items.unshift({ id: 'event-running', text: `${name} is running until ${when}! Keep stacking and keep the chains going!`, notice: true });
             }
             items.sort((a, b) => (b.priority ? 1 : 0) - (a.priority ? 1 : 0)); // the crimes and the money first (the sort keeps the rest in their order)
-            return res.status(200).json({ items, energyPause, ttl: items.some(i => i.priority) || items.some(i => /^lt-/.test(i.id)) ? 60 : 300 }); // how long the script may keep this: a leader with things waiting gets a fresh list every minute
+            return res.status(200).json({ items, energyPause, ttl: items.some(i => i.priority) || items.some(i => /^lt-/.test(i.id)) ? 120 : 300 }); // how long the script may keep this: a leader with things waiting gets a fresh list every minute
         }
         // Names for the "who" lists only leaders see (reporters, "I have this too", thumbs): one roster read (cached), best effort.
         const bugNames = async () => { const o = {}; try { for (const m of await getRoster(key)) o[m.id] = m.name; } catch (e) { /* ids are shown instead */ } return o; };
