@@ -12,6 +12,20 @@
 
 const WHATS_NEW = [
     {
+        version: '1.46', date: '2026-10-30',
+        title: 'Script 1.52: chain watching limit, onboarding and OC overview',
+        everyone: [
+            'Chain watching: as Chain saver or War guard you can now take at most 4 hours in any 12 hours, because watching is tiring and the hours are shared. A block from 18 to 22 TCT and another one from 6 to 10 the next morning still works. This counts on the site and in the script.',
+            'In the WWL script (update to 1.52) the Award tracker in the To do can be opened and closed by clicking its title. The choice is remembered.',
+            'The faction radar in the script now refreshes every 5 minutes instead of every minute, which saves hosting time.',
+            'The reminder messages no longer have a bracket, full stop or comma stuck to a link, because that made the link not work.',
+        ],
+        leaders: [
+            'The first week of new members is split in two: 4 days to join WWL and install the script (that makes them Experiment B), and 3 more days, a week in all, for Discord, Intel and CAT (Guinea Pig or Lab Rat). The removal list follows these days.',
+            'The leader To do has new sections with a toggle per line: Recruit to Experiment B (not on WWL, without the script), To Guinea Pig or Lab Rat (Discord, Intel, CAT) and Organized crimes (not in an OC now, no OC in the last 30 days, out for 7 days or more). Each member has a message to copy and a Notified button, which everybody with leader access sees. The sections show on the site and in the script.',
+        ],
+    },
+    {
         version: '1.45', date: '2026-10-25',
         title: 'Script 1.51: OC join rules, availability click fixed',
         everyone: [

@@ -2,7 +2,7 @@
 // @name         World Wide Labs
 // @namespace    https://worldwidelabs.vercel.app
 // @author       CreaLotte
-// @version      1.51
+// @version      1.52
 // @updateURL    __WWL_BASE__/worldwidelabs.user.js
 // @downloadURL  __WWL_BASE__/worldwidelabs.user.js
 // @description  Shows your WorldWideLabs weekly energy plan (the checklist from the Energy planner) inside Torn, a To do tab with small personal reminders (revive setting, feedback, timezone map, availability, Discord/Intel/CAT), your My Targets list, a simplified energy/war standing strip, and — if you are in the Mentoring Platform — your mentoring checklist too. Also shows faction banners at the top of every Torn page. A small ⚙ in the header shows the installed version, flags when a newer one is out, lets you set/replace your API key, and — for a leader — add or remove your faction's banners right from Torn. On a computer it is a small window you can drag around and close; in TornPDA it is a menu. Ticks are shared with the WWL site.
@@ -26,7 +26,7 @@
     const KEY_NAME = 'wwl_api_key', POS_NAME = 'wwl_plan_pos', STATE_NAME = 'wwl_plan_state';
     // GM_info gives the version Tampermonkey actually has installed right now — falls back to a
     // hardcoded copy (kept in sync with @version above) for TornPDA, which doesn't grant GM_info.
-    const SCRIPT_VERSION = (typeof GM_info !== 'undefined' && GM_info.script?.version) || '1.51';
+    const SCRIPT_VERSION = (typeof GM_info !== 'undefined' && GM_info.script?.version) || '1.52';
     const versionGreater = (a, b) => {
         const pa = String(a).split('.').map(Number), pb = String(b).split('.').map(Number);
         for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
@@ -621,7 +621,7 @@
         const hints = {
             all: 'Green = more members available (the number), ● = somebody watches the chain or war. White frame = now. Tap an hour to see who.',
             mine: 'Tap an hour: green = available, yellow = maybe, a third tap clears it. A blue frame is an hour where you watch. The same hours show on the WWL site.',
-            watch: `Tap one of your hours to add or remove yourself as ${roleName} (blue frame; dashed = you are the backup). Each hour has room for one ${roleName} and one backup, ✕ = full. It also marks you as available.`,
+            watch: `Tap one of your hours to add or remove yourself as ${roleName} (blue frame; dashed = you are the backup). Each hour has room for one ${roleName} and one backup, ✕ = full. You can take at most 4 hours in any 12 hours (it is tiring). It also marks you as available.`,
         };
         return `<div style="font-weight:700;">${esc(c.name || 'Availability')}${c.war && c.war.opponent ? ` <span style="font-weight:400;color:#9aa4b5;">vs ${esc(c.war.opponent)}</span>` : ''}</div>
             <div style="font-size:12px;margin:4px 0;">${nc ? `Right now: <b>${nc[0]}</b> available${nc[1] ? `, ${nc[1]} maybe` : ''}, <b>${nc[2]}</b> watching.` : '<span style="color:#9aa4b5;">The plan is not running right now.</span>'}</div>
@@ -632,6 +632,8 @@
             ${avMsg ? `<div style="color:#e05555;font-size:12px;margin-top:6px;">${esc(avMsg)}</div>` : ''}
             <div style="margin-top:6px;color:#9aa4b5;font-size:11px;">${hints[avMode]}${local ? ' Everything is saved in TCT, so the leaders see it in TCT.' : ''}</div>`;
     }
+    // in any 12 hours in a row at most 4 watch hours per person (hours counted across days); the server checks the same
+    const watchOver = (keys, day, hour) => { const idx = k => { const [d, h] = String(k).split('-').map(Number); return d * 24 + h; }, mine = keys.map(idx), cand = Number(day) * 24 + Number(hour); for (let s = cand - 11; s <= cand; s++) if (mine.filter(i => i >= s && i < s + 12 && i !== cand).length + 1 > 4) return true; return false; };
     function wireAvailTab() {
         body.querySelectorAll('.wwl-av-mode').forEach(b => b.addEventListener('click', () => { avMode = b.dataset.mode; avPick = null; avMsg = ''; render(); }));
         body.querySelector('#wwl-av-local')?.addEventListener('change', e => { avLocal = e.target.checked; store.set('wwl_av_local', avLocal ? '1' : '0'); render(); });
@@ -641,6 +643,7 @@
             const [day, hour] = k.split('-').map(Number), mine = avData.mine || (avData.mine = {}), mineWatch = avData.mineWatch || (avData.mineWatch = {});
             if (avMode === 'watch') {
                 const was = !!mineWatch[k], wasMine = mine[k], isWar = !!(avData.config && avData.config.war && avData.config.war.id);
+                if (!was && watchOver(Object.keys(mineWatch), day, hour)) { avMsg = `As ${isWar ? 'a War guard' : 'a Chain saver'} you can take at most 4 hours in any 12 hours: it is tiring, so the hours are shared. Take one of your hours nearby off first, or pick an hour 12 hours or more away from your block.`; render(); return; }
                 if (!was && ((avData.watchTaken || {})[k] || 0) >= 2) { avMsg = `That hour already has a ${isWar ? 'War guard' : 'Chain saver'} and a backup: pick another hour.`; render(); return; }
                 if (was) delete mineWatch[k]; else { mineWatch[k] = true; if (!mine[k]) mine[k] = true; }
                 avMsg = ''; render();
@@ -662,15 +665,53 @@
         const icon = r => r.kind === 'demote' ? '⬇' : r.kind === 'check' ? '⚠' : r.kind === 'kick' ? '🚪' : r.kind === 'recruit' ? '⏳' : '⬆';
         return `<div style="margin:0 0 8px 10px;max-height:260px;overflow:auto;">${(t.rows || []).map(r => `<div style="display:flex;gap:6px;align-items:baseline;padding:4px 0;border-top:1px solid #2c3442;"><span>${icon(r)}</span><span style="flex:1;"><a href="https://www.torn.com/profiles.php?XID=${esc(r.id)}" target="_blank" rel="noopener" style="color:#e6e9ef;text-decoration:none;font-weight:600;">${esc(r.name)}</a> <span style="color:#9aa4b5;">${r.kind === 'kick' ? esc(r.from) + ': can be removed' : esc(r.from) + ' → ' + esc(r.to)}</span><div style="color:#9aa4b5;font-size:11px;">${esc(r.why || '')}</div></span></div>`).join('')}</div>`;
     }
+    // ---- The onboarding overview in the leader To do: two sections (Recruit to Experiment B, and to Guinea Pig / Lab Rat), the same as on the site. The counts are always in sight, the members
+    // are in the drop-down, each with a message to copy and a Notified button (kept on the server: everybody sees who was already reminded) ----
+    const OB_DEF = {
+        1: { title: 'Recruit → Experiment B', reqs: [['wwl', 'not on WWL'], ['script', 'on WWL without the script']] },
+        2: { title: 'To Guinea Pig / Lab Rat', reqs: [['discord', 'without Discord'], ['intel', 'without Intel'], ['cat', 'without CAT']] },
+        3: { title: 'Organized crimes', reqs: [['ocout', 'not in an OC now'], ['ocnever', 'with no OC in the last 30 days']] },
+    };
+    const OB_DEFAULTS = {
+        discord: 'Hey, I have noticed you have not joined our Discord yet. It is one of the steps for becoming a Guinea Pig or Lab Rat, and it is where we plan wars and chat. Shout if you need the invite or any help!',
+        intel: 'Hey, I have noticed your Intel is not set up yet. It is one of the steps for becoming a Guinea Pig or Lab Rat. Shout if you need help with it!',
+        ocout: 'Hey, I have noticed you are not in an organized crime at the moment. Please join one that fits you: the OC page in Torn shows which slots are open, and on WWL you can ask for a spot. Shout if you need help!',
+        ocnever: 'Hey, I have noticed you have not been in an organized crime yet. They give good rewards and respect, and we would love to have you in one. The OC page in Torn shows which slots are open, and on WWL you can ask for a spot. Shout if you need help!',
+        cat: 'Hey, I have noticed CAT is not installed yet. It is our war tool and one of the steps for becoming a Guinea Pig or Lab Rat. Shout if you need help with it!',
+    };
+    const obDefault = k => OB_DEFAULTS[k] || invDefault(k), obMsg = k => store.get(INV_MSG_KEY(k)) || obDefault(k);
+    const obDate = ts => new Date(ts).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+    function obHtml(t) {
+        const o = t.ob, def = OB_DEF[o.stage], n = a => (a || []).length, past = o.past || [], pastIds = new Set(past.map(p => p.id)), btn = 'background:transparent;border-radius:6px;padding:3px 8px;font-size:12px;cursor:pointer;color:#e6e9ef;border:1px solid #3a4352;';
+        const missing = id => def.reqs.filter(([k]) => (o[k] || []).some(m => m.id === id)).map(([, label]) => label);
+        const person = (m, k, isPast) => `<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;padding:4px 0;border-top:1px solid #2c3442;"><span style="flex:1;min-width:110px;">${isPast ? '<b style="color:#e05555;">!</b> ' : ''}<a href="https://www.torn.com/profiles.php?XID=${esc(m.id)}" target="_blank" rel="noopener" style="color:#e6e9ef;text-decoration:none;font-weight:600;">${esc(m.name)}</a> <span style="color:#9aa4b5;font-size:11px;">${m.info ? esc(m.info) : m.days == null ? '' : `day ${m.days + 1}`}</span></span>${k ? `
+            <button type="button" class="wwl-ob-copy" data-kind="${k}" data-name="${esc(m.name)}" style="${btn}">Copy message</button>
+            <button type="button" class="wwl-ob-notified" data-kind="${k}" data-id="${esc(m.id)}" data-on="${m.notified ? 1 : 0}" style="${btn}${m.notified ? 'color:#35d99b;border-color:#35d99b;' : ''}">${m.notified ? `Notified ${obDate(m.notified)}` : 'Notified'}</button>` : `<span style="color:#9aa4b5;font-size:11px;">${esc(o.stage === 3 ? '' : missing(m.id).join(', '))}</span>`}</div>`;
+        const sum = (text, color) => `<summary style="cursor:pointer;padding:${IS_PDA ? 7 : 4}px 0;font-size:12px;${color ? `color:${color};font-weight:700;` : ''}">${text}</summary>`;
+        // one toggle per requirement: only the group you open expands, so the list never gets very long
+        const reqBlock = ([k, label]) => {
+            const c = n(o[k]), head = `${c} member${c === 1 ? '' : 's'} ${esc(label)}`, id = `${t.id}:${k}`;
+            if (!c) return `<div style="font-size:12px;color:#9aa4b5;padding:3px 0 3px 16px;">${head}</div>`;
+            return `<details class="wwl-ob" data-id="${esc(id)}" ${grpOpen[id] ? 'open' : ''}>${sum(head)}<div style="margin:0 0 8px 10px;"><div style="font-size:11px;color:#9aa4b5;margin:4px 0;">Message to copy:</div>
+                <textarea class="wwl-ob-msg" data-kind="${k}" rows="3" style="width:100%;box-sizing:border-box;background:#11141a;color:#e6e9ef;border:1px solid #3a4352;border-radius:6px;padding:5px;font-size:11px;">${esc(obMsg(k))}</textarea>
+                <div style="margin:4px 0;"><button type="button" class="wwl-ob-save" data-kind="${k}" style="${btn}">Save message</button> <button type="button" class="wwl-ob-reset" data-kind="${k}" style="${btn}">Standard message</button> <span class="wwl-ob-note" style="font-size:11px;color:#9aa4b5;"></span></div>
+                <div style="max-height:240px;overflow:auto;">${o[k].map(m => person(m, k, pastIds.has(m.id))).join('')}</div></div></details>`;
+        };
+        const pastId = `${t.id}:past`, pastBlock = !n(past) ? '' : `<details class="wwl-ob" data-id="${esc(pastId)}" ${grpOpen[pastId] ? 'open' : ''}>${sum(`! ${n(past)} member${n(past) === 1 ? ' has' : 's have'} ${o.stage === 3 ? `been out of an OC for ${o.days} days or more` : `passed their ${o.days} days`}`, '#e05555')}<div style="margin:0 0 8px 10px;max-height:240px;overflow:auto;">${past.map(m => person(m, '', true)).join('')}</div></details>`;
+        return `<div style="padding:${IS_PDA ? 10 : 7}px 0;border-bottom:1px solid #3a4352;"><div><b>${esc(def.title)}</b> <span style="color:#9aa4b5;font-size:11px;">(${o.stage === 3 ? `${o.window} days looked at` : `${o.days} days`})</span></div>${o.stage === 3 && o.building ? '<div style="font-size:11px;color:#9aa4b5;margin:2px 0 4px 2px;">WWL is still reading the older crimes: some members may show as having none for now.</div>' : ''}${def.reqs.map(reqBlock).join('')}${pastBlock}</div>`;
+    }
     // the awards you follow: a title with ONE Open button, then per award an icon and a bar (filled as far as it is done) with the name on it, and under it "25% - about 108 days to go"
     function awardBlockHtml(t) {
+        const awOpen = store.get('wwl_aw_open') !== '0'; // the block stays where it is; the title opens and closes it (remembered)
         const bar = a => `<div style="display:flex;gap:8px;align-items:center;margin-top:6px;"><span style="width:20px;text-align:center;">${esc(a.icon || '🏅')}</span><div style="flex:1;position:relative;border:1px solid #3a4352;border-radius:6px;overflow:hidden;background:#232a36;"><div style="position:absolute;left:0;top:0;bottom:0;width:${Math.max(0, Math.min(100, Number(a.pct) || 0))}%;background:#1f6b50;"></div><div style="position:relative;padding:4px 8px;font-size:12px;line-height:1.3;">${esc(a.label)}</div></div></div><div style="margin:2px 0 0 28px;color:#9aa4b5;font-size:11px;">${esc(a.line)}</div>`;
-        return `<div style="padding:${IS_PDA ? 10 : 7}px 0;border-bottom:1px solid #3a4352;"><div style="display:flex;gap:8px;align-items:center;"><span style="flex:1;font-weight:700;">${esc(t.text)}</span>${t.url ? `<a href="${esc(t.url)}" target="_blank" rel="noopener" style="color:#35d99b;white-space:nowrap;text-decoration:none;border:1px solid #35d99b;border-radius:6px;padding:4px 8px;font-size:12px;">${esc(t.cta || 'Open')}</a>` : ''}</div>${(t.awards || []).map(bar).join('')}</div>`;
+        return `<div style="padding:${IS_PDA ? 10 : 7}px 0;border-bottom:1px solid #3a4352;"><div style="display:flex;gap:8px;align-items:center;"><span class="wwl-aw-head" data-title="${esc(t.text)}" data-n="${(t.awards || []).length}" title="Click to open or close" style="flex:1;font-weight:700;cursor:pointer;user-select:none;">${awOpen ? '▾' : '▸'} ${esc(t.text)}${awOpen ? '' : ` <span style="font-weight:400;color:#9aa4b5;">(${(t.awards || []).length})</span>`}</span>${t.url ? `<a href="${esc(t.url)}" target="_blank" rel="noopener" style="color:#35d99b;white-space:nowrap;text-decoration:none;border:1px solid #35d99b;border-radius:6px;padding:4px 8px;font-size:12px;">${esc(t.cta || 'Open')}</a>` : ''}</div><div class="wwl-aw-list" style="${awOpen ? '' : 'display:none;'}">${(t.awards || []).map(bar).join('')}</div></div>`;
     }
     const INV_MSG_KEY = k =>'wwl_invite_msg_' + k, INV_AT_KEY = (k, id) => `wwl_invited_${k}_${id}`;
+    // a link in a message must stand alone: Torn makes a ")", "." or "," stuck to it part of the link, and then it does not work (also cleans a message a leader saved earlier)
+    const cleanLinks = text => String(text).replace(/(\(?)(https?:\/\/\S+)/g, (m, open, url, off, all) => { const core = url.replace(/[).,;:!?\]]+$/, ''), next = all.charAt(off + m.length); return core + (core !== url && next && !/\s/.test(next) ? ' ' : ''); });
     const invDefault = k => k === 'script'
-        ? `Hey, I have noticed you have not installed the WWL script yet (${WWL}/worldwidelabs.user.js). Please install it: it shows your to do list and energy plan right inside Torn. Note that the script is not the website: it is a separate add-on. You need Tampermonkey on a computer, or add it as a script in TornPDA. Shout if you get stuck!`
-        : `Hey, I have noticed you have not logged into WWL yet (${WWL}), please join with a limited API key. It takes a minute and gives you your energy plan, welcome chapters and more. Shout if you need help!`;
+        ? `Hey, I have noticed you have not installed the WWL script yet. You can install it from ${WWL}/worldwidelabs.user.js and then it shows your to do list and energy plan right inside Torn. Note that the script is not the website: it is a separate add-on. You need Tampermonkey on a computer, or add it as a script in TornPDA. Shout if you get stuck!`
+        : `Hey, I have noticed you have not logged into WWL yet. Please join at ${WWL} with a limited API key. It takes a minute and gives you your energy plan, welcome chapters and more. Shout if you need help!`;
     const invMsg = k => store.get(INV_MSG_KEY(k)) || invDefault(k);
     function inviteHtml(t) {
         const kind = t.kind === 'script' ? 'script' : 'wwl', btn = 'background:transparent;border-radius:6px;padding:3px 8px;font-size:12px;cursor:pointer;';
@@ -696,6 +737,36 @@
             } catch (e) { claimMsg = e.message; render(); }
         }));
         body.querySelectorAll('.wwl-grp').forEach(d => d.addEventListener('toggle', () => { grpOpen[d.dataset.id] = d.open; }));
+        body.querySelectorAll('.wwl-ob').forEach(d => d.addEventListener('toggle', () => { grpOpen[d.dataset.id] = d.open; }));
+        body.querySelectorAll('.wwl-ob-copy').forEach(b => b.addEventListener('click', () => { // it only copies: the leader decides when somebody counts as notified
+            const text = cleanLinks(b.closest('details').querySelector(`.wwl-ob-msg[data-kind="${b.dataset.kind}"]`).value.replace(/\{name\}/g, b.dataset.name));
+            try { navigator.clipboard.writeText(text); b.textContent = 'Copied ✓'; setTimeout(() => { b.textContent = 'Copy message'; }, 1800); } catch (e) { b.textContent = 'Could not copy'; }
+        }));
+        body.querySelectorAll('.wwl-ob-notified').forEach(b => b.addEventListener('click', async () => {
+            const on = b.dataset.on !== '1';
+            b.disabled = true;
+            try {
+                await api({ action: 'ob-notify', kind: b.dataset.kind, id: b.dataset.id, on });
+                b.dataset.on = on ? '1' : '0'; b.textContent = on ? `Notified ${obDate(Date.now())}` : 'Notified';
+                b.style.color = on ? '#35d99b' : '#e6e9ef'; b.style.borderColor = on ? '#35d99b' : '#3a4352';
+            } catch (e) { b.textContent = 'Could not save'; setTimeout(() => { b.textContent = on ? 'Notified' : `Notified ${obDate(Date.now())}`; }, 1800); }
+            b.disabled = false;
+        }));
+        body.querySelectorAll('.wwl-ob-save').forEach(b => b.addEventListener('click', () => {
+            store.set(INV_MSG_KEY(b.dataset.kind), b.closest('details').querySelector(`.wwl-ob-msg[data-kind="${b.dataset.kind}"]`).value);
+            b.parentElement.querySelector('.wwl-ob-note').textContent = 'Saved.';
+        }));
+        body.querySelectorAll('.wwl-ob-reset').forEach(b => b.addEventListener('click', () => {
+            store.set(INV_MSG_KEY(b.dataset.kind), '');
+            b.closest('details').querySelector(`.wwl-ob-msg[data-kind="${b.dataset.kind}"]`).value = obDefault(b.dataset.kind);
+            b.parentElement.querySelector('.wwl-ob-note').textContent = 'Standard message back.';
+        }));
+        body.querySelectorAll('.wwl-aw-head').forEach(h => h.addEventListener('click', () => { // open or close the Award tracker (it stays in its place; the choice is remembered)
+            const list = h.parentElement.parentElement.querySelector('.wwl-aw-list'), open = list.style.display === 'none';
+            list.style.display = open ? '' : 'none';
+            h.innerHTML = `${open ? '▾' : '▸'} ${esc(h.dataset.title)}${open ? '' : ` <span style="font-weight:400;color:#9aa4b5;">(${esc(h.dataset.n)})</span>`}`;
+            store.set('wwl_aw_open', open ? '1' : '0');
+        }));
         body.querySelectorAll('.wwl-claim').forEach(b => b.addEventListener('click', async () => {
             const label = b.textContent; b.disabled = true; b.textContent = 'Claiming…';
             const w = IS_PDA ? null : window.open('', '_blank'); // opened at once, on the tap, so the pop-up blocker lets it through; it goes to the right page when the claim is done
@@ -714,7 +785,7 @@
             const box = b.closest('.wwl-inv'); store.set(INV_MSG_KEY(box.dataset.kind), ''); box.querySelector('.wwl-inv-msg').value = invDefault(box.dataset.kind); box.querySelector('.wwl-inv-note').textContent = 'Standard message back.';
         }));
         body.querySelectorAll('.wwl-inv-send').forEach(b => b.addEventListener('click', () => {
-            const kind = b.dataset.kind, id = b.dataset.id, text = b.closest('.wwl-inv').querySelector('.wwl-inv-msg').value.replace(/\{name\}/g, b.dataset.name);
+            const kind = b.dataset.kind, id = b.dataset.id, text = cleanLinks(b.closest('.wwl-inv').querySelector('.wwl-inv-msg').value.replace(/\{name\}/g, b.dataset.name));
             store.set('wwl_pending_mail_' + id, JSON.stringify({ text, ts: Date.now() })); // the mail page fills it in (see pendingMail)
             store.set(INV_AT_KEY(kind, id), String(Date.now()));
             try { navigator.clipboard.writeText(text); } catch (e) { /* the page fills it in anyway */ }
@@ -730,7 +801,7 @@
         </label>`;
         const rest = todoItems === null ? '<div style="padding:6px 0;color:#9aa4b5;">Loading…</div>'
             : !todoItems.length ? ''
-            : [...todoItems].sort((a, b) => (b.priority ? 1 : 0) - (a.priority ? 1 : 0)).map(t => t.aw ? awardBlockHtml(t) : (t.members || t.rows) ? `<details class="wwl-grp" data-id="${esc(t.id)}" ${grpOpen[t.id] ? 'open' : ''} style="border-bottom:1px solid #3a4352;"><summary style="cursor:pointer;padding:${IS_PDA ? 10 : 7}px 0;list-style:none;display:flex;gap:8px;align-items:center;"><span style="color:#9aa4b5;">▾</span><span style="flex:1;">${esc(String(t.text).split(':')[0].replace(/[. ]+$/, ''))}</span></summary>${t.members ? inviteHtml(t) : rowsHtml(t)}</details>` : t.notice
+            : [...todoItems].sort((a, b) => (b.priority ? 1 : 0) - (a.priority ? 1 : 0)).map(t => t.aw ? awardBlockHtml(t) : t.ob ? obHtml(t) : (t.members || t.rows) ? `<details class="wwl-grp" data-id="${esc(t.id)}" ${grpOpen[t.id] ? 'open' : ''} style="border-bottom:1px solid #3a4352;"><summary style="cursor:pointer;padding:${IS_PDA ? 10 : 7}px 0;list-style:none;display:flex;gap:8px;align-items:center;"><span style="color:#9aa4b5;">▾</span><span style="flex:1;">${esc(String(t.text).split(':')[0].replace(/[. ]+$/, ''))}</span></summary>${t.members ? inviteHtml(t) : rowsHtml(t)}</details>` : t.notice
                 // a notice is just a reminder: a full-width amber box with the text, no button, not part of the count
                 ? `<div style="padding:8px 10px;margin:6px 0;border:1px solid #f0b432;border-radius:6px;background:#f0b43218;color:#f0b432;font-weight:600;line-height:1.4;">${esc(t.text)}</div>`
                 : `<div style="display:flex;gap:8px;align-items:center;padding:${IS_PDA ? 10 : 7}px 0;border-bottom:1px solid #3a4352;${t.priority ? 'border-left:3px solid #e05555;padding-left:8px;' : ''}">
@@ -1160,7 +1231,7 @@
     function refreshRadar(force) {
         if (!getKey() || radarBusy) return;
         if (!radarOn()) { renderRadar(); return; }
-        if (Date.now() - radarLast < (force ? 15000 : 60000)) return;
+        if (Date.now() - radarLast < (force ? 15000 : 300000)) return; // at most every 5 minutes (it was 1: every page of every member asks, and the free hosting time is limited)
         radarBusy = true;
         api({ action: 'faction-radar' }).then(r => {
             if (!r || !Array.isArray(r.online)) return;
