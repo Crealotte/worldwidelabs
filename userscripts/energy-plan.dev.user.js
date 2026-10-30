@@ -621,7 +621,7 @@
         const hints = {
             all: 'Green = more members available (the number), ● = somebody watches the chain or war. White frame = now. Tap an hour to see who.',
             mine: 'Tap an hour: green = available, yellow = maybe, a third tap clears it. A blue frame is an hour where you watch. The same hours show on the WWL site.',
-            watch: `Tap one of your hours to add or remove yourself as ${roleName} (blue frame; dashed = you are the backup). Each hour has room for one ${roleName} and one backup, ✕ = full. You can take at most 4 hours a day (it is tiring). It also marks you as available.`,
+            watch: `Tap one of your hours to add or remove yourself as ${roleName} (blue frame; dashed = you are the backup). Each hour has room for one ${roleName} and one backup, ✕ = full. You can take at most 4 hours in any 12 hours (it is tiring). It also marks you as available.`,
         };
         return `<div style="font-weight:700;">${esc(c.name || 'Availability')}${c.war && c.war.opponent ? ` <span style="font-weight:400;color:#9aa4b5;">vs ${esc(c.war.opponent)}</span>` : ''}</div>
             <div style="font-size:12px;margin:4px 0;">${nc ? `Right now: <b>${nc[0]}</b> available${nc[1] ? `, ${nc[1]} maybe` : ''}, <b>${nc[2]}</b> watching.` : '<span style="color:#9aa4b5;">The plan is not running right now.</span>'}</div>
@@ -632,6 +632,8 @@
             ${avMsg ? `<div style="color:#e05555;font-size:12px;margin-top:6px;">${esc(avMsg)}</div>` : ''}
             <div style="margin-top:6px;color:#9aa4b5;font-size:11px;">${hints[avMode]}${local ? ' Everything is saved in TCT, so the leaders see it in TCT.' : ''}</div>`;
     }
+    // in any 12 hours in a row at most 4 watch hours per person (hours counted across days); the server checks the same
+    const watchOver = (keys, day, hour) => { const idx = k => { const [d, h] = String(k).split('-').map(Number); return d * 24 + h; }, mine = keys.map(idx), cand = Number(day) * 24 + Number(hour); for (let s = cand - 11; s <= cand; s++) if (mine.filter(i => i >= s && i < s + 12 && i !== cand).length + 1 > 4) return true; return false; };
     function wireAvailTab() {
         body.querySelectorAll('.wwl-av-mode').forEach(b => b.addEventListener('click', () => { avMode = b.dataset.mode; avPick = null; avMsg = ''; render(); }));
         body.querySelector('#wwl-av-local')?.addEventListener('change', e => { avLocal = e.target.checked; store.set('wwl_av_local', avLocal ? '1' : '0'); render(); });
@@ -641,7 +643,7 @@
             const [day, hour] = k.split('-').map(Number), mine = avData.mine || (avData.mine = {}), mineWatch = avData.mineWatch || (avData.mineWatch = {});
             if (avMode === 'watch') {
                 const was = !!mineWatch[k], wasMine = mine[k], isWar = !!(avData.config && avData.config.war && avData.config.war.id);
-                if (!was && Object.keys(mineWatch).filter(x => x.split('-')[0] === String(day)).length >= 4) { avMsg = `You can take at most 4 hours a day as ${isWar ? 'a War guard' : 'a Chain saver'}: it is tiring, so the hours are shared. Take one of yours off first if you want a different hour.`; render(); return; }
+                if (!was && watchOver(Object.keys(mineWatch), day, hour)) { avMsg = `As ${isWar ? 'a War guard' : 'a Chain saver'} you can take at most 4 hours in any 12 hours: it is tiring, so the hours are shared. Take one of your hours nearby off first, or pick an hour 12 hours or more away from your block.`; render(); return; }
                 if (!was && ((avData.watchTaken || {})[k] || 0) >= 2) { avMsg = `That hour already has a ${isWar ? 'War guard' : 'Chain saver'} and a backup: pick another hour.`; render(); return; }
                 if (was) delete mineWatch[k]; else { mineWatch[k] = true; if (!mine[k]) mine[k] = true; }
                 avMsg = ''; render();

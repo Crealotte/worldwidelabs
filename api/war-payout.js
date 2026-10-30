@@ -362,7 +362,10 @@ function planEnd(startDate, endDate, endHour, startHour) {
 // Blue ring: one primary and one backup per hour. Who holds an hour, in the order they took it (a plain `true` from before is oldest);
 // members who said they can't make it, and marks on hours that are no longer ticked, don't count.
 const WATCH_MAX = 2;
-const WATCH_PER_DAY = 4; // watching a chain (or guarding a war) is tiring: nobody can take more than this many hours of one day, so it is shared and nobody ends up watching 12 hours in a row
+// Watching a chain (or guarding a war) is tiring: in any 12 hours in a row nobody can take more than 4 watch hours, so it is shared and nobody ends up watching 12 hours in a row.
+// 18-22 TCT and then 6-10 the next morning is fine (the blocks start 12 hours apart). Hours are counted across days (day * 24 + hour).
+const WATCH_PER_WINDOW = 4, WATCH_WINDOW_H = 12;
+const watchOver = (keys, day, hour) => { const idx = k => { const [d, h] = String(k).split('-').map(Number); return d * 24 + h; }, mine = keys.map(idx), cand = Number(day) * 24 + Number(hour); for (let s = cand - WATCH_WINDOW_H + 1; s <= cand; s++) if (mine.filter(i => i >= s && i < s + WATCH_WINDOW_H && i !== cand).length + 1 > WATCH_PER_WINDOW) return true; return false; };
 function watchOrder(data, slotKey) {
     const list = [];
     for (const [id, entry] of Object.entries(data?.entries || {})) {
@@ -1219,8 +1222,7 @@ module.exports = async function handler(req, res) {
             if (watch) {
                 if (entry.watch[slotKey]) return res.status(200).json({ ok: true });
                 const roleName = data.war?.id ? 'War guard' : 'Chain saver';
-                const mineToday = Object.keys(entry.watch).filter(k => k.split('-')[0] === String(day)).length;
-                if (mineToday >= WATCH_PER_DAY) return res.status(409).json({ error: `You can take at most ${WATCH_PER_DAY} hours a day as ${roleName}: it is tiring, so the hours are shared. Take one of yours off first if you want a different hour.` });
+                if (watchOver(Object.keys(entry.watch), day, hour)) return res.status(409).json({ error: `As ${roleName}, you can take at most 4 hours in any 12 hours: it is tiring, so the hours are shared. Take one of your hours nearby off first, or pick an hour 12 hours or more away from your block.` });
                 if (watchOrder(data, slotKey).length >= WATCH_MAX) return res.status(409).json({ error: `That hour already has a ${roleName} and a backup — pick another hour.` });
                 entry.watch[slotKey] = Date.now(); if (!entry.slots[slotKey]) entry.slots[slotKey] = true;
             } else delete entry.watch[slotKey];

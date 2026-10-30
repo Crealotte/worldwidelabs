@@ -1077,16 +1077,18 @@ function renderAvWatchBar() {
     $('av-watch-bar').style.background = avWatchMode ? 'rgba(77,163,255,.18)' : '';
     $('av-watch-warn').style.display = avWatchMode ? 'block' : 'none';
     $('av-watch-hint').textContent = avIsWarPlan()
-        ? 'This is a war plan. A War guard is online and active, keeping an eye out for when things go wrong: making the calls, changing plans, keeping the chat clear and motivating people. Each hour has room for one, plus one backup, and you can take at most 4 hours a day. With the switch on, click an hour to add or remove your blue ring (a solid ring is the first place, a dashed ring the backup). An hour you had not ticked becomes green.'
-        : 'This is a chain plan. A Chain saver is online and active, keeping an eye on the chain and stepping in when it is about to drop. Each hour has room for one, plus one backup, and you can take at most 4 hours a day (it is tiring). With the switch on, click an hour to add or remove your blue ring (a solid ring is the first place, a dashed ring the backup). An hour you had not ticked becomes green.';
+        ? 'This is a war plan. A War guard is online and active, keeping an eye out for when things go wrong: making the calls, changing plans, keeping the chat clear and motivating people. Each hour has room for one, plus one backup, and you can take at most 4 hours in any 12 hours. With the switch on, click an hour to add or remove your blue ring (a solid ring is the first place, a dashed ring the backup). An hour you had not ticked becomes green.'
+        : 'This is a chain plan. A Chain saver is online and active, keeping an eye on the chain and stepping in when it is about to drop. Each hour has room for one, plus one backup, and you can take at most 4 hours in any 12 hours (it is tiring). With the switch on, click an hour to add or remove your blue ring (a solid ring is the first place, a dashed ring the backup). An hour you had not ticked becomes green.';
 }
 $('av-watch-toggle').addEventListener('change', () => { avWatchMode = $('av-watch-toggle').checked; renderAvWatchBar(); });
 
+// in any 12 hours in a row at most 4 watch hours per person (hours counted across days); the server checks the same
+const avWatchOver = (keys, day, hour) => { const idx = k => { const [d, h] = String(k).split('-').map(Number); return d * 24 + h; }, mine = keys.map(idx), cand = Number(day) * 24 + Number(hour); for (let s = cand - 11; s <= cand; s++) if (mine.filter(i => i >= s && i < s + 12 && i !== cand).length + 1 > 4) return true; return false; };
 async function toggleAvWatch(day, hour, cellEl) {
     const key = `${day}-${hour}`;
     const wasWatch = !!avMineWatch[key], wasColour = avMine[key];
     const on = !wasWatch;
-    if (on && Object.keys(avMineWatch).filter(k => k.split('-')[0] === String(day)).length >= 4) { toast(`You can take at most 4 hours a day as ${avIsWarPlan() ? 'a War guard' : 'a Chain saver'}: it is tiring, so the hours are shared. Take one of yours off first if you want a different hour.`); return; }
+    if (on && avWatchOver(Object.keys(avMineWatch), day, hour)) { toast(`As ${avIsWarPlan() ? 'a War guard' : 'a Chain saver'} you can take at most 4 hours in any 12 hours: it is tiring, so the hours are shared. Take one of your hours nearby off first, or pick an hour 12 hours or more away from your block.`); return; }
     if (on && (avWatchTaken[key] || 0) >= 2) { toast(`That hour already has ${avIsWarPlan() ? 'a War guard' : 'a Chain saver'} and a backup — pick another hour.`); return; }
     if (on) { avMineWatch[key] = true; if (!avMine[key]) avMine[key] = true; } else delete avMineWatch[key];
     cellEl.classList.toggle('av-cell-watch', on);
