@@ -362,6 +362,7 @@ function planEnd(startDate, endDate, endHour, startHour) {
 // Blue ring: one primary and one backup per hour. Who holds an hour, in the order they took it (a plain `true` from before is oldest);
 // members who said they can't make it, and marks on hours that are no longer ticked, don't count.
 const WATCH_MAX = 2;
+const WATCH_PER_DAY = 4; // watching a chain (or guarding a war) is tiring: nobody can take more than this many hours of one day, so it is shared and nobody ends up watching 12 hours in a row
 function watchOrder(data, slotKey) {
     const list = [];
     for (const [id, entry] of Object.entries(data?.entries || {})) {
@@ -1218,6 +1219,8 @@ module.exports = async function handler(req, res) {
             if (watch) {
                 if (entry.watch[slotKey]) return res.status(200).json({ ok: true });
                 const roleName = data.war?.id ? 'War guard' : 'Chain saver';
+                const mineToday = Object.keys(entry.watch).filter(k => k.split('-')[0] === String(day)).length;
+                if (mineToday >= WATCH_PER_DAY) return res.status(409).json({ error: `You can take at most ${WATCH_PER_DAY} hours a day as ${roleName}: it is tiring, so the hours are shared. Take one of yours off first if you want a different hour.` });
                 if (watchOrder(data, slotKey).length >= WATCH_MAX) return res.status(409).json({ error: `That hour already has a ${roleName} and a backup — pick another hour.` });
                 entry.watch[slotKey] = Date.now(); if (!entry.slots[slotKey]) entry.slots[slotKey] = true;
             } else delete entry.watch[slotKey];
