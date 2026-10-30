@@ -2,7 +2,7 @@
 // @name         World Wide Labs
 // @namespace    https://worldwidelabs.vercel.app
 // @author       CreaLotte
-// @version      1.51.4
+// @version      1.51.5
 // @updateURL    __WWL_BASE__/worldwidelabs.user.js
 // @downloadURL  __WWL_BASE__/worldwidelabs.user.js
 // @description  Shows your WorldWideLabs weekly energy plan (the checklist from the Energy planner) inside Torn, a To do tab with small personal reminders (revive setting, feedback, timezone map, availability, Discord/Intel/CAT), your My Targets list, a simplified energy/war standing strip, and — if you are in the Mentoring Platform — your mentoring checklist too. Also shows faction banners at the top of every Torn page. A small ⚙ in the header shows the installed version, flags when a newer one is out, lets you set/replace your API key, and — for a leader — add or remove your faction's banners right from Torn. On a computer it is a small window you can drag around and close; in TornPDA it is a menu. Ticks are shared with the WWL site.
@@ -676,17 +676,23 @@
     const obDefault = k => OB_DEFAULTS[k] || invDefault(k), obMsg = k => store.get(INV_MSG_KEY(k)) || obDefault(k);
     const obDate = ts => new Date(ts).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
     function obHtml(t) {
-        const o = t.ob, def = OB_DEF[o.stage], past = new Set((o.past || []).map(p => p.id)), n = a => (a || []).length, btn = 'background:transparent;border-radius:6px;padding:3px 8px;font-size:12px;cursor:pointer;color:#e6e9ef;border:1px solid #3a4352;';
-        const count = (k, label) => { const c = n(o[k]); return `<div style="font-size:12px;color:${c ? '#e6e9ef' : '#9aa4b5'};">${c} member${c === 1 ? '' : 's'} ${esc(label)}</div>`; };
-        const summary = `<summary style="cursor:pointer;padding:${IS_PDA ? 10 : 7}px 0;list-style:none;"><div style="display:flex;gap:8px;align-items:center;"><span style="color:#9aa4b5;">▾</span><b>${esc(def.title)}</b> <span style="color:#9aa4b5;font-size:11px;">(${o.days} days)</span></div>
-            <div style="margin:3px 0 0 20px;">${def.reqs.map(([k, label]) => count(k, label)).join('')}${n(o.past) ? `<div style="font-size:12px;color:#e05555;font-weight:700;">! ${n(o.past)} member${n(o.past) === 1 ? ' is' : 's are'} past their ${o.days} days</div>` : ''}</div></summary>`;
-        const rowsOf = (k, label) => !n(o[k]) ? '' : `<div style="margin:0 0 8px 10px;"><div style="font-size:11px;color:#9aa4b5;margin:4px 0;">${esc(label)} (${n(o[k])}): message to copy</div>
-            <textarea class="wwl-ob-msg" data-kind="${k}" rows="3" style="width:100%;box-sizing:border-box;background:#11141a;color:#e6e9ef;border:1px solid #3a4352;border-radius:6px;padding:5px;font-size:11px;">${esc(obMsg(k))}</textarea>
-            <div style="margin:4px 0;"><button type="button" class="wwl-ob-save" data-kind="${k}" style="${btn}">Save message</button> <button type="button" class="wwl-ob-reset" data-kind="${k}" style="${btn}">Standard message</button> <span class="wwl-ob-note" style="font-size:11px;color:#9aa4b5;"></span></div>
-            <div style="max-height:240px;overflow:auto;">${o[k].map(m => `<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;padding:4px 0;border-top:1px solid #2c3442;"><span style="flex:1;min-width:110px;">${past.has(m.id) ? '<b style="color:#e05555;">!</b> ' : ''}<a href="https://www.torn.com/profiles.php?XID=${esc(m.id)}" target="_blank" rel="noopener" style="color:#e6e9ef;text-decoration:none;font-weight:600;">${esc(m.name)}</a> <span style="color:#9aa4b5;font-size:11px;">${m.days == null ? '' : `day ${m.days + 1}`}</span></span>
-                <button type="button" class="wwl-ob-copy" data-kind="${k}" data-name="${esc(m.name)}" style="${btn}">Copy message</button>
-                <button type="button" class="wwl-ob-notified" data-kind="${k}" data-id="${esc(m.id)}" data-on="${m.notified ? 1 : 0}" style="${btn}${m.notified ? 'color:#35d99b;border-color:#35d99b;' : ''}">${m.notified ? `Notified ${obDate(m.notified)}` : 'Notified'}</button></div>`).join('')}</div></div>`;
-        return `<details class="wwl-ob" data-id="${esc(t.id)}" ${grpOpen[t.id] ? 'open' : ''} style="border-bottom:1px solid #3a4352;">${summary}${def.reqs.map(([k, label]) => rowsOf(k, label.replace(/^./, c => c.toUpperCase()))).join('')}</details>`;
+        const o = t.ob, def = OB_DEF[o.stage], n = a => (a || []).length, past = o.past || [], pastIds = new Set(past.map(p => p.id)), btn = 'background:transparent;border-radius:6px;padding:3px 8px;font-size:12px;cursor:pointer;color:#e6e9ef;border:1px solid #3a4352;';
+        const missing = id => def.reqs.filter(([k]) => (o[k] || []).some(m => m.id === id)).map(([, label]) => label);
+        const person = (m, k, isPast) => `<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;padding:4px 0;border-top:1px solid #2c3442;"><span style="flex:1;min-width:110px;">${isPast ? '<b style="color:#e05555;">!</b> ' : ''}<a href="https://www.torn.com/profiles.php?XID=${esc(m.id)}" target="_blank" rel="noopener" style="color:#e6e9ef;text-decoration:none;font-weight:600;">${esc(m.name)}</a> <span style="color:#9aa4b5;font-size:11px;">${m.days == null ? '' : `day ${m.days + 1}`}</span></span>${k ? `
+            <button type="button" class="wwl-ob-copy" data-kind="${k}" data-name="${esc(m.name)}" style="${btn}">Copy message</button>
+            <button type="button" class="wwl-ob-notified" data-kind="${k}" data-id="${esc(m.id)}" data-on="${m.notified ? 1 : 0}" style="${btn}${m.notified ? 'color:#35d99b;border-color:#35d99b;' : ''}">${m.notified ? `Notified ${obDate(m.notified)}` : 'Notified'}</button>` : `<span style="color:#9aa4b5;font-size:11px;">${esc(missing(m.id).join(', '))}</span>`}</div>`;
+        const sum = (text, color) => `<summary style="cursor:pointer;padding:${IS_PDA ? 7 : 4}px 0;font-size:12px;${color ? `color:${color};font-weight:700;` : ''}">${text}</summary>`;
+        // one toggle per requirement: only the group you open expands, so the list never gets very long
+        const reqBlock = ([k, label]) => {
+            const c = n(o[k]), head = `${c} member${c === 1 ? '' : 's'} ${esc(label)}`, id = `${t.id}:${k}`;
+            if (!c) return `<div style="font-size:12px;color:#9aa4b5;padding:3px 0 3px 16px;">${head}</div>`;
+            return `<details class="wwl-ob" data-id="${esc(id)}" ${grpOpen[id] ? 'open' : ''}>${sum(head)}<div style="margin:0 0 8px 10px;"><div style="font-size:11px;color:#9aa4b5;margin:4px 0;">Message to copy:</div>
+                <textarea class="wwl-ob-msg" data-kind="${k}" rows="3" style="width:100%;box-sizing:border-box;background:#11141a;color:#e6e9ef;border:1px solid #3a4352;border-radius:6px;padding:5px;font-size:11px;">${esc(obMsg(k))}</textarea>
+                <div style="margin:4px 0;"><button type="button" class="wwl-ob-save" data-kind="${k}" style="${btn}">Save message</button> <button type="button" class="wwl-ob-reset" data-kind="${k}" style="${btn}">Standard message</button> <span class="wwl-ob-note" style="font-size:11px;color:#9aa4b5;"></span></div>
+                <div style="max-height:240px;overflow:auto;">${o[k].map(m => person(m, k, pastIds.has(m.id))).join('')}</div></div></details>`;
+        };
+        const pastId = `${t.id}:past`, pastBlock = !n(past) ? '' : `<details class="wwl-ob" data-id="${esc(pastId)}" ${grpOpen[pastId] ? 'open' : ''}>${sum(`! ${n(past)} member${n(past) === 1 ? ' is' : 's are'} past their ${o.days} days`, '#e05555')}<div style="margin:0 0 8px 10px;max-height:240px;overflow:auto;">${past.map(m => person(m, '', true)).join('')}</div></details>`;
+        return `<div style="padding:${IS_PDA ? 10 : 7}px 0;border-bottom:1px solid #3a4352;"><div><b>${esc(def.title)}</b> <span style="color:#9aa4b5;font-size:11px;">(${o.days} days)</span></div>${def.reqs.map(reqBlock).join('')}${pastBlock}</div>`;
     }
     // the awards you follow: a title with ONE Open button, then per award an icon and a bar (filled as far as it is done) with the name on it, and under it "25% - about 108 days to go"
     function awardBlockHtml(t) {

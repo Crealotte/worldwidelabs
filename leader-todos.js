@@ -67,18 +67,28 @@ const LT_OB = {
 };
 const ltObDate = ts => new Date(ts).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
 function ltObHtml(t) {
-    const o = t.ob, def = LT_OB[o.stage], past = new Set((o.past || []).map(p => p.id)), n = a => (a || []).length;
-    const count = (k, label) => { const c = n(o[k]); return `<div style="font-size:13px;color:${c ? 'inherit' : 'var(--muted)'};">${c} member${c === 1 ? '' : 's'} ${esc(label)}</div>`; };
-    const summary = `<summary class="av-sum" style="cursor:pointer;list-style:none;"><b style="font-size:14px;">${esc(def.title)}</b> <span style="color:var(--muted);font-size:12px;">(${o.days} days)</span>
-        <div style="margin:4px 0 0 2px;">${def.reqs.map(([k, label]) => count(k, label)).join('')}${n(o.past) ? `<div style="font-size:13px;color:#e05555;font-weight:600;">! ${n(o.past)} member${n(o.past) === 1 ? ' is' : 's are'} past their ${o.days} days</div>` : ''}</div></summary>`;
-    const rowsOf = (k, label) => !n(o[k]) ? '' : `<div style="padding:8px 0 4px 12px;"><div style="font-size:12px;color:var(--muted);margin-bottom:4px;">${esc(label)} (${n(o[k])}): message to copy</div>
-        <textarea class="lt-ob-msg" data-kind="${k}" rows="2" style="width:100%;box-sizing:border-box;font-size:12px;">${esc(ltInviteMsg(k))}</textarea>
-        <div style="margin:4px 0 6px;"><button type="button" class="ghost small lt-inv-save" data-kind="${k}" style="padding:3px 10px;">Save message</button> <button type="button" class="ghost small lt-inv-reset" data-kind="${k}" style="padding:3px 10px;">Use the standard message</button> <span class="lt-inv-note" style="font-size:11px;color:var(--muted);"></span></div>
-        ${o[k].map(m => `<div class="lt-ob-row" data-kind="${k}" data-id="${esc(m.id)}" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:5px 0;border-top:1px solid var(--line);"><span style="flex:1;min-width:170px;font-size:13px;">${past.has(m.id) ? '<b style="color:#e05555;">!</b> ' : ''}<a href="https://www.torn.com/profiles.php?XID=${esc(m.id)}" target="_blank" rel="noopener" style="color:inherit;">${esc(m.name)}</a> <span style="color:var(--muted);font-size:11px;">${m.days == null ? '' : `day ${m.days + 1}`}</span></span>
+    const o = t.ob, def = LT_OB[o.stage], n = a => (a || []).length, past = o.past || [];
+    // what a member still misses (for the list of the ones past their days)
+    const missing = id => def.reqs.filter(([k]) => (o[k] || []).some(m => m.id === id)).map(([, label]) => label);
+    const person = (m, k, isPast) => `<div class="lt-ob-row" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:5px 0;border-top:1px solid var(--line);"><span style="flex:1;min-width:170px;font-size:13px;">${isPast ? '<b style="color:#e05555;">!</b> ' : ''}<a href="https://www.torn.com/profiles.php?XID=${esc(m.id)}" target="_blank" rel="noopener" style="color:inherit;">${esc(m.name)}</a> <span style="color:var(--muted);font-size:11px;">${m.days == null ? '' : `day ${m.days + 1}`}</span></span>${k ? `
             <button type="button" class="ghost small lt-ob-copy" data-kind="${k}" data-name="${esc(m.name)}" style="padding:4px 10px;">Copy message</button>
-            <button type="button" class="ghost small lt-ob-notified" data-kind="${k}" data-id="${esc(m.id)}" data-on="${m.notified ? 1 : 0}" style="padding:4px 10px;${m.notified ? 'color:var(--reagent);border-color:var(--reagent);' : ''}">${m.notified ? `Notified ${ltObDate(m.notified)}` : 'Notified'}</button></div>`).join('')}</div>`;
-    return `<details class="lt-ob" data-id="${esc(t.id)}" ${LT_OB_OPEN[t.id] ? 'open' : ''} style="padding:8px 0;">${summary}${def.reqs.map(([k, label]) => rowsOf(k, label.replace(/^./, c => c.toUpperCase()))).join('')}</details>`;
+            <button type="button" class="ghost small lt-ob-notified" data-kind="${k}" data-id="${esc(m.id)}" data-on="${m.notified ? 1 : 0}" style="padding:4px 10px;${m.notified ? 'color:var(--reagent);border-color:var(--reagent);' : ''}">${m.notified ? `Notified ${ltObDate(m.notified)}` : 'Notified'}</button>` : `<span style="color:var(--muted);font-size:12px;">${esc(missing(m.id).join(', '))}</span>`}</div>`;
+    const pastIds = new Set(past.map(p => p.id));
+    // one toggle per requirement: only the group you open expands, so the list never gets very long
+    const reqBlock = ([k, label]) => {
+        const c = n(o[k]), head = `${c} member${c === 1 ? '' : 's'} ${esc(label)}`, id = `${t.id}:${k}`;
+        if (!c) return `<div style="font-size:13px;color:var(--muted);padding:3px 0 3px 18px;">${head}</div>`;
+        return `<details class="lt-ob" data-id="${esc(id)}" ${LT_OB_OPEN[id] ? 'open' : ''} style="padding:2px 0;"><summary style="cursor:pointer;font-size:13px;padding:2px 0;">${head}</summary>
+            <div style="padding:6px 0 4px 18px;"><div style="font-size:11px;color:var(--muted);margin-bottom:4px;">Message to copy:</div>
+            <textarea class="lt-ob-msg" data-kind="${k}" rows="2" style="width:100%;box-sizing:border-box;font-size:12px;">${esc(ltInviteMsg(k))}</textarea>
+            <div style="margin:4px 0 6px;"><button type="button" class="ghost small lt-inv-save" data-kind="${k}" style="padding:3px 10px;">Save message</button> <button type="button" class="ghost small lt-inv-reset" data-kind="${k}" style="padding:3px 10px;">Use the standard message</button> <span class="lt-inv-note" style="font-size:11px;color:var(--muted);"></span></div>
+            ${o[k].map(m => person(m, k, pastIds.has(m.id))).join('')}</div></details>`;
+    };
+    const pastId = `${t.id}:past`, pastBlock = !n(past) ? '' : `<details class="lt-ob" data-id="${esc(pastId)}" ${LT_OB_OPEN[pastId] ? 'open' : ''} style="padding:2px 0;"><summary style="cursor:pointer;font-size:13px;padding:2px 0;color:#e05555;font-weight:600;">! ${n(past)} member${n(past) === 1 ? ' is' : 's are'} past their ${o.days} days</summary>
+        <div style="padding:2px 0 4px 18px;">${past.map(m => person(m, '', true)).join('')}</div></details>`;
+    return `<div style="padding:8px 0;"><div style="margin-bottom:2px;"><b style="font-size:14px;">${esc(def.title)}</b> <span style="color:var(--muted);font-size:12px;">(${o.days} days)</span></div>${def.reqs.map(reqBlock).join('')}${pastBlock}</div>`;
 }
+
 function ltWireOb(panel) {
     panel.querySelectorAll('.lt-ob').forEach(d => d.addEventListener('toggle', () => { LT_OB_OPEN[d.dataset.id] = d.open; }));
     panel.querySelectorAll('.lt-ob-copy').forEach(b => b.addEventListener('click', async () => { // only copies: the leader decides when the member counts as notified
