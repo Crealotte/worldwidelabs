@@ -21,6 +21,8 @@ const ltCleanLinks = text => String(text).replace(/(\(?)(https?:\/\/\S+)/g, (m, 
 const LT_OB_DEFAULTS = {
     discord: 'Hey, I have noticed you have not joined our Discord yet. It is one of the steps for becoming a Guinea Pig or Lab Rat, and it is where we plan wars and chat. Shout if you need the invite or any help!',
     intel: 'Hey, I have noticed your Intel is not set up yet. It is one of the steps for becoming a Guinea Pig or Lab Rat. Shout if you need help with it!',
+    ocout: 'Hey, I have noticed you are not in an organized crime at the moment. Please join one that fits you: the OC page in Torn shows which slots are open, and on WWL you can ask for a spot. Shout if you need help!',
+    ocnever: 'Hey, I have noticed you have not been in an organized crime yet. They give good rewards and respect, and we would love to have you in one. The OC page in Torn shows which slots are open, and on WWL you can ask for a spot. Shout if you need help!',
     cat: 'Hey, I have noticed CAT is not installed yet. It is our war tool and one of the steps for becoming a Guinea Pig or Lab Rat. Shout if you need help with it!',
 };
 const ltInviteDefault = kind => LT_OB_DEFAULTS[kind] ? LT_OB_DEFAULTS[kind] : kind === 'script'
@@ -64,15 +66,16 @@ const LT_OB_OPEN = {};
 const LT_OB = {
     1: { title: 'Recruit → Experiment B', reqs: [['wwl', 'not on WWL'], ['script', 'on WWL without the script']] },
     2: { title: 'To Guinea Pig / Lab Rat', reqs: [['discord', 'without Discord'], ['intel', 'without Intel'], ['cat', 'without CAT']] },
+    3: { title: 'Organized crimes', reqs: [['ocout', 'not in an OC now'], ['ocnever', 'with no OC in the last 30 days']] },
 };
 const ltObDate = ts => new Date(ts).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
 function ltObHtml(t) {
     const o = t.ob, def = LT_OB[o.stage], n = a => (a || []).length, past = o.past || [];
     // what a member still misses (for the list of the ones past their days)
     const missing = id => def.reqs.filter(([k]) => (o[k] || []).some(m => m.id === id)).map(([, label]) => label);
-    const person = (m, k, isPast) => `<div class="lt-ob-row" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:5px 0;border-top:1px solid var(--line);"><span style="flex:1;min-width:170px;font-size:13px;">${isPast ? '<b style="color:#e05555;">!</b> ' : ''}<a href="https://www.torn.com/profiles.php?XID=${esc(m.id)}" target="_blank" rel="noopener" style="color:inherit;">${esc(m.name)}</a> <span style="color:var(--muted);font-size:11px;">${m.days == null ? '' : `day ${m.days + 1}`}</span></span>${k ? `
+    const person = (m, k, isPast) => `<div class="lt-ob-row" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:5px 0;border-top:1px solid var(--line);"><span style="flex:1;min-width:170px;font-size:13px;">${isPast ? '<b style="color:#e05555;">!</b> ' : ''}<a href="https://www.torn.com/profiles.php?XID=${esc(m.id)}" target="_blank" rel="noopener" style="color:inherit;">${esc(m.name)}</a> <span style="color:var(--muted);font-size:11px;">${m.info ? esc(m.info) : m.days == null ? '' : `day ${m.days + 1}`}</span></span>${k ? `
             <button type="button" class="ghost small lt-ob-copy" data-kind="${k}" data-name="${esc(m.name)}" style="padding:4px 10px;">Copy message</button>
-            <button type="button" class="ghost small lt-ob-notified" data-kind="${k}" data-id="${esc(m.id)}" data-on="${m.notified ? 1 : 0}" style="padding:4px 10px;${m.notified ? 'color:var(--reagent);border-color:var(--reagent);' : ''}">${m.notified ? `Notified ${ltObDate(m.notified)}` : 'Notified'}</button>` : `<span style="color:var(--muted);font-size:12px;">${esc(missing(m.id).join(', '))}</span>`}</div>`;
+            <button type="button" class="ghost small lt-ob-notified" data-kind="${k}" data-id="${esc(m.id)}" data-on="${m.notified ? 1 : 0}" style="padding:4px 10px;${m.notified ? 'color:var(--reagent);border-color:var(--reagent);' : ''}">${m.notified ? `Notified ${ltObDate(m.notified)}` : 'Notified'}</button>` : `<span style="color:var(--muted);font-size:12px;">${esc(o.stage === 3 ? '' : missing(m.id).join(', '))}</span>`}</div>`;
     const pastIds = new Set(past.map(p => p.id));
     // one toggle per requirement: only the group you open expands, so the list never gets very long
     const reqBlock = ([k, label]) => {
@@ -84,9 +87,9 @@ function ltObHtml(t) {
             <div style="margin:4px 0 6px;"><button type="button" class="ghost small lt-inv-save" data-kind="${k}" style="padding:3px 10px;">Save message</button> <button type="button" class="ghost small lt-inv-reset" data-kind="${k}" style="padding:3px 10px;">Use the standard message</button> <span class="lt-inv-note" style="font-size:11px;color:var(--muted);"></span></div>
             ${o[k].map(m => person(m, k, pastIds.has(m.id))).join('')}</div></details>`;
     };
-    const pastId = `${t.id}:past`, pastBlock = !n(past) ? '' : `<details class="lt-ob" data-id="${esc(pastId)}" ${LT_OB_OPEN[pastId] ? 'open' : ''} style="padding:2px 0;"><summary style="cursor:pointer;font-size:13px;padding:2px 0;color:#e05555;font-weight:600;">! ${n(past)} member${n(past) === 1 ? ' is' : 's are'} past their ${o.days} days</summary>
+    const pastId = `${t.id}:past`, pastBlock = !n(past) ? '' : `<details class="lt-ob" data-id="${esc(pastId)}" ${LT_OB_OPEN[pastId] ? 'open' : ''} style="padding:2px 0;"><summary style="cursor:pointer;font-size:13px;padding:2px 0;color:#e05555;font-weight:600;">! ${n(past)} member${n(past) === 1 ? ' has' : 's have'} ${o.stage === 3 ? `been out of an OC for ${o.days} days or more` : `passed their ${o.days} days`}</summary>
         <div style="padding:2px 0 4px 18px;">${past.map(m => person(m, '', true)).join('')}</div></details>`;
-    return `<div style="padding:8px 0;"><div style="margin-bottom:2px;"><b style="font-size:14px;">${esc(def.title)}</b> <span style="color:var(--muted);font-size:12px;">(${o.days} days)</span></div>${def.reqs.map(reqBlock).join('')}${pastBlock}</div>`;
+    return `<div style="padding:8px 0;"><div style="margin-bottom:2px;"><b style="font-size:14px;">${esc(def.title)}</b> <span style="color:var(--muted);font-size:12px;">(${o.stage === 3 ? `${o.window} days looked at` : `${o.days} days`})</span></div>${o.stage === 3 && o.building ? '<div style="font-size:11px;color:var(--muted);margin:2px 0 4px 2px;">WWL is still reading the older crimes: some members may show as having none for now.</div>' : ''}${def.reqs.map(reqBlock).join('')}${pastBlock}</div>`;
 }
 
 function ltWireOb(panel) {

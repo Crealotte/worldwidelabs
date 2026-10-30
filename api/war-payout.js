@@ -38,6 +38,7 @@ const { tzHandle } = require('../lib/tzMap');
 const { planHandle } = require('../lib/planSync');
 const { awHandle, followedTodo } = require('../lib/awards');
 const { ocRulesHandle } = require('../lib/ocrules');
+const { ocOverview } = require('../lib/ocwatch');
 const { nightlyHandle, nightlyRun, getVaultKey } = require('../lib/nightly');
 const { usageFor } = require('../lib/tornFetch');
 const { targetsHandle } = require('../lib/targets');
@@ -496,6 +497,12 @@ async function leaderTodos(key, factionId) {
             if (n(s1.wwl) + n(s1.script) + n(s1.past)) todos.push({ id: 'onboard-1', ob: { stage: 1, ...s1 }, text: `Recruit to Experiment B: ${n(s1.wwl)} not on WWL, ${n(s1.script)} without the script${n(s1.past) ? `, ${n(s1.past)} past their ${s1.days} days` : ''}.`, cta: 'Open', page: 'dashboard', anchor: 'leader-todos' });
             if (n(s2.discord) + n(s2.intel) + n(s2.cat) + n(s2.past)) todos.push({ id: 'onboard-2', ob: { stage: 2, ...s2 }, text: `To Guinea Pig or Lab Rat: ${n(s2.discord)} without Discord, ${n(s2.intel)} Intel, ${n(s2.cat)} CAT${n(s2.past) ? `, ${n(s2.past)} past their ${s2.days} days` : ''}.`, cta: 'Open', page: 'dashboard', anchor: 'leader-todos' });
         }
+    } catch (e) { /* skip */ }
+
+    // the organized crimes: who is not in an OC, who has none in the last 30 days and how long it has been (the same kind of overview, with the same Notified buttons)
+    try {
+        const oc = await ocOverview({ redis, factionId, key }), n = a => (a || []).length;
+        if (n(oc.ocout) + n(oc.ocnever)) todos.push({ id: 'onboard-3', ob: { stage: 3, ...oc }, text: `Organized crimes: ${n(oc.ocout)} not in an OC, ${n(oc.ocnever)} with none in ${oc.window} days${n(oc.past) ? `, ${n(oc.past)} out for ${oc.days}+ days` : ''}.`, cta: 'Open', page: 'dashboard', anchor: 'leader-todos' });
     } catch (e) { /* skip */ }
 
     return { todos, roleRows, roleWaiting };
