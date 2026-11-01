@@ -18,21 +18,32 @@ const FP_ROTATION = {
 };
 const FP_MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 
-// Perk roadmap ("Perk unlocking plan 2.0 B"), in the order the faction unlocks them:
-// [perk (as Torn names it, without the level), level, required respect, planned date]. Steadfast is not in it —
-// it is upgraded as soon as it can be. The order stays the same when the faction is behind schedule.
-const FP_ROADMAP = [
-    ['Travel capacity', 3, 14552, '2026-07-26'], ['Travel capacity', 4, 19608, '2026-08-02'],
+// Perk roadmap. FP_UNLOCKED is what the faction has accomplished (the earlier plans, kept so members see what we did), in date order:
+// [perk (as Torn names it, without the level), level, required respect, day it was unlocked]. The perk tree was reset on 2026-11-01 (Toleration: Addiction XIII, Side effects X, Overdosing VIII;
+// Voracity: Booster cooldown XV, Candy effect X, Energy drink effect V; Excursion: Travel capacity IV), so every perk that was still planned got that day as its unlock day.
+const FP_UNLOCKED = [
+    ['Overdosing', 1, 4168, '2026-06-07'],
+    ['Overdosing', 2, 4920, '2026-06-14'], ['Overdosing', 3, 5618, '2026-06-14'],
+    ['Overdosing', 4, 6633, '2026-06-28'], ['Overdosing', 5, 7574, '2026-06-28'], ['Travel capacity', 1, 8000, '2026-06-28'],
+    ['Overdosing', 6, 8941, '2026-07-05'],
+    ['Travel capacity', 2, 10792, '2026-07-26'], ['Travel capacity', 3, 14552, '2026-07-26'],
+    ['Travel capacity', 4, 19608, '2026-08-02'],
     ['Candy effect', 1, 4420, '2026-08-09'], ['Candy effect', 2, 5048, '2026-08-09'], ['Candy effect', 3, 5964, '2026-08-09'],
-    ['Candy effect', 4, 7040, '2026-08-16'], ['Candy effect', 5, 8036, '2026-08-16'], ['Candy effect', 6, 9484, '2026-08-23'],
-    ['Candy effect', 7, 10832, '2026-08-30'], ['Candy effect', 8, 12784, '2026-09-06'], ['Candy effect', 9, 14600, '2026-09-13'], ['Candy effect', 10, 17236, '2026-09-20'],
-    ['Addiction', 23, 12054, '2026-09-20'], ['Addiction', 24, 13766, '2026-09-27'], ['Addiction', 25, 15207, '2026-10-04'],
-    ['Overdosing', 7, 10555, '2026-10-11'], ['Overdosing', 8, 12054, '2026-10-18'],
-    ['Alcohol effect', 1, 9176, '2026-10-25'], ['Alcohol effect', 2, 10832, '2026-10-25'], ['Alcohol effect', 3, 12784, '2026-11-01'],
-    ['Alcohol effect', 4, 14600, '2026-11-08'], ['Alcohol effect', 5, 17236, '2026-11-15'], ['Alcohol effect', 6, 19680, '2026-11-29'],
-    ['Booster cooldown', 11, 11572, '2026-11-29'], ['Booster cooldown', 12, 12784, '2026-12-06'], ['Booster cooldown', 13, 14124, '2026-12-13'],
-    ['Booster cooldown', 14, 16128, '2026-12-20'], ['Booster cooldown', 15, 17816, '2026-12-27'],
-    ['Energy drink effect', 1, 17816, '2027-01-10'],
+    ['Candy effect', 4, 7040, '2026-08-16'], ['Candy effect', 5, 8036, '2026-08-16'],
+    ['Candy effect', 6, 9484, '2026-08-23'],
+    ['Candy effect', 7, 10832, '2026-08-30'],
+    ['Candy effect', 8, 12784, '2026-09-06'],
+    ['Candy effect', 9, 14600, '2026-09-13'],
+    ['Candy effect', 10, 17236, '2026-09-20'],
+    ['Overdosing', 7, 10555, '2026-10-11'],
+    ['Overdosing', 8, 12054, '2026-10-18'],
+    ['Booster cooldown', 11, 11572, '2026-11-01'], ['Booster cooldown', 12, 12784, '2026-11-01'], ['Booster cooldown', 13, 14124, '2026-11-01'],
+    ['Booster cooldown', 14, 16128, '2026-11-01'], ['Booster cooldown', 15, 17816, '2026-11-01'],
+    ['Energy drink effect', 1, 17816, '2026-11-01'],
+];
+// The perks still to come, in the order the faction unlocks them: [perk, level, required respect, planned date]. Steadfast is not in it - it is upgraded as soon as it can be.
+// The order stays the same when the faction is behind schedule. Empty until the new plan is written down.
+const FP_ROADMAP = [
 ];
 const fpRoman = n => { let s = ''; for (const [v, r] of [[50, 'L'], [40, 'XL'], [10, 'X'], [9, 'IX'], [5, 'V'], [4, 'IV'], [1, 'I']]) while (n >= v) { s += r; n -= v; } return s; };
 const fpNum = n => Math.round(n).toLocaleString();
@@ -109,7 +120,9 @@ async function loadFactionRoadmap() {
         const weeks = late ? Math.floor((now - Date.parse(`${date}T00:00:00Z`)) / (7 * 86400e3)) : 0;
         return { perk, level, respect, date, done, isNext, late, weeks };
     });
-    const doneCount = items.filter(i => i.done).length, next = items.find(i => i.isNext);
+    const unlocked = FP_UNLOCKED.map(([perk, level, respect, date]) => ({ perk, level, respect, date, done: true, isNext: false, late: false, weeks: 0, fixed: true }));
+    const all = [...unlocked, ...items];
+    const doneCount = all.filter(i => i.done).length, next = items.find(i => i.isNext);
     // "Available" respect is the spendable balance left after everything already bought (any branch,
     // peace or war) — NOT the lifetime total, which never goes down. See buildCountdown in lib/steadfast.js.
     const available = fpData?.availableRespect;
@@ -121,14 +134,14 @@ async function loadFactionRoadmap() {
         : `<div style="color:var(--muted);font-size:12px;margin-top:8px;">Faction respect (total): ${fpNum(fpData.respect)}</div>`;
     $('fr-summary').innerHTML = ok ? `
         <div class="grid3">
-            <div class="stat"><div class="k">Unlocked</div><div class="v good">${doneCount} / ${items.length}</div><div class="s">perks of the roadmap</div></div>
-            <div class="stat"><div class="k">Next up</div><div class="v" style="font-size:18px;">${next ? `${esc(next.perk)} ${fpRoman(next.level)}` : 'All done'}</div><div class="s">${next ? `needs ${fpNum(next.respect)} respect · planned ${fpDateLabel(next.date)}` : ''}</div></div>
-            <div class="stat"><div class="k">Schedule</div><div class="v ${next && next.late ? 'bad' : 'good'}" style="font-size:18px;">${next ? (next.late ? `${next.weeks || '<1'} week${next.weeks === 1 ? '' : 's'} behind` : 'on schedule') : 'done'}</div><div class="s">the order stays the same when behind</div></div>
+            <div class="stat"><div class="k">Unlocked</div><div class="v good">${doneCount} / ${all.length}</div><div class="s">perks of the roadmap</div></div>
+            <div class="stat"><div class="k">Next up</div><div class="v" style="font-size:18px;">${next ? `${esc(next.perk)} ${fpRoman(next.level)}` : items.length ? 'All done' : 'New plan coming'}</div><div class="s">${next ? `needs ${fpNum(next.respect)} respect · planned ${fpDateLabel(next.date)}` : ''}</div></div>
+            <div class="stat"><div class="k">Schedule</div><div class="v ${next && next.late ? 'bad' : 'good'}" style="font-size:18px;">${next ? (next.late ? `${next.weeks || '<1'} week${next.weeks === 1 ? '' : 's'} behind` : 'on schedule') : items.length ? 'done' : '-'}</div><div class="s">the order stays the same when behind</div></div>
         </div>${respectLine}`
         : '<p style="color:var(--muted);">The levels appear as soon as a leader has opened WWL.</p>';
     $('fr-table').innerHTML = `<table style="width:100%;font-size:13px;border-collapse:collapse;text-align:left;">
-        <thead><tr style="color:var(--muted);"><th style="padding:4px 8px;">Perk</th><th style="padding:4px 8px;">Required respect</th><th style="padding:4px 8px;">Planned</th><th style="padding:4px 8px;">Status</th></tr></thead>
-        <tbody>${items.map(i => `<tr style="border-top:1px solid var(--line);${i.isNext ? 'background:rgba(53,217,155,.10);' : ''}${i.done ? 'opacity:.6;' : ''}">
+        <thead><tr style="color:var(--muted);"><th style="padding:4px 8px;">Perk</th><th style="padding:4px 8px;">Required respect</th><th style="padding:4px 8px;">Date</th><th style="padding:4px 8px;">Status</th></tr></thead>
+        <tbody>${all.map(i => `<tr style="border-top:1px solid var(--line);${i.isNext ? 'background:rgba(53,217,155,.10);' : ''}${i.done && !i.fixed ? 'opacity:.6;' : ''}">
             <td style="padding:4px 8px;${i.isNext ? 'font-weight:700;' : ''}">${esc(i.perk)} ${fpRoman(i.level)}</td>
             <td style="padding:4px 8px;font-family:var(--mono);">${fpNum(i.respect)}</td>
             <td style="padding:4px 8px;white-space:nowrap;">${fpDateLabel(i.date)}</td>
