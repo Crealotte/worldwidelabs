@@ -554,3 +554,22 @@ module.exports.refreshXanaxOwed = async function refreshXanaxOwed(key, factionId
     }
     return await moXanaxAll({ redis, factionId });
 };
+
+// Nightly (called from the nightly saving job in api/war-payout.js, see lib/nightly.js): reads the armory log of the finished days that are not kept yet, newest day first,
+// one day at a time, so reports and the war pay calculator are served from what was kept instead of reading Torn in one big request. A day only counts as finished once it ended
+// more than an hour ago, so the night job (00:05 UTC) keeps up to the day before yesterday and yesterday is read on demand until the next night. Stops at the time budget
+// (the rest follows the next nights) or as soon as Torn rate-limits. Both logs are kept: the consumption log (armoryAction) and the deposits (armoryDeposit).
+module.exports.cacheArmoryDays = async function cacheArmoryDays(key, factionId, { days = 21, budgetMs = 25000 } = {}) {
+    const t0 = Date.now(), settled = Math.floor(Date.now() / 1000) - 3600;
+    const lastDay = Math.floor((settled + 1) / DAY_S) - 1;
+    let readFromTorn = 0, skipped = 0;
+    for (let d = lastDay; d > lastDay - days; d--) {
+        for (const cat of ['armoryAction', 'armoryDeposit']) {
+            if (Date.now() - t0 > budgetMs) { skipped++; continue; }
+            const r = await fetchArmoryNewsCached(key, factionId, d * DAY_S, (d + 1) * DAY_S - 1, cat);
+            if (r.pagesFetched) readFromTorn++;
+            if (r.rateLimited) return { readFromTorn, rateLimited: true };
+        }
+    }
+    return { readFromTorn, notYetKept: skipped };
+};

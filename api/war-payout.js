@@ -797,7 +797,7 @@ module.exports = async function handler(req, res) {
         // refreshes stored numbers.
         if (req.method === 'GET' && req.query?.cron) {
             const extra = String(process.env.WWL_SNAPSHOT_KEYS || '').split(',').map(s => s.trim()).filter(Boolean);
-            const results = await nightlyRun(redis, extra, getProfile, async (k, fid) => ({ ...(await require('./respect').runTracking(k, fid)), xanax: await require('./armory-tracker').refreshXanaxOwed(k, fid).catch(e => ({ error: String(e.message || e).slice(0, 60) })) }));
+            const results = await nightlyRun(redis, extra, getProfile, async (k, fid) => ({ ...(await require('./respect').runTracking(k, fid)), xanax: await require('./armory-tracker').refreshXanaxOwed(k, fid).catch(e => ({ error: String(e.message || e).slice(0, 60) })), armory: await require("./armory-tracker").cacheArmoryDays(k, fid).catch(e => ({ error: String(e.message || e).slice(0, 60) })) }));
             return res.status(200).json({ ran: results.length, results });
         }
 
