@@ -556,3 +556,16 @@ function moBsCalc() {
     out.innerHTML = `<b>${moBsN(baseN)} → ${moBsN(newN)} members</b>: the average goes from <b>${moBsN(baseSum / baseN)}</b> to <b style="color:${diff >= 0 ? 'var(--reagent)' : 'var(--danger)'};">${moBsN(newAvg)}</b> (${diff >= 0 ? '+' : ''}${moBsN(diff)}, ${diff >= 0 ? '+' : ''}${pct.toFixed(1)}%). All together: ${moBsN(newSum)}.`;
 }
 ['mo-bs-add-n', 'mo-bs-add-t', 'mo-bs-rem-n', 'mo-bs-rem-t', 'mo-bs-unk'].forEach(id => { const el = $(id); if (el) el.addEventListener('input', moBsCalc); });
+
+// Reads the chain reports again for every chain placed in a war or chain event and replaces the stored copies Member Overview and the newsletter work from.
+$('mo-reg-refresh').addEventListener('click', async () => {
+    const btn = $('mo-reg-refresh'); btn.disabled = true; btn.textContent = 'Reading the chain reports…';
+    try {
+        const r = await moFetch({ action: 'mo-chains-refresh' });
+        if (r.error) { toast(r.error); return; }
+        const lines = r.changed.map(c => c.error ? `#${c.chain}: ${c.error}` : `#${c.chain}: ${c.hadCopy ? `${c.hitsBefore} → ${c.hitsNow} hits, ${c.membersChanged} member(s) changed` : `had no stored copy, now ${c.hitsNow} hits`}`);
+        toast(`Checked ${r.checked} chain(s): ${r.changed.length ? lines.join(' | ') : 'all stored numbers were already correct'}${r.failed ? ` (${r.failed} could not be read)` : ''}`);
+        console.log('chain refresh', r);
+        if (typeof moReload === 'function') moReload();
+    } catch (e) { toast(e.message); } finally { btn.disabled = false; btn.textContent = 'Re-read the chain numbers'; }
+});
