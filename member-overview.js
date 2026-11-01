@@ -209,7 +209,8 @@ function moRows() {
             // The war/chain-hit COMPETITION only counts a war or event that ended within the period shown, so
             // one that's still in the rolling last 5 during the NEXT newsletter's period isn't handed out as a
             // competition win twice. The 3-of-5 rule (war/chain/okWars above) is unaffected, always the last 5.
-            if (w.end >= period.start && (period.id === 'now' || w.end < period.end)) { periodWar += p.war; periodChain += p.chain; } // a running period includes a war that ended today
+            const at = w.event ? w.start : w.end; // a chain event counts in the period it STARTED in (it can run on into the next one)
+            if (at >= period.start && (period.id === 'now' || at < period.end)) { periodWar += p.war; periodChain += p.chain; } // a running period includes a war that ended today
             if (joinedBy > w.start) { p.notIn = true; return p; } // not in the faction yet
             p.ok = moWarOk(p, settings);
             const ex = moData.excused?.[w.id]?.[m.id]; // said "I can't make this war" in the availability tracker
