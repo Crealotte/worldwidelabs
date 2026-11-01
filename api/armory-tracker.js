@@ -131,7 +131,7 @@ async function fetchAllArmoryNews(key, from, to, cat = 'armoryAction') {
         if (!addedAny) break;
         const oldest = Math.min(...news.map(e => e.timestamp));
         if (oldest < from) break; // paged past the start of the requested range
-        cursor = oldest - 1;
+        cursor = oldest; // not oldest - 1: entries in that same second that did not fit on this page would be skipped; the ids above drop the repeats
     }
     const hitPageCap = page >= MAX_PAGES; // loop only ends this way without having hit any natural break condition
     return { entries: all, pagesFetched: page, rateLimited, hitPageCap };
@@ -186,8 +186,13 @@ async function fetchArmoryNewsCached(key, factionId, from, to, cat = 'armoryActi
         const r = await live(a, b);
         pagesFetched += r.pagesFetched; rateLimited = rateLimited || r.rateLimited; hitPageCap = hitPageCap || r.hitPageCap;
         entries.push(...r.entries);
-        if (r.rateLimited || r.hitPageCap) continue; // incomplete: never store it
-        for (let d = Math.ceil(a / DAY_S); d <= Math.floor((b + 1) / DAY_S) - 1; d++) {
+        // A read that stopped early (rate limit or page limit) still has every day complete that lies after the oldest entry it reached: those are stored, so the
+        // next try only reads what is still missing instead of starting over. (The days at and before the oldest entry reached are never stored.)
+        const incomplete = r.rateLimited || r.hitPageCap;
+        const oldestRead = r.entries.length ? Math.min(...r.entries.map(e => e.timestamp)) : Infinity;
+        if (incomplete && !r.entries.length) continue;
+        const lowDay = incomplete ? Math.floor(oldestRead / DAY_S) + 1 : -Infinity;
+        for (let d = Math.max(Math.ceil(a / DAY_S), lowDay); d <= Math.floor((b + 1) / DAY_S) - 1; d++) {
             if (d < firstDay || d > lastDay) continue;
             const rows = r.entries.filter(e => Math.floor(e.timestamp / DAY_S) === d).map(e => [e.id, e.timestamp, e.text ?? e.news ?? '']);
             try { await redis(['SET', newsDayKey(factionId, cat, d), zlib.gzipSync(JSON.stringify(rows)).toString('base64'), 'EX', NEWS_CACHE_TTL]); } catch (e) { /* not critical */ }

@@ -129,8 +129,8 @@ async function atCalculateReport(from, to, onProgress) {
         if (result.error) throw new Error(result.error);
         // Torn's rate limit cuts a read short and the answer is then incomplete (and different every time). Days already read completely are kept on the server,
         // so waiting a little and asking again only reads what is still missing. Up to 4 more tries per slice.
-        for (let tries = 1; result.meta.rateLimited && tries <= 4; tries++) {
-            for (let w = 20; w > 0; w--) { if (onProgress) onProgress(i + 1, chunks.length, `Torn rate limit reached, waiting ${w}s and trying again (${tries}/4)`); await new Promise(r => setTimeout(r, 1000)); }
+        for (let tries = 1; (result.meta.rateLimited || result.meta.hitPageCap) && tries <= 4; tries++) {
+            for (let w = result.meta.rateLimited ? 20 : 1; w > 0; w--) { if (onProgress) onProgress(i + 1, chunks.length, `${result.meta.rateLimited ? 'Torn rate limit reached' : 'a long stretch of the log'}, waiting ${w}s and reading the rest (${tries}/4)`); await new Promise(r => setTimeout(r, 1000)); }
             if (onProgress) onProgress(i + 1, chunks.length, 'trying again');
             result = await atFetch({ action: 'consumption-report', from: cFrom, to: cTo });
             if (result.error) throw new Error(result.error);
