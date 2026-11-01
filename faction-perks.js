@@ -42,10 +42,25 @@ const FP_UNLOCKED = [
     ['Energy drink effect', 1, 17816, '2026-11-01'],
 ];
 // The perks still to come, in the order the faction unlocks them: [perk, level, required respect, planned date]. Steadfast is not in it - it is upgraded as soon as it can be.
-// The order stays the same when the faction is behind schedule. Empty until the new plan is written down.
+// The order stays the same when the faction is behind schedule. A level of 0 is a one-off upgrade without levels (the chain upgrade): it counts as done once a later perk of the list is.
+// Plan of 2026-11-01. A Steadfast upgrade can still come in between, whenever it is ready.
 const FP_ROADMAP = [
+    ['Addiction', 14, 4604, '2026-11-01'], ['Addiction', 15, 5258, '2026-11-08'], ['Addiction', 16, 5808, '2026-11-08'], ['Addiction', 17, 6414, '2026-11-08'],
+    ['Addiction', 18, 7088, '2026-11-15'], ['Addiction', 19, 7830, '2026-11-15'], ['Addiction', 20, 8941, '2026-11-22'],
+    ['Booster cooldown', 16, 9840, '2026-11-29'], ['Addiction', 21, 9877, '2026-11-29'],
+    ['Booster cooldown', 17, 10870, '2026-12-06'],
+    ['Addiction', 22, 10911, '2026-12-13'], ['Booster cooldown', 18, 12008, '2026-12-13'],
+    ['Chain upgrade', 0, 34258, '2027-01-03'],
+    ['Addiction', 23, 12054, '2027-01-10'], ['Booster cooldown', 19, 13714, '2027-01-10'],
+    ['Addiction', 24, 13766, '2027-01-17'], ['Booster cooldown', 20, 15148, '2027-01-24'],
+    ['Addiction', 25, 15207, '2027-01-31'],
+    ['Travel capacity', 5, 26432, '2027-02-14'], ['Booster cooldown', 21, 16734, '2027-02-21'],
+    ['Booster cooldown', 22, 18486, '2027-03-07'], ['Booster cooldown', 23, 21110, '2027-03-14'], ['Booster cooldown', 24, 23320, '2027-03-28'],
+    ['Travel capacity', 6, 36632, '2027-04-25'], ['Travel capacity', 7, 48032, '2027-05-16'], ['Travel capacity', 8, 66936, '2027-06-13'],
+    ['Rehab cost', 1, 66936, '2027-07-18'], ['Rehab cost', 2, 73944, '2027-08-22'], ['Rehab cost', 3, 81680, '2027-09-26'],
 ];
 const fpRoman = n => { let s = ''; for (const [v, r] of [[50, 'L'], [40, 'XL'], [10, 'X'], [9, 'IX'], [5, 'V'], [4, 'IV'], [1, 'I']]) while (n >= v) { s += r; n -= v; } return s; };
+const fpPerk = (perk, level) => level ? `${perk} ${fpRoman(level)}` : perk;
 const fpNum = n => Math.round(n).toLocaleString();
 const FP_LABEL = { strength: 'Strength', defense: 'Defense', speed: 'Speed', dexterity: 'Dexterity' };
 const FP_COLOR = { strength: '#3b6fd4', defense: '#e5531d', speed: '#f5a30b', dexterity: '#1f9d3a' };
@@ -112,11 +127,11 @@ async function loadFactionRoadmap() {
     const levels = ok ? fpData.allLevels : {};
     const now = Date.now();
     let nextFound = false;
-    const items = FP_ROADMAP.map(([perk, level, respect, date]) => {
-        const have = levels[perk.toLowerCase()] || 0;
-        const done = ok && have >= level;
+    const doneAt = FP_ROADMAP.map(([perk, level]) => ok && level > 0 && (levels[perk.toLowerCase()] || 0) >= level);
+    const items = FP_ROADMAP.map(([perk, level, respect, date], idx) => {
+        const done = doneAt[idx] || (ok && level === 0 && doneAt.slice(idx + 1).some(Boolean));
         const isNext = ok && !done && !nextFound; if (isNext) nextFound = true;
-        const late = !done && Date.parse(`${date}T00:00:00Z`) < now;
+        const late = !done && Date.parse(`${date}T00:00:00Z`) + 86400e3 <= now; // a perk planned for today is not late yet
         const weeks = late ? Math.floor((now - Date.parse(`${date}T00:00:00Z`)) / (7 * 86400e3)) : 0;
         return { perk, level, respect, date, done, isNext, late, weeks };
     });
@@ -135,14 +150,14 @@ async function loadFactionRoadmap() {
     $('fr-summary').innerHTML = ok ? `
         <div class="grid3">
             <div class="stat"><div class="k">Unlocked</div><div class="v good">${doneCount} / ${all.length}</div><div class="s">perks of the roadmap</div></div>
-            <div class="stat"><div class="k">Next up</div><div class="v" style="font-size:18px;">${next ? `${esc(next.perk)} ${fpRoman(next.level)}` : items.length ? 'All done' : 'New plan coming'}</div><div class="s">${next ? `needs ${fpNum(next.respect)} respect · planned ${fpDateLabel(next.date)}` : ''}</div></div>
+            <div class="stat"><div class="k">Next up</div><div class="v" style="font-size:18px;">${next ? `${esc(fpPerk(next.perk, next.level))}` : items.length ? 'All done' : 'New plan coming'}</div><div class="s">${next ? `needs ${fpNum(next.respect)} respect · planned ${fpDateLabel(next.date)}` : ''}</div></div>
             <div class="stat"><div class="k">Schedule</div><div class="v ${next && next.late ? 'bad' : 'good'}" style="font-size:18px;">${next ? (next.late ? `${next.weeks || '<1'} week${next.weeks === 1 ? '' : 's'} behind` : 'on schedule') : items.length ? 'done' : '-'}</div><div class="s">the order stays the same when behind</div></div>
         </div>${respectLine}`
         : '<p style="color:var(--muted);">The levels appear as soon as a leader has opened WWL.</p>';
     $('fr-table').innerHTML = `<table style="width:100%;font-size:13px;border-collapse:collapse;text-align:left;">
         <thead><tr style="color:var(--muted);"><th style="padding:4px 8px;">Perk</th><th style="padding:4px 8px;">Required respect</th><th style="padding:4px 8px;">Date</th><th style="padding:4px 8px;">Status</th></tr></thead>
         <tbody>${all.map(i => `<tr style="border-top:1px solid var(--line);${i.isNext ? 'background:rgba(53,217,155,.10);' : ''}${i.done && !i.fixed ? 'opacity:.6;' : ''}">
-            <td style="padding:4px 8px;${i.isNext ? 'font-weight:700;' : ''}">${esc(i.perk)} ${fpRoman(i.level)}</td>
+            <td style="padding:4px 8px;${i.isNext ? 'font-weight:700;' : ''}">${esc(fpPerk(i.perk, i.level))}</td>
             <td style="padding:4px 8px;font-family:var(--mono);">${fpNum(i.respect)}</td>
             <td style="padding:4px 8px;white-space:nowrap;">${fpDateLabel(i.date)}</td>
             <td style="padding:4px 8px;">${i.done ? '<span style="color:var(--reagent);">✓ Unlocked</span>' : i.isNext ? `<b>Next</b>${i.late ? ` <span style="color:var(--danger);">· ${i.weeks || '<1'} wk late</span>` : ''}` : i.late ? `<span style="color:var(--danger);">${i.weeks || '<1'} wk late</span>` : '<span style="color:var(--muted);">later</span>'}</td></tr>`).join('')}</tbody></table>`;

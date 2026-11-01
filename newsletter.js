@@ -140,8 +140,8 @@ async function buildNewsletter() {
             }) : [['', 'No perks were upgraded in this period.']],
             note: nl.startDay * 86400 > period.start + 86400 ? `Perk levels have been recorded since ${nlDay(nl.startDay * 86400)}, so earlier upgrades in this period are missing.` : '',
         });
-        const todo = FP_ROADMAP.filter(([perk, level]) => (levels[perk.toLowerCase()] || 0) < level).slice(0, 3);
-        if (todo.length) groups.push({ head: 'Up next', rows: todo.map(([perk, level, respect, date]) => [`${perk} ${fpRoman(level)}`, `needs ${nlNum(respect)} respect, planned ${fpDateLabel(date)}`]) });
+        const todo = FP_ROADMAP.filter(([perk, level]) => level > 0 && (levels[perk.toLowerCase()] || 0) < level).slice(0, 3);
+        if (todo.length) groups.push({ head: 'Up next', rows: todo.map(([perk, level, respect, date]) => [fpPerk(perk, level), `needs ${nlNum(respect)} respect, planned ${fpDateLabel(date)}`]) });
         sections.push({ title: 'Respect and perks', groups });
 
         sections.push({ title: 'Closing', raw: true, lines: ['Lots of Love', 'Crea <3'] });
