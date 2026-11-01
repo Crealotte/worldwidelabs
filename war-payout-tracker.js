@@ -155,6 +155,7 @@ function selectEvent(id) {
     wpSelectedWar = { id: e.id, start: e.start, end: e.end, event: true, us: null, them: { name: e.name, id: null }, winner: null };
     highlightPicked('e' + id);
     showPickedChains(`Chain event: ${e.name}`);
+    if (typeof wpArmoryDefaultDates === 'function') wpArmoryDefaultDates(); // armory-tracker.js: prefill the armory-costs dates for this chain event too
     // No war, usually no pool either: chain hits at the flat rate is what fits (the total to pay is shown under "4.")
     if (!$('wp-mode-split').checked) { $('wp-mode-split').checked = true; $('wp-mode-split').dispatchEvent(new Event('change')); }
 }

@@ -379,18 +379,22 @@ function renderAtShoppingList(report) {
 // from the day after the previous war ended through this war's end (covers restocking between
 // wars too, not just the war itself), so the dates default to that but stay fully editable. ----
 
-// Called from war-payout-tracker.js's selectWar (via a typeof-guarded hook) when a war is picked.
-// Only fills in blank fields — never overwrites dates the leader already edited.
+// Called from war-payout-tracker.js's selectWar / selectEvent (via a typeof-guarded hook) when a war or chain event is picked.
+// The dates are refilled for every pick, unless the leader typed their own dates since (then they stay). The period starts the day after the war OR chain
+// event that ended last before this one began, and runs to the end of this one.
+let wpArmoryTyped = false;
+['wp-armory-from', 'wp-armory-to'].forEach(id => $(id).addEventListener('input', () => { wpArmoryTyped = true; }));
 function wpArmoryDefaultDates() {
     if (typeof wpSelectedWar === 'undefined' || !wpSelectedWar) return;
-    let fromTs = wpSelectedWar.start; // fallback if no earlier war is found below
-    if (typeof wpWars !== 'undefined' && Array.isArray(wpWars)) {
-        const idx = wpWars.findIndex(w => String(w.id) === String(wpSelectedWar.id));
-        const prevWar = idx >= 0 ? wpWars[idx + 1] : null; // wpWars is sorted newest-end-first
-        if (prevWar) fromTs = prevWar.end + 86400; // the day after the previous war ended
-    }
-    if (!$('wp-armory-from').value) $('wp-armory-from').value = new Date(fromTs * 1000).toISOString().slice(0, 10);
-    if (!$('wp-armory-to').value) $('wp-armory-to').value = new Date(wpSelectedWar.end * 1000).toISOString().slice(0, 10);
+    let fromTs = wpSelectedWar.start; // fallback if no earlier war or chain event is found below
+    const others = [];
+    if (typeof wpWars !== 'undefined' && Array.isArray(wpWars)) others.push(...wpWars.map(w => ({ id: String(w.id), end: w.end })));
+    if (typeof wpEvents !== 'undefined' && Array.isArray(wpEvents)) others.push(...wpEvents.map(e => ({ id: String(e.id), end: e.end })));
+    const prev = others.filter(o => o.id !== String(wpSelectedWar.id) && o.end < wpSelectedWar.start).sort((a, b) => b.end - a.end)[0];
+    if (prev) fromTs = prev.end + 86400; // the day after the previous war or chain event ended
+    if (wpArmoryTyped && $('wp-armory-from').value && $('wp-armory-to').value) return;
+    $('wp-armory-from').value = new Date(fromTs * 1000).toISOString().slice(0, 10);
+    $('wp-armory-to').value = new Date(wpSelectedWar.end * 1000).toISOString().slice(0, 10);
 }
 
 $('wp-armory-calc').addEventListener('click', async () => {
