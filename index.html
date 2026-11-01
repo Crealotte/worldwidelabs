@@ -2323,6 +2323,10 @@
                 <p style="color:var(--muted);font-size:12px;margin:0 0 10px;">Which success chance a member may have to join an organized crime of each level (both numbers are allowed). In the WWL script the Join button of a slot outside the range is greyed out, with the reason next to it. Leave both empty for a level without a rule.</p>
                 <div class="status" id="ocr-status"></div>
                 <div class="table-scroll" style="overflow:auto;"><table style="font-size:13px;border-collapse:collapse;"><thead><tr style="color:var(--muted);text-align:left;"><th style="padding:4px 10px;">OC level</th><th style="padding:4px 10px;">Lowest chance %</th><th style="padding:4px 10px;">Highest chance %</th></tr></thead><tbody id="ocr-body"></tbody></table></div>
+                <h4 style="margin:14px 0 4px;font-size:13px;">Exceptions for one crime</h4>
+                <p style="color:var(--muted);font-size:12px;margin:0 0 6px;">A crime listed here by name (for example Bidding War) uses its own range instead of the one of its level.</p>
+                <div class="table-scroll" style="overflow:auto;"><table style="font-size:13px;border-collapse:collapse;"><thead><tr style="color:var(--muted);text-align:left;"><th style="padding:4px 10px;">Crime name</th><th style="padding:4px 10px;">Lowest chance %</th><th style="padding:4px 10px;">Highest chance %</th><th></th></tr></thead><tbody id="ocr-crimes"></tbody></table></div>
+                <button class="ghost small" id="ocr-addcrime" style="margin-top:6px;">+ Add a crime</button>
                 <div style="display:flex;gap:18px;flex-wrap:wrap;margin:10px 0;font-size:13px;">
                     <label><input type="checkbox" id="ocr-members" checked> The rules apply to members</label>
                     <label><input type="checkbox" id="ocr-leaders" checked> The rules apply to leaders</label>

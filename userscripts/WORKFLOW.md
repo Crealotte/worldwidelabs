@@ -15,7 +15,8 @@ Members get `energy-plan.user.js` (the **release** file). Every change from now 
 Queue changes below instead of releasing each one. Nothing here is live for members until a release.
 
 ### Queued for the next release
-- Nothing queued. Last release: script 1.52 (2026-10-30): the Award tracker can be opened and closed, clean links in the reminder messages, the leader To do sections (Recruit to Experiment B, to Guinea Pig / Lab Rat, Organized crimes) with a toggle per line, a message to copy and Notified, the faction radar every 5 minutes, and the chain watching limit message (4 hours in any 12 hours). Before that, script 1.51 (2026-10-25): the OC join rules, the OC numbers refresh and the availability calendar redraw.
+- OC join rules: exceptions per crime by name (Bidding War needs 50% instead of the 70% of level 6), read from the crime block on the page. Dev 1.52.1. Server and Leader settings part is already live.
+- Last release: script 1.52 (2026-10-30): the Award tracker can be opened and closed, clean links in the reminder messages, the leader To do sections (Recruit to Experiment B, to Guinea Pig / Lab Rat, Organized crimes) with a toggle per line, a message to copy and Notified, the faction radar every 5 minutes, and the chain watching limit message (4 hours in any 12 hours). Before that, script 1.51 (2026-10-25): the OC join rules, the OC numbers refresh and the availability calendar redraw.
 
 ## Releasing (when the list is done and tested)
 1. Copy the work file over the release file: `cp userscripts/energy-plan.dev.user.js userscripts/energy-plan.user.js`.

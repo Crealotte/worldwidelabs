@@ -8,6 +8,12 @@ async function ocrFetch(body) {
     const text = await res.text();
     try { return JSON.parse(text); } catch (e) { return { error: `Server problem (${res.status})` }; }
 }
+function ocrCrimeRow(name, x) {
+    const esc = v => String(v).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+    return `<tr><td style="padding:3px 10px;"><input type="text" class="ocr-cname" value="${esc(name)}" placeholder="Bidding War" style="width:170px;"></td><td style="padding:3px 10px;"><input type="number" min="0" max="100" class="ocr-cmin" value="${x ? x.min : ''}" placeholder="no limit" style="width:90px;"></td><td style="padding:3px 10px;"><input type="number" min="0" max="100" class="ocr-cmax" value="${x ? x.max : ''}" placeholder="no limit" style="width:90px;"></td><td><button class="ghost small ocr-cdel" type="button">Remove</button></td></tr>`;
+}
+$('ocr-crimes').addEventListener('click', e => { const b = e.target.closest('.ocr-cdel'); if (b) b.closest('tr').remove(); });
+$('ocr-addcrime').addEventListener('click', () => $('ocr-crimes').insertAdjacentHTML('beforeend', ocrCrimeRow('', null)));
 async function loadOcRules() {
     const st = $('ocr-status');
     try {
@@ -19,6 +25,7 @@ async function loadOcRules() {
             rows.push(`<tr><td style="padding:3px 10px;font-weight:600;">Level ${l}</td><td style="padding:3px 10px;"><input type="number" min="0" max="100" class="ocr-min" data-l="${l}" value="${x ? x.min : ''}" placeholder="no limit" style="width:90px;"></td><td style="padding:3px 10px;"><input type="number" min="0" max="100" class="ocr-max" data-l="${l}" value="${x ? x.max : ''}" placeholder="no limit" style="width:90px;"></td></tr>`);
         }
         $('ocr-body').innerHTML = rows.join('');
+        $('ocr-crimes').innerHTML = Object.keys(r.crimes || {}).map(n => ocrCrimeRow(n, r.crimes[n])).join('');
         $('ocr-members').checked = r.members !== false;
         $('ocr-leaders').checked = r.leaders !== false;
         st.textContent = ''; st.className = 'status';
@@ -30,8 +37,9 @@ $('ocr-save').addEventListener('click', async () => {
         const min = document.querySelector(`.ocr-min[data-l="${l}"]`).value.trim(), max = document.querySelector(`.ocr-max[data-l="${l}"]`).value.trim();
         if (min !== '' || max !== '') levels[l] = { min, max };
     }
+    const crimes = [...document.querySelectorAll('#ocr-crimes tr')].map(tr => ({ name: tr.querySelector('.ocr-cname').value.trim(), min: tr.querySelector('.ocr-cmin').value.trim(), max: tr.querySelector('.ocr-cmax').value.trim() })).filter(c => c.name);
     $('ocr-save').disabled = true;
-    const r = await ocrFetch({ action: 'ocrules-set', levels, members: $('ocr-members').checked, leaders: $('ocr-leaders').checked });
+    const r = await ocrFetch({ action: 'ocrules-set', levels, crimes, members: $('ocr-members').checked, leaders: $('ocr-leaders').checked });
     $('ocr-save').disabled = false;
     if (r.error) { st.className = 'status err'; st.textContent = r.error; return; }
     st.className = 'status ok'; st.textContent = 'Saved. The script picks the new rules up within 10 minutes (or after the next reload of Torn).';
