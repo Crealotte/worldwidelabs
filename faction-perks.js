@@ -154,12 +154,15 @@ async function loadFactionRoadmap() {
             <div class="stat"><div class="k">Schedule</div><div class="v ${next && next.late ? 'bad' : 'good'}" style="font-size:18px;">${next ? (next.late ? `${next.weeks || '<1'} week${next.weeks === 1 ? '' : 's'} behind` : 'on schedule') : items.length ? 'done' : '-'}</div><div class="s">the order stays the same when behind</div></div>
         </div>${respectLine}`
         : '<p style="color:var(--muted);">The levels appear as soon as a leader has opened WWL.</p>';
-    $('fr-table').innerHTML = `<table style="width:100%;font-size:13px;border-collapse:collapse;text-align:left;">
-        <thead><tr style="color:var(--muted);"><th style="padding:4px 8px;">Perk</th><th style="padding:4px 8px;">Required respect</th><th style="padding:4px 8px;">Date</th><th style="padding:4px 8px;">Status</th></tr></thead>
-        <tbody>${all.map(i => `<tr style="border-top:1px solid var(--line);${i.isNext ? 'background:rgba(53,217,155,.10);' : ''}${i.done && !i.fixed ? 'opacity:.6;' : ''}">
-            <td style="padding:4px 8px;${i.isNext ? 'font-weight:700;' : ''}">${esc(fpPerk(i.perk, i.level))}</td>
-            <td style="padding:4px 8px;font-family:var(--mono);">${fpNum(i.respect)}</td>
-            <td style="padding:4px 8px;white-space:nowrap;">${fpDateLabel(i.date)}</td>
-            <td style="padding:4px 8px;">${i.done ? '<span style="color:var(--reagent);">✓ Unlocked</span>' : i.isNext ? `<b>Next</b>${i.late ? ` <span style="color:var(--danger);">· ${i.weeks || '<1'} wk late</span>` : ''}` : i.late ? `<span style="color:var(--danger);">${i.weeks || '<1'} wk late</span>` : '<span style="color:var(--muted);">later</span>'}</td></tr>`).join('')}</tbody></table>`;
+    const head = `<thead><tr style="color:var(--muted);"><th style="padding:4px 8px;">Perk</th><th style="padding:4px 8px;">Required respect</th><th style="padding:4px 8px;">Date</th><th style="padding:4px 8px;">Status</th></tr></thead>`;
+    const rowHtml = i => `<tr style="border-top:1px solid var(--line);${i.isNext ? 'background:rgba(53,217,155,.10);' : ''}${i.done && !i.fixed ? 'opacity:.6;' : ''}">
+        <td style="padding:4px 8px;${i.isNext ? 'font-weight:700;' : ''}">${esc(fpPerk(i.perk, i.level))}</td>
+        <td style="padding:4px 8px;font-family:var(--mono);">${fpNum(i.respect)}</td>
+        <td style="padding:4px 8px;white-space:nowrap;">${fpDateLabel(i.date)}</td>
+        <td style="padding:4px 8px;">${i.done ? '<span style="color:var(--reagent);">✓ Unlocked</span>' : i.isNext ? `<b>Next</b>${i.late ? ` <span style="color:var(--danger);">· ${i.weeks || '<1'} wk late</span>` : ''}` : i.late ? `<span style="color:var(--danger);">${i.weeks || '<1'} wk late</span>` : '<span style="color:var(--muted);">later</span>'}</td></tr>`;
+    const table = list => `<table style="width:100%;font-size:13px;border-collapse:collapse;text-align:left;">${head}<tbody>${list.map(rowHtml).join('')}</tbody></table>`;
+    // what is unlocked sits in a tab that is closed by default; the perks still to come stay in view
+    $('fr-table').innerHTML = `<details style="margin-bottom:14px;"><summary style="cursor:pointer;font-weight:700;padding:4px 0;">Unlocked perks (${unlocked.length})</summary>${table(unlocked)}</details>`
+        + (items.length ? table(items) : '<p style="color:var(--muted);">The next perks will be planned soon.</p>');
 }
 const fpDateLabel = d => new Date(`${d}T12:00:00Z`).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' });
