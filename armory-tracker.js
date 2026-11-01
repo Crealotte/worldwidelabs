@@ -86,7 +86,7 @@ function atCostItems(report, cat, extras) {
         if (cat && c.category !== cat) continue;
         for (const it of c.items) rows.push({ category: c.category, item: it.item, quantity: it.quantity, value: Math.round(it.value) });
     }
-    if (extras) for (const e of (report.shoppingExtras || [])) rows.push({ category: e.category, item: e.item, quantity: e.quantity, value: Math.round(e.value) });
+    if (extras) for (const e of (report.shoppingExtras || [])) if (!cat || e.category === cat) rows.push({ category: e.category, item: e.item, quantity: e.quantity, value: Math.round(e.value) });
     return rows;
 }
 
@@ -125,8 +125,16 @@ async function atCalculateReport(from, to, onProgress) {
     for (let i = 0; i < chunks.length; i++) {
         if (onProgress) onProgress(i + 1, chunks.length);
         const [cFrom, cTo] = chunks[i];
-        const result = await atFetch({ action: 'consumption-report', from: cFrom, to: cTo });
+        let result = await atFetch({ action: 'consumption-report', from: cFrom, to: cTo });
         if (result.error) throw new Error(result.error);
+        // Torn's rate limit cuts a read short and the answer is then incomplete (and different every time). Days already read completely are kept on the server,
+        // so waiting a little and asking again only reads what is still missing. Up to 4 more tries per slice.
+        for (let tries = 1; result.meta.rateLimited && tries <= 4; tries++) {
+            for (let w = 20; w > 0; w--) { if (onProgress) onProgress(i + 1, chunks.length, `Torn rate limit reached, waiting ${w}s and trying again (${tries}/4)`); await new Promise(r => setTimeout(r, 1000)); }
+            if (onProgress) onProgress(i + 1, chunks.length, 'trying again');
+            result = await atFetch({ action: 'consumption-report', from: cFrom, to: cTo });
+            if (result.error) throw new Error(result.error);
+        }
 
         for (const cat of result.categories) {
             for (const it of cat.items) {
@@ -196,8 +204,8 @@ $('at-report-calc').addEventListener('click', async () => {
     if (!from || !to) { st.className = 'status err'; st.textContent = 'Pick both dates.'; return; }
     $('at-unparsed-body').innerHTML = '';
     try {
-        const result = await atCalculateReport(from, to, (done, total) => {
-            st.className = 'status ok'; st.textContent = `Fetching… (${done}/${total})`;
+        const result = await atCalculateReport(from, to, (done, total, note) => {
+            st.className = 'status ok'; st.textContent = `Fetching… (${done}/${total})${note ? ' - ' + note : ''}`;
         });
         const m = result.meta;
         if (!result.categories.length && m.entriesScanned === 0) {
@@ -391,11 +399,14 @@ $('wp-armory-calc').addEventListener('click', async () => {
     const to = atDateInputToTs($('wp-armory-to').value, true);
     if (!from || !to) { st.className = 'status err'; st.textContent = 'Pick both dates.'; return; }
     try {
-        const result = await atCalculateReport(from, to, (done, total) => {
-            st.className = 'status ok'; st.textContent = `Fetching… (${done}/${total})`;
+        const result = await atCalculateReport(from, to, (done, total, note) => {
+            st.className = 'status ok'; st.textContent = `Fetching… (${done}/${total})${note ? ' - ' + note : ''}`;
         });
-        st.className = result.meta.hitPageCap ? 'status err' : 'status';
-        st.textContent = result.meta.hitPageCap ? '⚠ Hit the page limit even per 3-day slice — numbers may be incomplete for an unusually active period.' : '';
+        const wm = result.meta;
+        st.className = wm.hitPageCap || wm.rateLimited ? 'status err' : 'status';
+        st.textContent = `Scanned ${wm.entriesScanned} armory event(s).`
+            + (wm.rateLimited ? ' ⚠ Torn rate-limited this partway through — numbers are incomplete, press Pull consumption again in a minute.' : '')
+            + (wm.hitPageCap ? ' ⚠ Hit the page limit even per 3-day slice — numbers may be incomplete for an unusually active period.' : '');
         renderWpArmoryBody(result);
     } catch (e) {
         st.className = 'status err'; st.textContent = e.message;
@@ -404,21 +415,28 @@ $('wp-armory-calc').addEventListener('click', async () => {
 
 function renderWpArmoryBody(report) {
     const el = $('wp-armory-body');
+    // the same lines as the Consumption Tracker's restock list: the consumed items plus the derived extras (e.g. Empty Blood Bag), so both show the same totals
+    const extraTotal = (report.shoppingExtras || []).reduce((s, e) => s + e.value, 0);
+    const lines = report.categories.map(cat => {
+        const items = atShoppingItemsForCategory(report, cat);
+        return { category: cat.category, quantity: items.reduce((s, it) => s + it.quantity, 0), value: items.reduce((s, it) => s + it.value, 0) };
+    });
+    const grand = report.grandTotal + extraTotal;
     if (!report.categories.length) {
         el.innerHTML = '<p style="color:var(--muted);font-size:12px;">Nothing consumed in this date range.</p>';
         return;
     }
-    el.innerHTML = report.categories.map(cat => `
+    el.innerHTML = lines.map(cat => `
         <div style="display:flex;align-items:center;gap:8px;padding:3px 0;font-size:13px;">
             <span style="flex:1;">${AT_CATEGORY_ICONS[cat.category] || '📦'} ${esc(cat.category)} — ${cat.quantity}x</span>
             <span style="font-family:var(--mono);">$${Math.round(cat.value).toLocaleString()}</span>
             <button class="ghost small" data-wp-armory-cat="${esc(cat.category)}" data-wp-armory-value="${cat.value}">+ Add</button>
         </div>`).join('')
-        + `<div style="display:flex;justify-content:flex-end;margin-top:8px;"><button class="ghost small" id="wp-armory-add-total">+ Add all ($${Math.round(report.grandTotal).toLocaleString()})</button></div>`;
+        + `<div style="display:flex;justify-content:flex-end;margin-top:8px;"><button class="ghost small" id="wp-armory-add-total">+ Add all ($${Math.round(grand).toLocaleString()})</button></div>`;
     el.querySelectorAll('[data-wp-armory-cat]').forEach(btn => {
-        btn.addEventListener('click', () => atAddCostToPayout(btn.dataset.wpArmoryCat, Number(btn.dataset.wpArmoryValue), atCostItems(report, btn.dataset.wpArmoryCat)));
+        btn.addEventListener('click', () => atAddCostToPayout(btn.dataset.wpArmoryCat, Number(btn.dataset.wpArmoryValue), atCostItems(report, btn.dataset.wpArmoryCat, true)));
     });
-    $('wp-armory-add-total').addEventListener('click', () => atAddCostToPayout('Armory costs', report.grandTotal, atCostItems(report)));
+    $('wp-armory-add-total').addEventListener('click', () => atAddCostToPayout('Armory costs', grand, atCostItems(report, null, true)));
 }
 
 // ---- By war: tick the wars to restock for and the period fills itself in ----
