@@ -28,7 +28,7 @@ const { tornFetch } = require('../lib/tornFetch');
 const { fetchWarHits, sleep, fetchLiveChainHits, isRateLimited } = require('../lib/warHits');
 const { fetchWarBadgeStats } = require('../lib/warBadgeStats');
 const { tornToDiscordIds, resolveDiscordIds, discordStatus } = require('../lib/discordMap');
-const { moHandle, moMe, moStandings, moWarOk, xanaxOwedKey, loadExtra, isEventId } = require('../lib/memberOverview');
+const { moHandle, moMe, moStandings, moWarOk, xanaxOwedKey, loadExtra, loadExtraFitted, isEventId } = require('../lib/memberOverview');
 const { evHandle } = require('../lib/evaluation');
 const { gymHandle } = require('../lib/gymStats');
 const { warReports } = require('../lib/warReports');
@@ -2599,7 +2599,7 @@ Cancel: ${cancelUrl}`, [], embeds, undefined, true);
             const [r, restockedRaw, register] = await Promise.all([
                 tornFetch(`https://api.torn.com/v2/faction?selections=rankedwars&key=${encodeURIComponent(key)}`, { headers: { accept: 'application/json' } }),
                 redis(['GET', restockedKey(factionId)]),
-                loadExtra(redis, factionId), // the war & chain register: chain events and which chains belong where
+                loadExtraFitted(redis, factionId, key), // the war & chain register: chain events and which chains belong where
             ]);
             const data = await r.json();
             if (data.error) return res.status(403).json({ error: data.error.error });

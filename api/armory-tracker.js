@@ -39,7 +39,7 @@
 const { tornFetch } = require('../lib/tornFetch');
 const { parseArmoryNewsEntry } = require('../lib/armoryNewsParser');
 const { fetchWarHits } = require('../lib/warHits');
-const { moXanaxAll, loadExtra } = require('../lib/memberOverview');
+const { moXanaxAll, loadExtraFitted } = require('../lib/memberOverview');
 const { TRACKED_ITEMS, BLOOD_BAG_RE } = require('../lib/trackedItems');
 
 const REDIS_URL = require('../lib/env').redisUrl();
@@ -325,7 +325,7 @@ module.exports = async function handler(req, res) {
                 .map(w => ({ id: String(w.id), start: w.start, end: w.end, opponent: ((w.factions || []).find(f => String(f.id) !== String(factionId)) || {}).name || 'Unknown' }));
             // the faction's chain events (added in Member Overview) sit in the same list, so a restock can be worked out for them too
             try {
-                const events = ((await loadExtra(redis, factionId)).events || []).filter(e => e.start && e.end)
+                const events = ((await loadExtraFitted(redis, factionId, key)).events || []).filter(e => e.start && e.end)
                     .map(e => ({ id: String(e.id), start: e.start, end: e.end, opponent: e.name || 'Chain event', event: true }));
                 wars.push(...events); wars.sort((a, b) => b.end - a.end);
             } catch (e) { /* the wars alone are still fine */ }
