@@ -452,21 +452,21 @@ async function loadAtWars() {
         atWars = r.wars; // newest first
         // the oldest one is only there as the "war before" for the one above it, so it is not offered
         const offered = atWars.slice(0, Math.max(0, atWars.length - 1));
-        list.innerHTML = offered.length ? offered.map(w => `<label style="display:flex;gap:6px;align-items:center;font-size:13px;cursor:pointer;"><input type="checkbox" class="at-war-pick" value="${w.id}" style="width:auto;"> War vs ${esc(w.opponent)} <span style="color:var(--muted);font-size:11px;">ended ${new Date(w.end * 1000).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}</span></label>`).join('') : '<span style="color:var(--muted);font-size:13px;">No finished wars found.</span>';
+        list.innerHTML = offered.length ? offered.map(w => `<label style="display:flex;gap:6px;align-items:center;font-size:13px;cursor:pointer;"><input type="checkbox" class="at-war-pick" value="${w.id}" style="width:auto;"> ${w.event ? 'Chain event: ' : 'War vs '}${esc(w.opponent)} <span style="color:var(--muted);font-size:11px;">ended ${new Date(w.end * 1000).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}</span></label>`).join('') : '<span style="color:var(--muted);font-size:13px;">No finished wars found.</span>';
     } catch (e) { list.innerHTML = `<span style="color:var(--danger);font-size:13px;">${esc(e.message)}</span>`; }
 }
 const atDay = ts => new Date(ts * 1000).toISOString().slice(0, 10);
 $('at-wars-use').addEventListener('click', () => {
     const note = $('at-wars-note');
     const picked = [...document.querySelectorAll('.at-war-pick:checked')].map(c => atWars.find(w => w.id === c.value)).filter(Boolean).sort((a, b) => a.end - b.end);
-    if (!picked.length) { note.textContent = 'Tick at least one war.'; return; }
+    if (!picked.length) { note.textContent = 'Tick at least one war or chain event.'; return; }
     const first = picked[0], last = picked[picked.length - 1];
     const before = atWars.filter(w => w.end < first.start).sort((a, b) => b.end - a.end)[0]; // the war right before the first ticked one
     const fromTs = before ? before.end + 86400 : first.start - 2 * 86400;
     const toTs = Math.min(last.end, Math.floor(Date.now() / 1000)); // ends on the last war's end date, like the war payout page
     $('at-report-from').value = atDay(fromTs);
     $('at-report-to').value = atDay(toTs);
-    note.textContent = `Period: ${atDay(fromTs)} → ${atDay(toTs)}${before ? ` (the day after the war vs ${before.opponent})` : ' (no earlier war known: 2 days before the first one)'}.`;
+    note.textContent = `Period: ${atDay(fromTs)} → ${atDay(toTs)}${before ? ` (the day after ${before.event ? 'the chain event ' : 'the war vs '}${before.opponent})` : ' (no earlier war known: 2 days before the first one)'}.`;
     $('at-report-calc').click();
 });
 
