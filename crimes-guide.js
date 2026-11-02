@@ -17,7 +17,7 @@ let cgMeritCache = null; // avoid refetching honors every tab switch
 const CRIMES_DATA = [
     { id: 'searchforcash', name: 'Search For Cash', icon: '💵', category: 'Theft', nerveCost: 2, guideStatus: 'ready' },
     { id: 'bootlegging', name: 'Bootlegging', icon: '📀', category: 'Counterfeiting', nerveCost: null, guideStatus: 'ready' },
-    { id: 'graffiti', name: 'Graffiti', icon: '🎨', category: null, nerveCost: null, guideStatus: 'pending' },
+    { id: 'graffiti', name: 'Graffiti', icon: '🎨', category: 'Vandalism', nerveCost: 3, guideStatus: 'ready' },
     { id: 'shoplifting', name: 'Shoplifting', icon: '🛍️', category: 'Theft', nerveCost: null, guideStatus: 'pending' },
     { id: 'pickpocketing', name: 'Pickpocketing', icon: '🤏', category: 'Theft', nerveCost: null, guideStatus: 'pending' },
     { id: 'cardskimming', name: 'Card Skimming', icon: '💳', category: null, nerveCost: null, guideStatus: 'pending' },
@@ -346,9 +346,221 @@ const BOOTLEGGING = {
     notes: 'All attempts here count as Counterfeiting crimes, the best crime for Counterfeiting medals in Crimes 2.0. Source: community in-depth guide on the Torn forum by Emforus, based on about 17,500 logged attempts. The nerve cost per copy or sell attempt is not stated there (collecting is 1 nerve, setting up the store 10).',
 };
 
+// ---- Graffiti: from the community in-depth guide on the Torn forum (Emforus, based on about 32,000 logs, last updated 2025) and the Torn wiki (the unique finds, edited Nov 2026), written up in our own words ----
+const GRAFFITI = {
+    summary: 'The third crime of Crimes 2.0, 3 nerve per attempt, and the only crime in the Vandalism category. You spray your name in seven areas. Each area has its own reputation (0 to 5 stars) that grows with the graffiti you place there and unlocks better finds and more cash. Mostly repeated clicking, with a few things to know: the Paint Mask, joining a crew, and reputation slowly decaying.',
+    estimatedNerveToCS100: null, // the guide gives no total
+    cycleLabel: '📍 Good to know',
+    highlightLabel: '🎯 Unique finds by reputation',
+    uniqueLocationLabel: 'Area',
+    keyItems: [
+        { name: 'Spray cans', effect: 'Needed for every attempt, any colour. A success uses 0 to 15% of a can. You need fewer than 100 cans to get to CS100; keep a variety of colours.', source: 'Item market, Bits \'n\' Bobs ($5 each), the Print Store' },
+        { name: 'The Ladder', effect: 'Seems to prevent bad outcomes about heights and falling, and unlocks some extra outcomes.', source: 'West Side, from CS15' },
+        { name: 'Wire Cutters', effect: 'Seems to prevent simple failures by letting you reach locked places, and unlocks extra outcomes.', source: 'North Side, from CS25' },
+        { name: 'Paint Mask', effect: 'Enhancer: +5% crime skill and crime experience gains. Also unlocks some very high paying outcomes; having it is the biggest factor in the money you make.', source: 'East Side, from CS35' },
+    ],
+    locations: [
+        {
+            name: 'East Side', unlock: null,
+            cycle: [
+                'Open from the start and relatively safe',
+                'Best colours (forum guide, small samples): purple for cash, red for reputation',
+                'Below reputation 2 a success only adds reputation',
+                'A critical failure can jail you for about 34 minutes to 1 hour 8 minutes, or take a share of your life',
+            ],
+            highlights: [
+                'Rep 1 (25 tags): 12 Bottles of Beer',
+                'Rep 2 (50): 4 Grenades, 2 HEG, 6 Pepper Spray',
+                'Rep 3 (100): 6 Morphine',
+                'Rep 4 (250): Ecstasy, Ketamine, 2 Shrooms, 6 Vicodin',
+                'Rep 5 (500) and CS70: the unique that lets you join a crew',
+                'Rep 5 and CS100: $126,000 to $160,000 (may depend on the crew you joined)',
+                'CS35: Paint Mask. CS50: unlocks the Residential District',
+            ],
+            tip: 'The best place to start: safe, and it gives you the Paint Mask at CS35.',
+        },
+        {
+            name: 'West Side', unlock: null,
+            cycle: [
+                'Open from the start',
+                'Best colours (forum guide): green for cash, blue for reputation',
+                'Below reputation 2 a success only adds reputation',
+                'A critical failure can jail you for about 3 hours 11 minutes, or take a share of your life',
+            ],
+            highlights: [
+                'Rep 1: 2 First Aid Kits, 6 Small First Aid Kits',
+                'Rep 2: 12 Cannabis',
+                'Rep 3: 6 HEG',
+                'Rep 4: $100,000 (needs CS77 or more and a crew)',
+                'Rep 5: $120,000 to $160,000',
+                'CS15: the Ladder. CS50: unlocks the Red-Light District',
+            ],
+            tip: 'Go here early for the Ladder at CS15.',
+        },
+        {
+            name: 'North Side', unlock: null,
+            cycle: [
+                'Open from the start, riskier than East and West Side',
+                'Best colours (forum guide): green for cash, orange for reputation',
+                'Below reputation 2 a success only adds reputation',
+            ],
+            highlights: [
+                'Rep 1: Cricket Bat',
+                'Rep 2: 12 Bottles of Beer, 5 Fireworks',
+                'Rep 3: $76,000 to $85,000',
+                'Rep 4: Police Vest, Taser, Smoke Grenade',
+                'Rep 5 and CS70: a unique that lets you join a crew',
+                'CS25: Wire Cutters. CS95: 2 to 5 points',
+            ],
+            tip: 'The place for the Wire Cutters at CS25.',
+        },
+        {
+            name: 'Residential District', unlock: 'A unique from East Side at CS50',
+            cycle: [
+                'The area with the lowest chance of failing',
+                'Best colours (forum guide): white for cash, blue for reputation',
+            ],
+            highlights: [
+                'Rep 1: $30,000 to $49,000',
+                'Rep 2: $52,000 to $64,000',
+                'Rep 3: $65,000 to $80,000',
+                'Rep 4: $90,000 to $120,000',
+                'Rep 5: $120,000 to $145,000',
+                'CS100: $150,000',
+            ],
+            tip: 'Safe and mostly cash finds: a good place to earn once you have it unlocked.',
+        },
+        {
+            name: 'Red-Light District', unlock: 'A unique from West Side at CS50',
+            cycle: [
+                'The area with the highest chance of failing',
+                'Best colours (forum guide): green for cash, pink for reputation',
+                'A success gives respect or money between $300 and $40,000',
+                'A critical failure can cost a lot of life (reported 500 to 750)',
+            ],
+            highlights: [
+                'Rep 1: 4 Morphine',
+                'Rep 2: 800 Special Ammo',
+                'Rep 3: PCP',
+                'Rep 4: 2 Opium, 2 Empty Blood Bags',
+                'Rep 5: Box of Medical Supplies',
+                'Rep 5 and CS70: a unique that unlocks the City Center and the Financial District and lets you join a crew',
+            ],
+            tip: 'Risky, so work on it with good life and the key items.',
+        },
+        {
+            name: 'Financial District', unlock: 'Joining a crew',
+            cycle: [
+                'Needs a crew',
+                'Best colours (forum guide): black for cash, red for reputation',
+                'A critical failure can jail you for up to about 5 hours 23 minutes',
+            ],
+            highlights: [
+                'Rep 1: 400 Special Ammo',
+                'Rep 2: 25 Card Skimmers',
+                'Rep 3: 2 Speed',
+                'Rep 4: Can of Goose Juice',
+                'Rep 5: Neumune Tablet',
+            ],
+            tip: 'The place for Card Skimmers (25 at rep 2), which later crimes need.',
+        },
+        {
+            name: 'City Center', unlock: 'Joining a crew',
+            cycle: [
+                'Needs a crew',
+                'Best colours (forum guide): green for cash, blue for reputation',
+                'A critical failure can jail you for about 1 hour 31 minutes, or put you in hospital for 3 hours 50 minutes if the life lost is more than you have',
+                'The most graffiti gets removed here per day (up to 100 in one day reported)',
+            ],
+            highlights: [
+                'Rep 1: High-Speed Drive and 20 Blank DVDs',
+                'Rep 2: Box of Medical Supplies',
+                'Rep 3: 4 Molotov Cocktails',
+                'Rep 4: 4 Bottles of Sake, 4 of Tequila, 2 of Pumpkin Brew, 2 of Kandy Kane',
+                'Rep 5: $500,000',
+            ],
+            tip: 'The biggest cash find ($500,000 at rep 5) and the High-Speed Drive for Bootlegging.',
+        },
+    ],
+    // no per-attempt drop tables: the forum guide gives them as pictures (risk by area, money by area, colours)
+    dropTables: null,
+    sections: [
+        { id: 'rep', label: 'Reputation & crew', blocks: [
+            { title: 'Reputation levels (each area has its own)', items: ['Rep 1: 25 graffiti in the area', 'Rep 2: 50', 'Rep 3: 100', 'Rep 4: 250', 'Rep 5: 500', 'About 80% of attempts add reputation. Money outcomes replace that chance, so it gets harder to gain reputation the higher it is.', 'Each rep level unlocks a unique find in that area, and higher reputation means more and bigger cash finds.'] },
+            { title: 'Reputation decay', items: ['The city slowly cleans up your graffiti, which lowers reputation in all areas (it can drop you a level).', 'The more graffiti you have in an area, the faster it is removed, and areas further down the list lose it faster.', 'The loss is random, from a few to over a dozen a day. The most reported was 100 in the City Center in one day.'] },
+            { title: 'Joining a crew', items: ['You need rep 5 in one of the first five areas and CS70.', 'When you have both, a new unique appears in that area. You have to FIND that unique to join a crew; reaching CS70 and rep 5 alone is not enough.', 'Joining a crew unlocks the Financial District and the City Center, extra outcomes in the other areas, and the Fresh Blud honor bar.'] },
+        ] },
+        { id: 'colours', label: 'Colours', blocks: [
+            { title: 'Best spray colour per area (forum guide, small samples: a hint, not a rule)', items: ['East Side: purple for cash, red for reputation', 'West Side: green for cash, blue for reputation', 'North Side: green for cash, orange for reputation', 'Residential District: white for cash, blue for reputation', 'Red-Light District: green for cash, pink for reputation', 'Financial District: black for cash, red for reputation', 'City Center: green for cash, blue for reputation'] },
+            { title: 'What colour changes', items: ['Colour decides which outcomes can appear. Most areas have common outcomes for every colour, and the unique finds ignore colour completely.', 'Colour does not seem to change the chance of failing or of a critical failure.', 'Money depends most on whether you have the Paint Mask: most of the high paying common outcomes need it.'] },
+        ] },
+    ],
+    tips: [
+        'Start at East Side, then West Side and North Side for the key items (Paint Mask at CS35, Ladder at CS15, Wire Cutters at CS25). Having them makes failures and crits less likely.',
+        'Crits are mostly minor: you lose the spray can and some life, sometimes jail for 1 to 5 hours. In bad cases the Paint Mask or Wire Cutters can be lost (not proven).',
+        'About one in ten failures is a critical failure.',
+        'Keep an eye on reputation decay: it can drop you a level, so do not stop for long when you are close to the next level.',
+        'This is the only Vandalism crime and a new category, so all fifteen Vandalism medals are open to old and new players alike: the best crime to collect medals.',
+    ],
+    uniques: [
+        { location: 'East Side', name: '12 Bottles of Beer', skill: 'None', other: 'Reputation 1' },
+        { location: 'East Side', name: '4 Grenades, 2 HEG, 6 Pepper Spray', skill: 'None', other: 'Reputation 2' },
+        { location: 'East Side', name: '6 Morphine', skill: 'None', other: 'Reputation 3' },
+        { location: 'East Side', name: 'Ecstasy, Ketamine, 2 Shrooms, 6 Vicodin', skill: 'None', other: 'Reputation 4' },
+        { location: 'East Side', name: 'Join a crew (unlocks the City Center)', skill: 'Level 70', other: 'Reputation 5' },
+        { location: 'East Side', name: 'Money ($126,000 to $160,000)', skill: 'Level 100', other: 'Reputation 5 (may depend on the crew)' },
+        { location: 'East Side', name: 'Paint Mask', skill: 'Level 35', other: 'None' },
+        { location: 'East Side', name: 'Unlocks the Residential District', skill: 'Level 50', other: 'None' },
+        { location: 'West Side', name: '2 First Aid Kits, 6 Small First Aid Kits', skill: 'None', other: 'Reputation 1' },
+        { location: 'West Side', name: '12 Cannabis', skill: 'None', other: 'Reputation 2' },
+        { location: 'West Side', name: '6 HEG', skill: 'None', other: 'Reputation 3' },
+        { location: 'West Side', name: 'Money ($100,000)', skill: 'Level 77', other: 'Reputation 4 and a crew' },
+        { location: 'West Side', name: 'Money ($120,000 to $160,000)', skill: 'None', other: 'Reputation 5' },
+        { location: 'West Side', name: 'Ladder', skill: 'Level 15', other: 'None' },
+        { location: 'West Side', name: 'Unlocks the Red-Light District', skill: 'Level 50', other: 'None' },
+        { location: 'North Side', name: 'Cricket Bat', skill: 'None', other: 'Reputation 1' },
+        { location: 'North Side', name: '12 Bottles of Beer, 5 Fireworks', skill: 'None', other: 'Reputation 2' },
+        { location: 'North Side', name: 'Money ($76,000 to $85,000)', skill: 'None', other: 'Reputation 3' },
+        { location: 'North Side', name: 'Police Vest, Taser, Smoke Grenade', skill: 'None', other: 'Reputation 4' },
+        { location: 'North Side', name: 'Join a crew', skill: 'Level 70', other: 'Reputation 5' },
+        { location: 'North Side', name: 'Wire Cutters', skill: 'Level 25', other: 'None' },
+        { location: 'North Side', name: '2 to 5 points', skill: 'Level 95', other: 'None' },
+        { location: 'Residential District', name: 'Money ($30,000 to $49,000)', skill: 'None', other: 'Reputation 1' },
+        { location: 'Residential District', name: 'Money ($52,000 to $64,000)', skill: 'None', other: 'Reputation 2' },
+        { location: 'Residential District', name: 'Money ($65,000 to $80,000)', skill: 'None', other: 'Reputation 3' },
+        { location: 'Residential District', name: 'Money ($90,000 to $120,000)', skill: 'None', other: 'Reputation 4' },
+        { location: 'Residential District', name: 'Money ($120,000 to $145,000)', skill: 'None', other: 'Reputation 5' },
+        { location: 'Residential District', name: 'Money ($150,000)', skill: 'Level 100', other: 'None' },
+        { location: 'Red-Light District', name: '4 Morphine', skill: 'None', other: 'Reputation 1' },
+        { location: 'Red-Light District', name: '800 Special Ammo', skill: 'None', other: 'Reputation 2' },
+        { location: 'Red-Light District', name: 'PCP', skill: 'None', other: 'Reputation 3' },
+        { location: 'Red-Light District', name: '2 Opium, 2 Empty Blood Bags', skill: 'None', other: 'Reputation 4' },
+        { location: 'Red-Light District', name: 'Box of Medical Supplies', skill: 'None', other: 'Reputation 5' },
+        { location: 'Red-Light District', name: 'Join a crew (unlocks the City Center and Financial District)', skill: 'Level 70', other: 'Reputation 5' },
+        { location: 'Financial District', name: '400 Special Ammo', skill: 'None', other: 'Reputation 1' },
+        { location: 'Financial District', name: '25 Card Skimmers', skill: 'None', other: 'Reputation 2' },
+        { location: 'Financial District', name: '2 Speed', skill: 'None', other: 'Reputation 3' },
+        { location: 'Financial District', name: 'Can of Goose Juice', skill: 'None', other: 'Reputation 4' },
+        { location: 'Financial District', name: 'Neumune Tablet', skill: 'None', other: 'Reputation 5' },
+        { location: 'City Center', name: 'High-Speed Drive, 20 Blank DVDs', skill: 'None', other: 'Reputation 1' },
+        { location: 'City Center', name: 'Box of Medical Supplies', skill: 'None', other: 'Reputation 2' },
+        { location: 'City Center', name: '4 Molotov Cocktails', skill: 'None', other: 'Reputation 3' },
+        { location: 'City Center', name: '4 Bottles of Sake, 4 of Tequila, 2 of Pumpkin Brew, 2 of Kandy Kane', skill: 'None', other: 'Reputation 4' },
+        { location: 'City Center', name: 'Money ($500,000)', skill: 'None', other: 'Reputation 5' },
+    ],
+    merits: [
+        { name: 'Let Us Spray', rarity: null, how: 'Reach crime skill 100 in Graffiti.' },
+        { name: 'Fresh Blud', rarity: null, how: 'Join a crew: reach rep 5 in a first-five area and CS70, then find the crew unique that appears there.' },
+        { name: 'Urban Legend', rarity: null, how: 'Reach 5 stars of reputation in all seven areas (a newer honor bar, listed on the Torn wiki but not in the older forum guide).' },
+    ],
+    uniqueCount: 44,
+    notes: 'All attempts count as Vandalism crimes, giving medals by the number of crimes done. Sources: the community in-depth guide on the Torn forum by Emforus (about 32,000 logged attempts; the author says a rewrite is due) and the Torn wiki (unique finds, edited November 2026). The forum guide counts 41 uniques, the wiki list below has 44 rows (it also lists the crew and unlock steps), and the cash amounts follow the wiki. The risk by area, money by area and colour tables of the forum guide are pictures and are not included.',
+};
+
 function cgAttachData(crime) {
     if (crime.id === 'searchforcash') return { ...crime, data: SEARCH_FOR_CASH };
     if (crime.id === 'bootlegging') return { ...crime, data: BOOTLEGGING };
+    if (crime.id === 'graffiti') return { ...crime, data: GRAFFITI };
     return crime;
 }
 
