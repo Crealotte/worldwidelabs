@@ -12,6 +12,15 @@
 
 const WHATS_NEW = [
     {
+        version: '1.49', date: '2026-11-02',
+        title: 'Crimes Guide: all 13 crimes',
+        everyone: [
+            'The Crimes Guide now has a guide for every one of the 13 Crimes 2.0 crimes: Search For Cash, Bootlegging, Graffiti, Shoplifting, Pickpocketing, Card Skimming, Burglary, Hustling, Disposal, Cracking, Forgery, Scamming and Arson. They are written up from the community in-depth guides on the Torn forum and the Torn wiki.',
+            'Each crime has tabs for the locations or steps, the key items, the unique finds, how to level up fast, tips, and the honor bars with a tick for the ones you already have. Some crimes also have tabs for things like security, notoriety, the rig and heat, or the persuasion bar.',
+        ],
+        leaders: [],
+    },
+    {
         version: '1.48', date: '2026-11-02',
         title: 'Script 1.54: Labs Assistant, mentoring sign-up and more',
         everyone: [
