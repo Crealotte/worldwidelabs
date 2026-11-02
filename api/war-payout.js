@@ -680,7 +680,7 @@ async function bankOpenOf(factionId, playerId) {
 function devizeScript(src) {
     return src
         .replace(/\/worldwidelabs\.user\.js/g, '/worldwidelabs-dev.user.js')
-        .replace(/(\/\/ @name\s+)Labs Assistant/, '$1Labs Assistant (DEV)')
+        .replace(/(\/\/ @name\s+)World Wide Labs/, '$1World Wide Labs (DEV)') // the name Tampermonkey knows the script by must never change (a new name installs as a second script), so only what is shown inside Torn says Labs Assistant
         .replace(/(\/\/ @namespace\s+\S+)/, '$1/dev')
         .replace("{ action: 'script-version' }", "{ action: 'script-version', channel: 'dev' }")
         .replace(/'wwl_update_check'/g, "'wwl_update_check_dev'")

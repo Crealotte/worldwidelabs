@@ -1,5 +1,5 @@
 // ==UserScript==
-// @name         Labs Assistant
+// @name         World Wide Labs
 // @namespace    https://worldwidelabs.vercel.app
 // @author       CreaLotte
 // @version      1.53.1
@@ -11,6 +11,7 @@
 // @grant        GM_info
 // @connect      __WWL_HOST__
 // ==/UserScript==
+// NOTE: keep "@name World Wide Labs" above as it is: Tampermonkey knows the script by this name, and a new name installs as a second script. The name members see inside Torn is Labs Assistant.
 
 (function () {
     'use strict';
