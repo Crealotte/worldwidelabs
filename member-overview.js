@@ -83,7 +83,8 @@ function moPeriod() {
 }
 const moWeeksIn = p => Math.max(1 / 7, (p.end - p.start) / (7 * MO_DAY)); // exact, so odd date ranges average correctly
 // Weeks of the picked period without training (an event week): the energy goal is lowered by that many weeks; what was trained stays as it is. Set per period, see 'mo-weeks-off'.
-const moWeeksOff = () => Number(moData?.weeksOff?.[String(moPeriod().start)]) || 0;
+const moWeeksOffFor = start => Number(moData?.weeksOff?.[String(start)]) || 0;
+const moWeeksOff = () => moWeeksOffFor(moPeriod().start);
 const moDaysIn = p => Math.round((p.end - p.start) / MO_DAY);
 
 function renderPeriodBar() {

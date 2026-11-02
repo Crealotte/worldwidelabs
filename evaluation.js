@@ -84,14 +84,15 @@ async function loadEvaluation() {
 // ---- the numbers per member ----
 function evRows() {
     const p = evPeriod();
-    const weeks = moWeeksIn(p);
+    const off = Math.min(moWeeksIn(p), moWeeksOffFor(p.start)); // weeks of this period without training (set on Member Overview): the goal is lowered by them
+    const weeks = Math.max(0, moWeeksIn(p) - off);
     return moRows().map(r => {
         const tier = r.tier || moData.autoTier?.[r.id]?.tier || '';
         // Joined during this period (Torn only gives whole days in the faction, so this is approximate): the target
         // counts only the time they have been here, and they get the softer approach like other new members.
         const joinedTs = r.daysInFaction == null ? null : Math.floor(Date.now() / 1000) - r.daysInFaction * 86400;
         const partial = joinedTs !== null && joinedTs > p.start;
-        const presentWeeks = partial ? Math.max(1 / 7, (p.end - joinedTs) / (7 * 86400)) : weeks;
+        const presentWeeks = partial ? Math.max(1 / 7, ((p.end - joinedTs) / (7 * 86400)) * (weeks / moWeeksIn(p))) : weeks; // a new member gets their share of the lowered goal
         const need = tier ? Math.round(moData.energyTarget[tier] * presentWeeks) : null;
         const trained = evEnergy?.snapshots ? (evEnergy.perMember[r.id] ?? 0) : null;
         const pct = need && trained !== null ? trained / need : null;
@@ -202,7 +203,7 @@ function renderEvaluation() {
     const notes = [];
     if (!evEnergy?.snapshots) notes.push('No training snapshots cover this period yet, so training shows as unknown.');
     else if (evEnergy.partial && evEnergy.sinceDay) notes.push(`Energy trained is only counted since ${moFmt(evEnergy.sinceDay * 86400)} — that is when counting started.`);
-    notes.push(`Training target = the member's own tier × the weeks in the period (${Math.round(moWeeksIn(p) * 10) / 10} weeks); war rule = ${moData.settings.minWarHits} war hits (or ${moData.settings.minChainHits} chain hits) in ${moData.settings.needWars} of the last 5 wars.`);
+    notes.push(`Training target = the member's own tier × the weeks in the period (${Math.round(moWeeksIn(p) * 10) / 10} weeks${moWeeksOffFor(p.start) ? `, minus ${moWeeksOffFor(p.start)} without training = ${Math.round((moWeeksIn(p) - moWeeksOffFor(p.start)) * 10) / 10} weeks (change it on Member Overview)` : ''}); war rule = ${moData.settings.minWarHits} war hits (or ${moData.settings.minChainHits} chain hits) in ${moData.settings.needWars} of the last 5 wars.`);
     // which availability plan each war was matched to (and how many members excused themselves in it), so a missing 🚫 can be traced
     const matched = moWarsInPeriod().filter(w => !w.event).map(w => {
         const pl = moData.excusedInfo?.[w.id] || [];
