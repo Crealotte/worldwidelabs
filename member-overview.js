@@ -82,6 +82,8 @@ function moPeriod() {
     return list.find(p => p.id === moPeriodId) || list.find(p => p.id === 'now' && p.end > p.start) || list.find(p => p.id.startsWith('p')) || list.find(p => p.id !== 'custom') || list[0]; // opens on the period still running; the last finished one only when none is running
 }
 const moWeeksIn = p => Math.max(1 / 7, (p.end - p.start) / (7 * MO_DAY)); // exact, so odd date ranges average correctly
+// Weeks of the picked period without training (an event week): the energy goal is lowered by that many weeks; what was trained stays as it is. Set per period, see 'mo-weeks-off'.
+const moWeeksOff = () => Number(moData?.weeksOff?.[String(moPeriod().start)]) || 0;
 const moDaysIn = p => Math.round((p.end - p.start) / MO_DAY);
 
 function renderPeriodBar() {
@@ -96,6 +98,7 @@ function renderPeriodBar() {
     $('mo-view-total').classList.toggle('active-toggle', !moPerWeek);
     $('mo-view-week').classList.toggle('active-toggle', moPerWeek);
     $('mo-period-note').textContent = (moEnergy?.partial && moEnergy.sinceDay ? `Energy trained is counted since ${moFmt(moEnergy.sinceDay * 86400)} — that is when the counting started. ` : '') + `${moDaysIn(cur)} days (${Math.round(moWeeksIn(cur) * 10) / 10} weeks) · ${moFmt(cur.start)} 00:00 → ${moFmt(cur.end)} 00:00 TCT${cur.id === 'dates' || cur.id === 'now' ? '' : ' (Sunday to Sunday)'}`;
+    renderWeeksOff(cur);
     const ccEl = $('mo-consumption-note');
     if (ccEl) {
         ccEl.innerHTML = moConsumption?.partial && moConsumption.sinceDay
@@ -321,7 +324,7 @@ function renderMemberOverview() {
                     <td style="padding:4px 8px;white-space:nowrap;">${(() => {
                         const auto = moData.autoTier?.[r.id];
                         const eff = r.tier || auto?.tier || '';
-                        const weeks = moWeeksIn(moPeriod());
+                        const weeks = Math.max(0, moWeeksIn(moPeriod()) - moWeeksOff()); // minus the weeks in which training was not possible
                         const need = eff ? Math.round(moData.energyTarget[eff] * weeks) : null;
                         // The tier OVERRIDE is the one editable bit in an otherwise read-only-for-Council table (see AUDIT.md) —
                         // Council sees the same effective tier as plain text instead of the edit dropdown.
@@ -569,3 +572,20 @@ $('mo-reg-refresh').addEventListener('click', async () => {
         if (typeof moReload === 'function') moReload();
     } catch (e) { toast(e.message); } finally { btn.disabled = false; btn.textContent = 'Re-read the chain numbers'; }
 });
+
+// Leader control under the period note: weeks of this period without training. Lowers the "E needed" goal by that many weeks of the weekly target.
+function renderWeeksOff(cur) {
+    const el = $('mo-off-wrap');
+    if (!el) return;
+    const editOnly = typeof canEditLeaderOnly === 'undefined' ? isLeaderCached : canEditLeaderOnly;
+    const off = moWeeksOff();
+    if (!editOnly) { el.innerHTML = off ? `The energy goal of this period is ${off} week${off === 1 ? '' : 's'} lower: training was not possible then.` : ''; return; }
+    el.innerHTML = `Weeks without training in this period: <input type="number" id="mo-off-weeks" min="0" max="4" step="0.5" value="${off}" style="width:64px;"> <button class="ghost small" id="mo-off-save">Save</button> <span style="color:var(--muted);">lowers the energy goal by that many weeks of the weekly target; the energy trained stays as it is</span>`;
+    $('mo-off-save').addEventListener('click', async () => {
+        const r = await moFetch({ action: 'mo-weeks-off', start: cur.start, weeks: $('mo-off-weeks').value });
+        if (r.error) { toast(r.error); return; }
+        moData.weeksOff = r.weeksOff;
+        toast('Saved');
+        renderMemberOverview();
+    });
+}
