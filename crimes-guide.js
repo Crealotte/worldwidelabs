@@ -22,7 +22,7 @@ const CRIMES_DATA = [
     { id: 'pickpocketing', name: 'Pickpocketing', icon: '🤏', category: 'Theft', nerveCost: 5, guideStatus: 'ready' },
     { id: 'cardskimming', name: 'Card Skimming', icon: '💳', category: 'Fraud', nerveCost: null, guideStatus: 'ready' },
     { id: 'burglary', name: 'Burglary', icon: '🏚️', category: 'Theft', nerveCost: null, guideStatus: 'ready' },
-    { id: 'hustling', name: 'Hustling', icon: '🎭', category: null, nerveCost: null, guideStatus: 'pending' },
+    { id: 'hustling', name: 'Hustling', icon: '🎭', category: 'Fraud', nerveCost: null, guideStatus: 'ready' },
     { id: 'disposal', name: 'Disposal', icon: '🗑️', category: 'Illicit Services', nerveCost: null, guideStatus: 'pending' },
     { id: 'cracking', name: 'Cracking', icon: '💻', category: null, nerveCost: null, guideStatus: 'pending' },
     { id: 'forgery', name: 'Forgery', icon: '📄', category: null, nerveCost: null, guideStatus: 'pending' },
@@ -1159,6 +1159,110 @@ const BURGLARY = {
     notes: 'All attempts count as Theft crimes. Source: the community in-depth guide on the Torn forum by Emforus (updated 2025; all 34 uniques identified). The nerve for casing and burgling is not stated there (scouting is 4 nerve), so no nerve cost per attempt is shown; the 16,000 nerve is the guide\'s minimum for CS100. The risk and drop-table pictures of the guide are not included.',
 };
 
+// ---- Hustling: from the community in-depth guide on the Torn forum (Emforus, updated 2026), written up in our own words ----
+const HUSTLING = {
+    summary: 'A fraud crime where you gather an audience and get them to bet on street games that are rigged in your favour. The nerve cost depends on the action (2 or 4 nerve). Crime skill comes from the actions you take, not from the money, and winning gives the most. It has no unique finds, and money is the only reward, which is easy to lose if you are careless.',
+    estimatedNerveToCS100: null, // the guide gives no total
+    locationsLabel: 'Actions',
+    cycleLabel: '⚙️ How it works',
+    highlightLabel: '📈 Crime skill and tips',
+    uniqueLocationLabel: 'Where',
+    keyItems: [
+        { name: 'Megaphone', effect: 'The enhancer: +5% crime experience and crime skill gains, and it can attract more people when you gather an audience.', source: 'Pickpocketing a Laborer' },
+    ],
+    locations: [
+        {
+            name: 'Gather an audience (4 nerve)', unlock: null,
+            cycle: [
+                'You attract 1 to 3 or more people per attempt, depending on your skill and on having a megaphone',
+                'There is a cap on the audience that depends on your skill: once reached, gathering always fails. Rule of thumb: 4, plus 1 for every 20 levels, up to 10 at max skill',
+                'People leave 1 to 3 minutes after the last interaction (demo, hype or game), so keep 40 or more nerve before gathering',
+            ],
+            highlights: [
+                'Crime skill: intermediate, about 150% of a demo',
+                'The least efficient way to gain skill for the nerve (4 nerve), so avoid it where you can',
+                'You do not need the full audience, except for the Snake Oil honor bar',
+            ],
+            tip: 'Keep your audience engaged, or follow only the people with a heart above their head, so you gather less often.',
+        },
+        {
+            name: 'Demonstrate and hype (2 nerve each)', unlock: null,
+            cycle: [
+                'Demonstrate shows how a game is played (the confidence trick). Hype persuades people to play: it raises attention and can start the betting, and it only appears if the demo did not already do that',
+                'Both are needed before betting can start',
+            ],
+            highlights: ['Crime skill: the lowest (100%, the reference), the same for both', 'The game, the size of the audience and the money bet do not change the skill gained, only the action does'],
+            tip: 'Demonstrate every game until at least one person gets a heart: that is the game to stay on.',
+        },
+        {
+            name: 'Betting: lose or win (2 nerve each)', unlock: null,
+            cycle: [
+                'You choose to lose on purpose or to win. The bet amount is shown on the left: a loss costs you that amount, a win pays you',
+                'You need some money in hand to bet, however little',
+            ],
+            highlights: [
+                'Losing: about 150% crime skill, and technique grows (a little)',
+                'Winning: the most crime skill, 225%: about 2.25 times a demo and 1.5 times a loss, and technique grows more',
+                'Losing raises attention, winning lowers attention and raises suspicion',
+            ],
+            tip: 'Winning is the best skill per nerve, and it is how you make money. Lose to top attention up, win to cash in, without letting attention hit zero.',
+        },
+        {
+            name: 'The Shill (4 nerve to recruit, 2 to collect)', unlock: 'CS60',
+            cycle: [
+                'Reduces the loss from losing on purpose: the shill keeps a share of the money you lose and gives the rest back when you collect',
+                'One at a time, taking a slot in the audience (shown in blue). He leaves after about 10 minutes, and money he still holds is lost',
+                'Collecting can crit: jail, or nothing. Either way the shill is lost with all his money',
+            ],
+            highlights: ['Crime skill: about 200% for recruiting and for collecting', 'The exact return rate is not known'],
+            tip: 'Worth it if you sit on a lot of nerve, or are about to use a refill, and want to limit the money lost.',
+        },
+        {
+            name: 'The Pickpocket (4 nerve to recruit, 2 to collect)', unlock: 'CS80',
+            cycle: [
+                'Stands with the audience and steals some cash whenever you take an action (hype, win or lose). More people and more attention mean more attempts',
+                'Collecting returns about half of what he stole. One at a time, in a slot (reddish brown). Collecting can crit and then everything he holds is lost',
+            ],
+            highlights: ['Crime skill: about 200% for recruiting and for collecting'],
+            tip: 'With the shill, very effective at making money.',
+        },
+    ],
+    dropTables: null, // the risk and technique tables are pictures in the guide
+    sections: [
+        { id: 'audience', label: 'Audience', blocks: [
+            { title: 'Attention and suspicion (the gauges under each person)', items: ['Attention goes up when you demonstrate or hype, and when you lose (more when it is their favourite game). It goes down when you win. The higher it is, the more likely they bet. If it empties, they leave.', 'Suspicion goes up when you win. A person\'s maximum attention is lowered by their suspicion.'] },
+            { title: 'Status above the head', items: ['A money icon: they are betting now and add to the pool.', 'A heart: the current game is their favourite. Their attention rises faster and they keep betting while it is played, whatever their suspicion.'] },
+            { title: 'Wealth', items: ['The colour of a person goes from grey to green: the greener, the more they can bet. People with a heart also seem to bet beyond their wealth.'] },
+        ] },
+        { id: 'games', label: 'Games & technique', blocks: [
+            { title: 'The four games', items: ['Cornhole (7 technique levels), Snail Racing (9), Find the Lady (11), Shell Game (12). They work the same; the differences are risk, betting range and technique levels.', 'The more advanced the game, the lower the success, but only by about a percentage point.'] },
+            { title: 'Technique', items: ['Technique raises the value of the bets in that game. It grows when you win or lose on purpose, more with wins.', 'The number of people, bettors or favourites does not change technique growth.'] },
+            { title: 'Raising technique fast (author\'s method)', items: ['Gather once or twice. Demonstrate each game until someone gets a heart (skip games you have maxed).', 'With a heart: lose until their attention is full, win once or twice to lower it (not empty), lose to top it up, repeat until suspicion is 80 to 90%, then win until they leave. Expect 10 to 15 games at about 1.5 wins to 1 loss.', 'Without a heart: lose until someone is full or total attention is over 60%, win to about 40%, lose again. At 60% suspicion keep winning to make them leave.', 'Ignore the shill and the pickpocket for this: they are for money and skill, not technique. Done right, skill and technique max out at about the same time.'] },
+        ] },
+        { id: 'levelling', label: 'Levelling & money', blocks: [
+            { title: 'Crime skill by action (relative)', items: ['100%: demonstrate (2 nerve), hype (2)', '150%: gather (4), lose (2)', '200%: recruit the shill (4), recruit the pickpocket (4), collect from either (2)', '225%: win (2)'] },
+            { title: 'Path 1: the efficient route', items: ['Get a handful of people and demonstrate each game until one has a heart. Lose 2 to 3 times to max attention, then win until attention is low but not empty. Repeat until the person leaves from suspicion.', 'After the shill unlocks, use one and collect after every loss if you have lots of nerve or a refill to use.'] },
+            { title: 'Path 2: the spamming route', items: ['Ignore money, attention and suspicion: gather one person and keep losing until your nerve is empty. Fewer gatherings are needed, but technique grows slower, because losses train less. Costs money, so use the shill to soften it.'] },
+            { title: 'Making a profit', items: ['Many players lose money in this crime: careless losing against a poor audience costs a lot.', 'People with hearts are the best source: demonstrate each game and stay on the one with the most hearts.', 'With no hearts, make sure attention is over half and at least five people are betting before you cash in. When single bets reach 30,000 to 50,000, start winning.', 'Run the shill and the pickpocket together when you play many games.'] },
+        ] },
+    ],
+    tips: [
+        'Look for the people with a heart above the head: they bet the most and keep betting.',
+        'Lose to build attention, win to cash in, and keep attention above zero.',
+        'Winning gives the most crime skill (225%) while gathering an audience is the least efficient use of nerve.',
+        'Snake Oil: fill the audience (10 people at max skill), push attention up, and switch games until a 100,000 bet shows up. Shell Game and Find the Lady are the easiest. Have a couple of million in hand and a full nerve bar.',
+        'This is the second Fraud crime (with Card Skimming and Scamming): good for Fraud medals if you have not got 10,000 fraud crimes from the old warehouse burning.',
+    ],
+    uniques: [],
+    merits: [
+        { name: 'Crowd Teaser', rarity: null, how: 'Reach crime skill 100 in Hustling.' },
+        { name: 'Tekkers', rarity: null, how: 'Reach maximum technique in all four games (Cornhole, Snail Racing, Find the Lady, Shell Game).' },
+        { name: 'Snake Oil', rarity: null, how: 'Win $100,000 from a single bet. Best with a full audience of 10 at max skill and technique.' },
+    ],
+    uniqueCount: 0,
+    notes: 'All attempts count as Fraud crimes, shared with Card Skimming and Scamming. Source: the community in-depth guide on the Torn forum by Emforus (updated 2026). No unique finds in this crime. Nerve per action is given in the action names (it differs by action, so no single cost is shown). The risk and technique tables of the guide are pictures and are not included.',
+};
+
 function cgAttachData(crime) {
     if (crime.id === 'searchforcash') return { ...crime, data: SEARCH_FOR_CASH };
     if (crime.id === 'bootlegging') return { ...crime, data: BOOTLEGGING };
@@ -1167,6 +1271,7 @@ function cgAttachData(crime) {
     if (crime.id === 'pickpocketing') return { ...crime, data: PICKPOCKETING };
     if (crime.id === 'cardskimming') return { ...crime, data: CARD_SKIMMING };
     if (crime.id === 'burglary') return { ...crime, data: BURGLARY };
+    if (crime.id === 'hustling') return { ...crime, data: HUSTLING };
     return crime;
 }
 
