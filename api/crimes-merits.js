@@ -36,6 +36,8 @@ const TRACKED_HONORS = [
     { crime: 'hustling', name: 'Crowd Teaser' },
     { crime: 'hustling', name: 'Tekkers' },
     { crime: 'hustling', name: 'Snake Oil' },
+    { crime: 'disposal', name: 'Trash Bandit' },
+    { crime: 'disposal', name: 'Dissolving Agent' },
 ];
 
 async function redis(command) {

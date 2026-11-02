@@ -23,7 +23,7 @@ const CRIMES_DATA = [
     { id: 'cardskimming', name: 'Card Skimming', icon: '💳', category: 'Fraud', nerveCost: null, guideStatus: 'ready' },
     { id: 'burglary', name: 'Burglary', icon: '🏚️', category: 'Theft', nerveCost: null, guideStatus: 'ready' },
     { id: 'hustling', name: 'Hustling', icon: '🎭', category: 'Fraud', nerveCost: null, guideStatus: 'ready' },
-    { id: 'disposal', name: 'Disposal', icon: '🗑️', category: 'Illicit Services', nerveCost: null, guideStatus: 'pending' },
+    { id: 'disposal', name: 'Disposal', icon: '🗑️', category: 'Illicit Services', nerveCost: null, guideStatus: 'ready' },
     { id: 'cracking', name: 'Cracking', icon: '💻', category: null, nerveCost: null, guideStatus: 'pending' },
     { id: 'forgery', name: 'Forgery', icon: '📄', category: null, nerveCost: null, guideStatus: 'pending' },
     { id: 'scamming', name: 'Scamming', icon: '☎️', category: null, nerveCost: null, guideStatus: 'pending' },
@@ -1263,6 +1263,111 @@ const HUSTLING = {
     notes: 'All attempts count as Fraud crimes, shared with Card Skimming and Scamming. Source: the community in-depth guide on the Torn forum by Emforus (updated 2026). No unique finds in this crime. Nerve per action is given in the action names (it differs by action, so no single cost is shown). The risk and technique tables of the guide are pictures and are not included.',
 };
 
+// ---- Disposal: from the community in-depth guide on the Torn forum (Emforus, updated 2026) and the Torn wiki (methods, uniques), written up in our own words ----
+const DISPOSAL = {
+    summary: 'An illicit services crime with no locations: every day at 00:00 TCT a new batch of jobs appears (about 16 per day, the same for everybody) and each job can be attempted once. For each job you choose how to get rid of the item: abandon, bury, burn, sink or dissolve, which cost 6 to 14 nerve. Nerve is not the limit here, time is: you can only do what the day offers.',
+    estimatedNerveToCS100: null, // the guide gives no total
+    locationsLabel: 'Methods',
+    cycleLabel: '⚙️ How it works',
+    highlightLabel: '📈 Crime skill and safety',
+    uniqueLocationLabel: 'Job',
+    keyItems: [
+        { name: 'Latex Gloves', effect: 'The enhancer: +5% crime experience and crime skill gains. Other effects are unknown.', source: 'A unique find shoplifting the Jewelry Store, or burgling the Dentist\'s Office' },
+        { name: 'Shovel (reusable)', effect: 'Needed for every job done with the Bury method.', source: 'Cannot be bought: a common find searching the Cemetery or burgling the Tool Shed, Beach Hut, Luxury Villa, Old Factory, Slaughterhouse and Foundry' },
+        { name: 'Wheelbarrow (reusable)', effect: 'Needed for every method on Building Debris and Industrial Waste jobs.', source: 'Sometimes sold at the Recycling Center, or found searching the Junkyard and burgling the Tool Shed, Suburban Home, Farmhouse, Farm Storage, Old Factory, Paper Mill, Foundry and Fertilizer Plant' },
+        { name: 'Handkerchief', effect: 'Needed to abandon a Firearm.', source: 'Cannot be bought: searching the Cemetery and the Fountain, pickpocketing a Homeless Person or Businessman, burgling the Beach Hut and Chiropractors' },
+        { name: 'Double Cut File', effect: 'Needed for every method on Firearm jobs, except Dissolve.', source: 'Cannot be bought: pickpocketing a Homeless Person or Laborer, burgling the Tool Shed' },
+        { name: 'Anchor and Rope', effect: 'Both are used up when sinking a Dead Body.', source: 'The Anchor is a unique from burgling the Shipyard. Rope: searching the Junkyard and many burglary targets' },
+        { name: 'Bonesaw', effect: 'Used up to dissolve a Dead Body.', source: 'Burgling the Secluded Cabin, Funeral Directors and Slaughterhouse' },
+        { name: 'Bleach and Paper Towels', effect: 'Used up to abandon a Vehicle or a Murder Weapon.', source: 'Burglary targets such as the Cleaning Agency, Dentist\'s Office, Old Factory, Slaughterhouse, Paper Mill' },
+        { name: 'Bricks', effect: 'Used up to sink a Vehicle.', source: 'Bits \'n\' Bobs, and many crime outcomes' },
+        { name: 'Disposable Masks', effect: 'Used up on every Biological Waste job.', source: 'The Pharmacy (no crime is known to give them)' },
+        { name: 'Gas cans (gasoline)', effect: 'Used up by every job done with the Burn method.', source: 'Bits \'n\' Bobs (sometimes), the Junkyard, shoplifting Bits \'n\' Bobs, many burglary targets' },
+        { name: 'Hydrochloric Acid', effect: 'Used up by every job done with the Dissolve method.', source: 'Cannot be bought: pickpocketing a Mobster, burgling the Beach Hut, Cleaning Agency and Foundry' },
+        { name: 'Lye', effect: 'Used up to bury Body Parts and Dead Bodies.', source: 'Burgling the Cleaning Agency and Farm Storage' },
+        { name: 'A car', effect: 'Some outcomes and three uniques need any car in your inventory. The exact car, a driving licence or racing licence do not matter.', source: 'Any car' },
+    ],
+    locations: [
+        {
+            name: 'Abandon (6 nerve)', unlock: null,
+            cycle: ['The simplest and cheapest: leave the object somewhere it will not bother anyone', 'Crime skill multiplier: 100% (the reference)', 'Vehicles and Murder Weapons need bleach and paper towels; Firearms need a handkerchief'],
+            highlights: ['Fairly unsafe across the board: success rates are lower than other methods for the same job'],
+            tip: 'Only worth it for a unique (General Waste, Building Debris, Dead Body and Vehicle uniques are found abandoning).',
+        },
+        {
+            name: 'Bury (8 nerve)', unlock: null,
+            cycle: ['Available for most jobs except Vehicles', 'Crime skill multiplier: 120%', 'Always needs a Shovel; Body Parts and Dead Bodies also use Lye'],
+            highlights: ['No general safety rating: it depends on the job', 'Safe for General Waste; risky for Broken Appliance, Building Debris; unsafe for Industrial and Biological waste, Firearms'],
+            tip: 'The Old Furniture, Firearm and Industrial Waste uniques are found burying.',
+        },
+        {
+            name: 'Burn (10 nerve)', unlock: null,
+            cycle: ['Available for most jobs except Building Debris and Broken Appliance', 'Crime skill multiplier: 144%', 'Every job uses one gas can'],
+            highlights: ['Surprisingly safe, especially for things that burn like Documents and Old Furniture'],
+            tip: 'The way to do Documents and Old Furniture.',
+        },
+        {
+            name: 'Sink (12 nerve)', unlock: null,
+            cycle: ['Available for all jobs', 'Crime skill multiplier: 173%', 'Usually no materials, except Vehicles use bricks and Dead Bodies use Rope and an Anchor'],
+            highlights: ['Very good for heavy things that really sink; light things float up and fail', 'Safe for Broken Appliance, Building Debris, Vehicle, Industrial Waste, Biological Waste and Murder Weapon'],
+            tip: 'The most useful method overall for heavy jobs.',
+        },
+        {
+            name: 'Dissolve (14 nerve)', unlock: null,
+            cycle: ['Available for most jobs, but not Vehicle and Biological Waste', 'Crime skill multiplier: 207%', 'Usually uses hydrochloric acid'],
+            highlights: ['Extremely particular: it fails almost every time, except Body Part and Dead Body jobs, where it works'],
+            tip: 'Only for Body Parts and Dead Bodies. A Dead Body dissolved gives the Dissolving Agent honor bar.',
+        },
+    ],
+    dropTables: null, // the risk, occurrence and income tables are pictures in the guide
+    sections: [
+        { id: 'jobs', label: 'Jobs', blocks: [
+            { title: 'About the jobs', items: ['12 kinds of job. Every day at 00:00 TCT a new batch appears, the same for all players, and unfinished jobs expire at the end of the day. About 16 are made per day, some only appear from a certain skill level.', 'When all jobs of the day are done, no more appear until the next day: this crime is time-gated.', 'Skill gain per job (relative to General Waste at 100%): Broken Appliance and Old Furniture 107.5%, Building Debris 115%, Vehicle 130%, Documents 145%, Industrial Waste 160%, Biological Waste 175%, Murder Weapon 212.5%, Firearm 220%, Body Part 350%, Dead Body 550%.', 'The total gain is the method multiplier times the job multiplier. A failure on a complex job can cost a lot of skill.'] },
+            { title: 'General Waste (very common, 100%)', items: ['Bury safe, Burn moderately unsafe, Abandon unsafe, Sink risky, Dissolve very dangerous', 'Burn or bury; avoid sinking and dissolving'] },
+            { title: 'Broken Appliance (common, 107.5%)', items: ['Sink safe, Abandon unsafe, Bury risky, Dissolve very dangerous, Burn unavailable', 'Sink is best'] },
+            { title: 'Old Furniture (common, 107.5%)', items: ['Burn safe, Abandon and Sink unsafe, Bury risky, Dissolve very dangerous', 'Burn works best by far'] },
+            { title: 'Building Debris (very common, 115%)', items: ['Sink safe, Abandon unsafe, Bury risky, Burn and Dissolve unavailable', 'Sink is best, avoid burying. Needs a wheelbarrow'] },
+            { title: 'Vehicle (uncommon, 130%)', items: ['Sink safe, Burn moderately unsafe, Abandon unsafe, Bury and Dissolve unavailable', 'Sink; burning is fine; abandon only for the unique'] },
+            { title: 'Documents (uncommon, 145%)', items: ['Burn safe; Sink and Dissolve very dangerous; Abandon and Bury low data and probably risky', 'Burn works best'] },
+            { title: 'Industrial Waste (uncommon, 160%)', items: ['Sink safe, Bury unsafe, Abandon dangerous, Burn and Dissolve unavailable', 'Sink works best; burying has a unique. Needs a wheelbarrow'] },
+            { title: 'Biological Waste (rare, 175%)', items: ['Sink safe, Bury unsafe, Burn risky, Abandon low data and probably dangerous, Dissolve unavailable', 'Sink works best. Needs a disposable mask'] },
+            { title: 'Murder Weapon (very rare, 212.5%)', items: ['Sink safe; the others have no data or are not recommended; Dissolve very dangerous', 'Sink'] },
+            { title: 'Firearm (very rare, 220%)', items: ['Sink moderately unsafe, Bury unsafe, Dissolve very dangerous, Abandon no data, Burn unavailable', 'Sink works best; burying has a unique. Needs a double cut file'] },
+            { title: 'Body Part (extremely rare, 350%)', items: ['Dissolve safe, Sink probably moderately unsafe, the rest no data', 'Dissolve works very often'] },
+            { title: 'Dead Body (extremely rare, 550%)', items: ['Dissolve seems safe (little data); Abandon is alright-ish; the rest untested', 'Materials are five times as many: 5 lye to bury, 5 gas cans to burn, 5 hydrochloric acid to dissolve'] },
+        ] },
+        { id: 'levelling', label: 'Levelling', blocks: [
+            { title: 'How to raise skill', items: ['It is slow because of the daily limit. More dangerous jobs and fancier methods give more, but not every job can be dissolved.', 'Nerve is not the limit, time is: do the method with the highest success rate for every job, and if several are safe, take the most expensive one in nerve.', 'Do every job every day.', 'Do not chase uniques: higher skill means more jobs per day. Go back for the uniques later.'] },
+            { title: 'Crit penalties (a vehicle job, from the wiki)', items: ['Jail from about 7 hours to 23 hours, or life loss of 69 to 974, with hospital if the loss is more than your life.'] },
+        ] },
+    ],
+    tips: [
+        'Do all the jobs of the day, with the safest method and, among safe ones, the one that costs the most nerve.',
+        'Stock the materials you need: shovel, wheelbarrow, gas cans, masks and so on. Most come from other crimes, and many can be bought on the item market.',
+        'A Dead Body job is rare (about once a week): it is fairly safe, so give it a go when it shows up.',
+        'The crime counts as an Illicit Services crime, but its high nerve cost and few daily attempts make it a poor choice for those medals.',
+    ],
+    uniques: [
+        { location: 'Building Debris', name: 'LSD, 2 Vicodin, 2 Xanax, 3 Permanent Markers', skill: 'None', other: 'Method: Abandon' },
+        { location: 'Old Furniture', name: 'Hard Drive, eCPU, CPU, HPCPU', skill: 'None', other: 'Method: Bury' },
+        { location: 'Documents', name: '2 Boxes of Medical Supplies', skill: 'None', other: 'Method: Burn' },
+        { location: 'Broken Appliance', name: 'Stash Box', skill: 'None', other: 'Method: Sink' },
+        { location: 'Firearm', name: 'M249 SAW', skill: 'None', other: 'Method: Bury' },
+        { location: 'Murder Weapon', name: 'Diamond Bladed Knife', skill: 'None', other: 'Method: Sink' },
+        { location: 'Industrial Waste', name: '250 special ammo', skill: 'None', other: 'Method: Bury' },
+        { location: 'General Waste', name: '2 Bags of Bon Bons, Pixie Sticks, 2 Bags of Candy Kisses, Bag of Tootsie Rolls', skill: 'None', other: 'Method: Abandon' },
+        { location: 'Body Part', name: 'Combat Gloves', skill: 'None', other: 'Method: Dissolve' },
+        { location: 'Dead Body', name: 'Epinephrine, Melatonin, Serotonin, Tyrosine', skill: 'None', other: 'Method: Abandon' },
+        { location: 'Vehicle', name: 'Money ($150,000 to $160,000)', skill: 'None', other: 'Method: Abandon (needs a car)' },
+    ],
+    merits: [
+        { name: 'Trash Bandit', rarity: null, how: 'Reach crime skill 100 in Disposal.' },
+        { name: 'Dissolving Agent', rarity: null, how: 'Dissolve a Dead Body in acid. Dead Bodies are random and appear at higher skill, so level up and wait.' },
+    ],
+    uniqueCount: 11,
+    notes: 'All attempts count as Illicit Services crimes (with the old Assassination and Drug Deals). Sources: the community in-depth guide on the Torn forum by Emforus (updated 2026) and the Torn wiki (methods, nerve costs and unique finds). Job data is limited because the crime is daily, so the safety ratings may change. The risk, occurrence and income tables are pictures and are not included. No single nerve cost is shown because it depends on the method (6 to 14).',
+};
+
 function cgAttachData(crime) {
     if (crime.id === 'searchforcash') return { ...crime, data: SEARCH_FOR_CASH };
     if (crime.id === 'bootlegging') return { ...crime, data: BOOTLEGGING };
@@ -1272,6 +1377,7 @@ function cgAttachData(crime) {
     if (crime.id === 'cardskimming') return { ...crime, data: CARD_SKIMMING };
     if (crime.id === 'burglary') return { ...crime, data: BURGLARY };
     if (crime.id === 'hustling') return { ...crime, data: HUSTLING };
+    if (crime.id === 'disposal') return { ...crime, data: DISPOSAL };
     return crime;
 }
 
