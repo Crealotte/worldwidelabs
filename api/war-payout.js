@@ -1605,7 +1605,7 @@ Cancel: ${cancelUrl}`, [], embeds, undefined, true);
                 // userscript's own code, `data.profile.revivable`) — reading `d.revivable` directly
                 // was always undefined regardless of the real setting.
                 if (!d.error && d.profile?.revivable) {
-                    items.push({ id: 'revive', text: "You have your revives on, set them to \"no one\".", cta: 'Open Preferences', url: 'https://www.torn.com/preferences.php#tab=privacy' });
+                    items.push({ id: 'revive', text: "You have your revives on, set them to \"no one\".", cta: 'Open Preferences', url: 'https://www.torn.com/preferences.php#tab=privacy', priority: true, calm: true });
                 }
                 // Torn's v2 "organizedcrime" (singular) is "your current ongoing organized crime" — null when you are not in one.
                 // (The plural "organizedcrimes" this used to read is something else entirely: the open slots of crimes that are
@@ -1679,8 +1679,19 @@ Cancel: ${cancelUrl}`, [], embeds, undefined, true);
                     const raw = await redis(['GET', availabilityKey(factionId, p.id)]);
                     const data = raw ? JSON.parse(raw) : null;
                     if (data && !respondedMap(data)[playerId]) {
-                        items.push({ id: 'availability', text: `Fill in your availability for ${p.name ? `"${p.name}"` : 'the upcoming war/weekend'}.`, cta: 'Open Availability', url: site ? `${site}/availability` : null });
+                        items.push({ id: 'availability', text: `Fill in your availability for ${p.name ? `"${p.name}"` : 'the upcoming war/weekend'}.`, cta: 'Open Availability', url: site ? `${site}/availability` : null, priority: true, calm: true });
                     }
+                }
+            } catch (e) { /* skip */ }
+
+            // A poll made on the site that is still open and this member has not voted in yet: a red, urgent line (the vote is on the dashboard). Only the newest poll is active.
+            try {
+                const newest = (await redis(['LRANGE', `wwl:polls:list:${factionId}`, 0, 0])) || [];
+                const praw = newest[0] ? await redis(['GET', `wwl:poll:${factionId}:${newest[0]}`]) : null;
+                const poll = praw ? JSON.parse(praw) : null;
+                if (poll && !poll.hidden && !(poll.expiresAt && Date.now() > poll.expiresAt) && !(await redis(['HEXISTS', `wwl:poll:votes:${factionId}:${poll.pollId}`, String(playerId)]))) {
+                    const left = poll.expiresAt ? Math.max(1, Math.round((poll.expiresAt - Date.now()) / 3600000)) : null;
+                    items.push({ id: `poll-${poll.pollId}`, text: `Vote in the poll: "${String(poll.question).slice(0, 120)}"${left ? ` (closes in about ${left} h)` : ''}.`, cta: 'Open the poll', url: site ? `${site}/dashboard` : null, priority: true, calm: true });
                 }
             } catch (e) { /* skip */ }
 
@@ -1769,7 +1780,7 @@ Cancel: ${cancelUrl}`, [], embeds, undefined, true);
                 items.unshift({ id: 'event-running', text: `${name} is running until ${when}! Keep stacking and keep the chains going!`, notice: true });
             }
             items.sort((a, b) => (b.priority ? 1 : 0) - (a.priority ? 1 : 0)); // the crimes and the money first (the sort keeps the rest in their order)
-            return res.status(200).json({ items, energyPause, ttl: items.some(i => i.priority) || items.some(i => /^lt-/.test(i.id)) ? 120 : 300 }); // how long the script may keep this: a leader with things waiting gets a fresh list every minute
+            return res.status(200).json({ items, energyPause, ttl: items.some(i => i.priority && !i.calm) || items.some(i => /^lt-/.test(i.id)) ? 120 : 300 }); // how long the script may keep this: a leader with things waiting gets a fresh list every minute
         }
         // Names for the "who" lists only leaders see (reporters, "I have this too", thumbs): one roster read (cached), best effort.
         const bugNames = async () => { const o = {}; try { for (const m of await getRoster(key)) o[m.id] = m.name; } catch (e) { /* ids are shown instead */ } return o; };
