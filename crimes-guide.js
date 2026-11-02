@@ -24,7 +24,7 @@ const CRIMES_DATA = [
     { id: 'burglary', name: 'Burglary', icon: '🏚️', category: 'Theft', nerveCost: null, guideStatus: 'ready' },
     { id: 'hustling', name: 'Hustling', icon: '🎭', category: 'Fraud', nerveCost: null, guideStatus: 'ready' },
     { id: 'disposal', name: 'Disposal', icon: '🗑️', category: 'Illicit Services', nerveCost: null, guideStatus: 'ready' },
-    { id: 'cracking', name: 'Cracking', icon: '💻', category: null, nerveCost: null, guideStatus: 'pending' },
+    { id: 'cracking', name: 'Cracking', icon: '💻', category: 'Cybercrime', nerveCost: null, guideStatus: 'ready' },
     { id: 'forgery', name: 'Forgery', icon: '📄', category: null, nerveCost: null, guideStatus: 'pending' },
     { id: 'scamming', name: 'Scamming', icon: '☎️', category: null, nerveCost: null, guideStatus: 'pending' },
     { id: 'arson', name: 'Arson', icon: '🔥', category: null, nerveCost: null, guideStatus: 'pending' },
@@ -1368,6 +1368,106 @@ const DISPOSAL = {
     notes: 'All attempts count as Illicit Services crimes (with the old Assassination and Drug Deals). Sources: the community in-depth guide on the Torn forum by Emforus (updated 2026) and the Torn wiki (methods, nerve costs and unique finds). Job data is limited because the crime is daily, so the safety ratings may change. The risk, occurrence and income tables are pictures and are not included. No single nerve cost is shown because it depends on the method (6 to 14).',
 };
 
+// ---- Cracking: from the community in-depth guide on the Torn forum (Emforus), written up in our own words ----
+const CRACKING = {
+    summary: 'A cybercrime where you crack people\'s passwords character by character. You can guess characters yourself, or use brute-forcing (7 nerve) with a rig you build from computer parts: CPUs for speed, PSUs for power and fans, water blocks and heat sinks to keep it from overheating. Jobs are daily. It is one of the most nerve-hungry crimes if you do not know what you are doing, and it is the one with the most to optimise.',
+    estimatedNerveToCS100: null, // the guide gives no total
+    locationsLabel: 'The steps',
+    cycleLabel: '⚙️ How it works',
+    highlightLabel: '📈 Crime skill and tips',
+    uniqueLocationLabel: 'Where',
+    keyItems: [
+        { name: 'Office Chair', effect: 'The enhancer: +5% crime experience and crime skill gains. Other effects are unknown.', source: 'A unique find shoplifting Cyber Force (when the guard is away)' },
+        { name: 'A computer', effect: 'Required: without one the crime is locked. A basic course in computing is also needed.', source: 'Super Store, and other crime outcomes' },
+        { name: 'CPUs, eCPUs and HPCPUs', effect: 'Build the rig. They give MIPS, and so brute-forcing strength. An eCPU has half the performance of an HPCPU for a fifth of the power, and makes very little heat.', source: 'Shoplifting Cyber Force; burgling an Apartment, Suburban Home, Self-Storage Facility, Postal Office, Recruitment Agency, Dockside Warehouse, Printing Works and Truckyard' },
+        { name: 'Fans, water blocks, heat sinks', effect: 'Cool the rig (see the Heat tab).', source: 'The same places as the CPUs' },
+        { name: 'PSUs (power supplies)', effect: 'The heart of the rig: they power everything and limit what you can build. A PSU takes a 1x2 slot.', source: 'The same places as the CPUs' },
+        { name: 'Education', effect: 'All the useful courses are in the Computer Science bachelor and take about five weeks in all. One course lets you overclock; CMT2570 (Fundamentals of Computer Architecture) lowers all heat gain by 25%.', source: 'Education' },
+    ],
+    locations: [
+        {
+            name: 'Brute-forcing (7 nerve)', unlock: null,
+            cycle: [
+                'Each attempt runs a number of cycles depending on the rig. A cycle reveals one character or removes one encryption layer from a character',
+                'The default laptop or computer has strength 1: one cycle per attempt',
+                'Some targets are encrypted (1 to 9 layers). Each layer counts as an extra character: 5 characters with 1 layer take 10 cycles',
+            ],
+            highlights: [
+                'Crime skill: about half of what cracking gives, the same for every target and rig, so it is about a third as efficient per nerve',
+                'It is the fastest way to skill, but not the cheapest, and one of the few ways to gain skill at all in a daily crime',
+            ],
+            tip: 'Efficiency or speed: guess and crack to save nerve, or brute-force everything to gain skill quicker.',
+        },
+        {
+            name: 'Guessing', unlock: null,
+            cycle: [
+                'Click a blank slot and type the character you think goes there. You can make three mistakes before no more guesses, but you can still crack the target',
+                'Guessed characters get a green glow. Passwords come from real password lists, so with at least one character a password tool can work it out',
+            ],
+            highlights: [
+                'Gives no crime skill at all, but costs no nerve',
+                'Guessing 250 characters gives the Character Assassination honor bar',
+            ],
+            tip: 'Brute-force once (or guess at once) and use a password helper to finish.',
+        },
+        {
+            name: 'Cracking the account (the payday)', unlock: null,
+            cycle: [
+                'Once the password is revealed you crack the account and get paid, depending on the target and the service you pick',
+                'Failing is a critical failure: you lose the job and its pay, plus the usual penalties such as jail',
+            ],
+            highlights: [
+                'Crime skill: double a brute-force, for roughly two thirds of the nerve: extremely efficient',
+                'The skill does not depend on the target or the service',
+            ],
+            tip: 'Cracking is the efficient source of skill; brute-forcing is the fast one.',
+        },
+    ],
+    dropTables: null,
+    sections: [
+        { id: 'rig', label: 'The rig', blocks: [
+            { title: 'Chassis and grid', items: ['Every 25 levels of crime skill unlocks a new chassis (at CS50 and CS75 you can combine several). All chassis belong to the same rig: power from one can be used in another and the processing power adds up.', 'An empty chassis is a 5x5 grid. Each component takes 1x1, except PSUs (1x2).', 'A rig comes online once the CPUs give at least 100,000 MIPS. There is a small X button to clear a chassis at once.'] },
+            { title: 'Brute-forcing strength (BFS)', items: ['Roughly BFS = 0.0052 x square root of MIPS, minus 0.6252 (within about 3%). It grows slowly: the more you have, the harder it is to raise.', 'About: 100,000 MIPS = 1, 250,000 = 2, 425,000 = 3, 805,000 = 4, 1.3 million = 5, 2 million = 6.', 'Decimals count as a chance of an extra cycle (1.7 means one cycle and a 70% chance of a second).'] },
+            { title: 'CPU choices', items: ['eCPU: little heat (often one or two fans give zero or low heat), best performance per power, cheap and easy to find, but weak at overclocking and takes more space.', 'HPCPU: 50,000 MIPS (up to 75,000 overclocked) in one slot, the best overclocking, but a lot of heat that also warms its neighbours, and it needs expensive cooling.', 'eCPUs suit zero-heat or low-heat rigs and players without the courses. HPCPUs shine in overclocked rigs with the standard seven heat sink pattern.'] },
+            { title: 'Several chassis', items: ['Standardised: repeat one proven layout on every chassis. Easier, good for budget or high-heat rigs.', 'Powerbank: one chassis only for power, the others for processing. Better heat control, but more expensive and wants overclocking.'] },
+        ] },
+        { id: 'heat', label: 'Heat & overclocking', blocks: [
+            { title: 'Heat', items: ['Parts over 50 heat glow red and cannot be removed until they cool. At 100 they overheat: they stop working (not lost) and take much longer to cool, up to heat 150%.', 'Since late January an overheated part no longer ruins the attempt in progress: the attempt uses the starting values. So one-shot rigs where everything overheats after one use are valid, and the most nerve-efficient.', 'Heat decays 1% a minute. Heat also spreads between neighbouring parts, so placement matters. CMT2570 cuts heat gain by 25%.'] },
+            { title: 'Cooling', items: ['Fans: a small cooling over a wide area (up to three tiles every way). The only cooling that needs power; cheap, and pair well with heat sinks.', 'Water blocks: only one tile around, but much stronger. You may need a few for HPCPUs.', 'Heat sinks: remove a share of the heat from parts directly next to them (up, down, left, right), but not from themselves. Careful placing can let a strong rig run without stopping.', 'You can swap in cooling parts to cool an overheated rig quickly (a "supercooling" rig), at the cost of nerve.'] },
+            { title: 'Overclocking', items: ['Needs the overclocking course and a large power surplus. Done in steps of 10% by dragging the power bar. If the power is not enough, the rate drops.', 'Power use and heat rise in step with the rate, for CPUs only (fans are not affected).', 'Extra MIPS per 10% of overclocking: eCPU +5%, CPU +7.5%, HPCPU +10%. The main use is to need fewer CPUs, leaving room for cooling.'] },
+            { title: 'Heat styles', items: ['Zero-heat: nothing gains heat except heat sinks and water blocks, which cannot overheat. Low-heat: usable at least ten times. High-heat: under ten uses, down to one-shot rigs.', 'Zero or low heat suits people with lots of nerve (big nerve bar, expensive alcohol, a nerve-boosting company). High-heat suits those doing other crimes too, or with little nerve per day.'] },
+        ] },
+        { id: 'targets', label: 'Targets', blocks: [
+            { title: 'Unencrypted, simple passwords (complexity 1)', items: ['Ex-husband, ex-wife, ex-boyfriend, ex-girlfriend, colleague, friend, online adversary, neighbour, romantic interest, informant, juror'] },
+            { title: 'Encrypted, simple passwords', items: ['1 layer: hacker, police officer'] },
+            { title: 'Unencrypted, longer passwords (complexity 2)', items: ['Doctor, judge'] },
+            { title: 'Encrypted, longer passwords (complexity 2)', items: ['1 layer: government official, politician, pornography network, campus network, health service', '2 layers: games developer, rival corporation', '3 layers: crime syndicate, police department'] },
+            { title: 'Random passwords (complexity 3, theory)', items: ['3 layers: government, internet service provider', '9 layers: armed forces, intelligence agency'] },
+            { title: 'About the numbers', items: ['Over thirty target types in the code (some are gender variants). Each target offers a choice of services, which change the payout. Complexity 2 adds random characters to a listed password, and complexity 3 is believed to be fully random.'] },
+        ] },
+        { id: 'paths', label: 'Levelling', blocks: [
+            { title: 'Slow path (efficient)', items: ['Brute-force once, or guess straight away, then use a password tool to find the rest with as few attempts as possible. Saves nerve for other crimes and speeds up the Character Assassination honor bar.', 'Use a low-heat rig and wait out the heat between attempts; the more strength for little heat, the better.'] },
+            { title: 'Quick path (inefficient but fast)', items: ['Brute-force everything, never guess (or guess at once until your mistakes run out for the honor bar). Since the crime is daily, more skill per day unlocks harder jobs and more chassis sooner.', 'Use no rig, a bare 100,000 MIPS rig (lots of spare nerve), or a zero-heat rig (some spare nerve).'] },
+            { title: 'Cost to max medals', items: ['The Cybercrime medal needs 10,000 offences: about 60,000 to 70,000 nerve if you only do this crime.'] },
+        ] },
+    ],
+    tips: [
+        'Guess and crack to save nerve; brute-force to gain skill faster. Cracking itself gives double the skill of a brute-force at about two thirds of the nerve.',
+        'eCPUs with one or two fans give a cheap zero-heat rig: a good start while you are still doing the courses.',
+        'Overclocked HPCPU rigs with heat sinks give the most strength: good once you have the parts.',
+        'A one-shot rig (everything overheats after one use) is the most nerve-efficient since the late January change.',
+        'A browser tool by the forum user "Bug" lets you try rig layouts before building them; search for it on the forum.',
+    ],
+    uniques: [],
+    merits: [
+        { name: 'Cryptographer', rarity: null, how: 'Reach crime skill 100 in Cracking.' },
+        { name: 'Character Assassination', rarity: null, how: 'Successfully guess 250 password characters.' },
+        { name: 'Overclocked', rarity: null, how: 'Run a rig at 2,500,000 MIPS (from Torn\'s honor list; 2.5 million MIPS is about brute-forcing strength 7.5 by the guide\'s formula).' },
+    ],
+    uniqueCount: 0,
+    notes: 'All attempts count as Cybercrime offences (like Computer crimes in 1.0). Source: the community in-depth guide on the Torn forum by Emforus. The nerve for cracking itself is not given there (about two thirds of the 7 of a brute-force), so no nerve cost is shown. The guide\'s recommended rig layouts and target tables are pictures or a separate post and are not included. The Overclocked honor bar comes from the Torn wiki honor list, not from the forum guide.',
+};
+
 function cgAttachData(crime) {
     if (crime.id === 'searchforcash') return { ...crime, data: SEARCH_FOR_CASH };
     if (crime.id === 'bootlegging') return { ...crime, data: BOOTLEGGING };
@@ -1378,6 +1478,7 @@ function cgAttachData(crime) {
     if (crime.id === 'burglary') return { ...crime, data: BURGLARY };
     if (crime.id === 'hustling') return { ...crime, data: HUSTLING };
     if (crime.id === 'disposal') return { ...crime, data: DISPOSAL };
+    if (crime.id === 'cracking') return { ...crime, data: CRACKING };
     return crime;
 }
 
