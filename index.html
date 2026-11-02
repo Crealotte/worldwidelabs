@@ -715,7 +715,7 @@
             </div>
 
             <div class="panel" id="dash-script-panel" style="display:none;border-color:#f0b432;">
-                <h3 style="margin-top:0;">🧪 WWL script for Torn</h3>
+                <h3 style="margin-top:0;">🧪 Labs Assistant for Torn</h3>
                 <div id="dash-script-body"></div>
             </div>
 
@@ -2097,7 +2097,7 @@
                     <tr><td>Leaders</td><td>The faction's data a leader's Limited key can read (members, contributors, wars, chains).</td><td>War payout reports and the faction's daily energy numbers. A leader who turns on nightly saving: see "Your key".</td><td>Leadership of that faction. A war payout report is a page with a link that anybody with the link can open.</td></tr>
                     <tr><td>Labs services</td><td>Your profile. For buddy banking also the bank deposit shown in your Torn city bank.</td><td>Your investments, rental contract or buddy plan and the payments made, the requests you send, and your company's figures for a director.</td><td>You and the owner of the Labs services.</td></tr>
                     <tr><td>Trading tools: pricelist and receipts</td><td>Your profile, and Torn's item list with market values (the same list for everybody, refreshed every 12 hours).</td><td>Your pricelist, your receipts, your message for a receipt, and your trade count.</td><td>You. A pricelist is public only if you tick "Share as a public page", and shows your name, Torn ID, prices, trade count and votes. A receipt is a page that anybody with its link can open; you can delete it whenever you want.</td></tr>
-                    <tr><td>Trading tools: ledger and VIP</td><td>Nothing more. Trades come from what you paste, from the WWL userscript, or from your receipts.</td><td>Your trades, your stock and profit figures, your VIP status and the Xanax payment that gave it (a short record, no key).</td><td>You. The owner can see the ledger of traders who have a Trading Funding. Nobody else.</td></tr>
+                    <tr><td>Trading tools: ledger and VIP</td><td>Nothing more. Trades come from what you paste, from the Labs Assistant, or from your receipts.</td><td>Your trades, your stock and profit figures, your VIP status and the Xanax payment that gave it (a short record, no key).</td><td>You. The owner can see the ledger of traders who have a Trading Funding. Nobody else.</td></tr>
                     <tr><td>Voting on a pricelist</td><td>Nothing: no key and no login.</td><td>A vote is kept with a one-way code made from the visitor's internet address, so one visitor counts once.</td><td>Only the total is shown.</td></tr>
                 </table>
             </div>
@@ -2109,7 +2109,7 @@
                     <li><b>On the server:</b> each time WWL needs something from Torn, your browser sends the key to WWL's server, which asks Torn and answers you. The key is used for that one request and is not written to the database.</li>
                     <li><b>Leaders, optional:</b> a leader can press "Turn on nightly saving" on the dashboard. That leader's key is then kept encrypted on the server, so the faction's energy numbers can be saved while nobody is logged in. It is used only for that, and only for that leader's faction.</li>
                     <li><b>The owner's own key:</b> the owner's key (Limited access) is set in the server settings to read the Xanax the owner received, to switch VIP on. It is the owner's key, not yours.</li>
-                    <li><b>The WWL userscript:</b> if you install it, it keeps your key in your browser (on torn.com) and uses it to ask WWL for your plan and to-dos. The Trade helper part reads the trade page you have open in your browser, and sends WWL only that trade's items, money, trade ID and the other player's name. It does not use the Torn API and does not read your messages or logs.</li>
+                    <li><b>The Labs Assistant:</b> if you install it, it keeps your key in your browser (on torn.com) and uses it to ask WWL for your plan and to-dos. The Trade helper part reads the trade page you have open in your browser, and sends WWL only that trade's items, money, trade ID and the other player's name. It does not use the Torn API and does not read your messages or logs.</li>
                 </ul>
             </div>
 
@@ -2203,7 +2203,7 @@
                 <div>
                     <div style="display:flex;gap:12px;padding:8px 0;border-top:1px solid var(--line);"><div style="width:150px;flex:none;font-weight:700;font-size:13px;">Recruit</div><div style="flex:1;font-size:13px;">Joined the faction. Automatic.</div></div>
                     <div style="display:flex;gap:12px;padding:8px 0;border-top:1px solid var(--line);"><div style="width:150px;flex:none;font-weight:700;font-size:13px;">Experiment A</div><div style="flex:1;font-size:13px;">3 days in the faction. Automatic.</div></div>
-                    <div style="display:flex;gap:12px;padding:8px 0;border-top:1px solid var(--line);"><div style="width:150px;flex:none;font-weight:700;font-size:13px;">Experiment B</div><div style="flex:1;font-size:13px;">On WWL (logged in) with the WWL script installed.<div style="color:var(--muted);font-size:12px;margin-top:2px;">Gives you access to the armory.</div></div></div>
+                    <div style="display:flex;gap:12px;padding:8px 0;border-top:1px solid var(--line);"><div style="width:150px;flex:none;font-weight:700;font-size:13px;">Experiment B</div><div style="flex:1;font-size:13px;">On WWL (logged in) with the Labs Assistant installed.<div style="color:var(--muted);font-size:12px;margin-top:2px;">Gives you access to the armory.</div></div></div>
                     <div style="display:flex;gap:12px;padding:8px 0;border-top:1px solid var(--line);"><div style="width:150px;flex:none;font-weight:700;font-size:13px;">Guinea Pig / Lab Rat</div><div style="flex:1;font-size:13px;">On our Discord, joined Intel and installed CAT. Intel and CAT are checked by a leader.<div style="color:var(--muted);font-size:12px;margin-top:2px;">Guinea Pig below level 15, Lab Rat from level 15. You get your first week to install the script and join Discord: someone still Experiment A or B after that may be removed from the faction.</div></div></div>
                     <div style="display:flex;gap:12px;padding:8px 0;border-top:1px solid var(--line);"><div style="width:150px;flex:none;font-weight:700;font-size:13px;">Chemist</div><div style="flex:1;font-size:13px;">Met the war rule in 3 of the last 5 wars (the minimum war hits the leaders set; wars you could not take part in or were excused for do not count against you).<div style="color:var(--muted);font-size:12px;margin-top:2px;">You keep Chemist only while the war rule keeps being met, otherwise you move back to Guinea Pig / Lab Rat. These moves are made after the monthly check-in, not in the middle of a month.</div></div></div>
                     <div style="display:flex;gap:12px;padding:8px 0;border-top:1px solid var(--line);"><div style="width:150px;flex:none;font-weight:700;font-size:13px;">Junior Researcher</div><div style="flex:1;font-size:13px;">A council role: the leaders choose who gets it.</div></div>
@@ -2322,7 +2322,7 @@
 
             <div class="panel" id="ls-ocrules-panel">
                 <h3 style="margin-top:0;">OC join rules</h3>
-                <p style="color:var(--muted);font-size:12px;margin:0 0 10px;">Which success chance a member may have to join an organized crime of each level (both numbers are allowed). In the WWL script the Join button of a slot outside the range is greyed out, with the reason next to it. Leave both empty for a level without a rule.</p>
+                <p style="color:var(--muted);font-size:12px;margin:0 0 10px;">Which success chance a member may have to join an organized crime of each level (both numbers are allowed). In the Labs Assistant the Join button of a slot outside the range is greyed out, with the reason next to it. Leave both empty for a level without a rule.</p>
                 <div class="status" id="ocr-status"></div>
                 <div class="table-scroll" style="overflow:auto;"><table style="font-size:13px;border-collapse:collapse;"><thead><tr style="color:var(--muted);text-align:left;"><th style="padding:4px 10px;">OC level</th><th style="padding:4px 10px;">Lowest chance %</th><th style="padding:4px 10px;">Highest chance %</th></tr></thead><tbody id="ocr-body"></tbody></table></div>
                 <h4 style="margin:14px 0 4px;font-size:13px;">Exceptions for one crime</h4>
@@ -2393,7 +2393,7 @@
         <section class="page" id="page-awards">
             <div class="lab-label">WWL·28 / for everyone</div>
             <h2>Awards</h2>
-            <p class="pagedesc">Every honor and medal of Torn, which ones you already have, and a pin to follow the ones you are working towards. The awards you follow show in the To do list of the WWL script.</p>
+            <p class="pagedesc">Every honor and medal of Torn, which ones you already have, and a pin to follow the ones you are working towards. The awards you follow show in the To do list of the Labs Assistant.</p>
             <div class="status" id="aw-status"></div>
             <div id="aw-cards" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;"></div>
             <div class="panel">

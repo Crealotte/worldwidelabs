@@ -39,11 +39,11 @@ async function loadScriptCard() {
     // a script too old to report its version counts as outdated, same as Who's on board
     const outdated = recent && r.latest && (!r.version || scLess(r.version, r.latest));
     if (recent && !outdated) {
-        $('dash-script-body').innerHTML = `<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;"><span style="color:var(--reagent);">✓ Your WWL script is installed and up to date${r.version ? ` (v${esc(r.version)})` : ''}.</span>${btn('Reinstall', true)}</div>`;
+        $('dash-script-body').innerHTML = `<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;"><span style="color:var(--reagent);">✓ Your Labs Assistant is installed and up to date${r.version ? ` (v${esc(r.version)})` : ''}.</span>${btn('Reinstall', true)}</div>`;
         return;
     }
     $('dash-script-body').innerHTML = outdated
-        ? `<p style="margin:0 0 10px;">A newer version of the WWL script is available${r.latest ? ` (v${esc(r.latest)})` : ''}${r.version ? ` — you have v${esc(r.version)}` : ''}. Press the button; your script manager asks you to confirm, and your key and settings stay as they are.</p>${btn('Update the script')}${linkLine}`
-        : `<p style="margin:0 0 10px;">${r.seen ? 'Your WWL script has not been seen for a while.' : 'Get your weekly plan, to-dos and targets right inside Torn.'} Press the button and your script manager asks you to confirm the install. Then open the small <b>WWL</b> button in Torn, press ⚙ and paste your API key.</p>${btn('Install the script')}${howTo}${linkLine}`;
+        ? `<p style="margin:0 0 10px;">A newer version of the Labs Assistant is available${r.latest ? ` (v${esc(r.latest)})` : ''}${r.version ? ` — you have v${esc(r.version)}` : ''}. Press the button; your script manager asks you to confirm, and your key and settings stay as they are.</p>${btn('Update the script')}${linkLine}`
+        : `<p style="margin:0 0 10px;">${r.seen ? 'Your Labs Assistant has not been seen for a while.' : 'Get your weekly plan, to-dos and targets right inside Torn.'} Press the button and your script manager asks you to confirm the install. Then open the small <b>WWL</b> button in Torn, press ⚙ and paste your API key.</p>${btn('Install the script')}${howTo}${linkLine}`;
     wireCopy();
 }

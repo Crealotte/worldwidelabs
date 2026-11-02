@@ -680,25 +680,25 @@ async function bankOpenOf(factionId, playerId) {
 function devizeScript(src) {
     return src
         .replace(/\/worldwidelabs\.user\.js/g, '/worldwidelabs-dev.user.js')
-        .replace(/(\/\/ @name\s+)World Wide Labs/, '$1World Wide Labs (DEV)')
+        .replace(/(\/\/ @name\s+)Labs Assistant/, '$1Labs Assistant (DEV)')
         .replace(/(\/\/ @namespace\s+\S+)/, '$1/dev')
         .replace("{ action: 'script-version' }", "{ action: 'script-version', channel: 'dev' }")
         .replace(/'wwl_update_check'/g, "'wwl_update_check_dev'")
         .replace(/'wwl_script_checkin_at'/g, "'wwl_script_checkin_at_dev'")
         .replace(/'wwl_script_checkin_v'/g, "'wwl_script_checkin_v_dev'")
-        .replace('<b>WWL</b>', '<b>WWL DEV</b>')
-        .replace(/(<b style="flex:1;">World Wide Labs)/, '$1 DEV');
+        .replace('<b>Labs Assistant</b>', '<b>Labs Assistant DEV</b>')
+        .replace(/(<b style="flex:1;">Labs Assistant)/, '$1 DEV');
 }
 module.exports = async function handler(req, res) {
     try {
         if (require('../lib/env').blockUntilTestDb(req, res)) return; // a test site without its own test database stays closed (lib/env.js)
-        // The WWL userscript runs on torn.com and reads/ticks the energy plan from here, so torn.com may call these actions.
+        // The Labs Assistant runs on torn.com and reads/ticks the energy plan from here, so torn.com may call these actions.
         res.setHeader('Access-Control-Allow-Origin', 'https://www.torn.com');
         res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
         res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
         res.setHeader('Vary', 'Origin');
         if (req.method === 'OPTIONS') return res.status(204).end();
-        // The WWL userscript for Torn: GET /worldwidelabs.user.js, or the older /wwl-energy-planner.user.js
+        // The Labs Assistant for Torn: GET /worldwidelabs.user.js, or the older /wwl-energy-planner.user.js
         // (both rewritten to this same handler — see vercel.json; the old path is kept alive so
         // existing installs, whose @updateURL is baked in from whenever they first installed, keep
         // updating). Tampermonkey installs it straight from this link; the site's own address is
@@ -1009,7 +1009,7 @@ module.exports = async function handler(req, res) {
             return res.status(400).json({ error: 'Unknown action' });
         }
 
-        // Faction radar (the WWL script shows it on every Torn page): who of the faction is online or idle right now. Names and the online / idle status are what every faction member can see in Torn anyway.
+        // Faction radar (the Labs Assistant shows it on every Torn page): who of the faction is online or idle right now. Names and the online / idle status are what every faction member can see in Torn anyway.
         // One read from Torn per minute for the whole faction (kept in this server's memory, nothing is written to the database); the plain fetch skips lib/tornFetch's 10-minute memory of the member list.
         if (action === 'faction-radar') {
             const hit = radarMem.get(String(factionId));

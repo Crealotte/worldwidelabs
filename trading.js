@@ -165,8 +165,8 @@ async function loadTrading() {
     trdData = r; trdRender();
 }
 
-// ---- the WWL script: where to install it (shown on the Pricelist and Receipts & ledger pages) ----
-// The trade bar on Torn's trade pages (total at your pricelist, receipt link, Accept check, auto-save of finished trades) is part of the WWL userscript.
+// ---- the Labs Assistant: where to install it (shown on the Pricelist and Receipts & ledger pages) ----
+// The trade bar on Torn's trade pages (total at your pricelist, receipt link, Accept check, auto-save of finished trades) is part of the Labs Assistant.
 let trdScriptInfo = null;
 async function trdLoadScriptInfo() {
     if (trdScriptInfo) return trdScriptInfo;
@@ -175,9 +175,9 @@ async function trdLoadScriptInfo() {
 }
 function trdScriptHtml(isOwner) {
     const info = trdScriptInfo || {}, file = '/worldwidelabs.user.js';
-    return `<div class="panel" id="trd-script" style="margin:0 0 12px;"><div style="display:flex;gap:12px;flex-wrap:wrap;align-items:center;justify-content:space-between;"><div style="flex:1;min-width:240px;"><b>📲 The WWL script for Torn</b>
+    return `<div class="panel" id="trd-script" style="margin:0 0 12px;"><div style="display:flex;gap:12px;flex-wrap:wrap;align-items:center;justify-content:space-between;"><div style="flex:1;min-width:240px;"><b>📲 The Labs Assistant for Torn</b>
         <div style="font-size:13px;color:var(--muted);margin-top:2px;">${info.tradeHelper === false ? 'The trade bar comes with the next update of the script; install it now and it updates by itself. ' : ''}On Torn's trade pages it shows the total at your pricelist, a link to the receipt, an Accept check, and saves your finished trades.</div></div>
-        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;"><a href="${file}" target="_blank" rel="noopener" style="text-decoration:none;"><button type="button">Install the WWL script</button></a>${isOwner ? '<a href="/worldwidelabs-dev.user.js" target="_blank" rel="noopener" style="text-decoration:none;"><button type="button" class="ghost small">Install DEV (test)</button></a>' : ''}<a href="#" id="trd-script-copy" style="font-size:12px;">copy the link</a></div></div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;"><a href="${file}" target="_blank" rel="noopener" style="text-decoration:none;"><button type="button">Install the Labs Assistant</button></a>${isOwner ? '<a href="/worldwidelabs-dev.user.js" target="_blank" rel="noopener" style="text-decoration:none;"><button type="button" class="ghost small">Install DEV (test)</button></a>' : ''}<a href="#" id="trd-script-copy" style="font-size:12px;">copy the link</a></div></div>
         <div style="font-size:12px;color:var(--muted);margin-top:6px;">On a computer you need <b>Tampermonkey</b> (or a similar script manager) first. On TornPDA, add it as a script in the app. If the button only opens a page, copy the link and paste it into your script manager.</div></div>`;
 }
 function trdWireScript() {

@@ -26,7 +26,7 @@ const LT_OB_DEFAULTS = {
     cat: 'Hey, I have noticed CAT is not installed yet. It is our war tool and one of the steps for becoming a Guinea Pig or Lab Rat. Shout if you need help with it!',
 };
 const ltInviteDefault = kind => LT_OB_DEFAULTS[kind] ? LT_OB_DEFAULTS[kind] : kind === 'script'
-    ? `Hey, I have noticed you have not installed the WWL script yet. You can install it from ${location.origin}/worldwidelabs.user.js and then it shows your to do list and energy plan right inside Torn. Note that the script is not this website: it is a separate add-on. You need Tampermonkey on a computer, or add it as a script in TornPDA. Shout if you get stuck!`
+    ? `Hey, I have noticed you have not installed the Labs Assistant yet. You can install it from ${location.origin}/worldwidelabs.user.js and then it shows your to do list and energy plan right inside Torn. Note that the Labs Assistant is not this website: it is a separate add-on. You need Tampermonkey on a computer, or add it as a script in TornPDA. Shout if you get stuck!`
     : `Hey, I have noticed you have not logged into WWL yet. Please join at ${location.origin} with a limited API key. It takes a minute and gives you your energy plan, welcome chapters and more. Shout if you need help!`;
 const ltInviteMsg = kind => { try { return localStorage.getItem(`wwl_invite_msg_${kind}`) || ltInviteDefault(kind); } catch (e) { return ltInviteDefault(kind); } };
 const ltRemindedAt = (kind, id) => { try { return Number(localStorage.getItem(`wwl_invited_${kind}_${id}`)) || 0; } catch (e) { return 0; } };

@@ -364,7 +364,7 @@ module.exports = async function handler(req, res) {
         }
 
         // 'refresh' is the same work as 'read' (the member's own numbers are read from Torn and stored for the Fit Tracker and the team builder), but answers with just a short confirmation:
-        // the WWL script asks for it when a member opens the OC page, so the data stays current without anybody visiting the site.
+        // the Labs Assistant asks for it when a member opens the OC page, so the data stays current without anybody visiting the site.
         if (action !== 'read' && action !== 'refresh') return res.status(400).json({ error: 'Unknown action' });
 
         // Live pull: whatever this member's faction currently has spawned, from their own POV.

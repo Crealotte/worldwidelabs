@@ -15,7 +15,8 @@ Members get `energy-plan.user.js` (the **release** file). Every change from now 
 Queue changes below instead of releasing each one. Nothing here is live for members until a release.
 
 ### Queued for the next release
-- Nothing queued. Last release: script 1.53 (2026-11-02): OC join rules with exceptions per crime (Bidding War 50 percent). Before that, script 1.52 (2026-10-30): the Award tracker can be opened and closed, clean links in the reminder messages, the leader To do sections (Recruit to Experiment B, to Guinea Pig / Lab Rat, Organized crimes) with a toggle per line, a message to copy and Notified, the faction radar every 5 minutes, and the chain watching limit message (4 hours in any 12 hours). Before that, script 1.51 (2026-10-25): the OC join rules, the OC numbers refresh and the availability calendar redraw.
+- Rename of the script to Labs Assistant (dev 1.53.1): name, button, window, settings, trade bar label and the reminder message. Site texts already say Labs Assistant. To test: the dev script must update itself to the new name in Tampermonkey (the namespace is unchanged) before this is released.
+- Last release: script 1.53 (2026-11-02): OC join rules with exceptions per crime (Bidding War 50 percent). Before that, script 1.52 (2026-10-30): the Award tracker can be opened and closed, clean links in the reminder messages, the leader To do sections (Recruit to Experiment B, to Guinea Pig / Lab Rat, Organized crimes) with a toggle per line, a message to copy and Notified, the faction radar every 5 minutes, and the chain watching limit message (4 hours in any 12 hours). Before that, script 1.51 (2026-10-25): the OC join rules, the OC numbers refresh and the availability calendar redraw.
 
 ## Releasing (when the list is done and tested)
 1. Copy the work file over the release file: `cp userscripts/energy-plan.dev.user.js userscripts/energy-plan.user.js`.

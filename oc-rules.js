@@ -1,5 +1,5 @@
 // oc-rules.js — the "OC join rules" panel of Leader settings: for each organized crime level the lowest and highest success chance a member may have to join it, and whether the
-// rules apply to members and to leaders. The WWL script greys out the Join button of a slot outside the range. Backend: 'ocrules-get' / 'ocrules-set' (lib/ocrules.js).
+// rules apply to members and to leaders. The Labs Assistant greys out the Join button of a slot outside the range. Backend: 'ocrules-get' / 'ocrules-set' (lib/ocrules.js).
 'use strict';
 
 const OCR_LEVELS = 10;
