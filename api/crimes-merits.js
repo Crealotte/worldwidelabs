@@ -47,6 +47,9 @@ const TRACKED_HONORS = [
     { crime: 'scamming', name: 'Alpha Mail' },
     { crime: 'scamming', name: 'Decepticon' },
     { crime: 'scamming', name: 'Grift Horse' },
+    { crime: 'arson', name: 'Hotshot' },
+    { crime: 'arson', name: 'Arsonal' },
+    { crime: 'arson', name: 'Cooking With Gas' },
 ];
 
 async function redis(command) {

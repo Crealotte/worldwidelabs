@@ -27,7 +27,7 @@ const CRIMES_DATA = [
     { id: 'cracking', name: 'Cracking', icon: '💻', category: 'Cybercrime', nerveCost: null, guideStatus: 'ready' },
     { id: 'forgery', name: 'Forgery', icon: '📄', category: 'Counterfeiting', nerveCost: 5, guideStatus: 'ready' },
     { id: 'scamming', name: 'Scamming', icon: '☎️', category: 'Fraud', nerveCost: null, guideStatus: 'ready' },
-    { id: 'arson', name: 'Arson', icon: '🔥', category: null, nerveCost: null, guideStatus: 'pending' },
+    { id: 'arson', name: 'Arson', icon: '🔥', category: null, nerveCost: null, guideStatus: 'ready' },
 ];
 
 // ---- Search For Cash — fully populated from the guide + real screenshot ----
@@ -1701,6 +1701,127 @@ const SCAMMING = {
     notes: 'All attempts count as Fraud crimes. Source: the community in-depth guide on the Torn forum by Emforus (the numbers come from OutcomeDB logs). The nerve cost of spam waves, responses and capitalising is not stated there, so no cost per attempt is shown (farming is 8, resolving a concern is 3). The guide\'s tables of marks, bars and payouts are partly pictures and not included. Grift Horse comes from the Torn honor list.',
 };
 
+// ---- Arson: from the community in-depth guide on the Torn forum (Emforus, 2026), written up in our own words ----
+const ARSON = {
+    summary: 'A daily-job crime: you take a job to burn a property, break in, place fuel, light it and then manage the fire in a short window before first responders arrive. Every action has its own nerve cost (2 to 5) and its own crime skill value. Be ready with 2 to 3 spare minutes and 40 or more nerve, because it is reactive. The uniques here are about progression: they unlock contacts and the accelerants.',
+    estimatedNerveToCS100: null, // the guide gives no total
+    locationsLabel: 'The actions',
+    cycleLabel: '⚙️ How it works',
+    highlightLabel: '📈 Crime skill and tips',
+    uniqueLocationLabel: 'Target',
+    keyItems: [
+        { name: 'Windproof Lighter', effect: 'The enhancer: +5% crime experience and crime skill gains. It also replaces the normal Lighter for igniting and stoking, and may improve success with the lighter (unconfirmed). It may be lost on a critical failure.', source: 'A unique find burgling the Secluded Cabin' },
+        { name: '15 tools and materials', effect: 'Arson uses 15 tools and materials in all, plus various miscellaneous supplies for particular job requirements (the "plant evidence" items). Aim for a pair of each tool and a couple of hundred of each material, as far as it is affordable.', source: 'The forum guide links a spreadsheet with every item and where to get it' },
+    ],
+    locations: [
+        {
+            name: 'Preparing a job: inquire, breach, plant evidence', unlock: null,
+            cycle: [
+                'Inquire (0 nerve): shows the story of the target. Its only use is to preserve the job, so it survives the day change',
+                'Breach (3 nerve): gets you into the target, and sometimes fails',
+                'Plant evidence (5 nerve): only for jobs with a plant evidence requirement, and needs a miscellaneous item',
+            ],
+            highlights: ['Breach gives 100% crime skill (33% per nerve)', 'Preserved jobs stay until done, and a duplicate of a preserved job cannot appear, so clear them soon'],
+            tip: 'Inquire into any job you want to keep for tomorrow.',
+        },
+        {
+            name: 'Placing fuel and igniting', unlock: null,
+            cycle: [
+                'Place (5 nerve): put starter fuel before ignition, at least once, as often as you like',
+                'Ignite (5 nerve): starts the fire. The starters set the first intensity and momentum, and the chance of a critical failure',
+            ],
+            highlights: [
+                'Place gives about 133% crime skill, but each repeat gives less (see Levelling)',
+                'Ignite gives 300% (60% per nerve): one of the better actions',
+                'Igniting with too little fuel can soft fail; with too much it can crit (the fire still starts)',
+            ],
+            tip: 'See the Starters & stoking tab for how many and which.',
+        },
+        {
+            name: 'Managing the fire: stoke and dampen', unlock: null,
+            cycle: [
+                'Stoke (5 nerve): add fuel or light smaller areas. Its failure rate depends on the accelerant',
+                'Dampen (5 nerve): smother the fire to lower intensity and momentum, depending on the dampener',
+                'Never stoke or dampen at red intensity: it very likely ends in a critical failure',
+            ],
+            highlights: ['Both give about 200% crime skill (40% per nerve), with diminishing returns when repeated', 'As first responders get closer, the risk of jail when stoking or dampening goes up'],
+            tip: 'Wait for momentum to die down before stoking.',
+        },
+        {
+            name: 'Collecting', unlock: null,
+            cycle: [
+                'Collect (2 nerve): when the fire is out and the job requirements were met, you collect the reward',
+                'The payout depends on the job and the destruction, with a random variation of 10%',
+            ],
+            highlights: [
+                'Collect gives 600% crime skill, 300% per nerve: by far the best',
+                'Jobs with a maximum damage limit pay in proportion to the damage; minimum damage, damage range and total destruction jobs pay in full; jobs without a damage rule pay the destruction percentage',
+            ],
+            tip: 'Collecting is the best crime skill, so the aim is to finish jobs with as little nerve as possible.',
+        },
+    ],
+    dropTables: null, // risk breakdown tables are still marked "todo" in the guide
+    sections: [
+        { id: 'jobs', label: 'Jobs', blocks: [
+            { title: 'About jobs', items: ['Every day at 00:00 TCT a new batch appears, the same for everyone. Jobs not done by the end of the day expire, except preserved ones. When all jobs are done, no more appear until the next day, so this crime is time-gated. Some jobs only show up from a certain skill.', 'A job has a location (sets flammability, rurality and the number of areas), a story (sets the requirements and pay), the first responders status, the destruction caused and the number of areas. There are hundreds of combinations. The motive seems to be only flavour.'] },
+            { title: 'Flammability (1 to 5)', items: ['Rating 1: intensity and momentum factor x1, destruction rate up to 0.4% per second, burn down in about 250 seconds', 'Rating 2: x1.5, 0.8% a second, 125 seconds', 'Rating 3: x2, 1.2% a second, 83 seconds', 'Rating 4: x2.5, 1.6% a second, 63 seconds', 'Rating 5: x3, 2% a second, 50 seconds', 'Old wooden buildings burn more easily than concrete or metal. To raise the cap on destruction rate, use Thermite.'] },
+            { title: 'Rurality (1 to 5)', items: ['It decides how long until the fire is reported and how long first responders take (the response time): level 1: 30, level 2: 60, level 3: 120, level 4: 240, level 5: 480', 'Busy places are less rural, remote or industrial places more. For total destruction jobs with a short response time you need the right accelerants.'] },
+            { title: 'Areas', items: ['Bigger places have more areas (flames shown at the side), tracked separately: for total destruction every area must reach full intensity and stay there while destruction catches up.', 'Most accelerants go to the main area (usually left-centre) and spread to secondary and ternary areas. Gas spreads most, solids least. Starters get +25% spread.'] },
+            { title: 'Requirements (all must be met or the job fails)', items: ['Insurance claim: keep suspicion low (oxygen, potassium nitrate, kerosene); methane removes suspicion.', 'Accidental cause: the same but more lenient.', 'Highly suspicious: the opposite, suspicion must be high (gasoline, magnesium).', 'High visibility: visibility must be high (magnesium, diesel); at least four of diesel, magnesium or flamethrower.', 'Total destruction: reach 100%. Minimum damage: pass X%. Maximum damage: do not pass X%. Damage range: between X% and Y%.', 'Plant evidence: place a miscellaneous item first. Specific accelerant: only the type named (igniters and dampeners are always allowed).'] },
+        ] },
+        { id: 'fire', label: 'The fire', blocks: [
+            { title: 'Intensity (0 to 11 per area, up to 100)', items: ['How strongly it burns and how much it covers. It caps the damage the target can take. It rises with momentum and falls by 0.2 a second with none. Stoking with any accelerant or igniter raises it.', 'Excess intensity in one area spills into the next. If destruction stalls, one area is usually not at full intensity: gas and the Molotov help.'] },
+            { title: 'Momentum (unburned fuel)', items: ['It is used up at a rate set by flammability and only rises when you stoke. Liquids give the most, then solids, gases the least. Liquids apply it everywhere, solids a lot to the main area, gases a little to the main area.', 'Wait for momentum to drop before stoking, or you risk an accident.', 'Above momentum 4, neighbouring areas gain momentum from the main one. A very high momentum (kerosene) fills every area quickly; then hydrogen alone keeps it up. With a little magnesium this clears total destruction jobs easily.'] },
+            { title: 'Suspicion and visibility', items: ['Suspicion: every accelerant except methane raises it by a different amount. It only matters for insurance, accidental and suspicious jobs. The cap rises with target size; for insurance jobs assume about 3 times the number of areas.', 'Visibility: only diesel, magnesium and the flamethrower raise it, nothing lowers it. It makes responders dispatch sooner (before their travel time) and is needed for high visibility jobs.'] },
+            { title: 'First responders', items: ['They are dispatched a random time after ignition, affected by rurality and visibility, then take the response time to arrive. The siren has five levels (every 20% of the time); the higher the level, the bigger the jail risk when stoking or dampening.', 'When they arrive, they stop all actions and put the fire out, raising the intensity decay from 0.2 to 1 per second. Each Magnesium halves that decay (multiplying), useful for total destruction at low rurality. Destruction can still rise while intensity falls.'] },
+        ] },
+        { id: 'fuel', label: 'Starters & stoking', blocks: [
+            { title: 'Starters (9 accelerants; early only Gasoline)', items: ['Starters get -20% intensity and +25% spread.', 'Liquid starters: usually the best and lowest risk. They give momentum in every area. Use up to the number of areas plus one, at most 5; more raises the crit rate (not for Diesel). Diesel also lowers the crit rate on ignition.', 'Solid starters: good for small targets (3 areas or fewer), and they pair well with liquids. Avoid them alone or with gas, and avoid more than one solid unless with Diesel. Poor on size 1 targets, very safe on size 4 to 5.', 'Gaseous starters: usually not great (they already spread a lot). Two give medium intensity in all areas, three give maximum, but two or more raise the crit rate. Save methane for last (it removes suspicion). Hydrogen is the exception: best as a starter.', 'Generally use no more than 5 starters at once.'] },
+            { title: 'Ignition', items: ['Lighter: the simplest; its crit rate depends on how many accelerants were used. Molotov Cocktail (CS30): a base crit chance, less dependent on the amount of fuel, and the start has more momentum, like an extra gasoline. Flamethrower (CS80): risky and volatile, adds a random amount of intensity and momentum; very good for high visibility jobs.'] },
+            { title: 'Stoking', items: ['Most accelerants that are safe as starters are dangerous when stoking, so be careful.', 'Lighter: a very small boost (2.5% intensity), great for fine tuning. Molotov: 17.5% intensity and momentum to the area with the least intensity (only as high as the main area has). Flamethrower: a random increase in all areas, the riskiest, use it early when the fire is small.'] },
+            { title: 'Dampening', items: ['Blanket: the cheapest and the most dangerous, lowers intensity by about 25%, about one crit in 5 attempts at low skill.', 'Sand (CS60): twice as effective and half as risky as the blanket. Fire Extinguisher (CS90): about as effective as sand, safer, three times the cost.', 'All dampeners give "negative momentum", so after the momentum is gone, intensity decays faster and faster.'] },
+        ] },
+        { id: 'levelling', label: 'Levelling', blocks: [
+            { title: 'Crime skill by action', items: ['Breach 100% (33.3 per nerve), Place 133% (26.6), Ignite 300% (60), Stoke 200% (40), Dampen 200% (40), Collect 600% (300).', 'Place, stoke and dampen have diminishing returns when repeated in one job: stoking or dampening gives 200%, 150%, 112.5%, 84.4%, 63.3%, 47.5%; placing 133%, 99.8%, 74.8%, 56.1%, 42.1%, 31.6%. Do the same action no more than about 3 times.', 'The skill lost on a crit shrinks the same way. For self-hospitalising, stoke with low intensity accelerants first, then throw risky ones like gasoline once the fire is at max; at max skill crits are rare.'] },
+            { title: 'The efficient path (least nerve, slower)', items: ['Start with plenty of fuel: one gasoline or diesel per area plus one solid depending on the target; one type is more efficient than several.', 'Stoke only if the job needs it. For insurance jobs, methane at the end usually makes it succeed (especially after kerosene and potassium nitrate). For total destruction at size 3 or less, potassium nitrate near the end is usually enough; at size 4 and above you may need diesel, oxygen or Molotovs.', 'Take as few actions as possible: collecting gives the most skill. Skip jobs that need several accelerants (total destruction, high suspicion or visibility, minimum damage) to save nerve.', 'Good if you do not drink premium alcohol, have no nerve-giving company, or are doing other crimes.'] },
+            { title: 'The fast path (more daily skill, a lot more nerve)', items: ['Start with a single can of liquid fuel (more only if the job needs it). Stoke and dampen as much as the diminishing returns allow: 3 to 6 each per target.', 'Size 2 or more: five seconds after ignition, when momentum has died down, dampen each secondary area but not the main one (low intensity there rarely crits), stoke with a liquid (diesel), dampen the secondary areas again, until 3 to 6 dampens. Then stoke until the goals are met.', 'Size 1: avoid dampening (it likely crits); stoke with anything, even the lighter if the goal is damage under a limit.', 'It needs lots of nerve (a pub, for instance). With little nerve, limit yourself to 2 placements, 2 stokes and 2 dampens.', 'You can fail some unique jobs on purpose: they respawn every day, giving more jobs a day. Omit only the less important accelerants, or bigger jobs.'] },
+        ] },
+    ],
+    tips: [
+        'Have 2 to 3 spare minutes and 40 or more nerve before starting a job: it is reactive.',
+        'Inquire into any job you want for tomorrow, and clear preserved jobs soon.',
+        'Never stoke or dampen at red intensity.',
+        'Collecting is the best crime skill (600%): finish jobs with as little nerve as possible, or if you have lots of nerve, stoke and dampen 3 to 6 times per job.',
+        'Do the unique jobs to unlock the contacts and accelerants: they are what makes progress possible.',
+        'Community scripts exist for this crime: one shows rurality and flammability, another rates how profitable each job is. Check them yourself before installing.',
+    ],
+    uniques: [
+        { location: 'Shack', name: 'Contact: Chase Swindlehurst (job "Cut to the Chase")', skill: 'Level 1', other: 'Easy: throw a few canisters of gasoline' },
+        { location: 'Bordello', name: 'Contact: Marvelous Mudenda (job "Hell Fire")', skill: 'Level 5', other: 'Similar: 3 to 4 canisters of gasoline' },
+        { location: 'Bookies', name: 'Contact: Denise David (job "Improving the Odds")', skill: 'Level 48', other: 'Start with diesel and magnesium, stoke with diesel throughout' },
+        { location: 'Clock Tower', name: 'Contact: Ethan McChad (job "Cooking Time")', skill: 'Level 50', other: 'The same as Denise\'s' },
+        { location: 'Dental Surgery', name: 'Oxygen (job "A Bitter Taste")', skill: 'Level 5', other: 'Plenty of gasoline should do it' },
+        { location: 'Barn', name: 'Potassium Nitrate (job "The Bolted Horse")', skill: 'Level 10', other: 'A lot of oxygen, for starting and stoking' },
+        { location: 'Gas Station', name: 'Diesel (job "Blown to High Heaven")', skill: 'Level 15', other: 'Quite difficult: start with oxygen and dampen at once, do not wait a second' },
+        { location: 'Firework Store', name: 'Magnesium (job "Sky High Prices")', skill: 'Level 20', other: 'Gasoline and potassium nitrate; be ready to stoke with more potassium nitrate; needs a Glitter Bomb' },
+        { location: 'Restroom', name: 'Methane (job "Shit Happens")', skill: 'Level 25', other: 'Cannot be failed' },
+        { location: 'Recording Studio', name: 'Molotov Cocktail (job "Roast Beef")', skill: 'Level 30', other: '4 diesel and be ready to dampen near the end, or 1 gasoline and stoke with oxygen twice' },
+        { location: 'Aircraft Hangar', name: 'Kerosene (job "Plane and Simple")', skill: 'Level 40', other: 'Diesel or methane as openers, then some oxygen' },
+        { location: 'Foundry', name: 'Thermite (job "Hot Under the Collar")', skill: 'Level 50', other: 'Low flammability but high rurality: time is on your side' },
+        { location: 'Raceway', name: 'Sand (job "Finish Line")', skill: 'Level 60', other: 'A little kerosene and one potassium nitrate as starters, then stoke with a tank of methane' },
+        { location: 'Homeless Camp', name: 'Hydrogen (job "Bummed Out")', skill: 'Level 70', other: '3 kerosene, then methane once or twice near the end' },
+        { location: 'Pest Control Hub', name: 'Flamethrower (job "Bugging Me")', skill: 'Level 80', other: 'A lot of oxygen: 2 or 3 to start, then stoke near the end, maybe several times' },
+        { location: 'Fire Station', name: 'Fire Extinguisher (job "Stop, Drop and Lol")', skill: 'Level 90', other: 'Two thermite and three kerosene, ignite with the flamethrower' },
+    ],
+    merits: [
+        { name: 'Hotshot', rarity: null, how: 'Reach crime skill 100 in Arson.' },
+        { name: 'Arsonal', rarity: null, how: 'Use every igniter, accelerant and dampener at least once. The last one unlocks at CS90, so you need that first.' },
+        { name: 'Cooking With Gas', rarity: null, how: 'Destroy a size 5 target in 30 seconds or less. It needs Thermite (CS50): about 5 plus your accelerant of choice (kerosene), with a Molotov or oxygen ready if the ternary areas stall. You get it when the fire dies down, even if the job fails.' },
+    ],
+    uniqueCount: 16,
+    notes: 'Source: the community in-depth guide on the Torn forum by Emforus (2026). The guide says all arson medals follow its category, but does not name it here, so none is shown. Nerve per action is in the action names, so no single cost is shown. The risk breakdowns, intensity tables and target reference sheet are marked "todo" or are pictures and are not included. The honor bar names are from the guide.',
+};
+
 function cgAttachData(crime) {
     if (crime.id === 'searchforcash') return { ...crime, data: SEARCH_FOR_CASH };
     if (crime.id === 'bootlegging') return { ...crime, data: BOOTLEGGING };
@@ -1714,6 +1835,7 @@ function cgAttachData(crime) {
     if (crime.id === 'cracking') return { ...crime, data: CRACKING };
     if (crime.id === 'forgery') return { ...crime, data: FORGERY };
     if (crime.id === 'scamming') return { ...crime, data: SCAMMING };
+    if (crime.id === 'arson') return { ...crime, data: ARSON };
     return crime;
 }
 
