@@ -19,7 +19,7 @@ const CRIMES_DATA = [
     { id: 'bootlegging', name: 'Bootlegging', icon: '📀', category: 'Counterfeiting', nerveCost: null, guideStatus: 'ready' },
     { id: 'graffiti', name: 'Graffiti', icon: '🎨', category: 'Vandalism', nerveCost: 3, guideStatus: 'ready' },
     { id: 'shoplifting', name: 'Shoplifting', icon: '🛍️', category: 'Theft', nerveCost: 4, guideStatus: 'ready' },
-    { id: 'pickpocketing', name: 'Pickpocketing', icon: '🤏', category: 'Theft', nerveCost: null, guideStatus: 'pending' },
+    { id: 'pickpocketing', name: 'Pickpocketing', icon: '🤏', category: 'Theft', nerveCost: 5, guideStatus: 'ready' },
     { id: 'cardskimming', name: 'Card Skimming', icon: '💳', category: null, nerveCost: null, guideStatus: 'pending' },
     { id: 'burglary', name: 'Burglary', icon: '🏚️', category: 'Theft', nerveCost: null, guideStatus: 'pending' },
     { id: 'hustling', name: 'Hustling', icon: '🎭', category: null, nerveCost: null, guideStatus: 'pending' },
@@ -767,11 +767,156 @@ const SHOPLIFTING = {
     notes: 'All attempts count as Theft crimes. Sources: the community in-depth guide on the Torn forum by Emforus (updated 2025) and the Torn wiki (unique finds and crits). The full drop tables are a spreadsheet linked from the forum guide and are not included.',
 };
 
+// ---- Pickpocketing: from the community in-depth guide on the Torn forum (Emforus, updated 2025) and the Torn wiki (nerve cost), written up in our own words ----
+const PICKPOCKETING = {
+    summary: 'Crime number five of Crimes 2.0, 5 nerve per attempt. There are no locations: new marks (targets) appear every few seconds and you pick one. There are 22 kinds of mark, each with its own unique find. What decides your chance is the kind of mark first, then what it is doing (its status), then its build. Harder marks give far more crime skill but fail and crit more.',
+    estimatedNerveToCS100: null, // the guide gives no total
+    locationsLabel: 'Mark groups',
+    cycleLabel: '📊 Skill gain and risk',
+    highlightLabel: '🎯 The marks in this group',
+    uniqueLocationLabel: 'Mark',
+    keyItems: [
+        { name: 'Cut-Throat Razor', effect: 'Enhancer: +5% crime experience and crime skill gains, unlocks some outcomes and several uniques (it is required to get them). It may be lost on a critical failure, which is unconfirmed but likely with the dangerous marks.', source: 'Shoplifting Bits \'n\' Bobs (unique), burgling the Barbershop (unique), pickpocketing the Thug (unique)' },
+    ],
+    locations: [
+        {
+            name: 'Safe marks', unlock: null,
+            cycle: [
+                'Crime skill gain: 100% (the lowest). Success about 97.5%, only 5 fails in 200 tests',
+                'Good from the start to about CS20; you can stay on them to CS100 if you want no risk, but it is slower',
+            ],
+            highlights: [
+                'Drunk Man (6 Bottles of Beer): avoid when distracted or muscular',
+                'Drunk Woman (2 Bottles of Pumpkin Brew): avoid when distracted',
+                'Elderly Man (Bag of Tootsie Rolls) and Elderly Woman (Opium): always safe',
+                'Homeless Person (4 Morphine, Soap on a Rope, 3 Bricks, Toothbrush): avoid when loitering',
+                'Junkie (Ecstasy, LSD, PCP, Speed): avoid when loitering or muscular',
+            ],
+            tip: 'The right place for the first levels. Switch to the next group around CS10 to 20.',
+        },
+        {
+            name: 'Moderately unsafe marks', unlock: null,
+            cycle: [
+                'Crime skill gain: about 150%. Success about 92.5% (90 to 95% depending on what they do)',
+                'Usable from about CS10 to 70',
+            ],
+            highlights: [
+                'Young Man (Ketamine): always safe. Young Woman (Ecstasy): best when on the phone',
+                'Student (Laptop, Cannabis, Coin Purse, Cell Phone): best on the phone, avoid when athletic',
+                'Classy Lady (High Heels): generally bad, best when heavyset',
+                'Laborer (Megaphone): avoid when distracted. Postal Worker (Lottery Voucher): little data, best when walking',
+            ],
+            tip: 'Probably the best group for steady, reliable growth. Young people have their phones out and appear very often.',
+        },
+        {
+            name: 'Unsafe marks', unlock: null,
+            cycle: [
+                'Crime skill gain: about 200%. Success about 85% (80 to 87.5% by status)',
+                'Usable from about CS35 to 90, only when the mark is distracted',
+            ],
+            highlights: [
+                'Rich Kid (Six-Pack of Alcohol): little data, best when walking, skinny or heavyset',
+                'Sex Worker (Thong): best when on the phone',
+                'Thug (PCP, Cut-Throat Razor, Billfold): best when running, avoid when muscular',
+            ],
+            tip: 'Avoid marks that are paying attention. The Thug is the way to the Cut-Throat Razor.',
+        },
+        {
+            name: 'Risky marks', unlock: null,
+            cycle: [
+                'Crime skill gain: about 250%. Success about 75%, lower below CS30',
+                'Possible from CS50 if you live on the edge, good from about CS65. Expect many crits',
+            ],
+            highlights: [
+                'Businessman (2 Speed): avoid when walking or skinny. Businesswoman (Glasses): little data, avoid walking',
+                'Gang Member (Spray Cans red, purple, blue and Wire Cutters): avoid when muscular',
+                'Jogger (Can of Crocozade): best when walking',
+                'Mobster (Money, about $561,000 to $772,000, CS100 only): avoid entirely, ideally',
+            ],
+            tip: 'Only pick marks that are busy or distracted.',
+        },
+        {
+            name: 'Dangerous marks: Cyclist', unlock: null,
+            cycle: [
+                'Crime skill gain: about 300%. Success about 50%; the "safe" walking cyclist almost never appears',
+                'Worth it from CS80, or CS85 to 90 to be safe',
+            ],
+            highlights: [
+                'Unique: Mountain Bike (CS100 only), the enhancer of Shoplifting',
+                'Can sometimes give Xanax',
+                'A crit can hospitalise you for about 5 hours: useful if you want a long self-hospital',
+            ],
+            tip: 'Extremely good from CS80 on.',
+        },
+        {
+            name: 'Very dangerous marks: Police Officer', unlock: null,
+            cycle: [
+                'Crime skill gain: about 350%, the most. Success under 10%, and the most likely to get you jailed',
+                'A crit costs about three times the crime skill of a crit on an elderly woman',
+            ],
+            highlights: [
+                'Uniques: Billfold and the Police Badge (the Pig Rustler honor bar, from a RUNNING officer)',
+                'Tests at CS90 to 95 say you should not try them even then; max your skill first',
+            ],
+            tip: 'Avoid, even at high skill. The one alternative is spamming running officers at CS1, where you cannot lose skill.',
+        },
+    ],
+    dropTables: null, // the risk tables are pictures in the guide
+    sections: [
+        { id: 'status', label: 'Status & build', blocks: [
+            { title: 'Status: what the mark is doing', items: ['After the kind of mark this is the biggest factor: success rate changes by 10% or more with it, and some uniques need a certain status.', 'The more oblivious, the easier: on the phone, listening to music and similar.', 'Fast marks can be safe or unsafe: cyclists and joggers are better walking, thugs better running.', 'Marks on the phone are usually a good call.'] },
+            { title: 'Build: the body type of the mark', items: ['Five builds: average (most common), athletic (joggers, cyclists, thugs), skinny (more common in women), muscular (laborers, sex workers) and heavyset (rare, mostly civilians).', 'It matters less than status, but it is there. Skinny matters for the Slim Pickings honor bar.'] },
+            { title: 'Marks are shared', items: ['Everybody sees the same marks, and pickpocketing one does not remove it for others.', 'A script exists that shows these safety ratings on the pickpocketing page (works in the browser and TornPDA); search the forum for it.'] },
+        ] },
+        { id: 'crits', label: 'Crits & skill path', blocks: [
+            { title: 'Critical failures', items: ['Lose life (9 to 1,672 logged), go to jail (37 minutes to 6 hours 11, about 1 hour 20 on average) or go to hospital (5 hours 28 to 11 hours 23).', 'The hospital times came from cyclists (about 5 hours) and thugs (about 11 hours): a way to self-hospitalise for long.', 'Crime skill lost is about ten times the skill you would gain, so harder marks cost much more.'] },
+            { title: 'When to switch to harder marks (author\'s experience, not exact)', items: ['Safe marks to about CS10 to 20', 'Moderately unsafe from CS10 on', 'Unsafe from CS40, only when distracted', 'Risky from about CS50 to 65', 'Dangerous (cyclist) from CS80, or CS85 to 90 to be careful', 'Police officers: avoid, even at CS90 to 95'] },
+        ] },
+    ],
+    tips: [
+        'For steady growth, use the moderately unsafe marks (young man or woman, student) from CS10 and move up as the success rate gets good.',
+        'Always pick marks that are distracted or on their phone; avoid ones paying attention.',
+        'Going for very dangerous marks early can badly hurt your crime skill: a crit takes about ten times the gain.',
+        'All attempts count as Theft crimes: this is the fourth Theft crime, with Search For Cash, Shoplifting and Burglary.',
+    ],
+    uniques: [
+        { location: 'Drunk Man', name: '6 Bottles of Beer', skill: 'None', other: 'Statuses: distracted, stumbling. Avoid when distracted or muscular' },
+        { location: 'Drunk Woman', name: '2 Bottles of Pumpkin Brew', skill: 'None', other: 'Statuses: distracted, stumbling. Avoid when distracted' },
+        { location: 'Elderly Man', name: 'Bag of Tootsie Rolls', skill: 'None', other: 'Walking. Always safe' },
+        { location: 'Elderly Woman', name: 'Opium', skill: 'None', other: 'Walking. Always safe' },
+        { location: 'Homeless Person', name: '4 Morphine, Soap on a Rope, 3 Bricks, Toothbrush', skill: 'None', other: 'Begging, loitering. Avoid when loitering' },
+        { location: 'Junkie', name: 'Ecstasy, LSD, PCP, Speed', skill: 'None', other: 'Loitering, stumbling. Avoid when loitering or muscular' },
+        { location: 'Young Man', name: 'Ketamine', skill: 'None', other: 'Walking, on phone, music. Always safe' },
+        { location: 'Young Woman', name: 'Ecstasy', skill: 'None', other: 'Walking, distracted, on phone, music. Best on the phone' },
+        { location: 'Student', name: 'Laptop, Cannabis, Coin Purse, Cell Phone', skill: 'None', other: 'Walking, on phone, music, running. Best on the phone, avoid athletic' },
+        { location: 'Classy Lady', name: 'Pair of High Heels', skill: 'None', other: 'Walking, on phone. Generally bad, best heavyset' },
+        { location: 'Laborer', name: 'Megaphone', skill: 'None', other: 'Walking, distracted, on phone. Avoid when distracted (changed from Box of Medical Supplies)' },
+        { location: 'Postal Worker', name: 'Lottery Voucher', skill: 'None', other: 'Walking, distracted. Little data, best walking?' },
+        { location: 'Rich Kid', name: 'Six-Pack of Alcohol', skill: 'None', other: 'Walking, on phone, music. Little data' },
+        { location: 'Sex Worker', name: 'Thong', skill: 'None', other: 'Distracted, on phone, soliciting. Best on the phone' },
+        { location: 'Thug', name: 'PCP, Cut-Throat Razor, Billfold', skill: 'None', other: 'Walking, loitering, running. Best running, avoid muscular' },
+        { location: 'Businessman', name: '2 Speed', skill: 'None', other: 'Walking, on phone. Avoid when walking or skinny' },
+        { location: 'Businesswoman', name: 'Glasses', skill: 'None', other: 'Walking, on phone. Little data, avoid walking' },
+        { location: 'Gang Member', name: 'Spray Cans (red, purple, blue), Wire Cutters', skill: 'None', other: 'Loitering. Avoid when muscular' },
+        { location: 'Jogger', name: 'Can of Crocozade', skill: 'None', other: 'Walking, jogging. Best when walking' },
+        { location: 'Mobster', name: 'Money (about $561,000 to $772,000)', skill: 'Level 100', other: 'Walking. Avoid entirely, ideally' },
+        { location: 'Cyclist', name: 'Mountain Bike', skill: 'Level 100', other: 'Cycling. Extremely good from CS80, can give Xanax' },
+        { location: 'Police Officer', name: 'Billfold, Police Badge', skill: 'None', other: 'Walking, running. Best avoided, the badge needs a running officer' },
+    ],
+    merits: [
+        { name: 'Pocketeer', rarity: null, how: 'Reach crime skill 100 in Pickpocketing.' },
+        { name: 'Pig Rustler', rarity: null, how: 'Pickpocket a running police officer and get his badge. Very hard: about a 10% success rate.' },
+        { name: 'Slim Pickings', rarity: null, how: 'Pickpocket ten skinny marks in a row, successfully. The build of the mark must be skinny.' },
+    ],
+    notes: 'All attempts count as Theft crimes. Source: the community in-depth guide on the Torn forum by Emforus (updated 2025, about 8,400 logged attempts) and the Torn wiki (5 nerve per attempt). The success tables by mark and build are pictures in the forum guide and are not included. Success rates are rough: some marks have little data.',
+};
+
 function cgAttachData(crime) {
     if (crime.id === 'searchforcash') return { ...crime, data: SEARCH_FOR_CASH };
     if (crime.id === 'bootlegging') return { ...crime, data: BOOTLEGGING };
     if (crime.id === 'graffiti') return { ...crime, data: GRAFFITI };
     if (crime.id === 'shoplifting') return { ...crime, data: SHOPLIFTING };
+    if (crime.id === 'pickpocketing') return { ...crime, data: PICKPOCKETING };
     return crime;
 }
 
