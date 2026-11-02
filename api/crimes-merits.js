@@ -28,6 +28,9 @@ const TRACKED_HONORS = [
     { crime: 'pickpocketing', name: 'Pocketeer' },
     { crime: 'pickpocketing', name: 'Pig Rustler' },
     { crime: 'pickpocketing', name: 'Slim Pickings' },
+    { crime: 'cardskimming', name: 'King PIN' },
+    { crime: 'cardskimming', name: 'Zero Liability' },
+    { crime: 'cardskimming', name: 'Line of Credit' },
 ];
 
 async function redis(command) {

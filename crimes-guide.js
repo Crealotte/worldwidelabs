@@ -20,7 +20,7 @@ const CRIMES_DATA = [
     { id: 'graffiti', name: 'Graffiti', icon: '🎨', category: 'Vandalism', nerveCost: 3, guideStatus: 'ready' },
     { id: 'shoplifting', name: 'Shoplifting', icon: '🛍️', category: 'Theft', nerveCost: 4, guideStatus: 'ready' },
     { id: 'pickpocketing', name: 'Pickpocketing', icon: '🤏', category: 'Theft', nerveCost: 5, guideStatus: 'ready' },
-    { id: 'cardskimming', name: 'Card Skimming', icon: '💳', category: null, nerveCost: null, guideStatus: 'pending' },
+    { id: 'cardskimming', name: 'Card Skimming', icon: '💳', category: 'Fraud', nerveCost: null, guideStatus: 'ready' },
     { id: 'burglary', name: 'Burglary', icon: '🏚️', category: 'Theft', nerveCost: null, guideStatus: 'pending' },
     { id: 'hustling', name: 'Hustling', icon: '🎭', category: null, nerveCost: null, guideStatus: 'pending' },
     { id: 'disposal', name: 'Disposal', icon: '🗑️', category: 'Illicit Services', nerveCost: null, guideStatus: 'pending' },
@@ -911,12 +911,111 @@ const PICKPOCKETING = {
     notes: 'All attempts count as Theft crimes. Source: the community in-depth guide on the Torn forum by Emforus (updated 2025, about 8,400 logged attempts) and the Torn wiki (5 nerve per attempt). The success tables by mark and build are pictures in the forum guide and are not included. Success rates are rough: some marks have little data.',
 };
 
+// ---- Card Skimming: from the community in-depth guide on the Torn forum (Emforus, updated 2026), written up in our own words ----
+const CARD_SKIMMING = {
+    summary: 'A fraud crime with three steps: install a card skimmer and a spy camera in a location, recover them later together with the card details they collected, and sell the details. Installing costs 6 nerve and gives good crime skill; the skimmers work while you are away. Unlike most crimes it has no unique finds, its draws are the honor bars and a slow passive income.',
+    estimatedNerveToCS100: null, // the guide gives no total
+    locationsLabel: 'Locations',
+    cycleLabel: '📍 Speed and safety',
+    highlightLabel: '⚠️ Losses',
+    uniqueLocationLabel: 'Where',
+    keyItems: [
+        { name: 'Card skimmers', effect: 'Needed to install. Used up when installed, and given back (with the details) when you recover them.', source: 'Mexico ($175 each), searching the Junkyard, or a unique find at the Subway (Search For Cash) and the City Center (Graffiti)' },
+        { name: 'Spy cameras', effect: 'Needed to install, used up and given back like the skimmers.', source: 'Super Store ($130 each), searching the Junkyard, shoplifting the Super Store' },
+        { name: 'Personal Computer or Laptop', effect: 'Needed to sell card details.', source: 'Shoplifting the Super Store, or buy one in the Super Store ($1,350)' },
+        { name: 'Duct Tape', effect: 'Enhancer: +5% crime experience and crime skill gains. Some outcomes mention it, so it may also help success (no proof).', source: 'A unique find when shoplifting at Bits \'n\' Bobs' },
+    ],
+    locations: [
+        {
+            name: 'Bus Station', unlock: null,
+            cycle: ['Very slow: about 0.6 card details an hour', 'Very safe: only a few skimmers lost per week', 'Locked during a State of Emergency'],
+            highlights: ['Skimmers are very unlikely to be found'],
+            tip: 'A good place to leave skimmers for weeks.',
+        },
+        {
+            name: 'Subway Station', unlock: null,
+            cycle: ['About 0.9 details an hour: roughly 1 an hour at high activity (around noon and afternoon TCT), 0.8 at low activity (evening and early morning)', 'Minor risk', 'Locked during a State of Emergency'],
+            highlights: ['Rarely found: about one a day with 20 installed'],
+            tip: 'A decent safe choice, speed follows player activity like Search For Cash.',
+        },
+        {
+            name: 'College Campus', unlock: null,
+            cycle: ['Fastest of the first four: about 1.1 details an hour', 'Moderate risk'],
+            highlights: ['Fairly likely to be found: about 3 a day lost with 20 installed'],
+            tip: 'Good for active players, and for the 250 details honor bar (20 skimmers, about two weeks).',
+        },
+        {
+            name: 'Post Office', unlock: null,
+            cycle: ['About 0.75 details an hour', 'Safe'],
+            highlights: ['Unlikely to be found: it takes a few days to lose 1 of 20'],
+            tip: 'A safe place if you fly or sleep a lot.',
+        },
+        {
+            name: 'Gas Station', unlock: 'CS25',
+            cycle: ['The slowest: about 0.4 details an hour, no effect from time of day', 'Safest of all'],
+            highlights: ['Extremely unlikely to be found: sometimes days or weeks for one of 20'],
+            tip: 'Set and forget: the minimum-nerve way to build up 10,000 details for the Line of Credit honor bar.',
+        },
+        {
+            name: 'Airport Terminal', unlock: 'CS50',
+            cycle: ['Good: about 1.3 details an hour, best around noon and afternoon, at night it falls to about the level of the College', 'High risk'],
+            highlights: ['Very likely to be found: 4 to 8 lost per day on average'],
+            tip: 'For active players: use it by day and move skimmers to the Subway when you go to sleep.',
+        },
+        {
+            name: 'Casino Lobby', unlock: 'CS75',
+            cycle: ['Excellent: about 2.15 details an hour, so 250 details take about 4 to 5 days', 'Very high risk'],
+            highlights: ['Extremely likely to be found: over half of the skimmers can be lost after a short time away'],
+            tip: 'The fastest and the riskiest: only for people who are online a lot.',
+        },
+        {
+            name: 'Bank Branch', unlock: 'CS100',
+            cycle: ['Very good: about 1.7 details an hour, between the Airport and the Casino', 'Safety: not confirmed yet'],
+            highlights: ['Skimmers appear to be found about as often as at the Airport (more data needed)'],
+            tip: 'Unlocked at the top skill.',
+        },
+    ],
+    dropTables: null,
+    sections: [
+        { id: 'steps', label: 'The three steps', blocks: [
+            { title: 'Install a skimmer (6 nerve)', items: ['Needs a card skimmer and a spy camera, both used up by the attempt.', 'It gives a consistently high crime skill, and the same in every location.', 'A failure does nothing. A critical failure loses both items and the usual penalties.', 'You can have 20 skimmers placed in total over all locations; recover some, or have them found, to free space.', 'Skimmers get lost based on your activity: the less active you are, the more get found, and a long absence can lose most or all of them. Collect them first if you go away.'] },
+            { title: 'Recover a skimmer', items: ['Installed skimmers are listed at the bottom of the crime page. You get the skimmer, camera and details back.', 'The crime skill from recovering grows with the number of details held: about 15.5% more per detail. About 7 details equal the efficiency of installing and 13 details equal the gain of installing. There is no cap, up to at least 250 details, and hundreds of details can give several levels at once.', 'A failed recovery (not a crit) blocks the ATM for 10 to 30 minutes.', 'A critical failure loses the skimmer, the camera and all the details inside, plus jail of 1 to 3 hours. The skill lost looks the same whatever the details.', 'Installing and recovering carry the same risk, in every location.'] },
+            { title: 'Sell card details', items: ['Needs a Personal Computer or Laptop. All the stored details are sold at once.', 'Crime skill from selling is very small, about half of an install, whatever the amount. Selling is not for levelling.', 'Value per detail: 1 to 100 details $100 to $160; 101 to 1,000 $130 to $190; 1,001 to 9,999 $160 to $220; 10,000 or more $190 to $250. So waiting for 1,000 or 10,000 pays more.', 'A critical failure loses all details.'] },
+        ] },
+        { id: 'paths', label: 'Levelling paths', blocks: [
+            { title: '1. Install, recover, repeat (fast, expensive in nerve)', items: ['The fastest way to skill. Recovering an empty skimmer gives about a third of an install, so it is about 50% less nerve-efficient than installing.', 'Lets you rush to better locations, but needs plenty of nerve boosters.'] },
+            { title: '2. Install, wait 6 to 12 hours, recover (slow, efficient)', items: ['Wait for about 6 to 7 details so a recovery is as efficient as an install; with 13 details it is about 50% more efficient.', 'Install and recover in the morning and at night, using only natural nerve and the booster cooldown.'] },
+            { title: '3. Install, wait 2 to 3 weeks, recover (slowest, most efficient)', items: ['Use safe locations (Post Office, Bus Station, Gas Station). The best way if you work on other crimes at the same time: leave the skimmers and recover at 200 details or even 500.'] },
+            { title: 'In short', items: ['Do not sell to gain skill, or only when you hold over 10,000 details.', 'Installing gives the skill of recovering a skimmer with 13 details.'] },
+        ] },
+        { id: 'profit', label: 'Profit & emergency', blocks: [
+            { title: 'Money', items: ['It is a leave-and-forget crime that can earn over time, roughly 200,000 to 500,000 a day for a full set (not firmly determined).', 'The Casino Lobby collects about 50 details a day, about $10,000 a day per skimmer at about $200 a detail, so about $200,000 a day with 20 skimmers, if they are not found.', 'The faster a location collects, the more likely skimmers get detected, which loses all the details. Safer locations suit checking once or twice a week.', 'Average sale value rises by about $30 at each breakpoint (100, 1,000, 10,000 details), starting at $130.'] },
+            { title: 'State of Emergency', items: ['With a dirty bomb armed, the Bus Station and the Subway Station are locked: nothing can be installed or removed there (the Airport is expected to be too).', 'Skimmers keep working and keep collecting details during the lockdown.'] },
+        ] },
+    ],
+    tips: [
+        'Active players: use the College, Airport and Casino. Less active or flying a lot: Subway or Post Office. Cycling skimmers daily: Airport by day, Subway when you go to bed.',
+        'To do this next to other crimes: put skimmers in safe locations, leave them for weeks, and recover at hundreds of details.',
+        'The Zero Liability honor bar: twenty skimmers on the College Campus for about two weeks, replacing only those that get found. Even less effort: the Gas Station for a month or more.',
+        'No unique finds in this crime, so it is mainly about the two honor bars and the passive income.',
+    ],
+    uniques: [],
+    merits: [
+        { name: 'King PIN', rarity: null, how: 'Reach crime skill 100 in Card Skimming.' },
+        { name: 'Zero Liability', rarity: null, how: 'Recover a skimmer that holds 250 details.' },
+        { name: 'Line of Credit', rarity: null, how: 'Sell at least 10,000 card details at once.' },
+    ],
+    uniqueCount: 0,
+    notes: 'All attempts count as Fraud crimes, shared with Hustling and Scamming. Source: the community in-depth guide on the Torn forum by Emforus (updated July 2026). Location rates are measured by hand over 12 hours or more and are rough; the guide notes that the Bank Branch safety is not confirmed. Only the install cost (6 nerve) is stated, so no nerve cost per attempt is shown.',
+};
+
 function cgAttachData(crime) {
     if (crime.id === 'searchforcash') return { ...crime, data: SEARCH_FOR_CASH };
     if (crime.id === 'bootlegging') return { ...crime, data: BOOTLEGGING };
     if (crime.id === 'graffiti') return { ...crime, data: GRAFFITI };
     if (crime.id === 'shoplifting') return { ...crime, data: SHOPLIFTING };
     if (crime.id === 'pickpocketing') return { ...crime, data: PICKPOCKETING };
+    if (crime.id === 'cardskimming') return { ...crime, data: CARD_SKIMMING };
     return crime;
 }
 
@@ -979,7 +1078,7 @@ function renderCrimeTabs(crime) {
         { id: 'locations', label: `${d.locationsLabel || 'Locations'} (${d.locations.length})` },
         ...(d.dropTables === null ? [] : [{ id: 'droprates', label: 'Drop Rates' }]),
         ...(d.sections || []).map(sec => ({ id: 'sec-' + sec.id, label: sec.label })),
-        { id: 'uniques', label: `Uniques (${d.uniques ? d.uniques.length : 0})` },
+        ...((d.uniques && !d.uniques.length) ? [] : [{ id: 'uniques', label: `Uniques (${d.uniques ? d.uniques.length : 0})` }]),
         { id: 'items', label: 'Key Items' },
         { id: 'honors', label: 'Honor Bars' },
     ];
