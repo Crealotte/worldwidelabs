@@ -159,8 +159,8 @@ const mtaMentorAccessors = { name: ([id, m]) => (m.name || `#${id}`).toLowerCase
 let mtaPupilSort = { key: null, dir: 'asc' };
 const mtaPupilAccessors = { name: ([id, p]) => (p.name || `#${id}`).toLowerCase(), mentor: ([, p]) => (mtaProgram.mentors[p.mentorId]?.name || '').toLowerCase() };
 function renderMta() {
-    { const bar = $('mta-open-bar'); if (bar) { const open = mtaProgram.open === true;
-        bar.innerHTML = `<b>Self sign-up for members is ` + (open ? '<span style="color:var(--reagent);">OPEN</span>' : '<span style="color:var(--danger);">CLOSED</span>') + `.</b> <span style="color:var(--muted);">` + (open ? 'Members can sign up, tick their online hours and ask each other.' : 'Only leaders can use it, to test it. Open it when the newsletter goes out.') + `</span> <button class="small" id="mta-open-toggle">` + (open ? 'Close it' : 'Open it for members') + `</button>`;
+    { const bar = $('mta-open-bar'); if (bar) { const open = mtaProgram.open !== false;
+        bar.innerHTML = `<b>Self sign-up for members is ` + (open ? '<span style="color:var(--reagent);">OPEN</span>' : '<span style="color:var(--danger);">CLOSED</span>') + `.</b> <span style="color:var(--muted);">` + (open ? 'Members can sign up, tick their online hours and ask each other.' : 'Only leaders can use it, to test it.') + `</span> <button class="small" id="mta-open-toggle">` + (open ? 'Close it' : 'Open it for members') + `</button>`;
         $('mta-open-toggle').onclick = async () => { const r = await mtFetch({ action: 'mentor-open-set', open: !open }); if (r.error) { toast(r.error); return; } mtaProgram.open = r.open; toast(r.open ? 'Sign-up is open for members' : 'Sign-up is closed'); renderMta(); }; } }
     $('mta-oh-bar').innerHTML = `<label style="display:inline-flex;gap:6px;align-items:center;cursor:pointer;"><input type="checkbox" id="mta-oh-tz" style="width:auto;" ${ohLocal && ohOffsetOk() ? 'checked' : ''} ${ohOffsetOk() ? '' : 'disabled'}> Show online hours in my own time zone</label> <span>— hours are members\x27 own, set on their dashboard (${Object.keys(mtaHours).length} of ${mtaRoster.length} have set them). Shown in ${ohZone()}.</span>`;
     $('mta-oh-tz').addEventListener('change', () => { ohLocal = $('mta-oh-tz').checked; try { localStorage.setItem(OH_TZ_KEY, ohLocal ? '1' : '0'); } catch (e) { /* not critical */ } renderMta(); });
@@ -276,7 +276,7 @@ function renderMtJoin() {
     const el = $('mt-join'), d = mtData;
     const isLeaderView = d.allPairs !== undefined;
     if (!d.signupOpen && !isLeaderView) { // the leaders open the sign-up with the newsletter: until then members only see this
-        el.innerHTML = '<h3 style="margin-top:0;">🎓 Mentoring sign-up opens soon</h3><p style="margin:0;font-size:13px;color:var(--muted);">You will be able to sign up as a pupil or as a mentor here, tick your online hours and ask someone who fits. Watch the next newsletter.</p>';
+        el.innerHTML = '<h3 style="margin-top:0;">🎓 Mentoring sign-up is closed for now</h3><p style="margin:0;font-size:13px;color:var(--muted);">Sign-up is closed at the moment. When it opens you can sign up as a pupil or as a mentor here, tick your online hours and ask someone who fits.</p>';
         return;
     }
     if (!d.signupOpen) el.dataset.test = '1';
@@ -317,7 +317,7 @@ function renderMtJoin() {
         $('mt-join-pupil').onclick = () => mtDo({ action: 'mentor-apply', as: 'pupil', note: $('mt-note-pupil').value }, 'You are signed up. Pick a mentor below.');
         if (can.ok) $('mt-join-mentor').onclick = () => mtDo({ action: 'mentor-apply', as: 'mentor', capacity: $('mt-cap').value, note: $('mt-note-mentor').value }, 'You are signed up as a mentor.');
     }
-    if (!d.signupOpen && isLeaderView) el.insertAdjacentHTML('afterbegin', '<div style="font-size:12px;color:var(--reagent);margin-bottom:6px;">Sign-up is closed for members. You can test it as a leader. Open it on the Mentoring admin page.</div>');
+    if (!d.signupOpen && isLeaderView) el.insertAdjacentHTML('afterbegin', '<div style="font-size:12px;color:var(--reagent);margin-bottom:6px;">Sign-up is closed for members. You can test it as a leader. Open it again on the Mentoring admin page.</div>');
 }
 
 function renderMtRequests() {

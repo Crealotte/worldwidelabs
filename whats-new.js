@@ -12,6 +12,19 @@
 
 const WHATS_NEW = [
     {
+        version: '1.48', date: '2026-11-02',
+        title: 'Script 1.54: Labs Assistant, mentoring sign-up and more',
+        everyone: [
+            'Mentoring: you can now sign up yourself. On the Mentoring page choose I want a mentor, or I want to be a mentor (from Lab Rat up, and one full newsletter cycle in the faction). Tick the hours you are usually online, and you see who fits best, sorted by the hours you share. Press Ask: the other person gets your ask on the Mentoring page and in their To do, and has to accept before you are paired. A mentor can take up to 3 pupils.',
+            'The WWL script has a new name: Labs Assistant. It is the same script, so nothing needs to be installed again and your settings and key stay as they are. After the update (1.54) the button and the window in Torn say Labs Assistant. In the Tampermonkey list it still shows under its old name, World Wide Labs.',
+            'Everywhere on the site the script is now called Labs Assistant too: the install card on the dashboard, the Lab Notes steps, the trading page and the messages that remind you to install it.',
+            'An open poll made on the site that you have not voted in yet now shows as a line in the To do of the Labs Assistant, with a button that opens the poll.',
+        ],
+        leaders: [
+            'Mentoring admin has a new switch at the top: self sign-up for members is open by default, and you can close it when needed. Leaders can always use it, also when it is closed. You can still add mentors and pupils and pair them by hand.',
+        ],
+    },
+    {
         version: '1.47', date: '2026-11-02',
         title: 'Script 1.53: Bidding War OC, perk roadmap and energy goal',
         everyone: [

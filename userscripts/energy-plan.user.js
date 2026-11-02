@@ -2,7 +2,7 @@
 // @name         World Wide Labs
 // @namespace    https://worldwidelabs.vercel.app
 // @author       CreaLotte
-// @version      1.53
+// @version      1.54
 // @updateURL    __WWL_BASE__/worldwidelabs.user.js
 // @downloadURL  __WWL_BASE__/worldwidelabs.user.js
 // @description  Shows your WorldWideLabs weekly energy plan (the checklist from the Energy planner) inside Torn, a To do tab with small personal reminders (revive setting, feedback, timezone map, availability, Discord/Intel/CAT), your My Targets list, a simplified energy/war standing strip, and — if you are in the Mentoring Platform — your mentoring checklist too. Also shows faction banners at the top of every Torn page. A small ⚙ in the header shows the installed version, flags when a newer one is out, lets you set/replace your API key, and — for a leader — add or remove your faction's banners right from Torn. On a computer it is a small window you can drag around and close; in TornPDA it is a menu. Ticks are shared with the WWL site.
@@ -11,6 +11,7 @@
 // @grant        GM_info
 // @connect      __WWL_HOST__
 // ==/UserScript==
+// NOTE: keep "@name World Wide Labs" above as it is: Tampermonkey knows the script by this name, and a new name installs as a second script. The name members see inside Torn is Labs Assistant.
 
 (function () {
     'use strict';
@@ -26,7 +27,7 @@
     const KEY_NAME = 'wwl_api_key', POS_NAME = 'wwl_plan_pos', STATE_NAME = 'wwl_plan_state';
     // GM_info gives the version Tampermonkey actually has installed right now — falls back to a
     // hardcoded copy (kept in sync with @version above) for TornPDA, which doesn't grant GM_info.
-    const SCRIPT_VERSION = (typeof GM_info !== 'undefined' && GM_info.script?.version) || '1.53';
+    const SCRIPT_VERSION = (typeof GM_info !== 'undefined' && GM_info.script?.version) || '1.54';
     const versionGreater = (a, b) => {
         const pa = String(a).split('.').map(Number), pb = String(b).split('.').map(Number);
         for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
@@ -95,7 +96,7 @@
         // top:8px used to sit right on top of Torn's own logo in the corner — nudged down to clear it.
         // A visual estimate from a screenshot, not a measured value, so it may still need adjusting.
         pill.style.cssText = `position:fixed;left:8px;top:${PILL_TOP}px;z-index:99998;display:flex;gap:6px;align-items:center;padding:8px 12px;background:#1b2029;border:1px solid #35d99b;border-radius:20px;cursor:pointer;box-shadow:0 2px 12px rgba(0,0,0,.5);user-select:none;`;
-        pill.innerHTML = `${VIAL_SVG}<b>WWL</b><span id="wwl-prog" style="color:#35d99b;font-family:monospace;"></span>`;
+        pill.innerHTML = `${VIAL_SVG}<b>Labs Assistant</b><span id="wwl-prog" style="color:#35d99b;font-family:monospace;"></span>`;
     }
     root.appendChild(pill);
     const prog = pill.querySelector('#wwl-prog');
@@ -144,7 +145,7 @@
         win.style.cssText = 'position:fixed;z-index:99999;width:330px;max-width:94vw;max-height:75vh;display:none;flex-direction:column;background:#1b2029;border:1px solid #3a4352;border-radius:8px;box-shadow:0 6px 24px rgba(0,0,0,.55);';
     }
     win.innerHTML = `<div id="wwl-head" style="display:flex;align-items:center;gap:8px;padding:9px 12px;border-bottom:1px solid #3a4352;${IS_PDA ? '' : 'cursor:move;touch-action:none;'}user-select:none;">
-            <b style="flex:1;">World Wide Labs${IS_PDA ? '' : ' <span style="color:#9aa4b5;font-weight:400;font-size:11px;">— drag to move</span>'}</b>
+            <b style="flex:1;">Labs Assistant${IS_PDA ? '' : ' <span style="color:#9aa4b5;font-weight:400;font-size:11px;">— drag to move</span>'}</b>
             <span id="wwl-prog2" style="color:#35d99b;font-family:monospace;"></span>
             <span id="wwl-settings" title="Settings" style="cursor:pointer;font-size:16px;line-height:1;padding:0 4px;color:#9aa4b5;position:relative;">⚙<span id="wwl-settings-dot" style="display:none;position:absolute;top:-2px;right:-1px;width:7px;height:7px;border-radius:50%;background:#f0b432;"></span></span>
             <span id="wwl-close" title="Close" style="cursor:pointer;font-size:20px;line-height:1;padding:0 4px;">×</span></div>
@@ -710,7 +711,7 @@
     // a link in a message must stand alone: Torn makes a ")", "." or "," stuck to it part of the link, and then it does not work (also cleans a message a leader saved earlier)
     const cleanLinks = text => String(text).replace(/(\(?)(https?:\/\/\S+)/g, (m, open, url, off, all) => { const core = url.replace(/[).,;:!?\]]+$/, ''), next = all.charAt(off + m.length); return core + (core !== url && next && !/\s/.test(next) ? ' ' : ''); });
     const invDefault = k => k === 'script'
-        ? `Hey, I have noticed you have not installed the WWL script yet. You can install it from ${WWL}/worldwidelabs.user.js and then it shows your to do list and energy plan right inside Torn. Note that the script is not the website: it is a separate add-on. You need Tampermonkey on a computer, or add it as a script in TornPDA. Shout if you get stuck!`
+        ? `Hey, I have noticed you have not installed the Labs Assistant yet. You can install it from ${WWL}/worldwidelabs.user.js and then it shows your to do list and energy plan right inside Torn. Note that the Labs Assistant is not the website: it is a separate add-on. You need Tampermonkey on a computer, or add it as a script in TornPDA. Shout if you get stuck!`
         : `Hey, I have noticed you have not logged into WWL yet. Please join at ${WWL} with a limited API key. It takes a minute and gives you your energy plan, welcome chapters and more. Shout if you need help!`;
     const invMsg = k => store.get(INV_MSG_KEY(k)) || invDefault(k);
     function inviteHtml(t) {
@@ -847,7 +848,7 @@
         const dismissedCount = Object.keys(banDismissed()).length;
         const undismissHtml = dismissedCount ? `<button type="button" id="wwl-ban-undismiss" style="margin-top:8px;padding:6px 12px;border-radius:6px;border:1px solid #3a4352;background:transparent;color:#e6e9ef;cursor:pointer;">Show ${dismissedCount} dismissed banner${dismissedCount === 1 ? '' : 's'} again</button>` : '';
         let html = `<button type="button" id="wwl-back" style="margin-bottom:10px;padding:4px 10px;border-radius:6px;border:1px solid #3a4352;background:transparent;color:#e6e9ef;cursor:pointer;">← Back</button>
-            <div style="font-weight:700;margin-bottom:4px;">World Wide Labs v${esc(SCRIPT_VERSION)}</div>
+            <div style="font-weight:700;margin-bottom:4px;">Labs Assistant v${esc(SCRIPT_VERSION)}</div>
             ${connLine()}
             ${updateHtml}
             <button type="button" id="wwl-change-key" style="margin-top:4px;padding:6px 12px;border-radius:6px;border:1px solid #3a4352;background:transparent;color:#e6e9ef;cursor:pointer;">Change API key</button>
@@ -894,7 +895,7 @@
         if (!connInfo) return '<div style="color:#9aa4b5;font-size:12px;margin:2px 0 6px;">Checking the connection with WWL…</div>';
         if (!connInfo.ok) return `<div style="color:#e05555;font-size:12px;margin:2px 0 6px;">WWL does not accept this key: ${esc(connInfo.error)} Use Change API key below to enter a working one.</div>`;
         const when = connInfo.seen ? new Date(connInfo.seen).toLocaleString() : 'not yet';
-        return `<div style="color:#35d99b;font-size:12px;margin:2px 0 6px;">Connected. WWL last saw this script: ${esc(when)}${connInfo.version ? ` (v${esc(connInfo.version)}, ${connInfo.pda ? 'TornPDA' : 'browser'})` : ''}.</div>`;
+        return `<div style="color:#35d99b;font-size:12px;margin:2px 0 6px;">Connected. WWL last saw the Labs Assistant: ${esc(when)}${connInfo.version ? ` (v${esc(connInfo.version)}, ${connInfo.pda ? 'TornPDA' : 'browser'})` : ''}.</div>`;
     }
     async function loadSettings() {
         try { settingsData = await api({ action: 'banners-get', manage: true }); }
@@ -908,7 +909,7 @@
         body.querySelector('#wwl-change-key')?.addEventListener('click', () => {
             const current = store.get(KEY_NAME) || '';
             const masked = current ? `${current.slice(0, 4)}…${current.slice(-4)}` : 'not set';
-            const input = prompt(`World Wide Labs v${SCRIPT_VERSION}\n\nCurrent API key: ${masked}\n\nPaste a new key to replace it, or leave blank to keep the current one.`, '');
+            const input = prompt(`Labs Assistant v${SCRIPT_VERSION}\n\nCurrent API key: ${masked}\n\nPaste a new key to replace it, or leave blank to keep the current one.`, '');
             if (input === null) return;
             const trimmed = input.trim();
             if (!trimmed) return;
@@ -1475,7 +1476,7 @@
                 saveReceipt(id, lines, partnerOf(cont));
             }
             // the real Accept button stays blocked only while there is money in the trade that is not the total ("Accept anyway" lifts it)
-            setAcceptBlock(acc, mismatch, `WWL: the money in the trade is not ${fmt(total)}`);
+            setAcceptBlock(acc, mismatch, `Labs Assistant: the money in the trade is not ${fmt(total)}`);
             const accepted = !acc && inTrade > 0;
             const status = !ready ? '' : inTrade === total ? '<span style="color:#35d99b;">The money matches.</span>' : !inTrade ? 'No money added yet.' : diff < 0 ? `<span style="color:#ff6b6b;">Too low by ${fmt(-diff)}.</span>` : `<span style="color:#ff6b6b;">Too high by ${fmt(diff)}.</span>`;
             const rurl = receipts[id] && receipts[id].url;
@@ -1485,7 +1486,7 @@
             else if (acc && ready) accept = inTrade === total ? b('wwl-tb-acc', 'Accept Trade', 'background:#1f9d63;border-color:#1f9d63;') : !inTrade ? b('wwl-tb-acc', 'Add Money', 'background:#c98a14;border-color:#c98a14;') : b('wwl-tb-acc', diff < 0 ? 'Too Low — add money' : 'Too High — fix money', 'background:#b03a3a;border-color:#b03a3a;');
             else if (acc && !waiting) accept = b('wwl-tb-acc', 'Accept (not checked)', '');
             const head = waiting ? 'Looking up your prices…' : priceError ? `<span style="color:#ff6b6b;">${esc(priceError)}</span>` : '';
-            setBar(`<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;"><b style="color:#35d99b;">WWL</b>${head}${!head && total ? b('wwl-tb-copy', `Total: ${fmt(total)}`) : ''}${ready ? (rurl ? b('wwl-tb-rcpt', 'Receipt — copy link') + ` <a href="${esc(rurl)}" target="_blank" rel="noopener" style="color:#7fb0ff;font-size:12px;">open</a>` + (receipts[id].message ? b('wwl-tb-msg', 'Copy message') : '') : '<span style="color:#8a93a6;font-size:12px;">receipt…</span>') : ''}${accept}</div>${unpriced && !waiting ? `<div style="color:#f0b432;">${unpriced} item${unpriced === 1 ? '' : 's'} without a price on your list.</div>` : ''}${status ? `<div>${status} <span style="color:#8a93a6;">In the trade: ${fmt(inTrade)}</span>${mismatch ? ' <a href="#" id="wwl-tb-any" style="color:#7fb0ff;">Accept anyway</a>' : ''}</div>` : ''}<details style="margin-top:4px;"><summary style="cursor:pointer;color:#8a93a6;">Items</summary>${rows.join('')}</details>`, el => {
+            setBar(`<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;"><b style="color:#35d99b;">Labs Assistant</b>${head}${!head && total ? b('wwl-tb-copy', `Total: ${fmt(total)}`) : ''}${ready ? (rurl ? b('wwl-tb-rcpt', 'Receipt — copy link') + ` <a href="${esc(rurl)}" target="_blank" rel="noopener" style="color:#7fb0ff;font-size:12px;">open</a>` + (receipts[id].message ? b('wwl-tb-msg', 'Copy message') : '') : '<span style="color:#8a93a6;font-size:12px;">receipt…</span>') : ''}${accept}</div>${unpriced && !waiting ? `<div style="color:#f0b432;">${unpriced} item${unpriced === 1 ? '' : 's'} without a price on your list.</div>` : ''}${status ? `<div>${status} <span style="color:#8a93a6;">In the trade: ${fmt(inTrade)}</span>${mismatch ? ' <a href="#" id="wwl-tb-any" style="color:#7fb0ff;">Accept anyway</a>' : ''}</div>` : ''}<details style="margin-top:4px;"><summary style="cursor:pointer;color:#8a93a6;">Items</summary>${rows.join('')}</details>`, el => {
                 const c = el.querySelector('#wwl-tb-copy');
                 if (c) c.addEventListener('click', () => { const t = String(total); (navigator.clipboard ? navigator.clipboard.writeText(t) : Promise.reject()).then(() => { c.textContent = 'Copied'; }, () => { c.textContent = t; }); });
                 const mg = el.querySelector('#wwl-tb-msg');
@@ -1509,7 +1510,7 @@
             if (!rec || !rec.total || !inputs.length || filled[id]) return;
             filled[id] = true;
             inputs.forEach(i => { i.value = String(rec.total); i.dispatchEvent(new Event('input', { bubbles: true })); i.dispatchEvent(new Event('change', { bubbles: true })); });
-            setBar(`<b style="color:#35d99b;">WWL</b> Filled in <b>${fmt(rec.total)}</b>, the total at your pricelist.`);
+            setBar(`<b style="color:#35d99b;">Labs Assistant</b> Filled in <b>${fmt(rec.total)}</b>, the total at your pricelist.`);
         }
 
         // ---- a finished trade: saved to your ledger ----
@@ -1528,7 +1529,7 @@
             logBusy = true;
             try {
                 const sides = ['.user.left', '.user.right'].map(s => { const u = q1(s, cont); return u ? sideOf(u) : null; });
-                if (sides.some(s => !s)) { setBar('<b style="color:#35d99b;">WWL</b> <span style="color:#ff6b6b;">This trade page could not be read.</span>'); return; }
+                if (sides.some(s => !s)) { setBar('<b style="color:#35d99b;">Labs Assistant</b> <span style="color:#ff6b6b;">This trade page could not be read.</span>'); return; }
                 const rec = readJson(REC(id)), pr = {};
                 const itemSides = sides.filter(s => Object.keys(s.items).length), other = sides.find(s => !Object.keys(s.items).length);
                 // the price per item is only kept when it adds up to exactly the money in the trade
@@ -1540,13 +1541,13 @@
                 if (r.off) { dropBar(); return; } // no pricelist and no ledger yet: nothing is saved
                 store.set(SAVED(id), JSON.stringify({ at: Date.now() }));
                 const undo = r.ids && r.ids[0];
-                setBar(`<b style="color:#35d99b;">WWL</b> ${r.added ? `Saved in your trading ledger (${r.kind === 'buy' ? 'bought' : 'sold'}).` : 'This trade is in your trading ledger already.'}${undo ? btn('wwl-tb-undo', 'Undo') : ''}`, b => {
+                setBar(`<b style="color:#35d99b;">Labs Assistant</b> ${r.added ? `Saved in your trading ledger (${r.kind === 'buy' ? 'bought' : 'sold'}).` : 'This trade is in your trading ledger already.'}${undo ? btn('wwl-tb-undo', 'Undo') : ''}`, b => {
                     const u = b.querySelector('#wwl-tb-undo');
-                    if (u) u.addEventListener('click', () => { api({ action: 'led-del', id: undo }).then(() => { store.set(SAVED(id), ''); setBar('<b style="color:#35d99b;">WWL</b> Removed from your ledger again.'); }).catch(e => { u.textContent = e.message; }); });
+                    if (u) u.addEventListener('click', () => { api({ action: 'led-del', id: undo }).then(() => { store.set(SAVED(id), ''); setBar('<b style="color:#35d99b;">Labs Assistant</b> Removed from your ledger again.'); }).catch(e => { u.textContent = e.message; }); });
                 });
             } catch (e) {
                 if (stopped) { dropBar(); return; }
-                setBar(`<b style="color:#35d99b;">WWL</b> <span style="color:#ff6b6b;">${esc(e.message)}</span>${btn('wwl-tb-retry', 'Try again')}`, b => {
+                setBar(`<b style="color:#35d99b;">Labs Assistant</b> <span style="color:#ff6b6b;">${esc(e.message)}</span>${btn('wwl-tb-retry', 'Try again')}`, b => {
                     const t = b.querySelector('#wwl-tb-retry');
                     if (t) t.addEventListener('click', () => { savedTried[id] = false; setBar(''); });
                 });
@@ -1555,11 +1556,11 @@
         function logTick(id) {
             const cont = q1('.trade-cont.m-top10'); if (!cont || logBusy || savedTried[id]) return;
             savedTried[id] = true;
-            if ((readJson(SAVED(id)) || {}).at) { setBar('<b style="color:#35d99b;">WWL</b> This trade was saved in your trading ledger earlier.'); return; }
+            if ((readJson(SAVED(id)) || {}).at) { setBar('<b style="color:#35d99b;">Labs Assistant</b> This trade was saved in your trading ledger earlier.'); return; }
             const logText = logLines();
-            if (logText && !/completed/i.test(logText)) { setBar('<b style="color:#35d99b;">WWL</b> This trade was not completed, so it is not saved.'); return; }
+            if (logText && !/completed/i.test(logText)) { setBar('<b style="color:#35d99b;">Labs Assistant</b> This trade was not completed, so it is not saved.'); return; }
             if (!logText) { // the page shows no log lines, so there is no proof that it finished: ask first
-                setBar(`<b style="color:#35d99b;">WWL</b> Add this trade to your trading ledger?${btn('wwl-tb-save', 'Add it')}`, b => { const s = b.querySelector('#wwl-tb-save'); if (s) s.addEventListener('click', () => saveTrade(id, cont)); });
+                setBar(`<b style="color:#35d99b;">Labs Assistant</b> Add this trade to your trading ledger?${btn('wwl-tb-save', 'Add it')}`, b => { const s = b.querySelector('#wwl-tb-save'); if (s) s.addEventListener('click', () => saveTrade(id, cont)); });
                 return;
             }
             saveTrade(id, cont);
