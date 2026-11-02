@@ -21,7 +21,7 @@ const CRIMES_DATA = [
     { id: 'shoplifting', name: 'Shoplifting', icon: '🛍️', category: 'Theft', nerveCost: 4, guideStatus: 'ready' },
     { id: 'pickpocketing', name: 'Pickpocketing', icon: '🤏', category: 'Theft', nerveCost: 5, guideStatus: 'ready' },
     { id: 'cardskimming', name: 'Card Skimming', icon: '💳', category: 'Fraud', nerveCost: null, guideStatus: 'ready' },
-    { id: 'burglary', name: 'Burglary', icon: '🏚️', category: 'Theft', nerveCost: null, guideStatus: 'pending' },
+    { id: 'burglary', name: 'Burglary', icon: '🏚️', category: 'Theft', nerveCost: null, guideStatus: 'ready' },
     { id: 'hustling', name: 'Hustling', icon: '🎭', category: null, nerveCost: null, guideStatus: 'pending' },
     { id: 'disposal', name: 'Disposal', icon: '🗑️', category: 'Illicit Services', nerveCost: null, guideStatus: 'pending' },
     { id: 'cracking', name: 'Cracking', icon: '💻', category: null, nerveCost: null, guideStatus: 'pending' },
@@ -1009,6 +1009,156 @@ const CARD_SKIMMING = {
     notes: 'All attempts count as Fraud crimes, shared with Hustling and Scamming. Source: the community in-depth guide on the Torn forum by Emforus (updated July 2026). Location rates are measured by hand over 12 hours or more and are rough; the guide notes that the Bank Branch safety is not confirmed. Only the install cost (6 nerve) is stated, so no nerve cost per attempt is shown.',
 };
 
+// ---- Burglary: from the community in-depth guide on the Torn forum (Emforus, updated 2025), written up in our own words ----
+const BURGLARY = {
+    summary: 'The sixth crime released in Crimes 2.0, in three steps: scout a location type to find a target, case it to build confidence, then burgle it. There are 34 targets in three location types (residential, commercial, industrial), each with its own unique find. Burgling is where the crime skill comes from. It is the most nerve-hungry crime so far: about 16,000 nerve or more to reach CS100.',
+    estimatedNerveToCS100: { min: 16000, max: 16000 }, // "at the very least 16k nerve" per the guide
+    locationsLabel: 'Location types',
+    cycleLabel: '📍 What to expect',
+    highlightLabel: '🎯 Targets (key item, safety, casings needed)',
+    uniqueLocationLabel: 'Target',
+    keyItems: [
+        { name: 'Flashlight', effect: 'The enhancer: +5% crime experience and crime skill gains, and it unlocks new, usually more valuable outcomes. All the unique finds need it (and so does the key item of the target).', source: 'A unique find shoplifting Bits \'n\' Bobs, and burgling the Tool Shed with lockpicks' },
+        { name: 'Jemmy', effect: 'Unlocks outcomes and uniques in places that need forcing open, prying or wrenching.', source: 'Shoplifting Bits \'n\' Bobs, burgling the Mobile Home' },
+        { name: 'Rope', effect: 'For climbing up or down at some targets.', source: 'Searching the Junkyard and the Beach, casing the Mobile Home, burgling the Tool Shed and the Beach Hut' },
+        { name: 'Credit card', effect: 'Shimmies open some locked doors. Very common.', source: 'Inside billfolds, old wallets, cardholders and many other places' },
+        { name: 'Lockpicks', effect: 'The standard tool: opens locks of any kind.', source: 'Burgling the Tool Shed, the Cottage and the Secluded Cabin' },
+        { name: 'Window breaker', effect: 'Opens windows: most houses can be entered with it.', source: 'Burgling the Beach Hut and the Lake House' },
+        { name: 'Skeleton key', effect: 'Opens the more advanced locations easily.', source: 'Burgling the Self-Storage Facility (commercial) or the Shipyard (industrial)' },
+    ],
+    locations: [
+        {
+            name: 'Residential targets', unlock: null,
+            cycle: [
+                'Mostly safe and easy to case: usually 1 to 3 attempts to reach enough confidence',
+                'Loot is mostly junk, sometimes drugs like Xanax and premium consumables',
+                'Difficulty rises as you unlock more: the early ones are easy (except the Apartment), the later ones need several casings',
+                'Recommended crime skill: 1 to 70',
+            ],
+            highlights: [
+                'Tool Shed (lockpicks, SAFE): case once. Best place for lockpicks; unique: Flashlight',
+                'Beach Hut (jemmy, SAFE): case once. The earliest window breaker; unique: money (about $160,000 to $400,000)',
+                'Bungalow (window breaker, moderately unsafe): case once or twice',
+                'Mobile Home (rope, SAFE): case once. Can give the jemmy',
+                'Cottage, CS3 (window breaker, moderately unsafe): case twice. Lockpicks and handcuffs',
+                'Apartment, CS14 (credit card, RISKY): avoid or case 4 to 6 times. Forgery-related loot and 2N alcohol',
+                'Suburban Home, CS22 (window breaker, moderately unsafe): case once or twice. Many crime tools',
+                'Secluded Cabin, CS30 (jemmy, SAFE): case once. Weapons, gear and tools for upcoming crimes',
+                'Farmhouse, CS38 (window breaker, UNSAFE): case twice or three times. Explosives and razor wire',
+                'Lake House, CS46 (jemmy, UNSAFE): case 3 or more times. Window breaker and very lucrative premium booze',
+                'Luxury Villa, CS69 (window breaker, RISKY): case 4 or more. Money, Xanax, premium booze, melatonin',
+                'Manor House, CS100 (lockpicks, RISKY): case 4 to 6 times. Special ammunition',
+            ],
+            tip: 'The way to level fast: safe targets that need few casings. Around CS80 residential gets harder while easier industrial targets appear.',
+        },
+        {
+            name: 'Commercial targets', unlock: 'CS25',
+            cycle: [
+                'Somewhat harder: several casings to build confidence',
+                'Loot is clearly better than residential: premium consumables and crime components',
+                'The first ones are a bit difficult, the last two are very difficult, those in between are easy',
+                'Recommended crime skill: 45 to 80',
+            ],
+            highlights: [
+                'Funeral Directors (lockpicks, UNSAFE): case twice or three times. Components for future crimes, a lucrative small suitcase',
+                'Self-Storage Facility (skeleton key, DANGEROUS): case 6 or more. Very good loot, and the Skeleton Key and Paint Mask',
+                'Market (jemmy, RISKY): case 4 to 6 times. Premium consumables, some crime components',
+                'Postal Office (credit card, RISKY): case 5 or more. Mostly lackluster loot',
+                'Cleaning Agency, CS27 (jemmy, SAFE): case twice. Lye, ammonia, ladder, lockpicks',
+                'Barbershop, CS35 (lockpicks, moderately unsafe): case once or twice. Mostly junk; unique: Cut-Throat Razor',
+                'Liquor Store, CS43 (skeleton key, moderately unsafe): case twice. Premium alcohol up to 4N, sometimes Crocozade',
+                'Dentist\'s Office, CS47 (credit card, SAFE): case once or twice. Arguably the best commercial target, with several lucrative finds',
+                'Chiropractors, CS56 (window breaker, moderately unsafe): case once or twice. A suitcase, Ketamine, Morphine',
+                'Recruitment Agency, CS77 (window breaker, RISKY): case 4 to 6 times',
+                'Advertising Agency, CS100 (skeleton key, RISKY): case 4 to 6 times. Money finds are common',
+            ],
+            tip: 'The Dentist\'s Office is the best all-round pick. The Barbershop gives the Cut-Throat Razor (pickpocketing enhancer).',
+        },
+        {
+            name: 'Industrial targets', unlock: 'CS50',
+            cycle: [
+                'Extremely difficult early on: a lot of casings. The curve is the opposite of residential: later targets are easier',
+                'Loot is the best: supply packs, equipment and many rare crime components',
+                'Recommended crime skill: 85 and up',
+            ],
+            highlights: [
+                'Dockside Warehouse (lockpicks, DANGEROUS): case 7 or more. Weapons, armour, temporaries, special ammo',
+                'Farm Storage Unit (jemmy, RISKY): case 4 to 6 times. Fertiliser and explosive components, a crucible',
+                'Shipyard (jemmy, VERY DANGEROUS): case 8 or more. Skeleton key, brass ingots, C4',
+                'Printing Works, CS52 (window breaker, RISKY): case 4 to 6 times. Forgery components, Erotic DVDs',
+                'Brewery, CS60 (rope, VERY DANGEROUS): avoid, or case 8 or more. Very lucrative premium alcohol (2N to 4N)',
+                'Truckyard, CS68 (skeleton key, moderately unsafe): case once or twice. Ammo, tools, temporaries',
+                'Old Factory, CS76 (window breaker, SAFE): case once, rarely twice. Brass ingots, dynamite',
+                'Slaughterhouse, CS84 (credit card, SAFE): case once or twice. Medical items and components',
+                'Paper Mill, CS92 (skeleton key, UNSAFE): case twice or three times. Stationery, skeleton key; unique: money (about $210,000 to $224,000)',
+                'Foundry, CS96 (jemmy, moderately unsafe): case twice, rarely 3 times. Materials for future crimes',
+                'Fertilizer Plant, CS100 (lockpicks, UNSAFE): case twice or three times. Fertiliser and explosives',
+            ],
+            tip: 'From CS80 the easy industrial targets (Old Factory, Truckyard, Slaughterhouse) are a good alternative to the harder residential ones.',
+        },
+    ],
+    dropTables: null, // the item drop tables are pictures in the guide
+    sections: [
+        { id: 'steps', label: 'Scout, case, burgle', blocks: [
+            { title: 'Scouting (4 nerve)', items: ['Finds a random target of the type you pick. It gives a steady, small amount of crime skill (about a fifth of burgling).', 'You can scout as many as you like. A scouted target disappears after 72 hours if you do not rob it.', 'Some targets only appear from a certain skill level.'] },
+            { title: 'Casing', items: ['Raises the confidence of a target. The more confidence, the better your chance. A case gives about a fifth of the skill of burgling and cannot crit.', 'Rough success rates: under 30% confidence about 70%; 30 to 40% about 85%; 40 to 60% about 90%; 100% about 98.5%.', '50% is the sweet spot: more confidence helps less. Skill makes each casing give more confidence.', 'Never rob a target at zero confidence. Maxing confidence can cost a dozen casings, which is often wasted nerve.', 'A failed casing can make the target "Too dangerous" for 20 to 60 minutes. Rarely the status becomes "All clear", which makes the next burglary within the window a sure success.'] },
+            { title: 'Burgling', items: ['The crime itself, and the main source of crime skill: about five times a scout or case, in every location.', 'The recommended item (the flashlight) unlocks new outcomes and all the unique finds.', 'After a failure the target may be unavailable 20 to 60 minutes, nothing may happen, or the target disappears. Casing mostly causes "too dangerous", burgling mostly loses the target. Failures do not change confidence.', 'Critical failures only happen when burgling: lose life, go to jail, or lose the key item of that target. More likely at dangerous targets and with low confidence. Losing the flashlight was never seen.'] },
+        ] },
+        { id: 'path', label: 'Path to CS100', blocks: [
+            { title: 'What it takes', items: ['At least about 1,000 scouts, 1,100 to 1,200 burglaries and 2,000 to 3,000 casings: at least 16,000 nerve, about twice what Graffiti needs.', 'With natural regeneration and the daily refill only, about 40 to 50 days.'] },
+            { title: 'How to cut the nerve', items: ['Scout residential only: until the Luxury Villa the targets need few casings to reach 50% confidence.', 'Around CS80 the harder residential targets are worth swapping for the easier industrial ones.', 'Always case to a reasonable confidence: the nerve saved by not casing is lost to failures and crits.', 'Burgle everything: it is more efficient to case more and rob a target than to let it time out. Do scout the type where you know the safer targets are.'] },
+            { title: 'Time of day (casing only, small effect)', items: ['Residential tends to be best from 9 to 5 while people work, commercial from 6 to 12 in the evening, industrial at night (a doubtful finding). The gain is only about 1 to 2%.'] },
+        ] },
+    ],
+    tips: [
+        'The only way to raise skill reliably is burgling, so look for targets that need as few casings as possible: residential early on.',
+        'Case every target at least once, maybe twice. Avoid dangerous targets until your skill is higher.',
+        'Safe, good-loot targets: Tool Shed, Beach Hut, Secluded Cabin, Dentist\'s Office, Old Factory, Slaughterhouse.',
+        'Key to the City needs every one of the 34 targets burgled at least once, and three of them only open at CS100, so it comes after maxing your skill.',
+    ],
+    uniques: [
+        { location: 'Tool Shed', name: 'Flashlight', skill: 'None', other: 'Residential. Key item: lockpicks. Safe' },
+        { location: 'Beach Hut', name: 'Money (about $160,000 to $400,000)', skill: 'None', other: 'Residential. Key item: jemmy. Safe' },
+        { location: 'Bungalow', name: 'Soap on a Rope, Xanax, Vitamins, Toothbrush', skill: 'None', other: 'Residential. Key item: window breaker. Moderately unsafe' },
+        { location: 'Mobile Home', name: 'Claymore Mine, Luger, WWII Helmet', skill: 'None', other: 'Residential. Key item: rope. Safe' },
+        { location: 'Cottage', name: 'Jacket, Lawyer\'s Business Card', skill: 'Level 3', other: 'Residential. Key item: window breaker. Moderately unsafe' },
+        { location: 'Apartment', name: 'Personal Computer, High-Speed Drive, 250 Blank DVDs', skill: 'Level 14', other: 'Residential. Key item: credit card. Risky' },
+        { location: 'Suburban Home', name: 'Lottery Voucher', skill: 'Level 22', other: 'Residential. Key item: window breaker. Moderately unsafe' },
+        { location: 'Secluded Cabin', name: 'Pack of Cuban Cigars, Windproof Lighter, Cigar Cutter', skill: 'Level 30', other: 'Residential. Key item: jemmy. Safe' },
+        { location: 'Farmhouse', name: 'Turkey Baster, Bull Semen', skill: 'Level 38', other: 'Residential. Key item: window breaker. Unsafe' },
+        { location: 'Lake House', name: '2 Boxes of Medical Supplies', skill: 'Level 46', other: 'Residential. Key item: jemmy. Unsafe' },
+        { location: 'Luxury Villa', name: 'Persian Rug', skill: 'Level 69', other: 'Residential. Key item: window breaker. Risky' },
+        { location: 'Manor House', name: 'Chandelier', skill: 'Level 100', other: 'Residential. Key item: lockpicks. Risky' },
+        { location: 'Funeral Directors', name: 'Empty Blood Bag, Bone Saw, Bone, Cassock', skill: 'None', other: 'Commercial (CS25). Key item: lockpicks. Unsafe' },
+        { location: 'Self-Storage Facility', name: '4 Opium', skill: 'None', other: 'Commercial (CS25). Key item: skeleton key. Dangerous' },
+        { location: 'Market', name: 'Fanny Pack', skill: 'None', other: 'Commercial (CS25). Key item: jemmy. Risky' },
+        { location: 'Postal Office', name: 'Stamp Collection', skill: 'None', other: 'Commercial (CS25). Key item: credit card. Risky' },
+        { location: 'Cleaning Agency', name: 'Tumble Dryer', skill: 'Level 27', other: 'Commercial. Key item: jemmy. Safe' },
+        { location: 'Barbershop', name: 'Cut-Throat Razor', skill: 'Level 35', other: 'Commercial. Key item: lockpicks. Moderately unsafe' },
+        { location: 'Liquor Store', name: 'Six-Pack of Alcohol', skill: 'Level 43', other: 'Commercial. Key item: skeleton key. Moderately unsafe' },
+        { location: 'Dentist\'s Office', name: 'Latex Gloves, 6 Golden Teeth', skill: 'Level 47', other: 'Commercial. Key item: credit card. Safe' },
+        { location: 'Chiropractors', name: '3 Xanax', skill: 'Level 56', other: 'Commercial. Key item: window breaker. Moderately unsafe' },
+        { location: 'Recruitment Agency', name: 'Jade Buddha, Bowling Trophy', skill: 'Level 77', other: 'Commercial. Key item: window breaker. Risky' },
+        { location: 'Advertising Agency', name: '2 Cans of Damp Valley', skill: 'Level 100', other: 'Commercial. Key item: skeleton key. Risky' },
+        { location: 'Dockside Warehouse', name: 'Erotic DVD', skill: 'None', other: 'Industrial (CS50). Key item: lockpicks. Dangerous' },
+        { location: 'Farm Storage Unit', name: 'Cattle Prod', skill: 'None', other: 'Industrial (CS50). Key item: jemmy. Risky' },
+        { location: 'Shipyard', name: 'Anchor', skill: 'None', other: 'Industrial (CS50). Key item: jemmy. Very dangerous' },
+        { location: 'Printing Works', name: 'Hot Foil Stamper', skill: 'Level 52', other: 'Industrial. Key item: window breaker. Risky' },
+        { location: 'Brewery', name: 'Empty Box, 6 Bottles of Stinky Swamp Punch', skill: 'Level 60', other: 'Industrial. Key item: rope. Very dangerous' },
+        { location: 'Truckyard', name: 'Can of Munster', skill: 'Level 68', other: 'Industrial. Key item: skeleton key. Moderately unsafe' },
+        { location: 'Old Factory', name: 'Empty Box, Small Explosive Device', skill: 'Level 76', other: 'Industrial. Key item: window breaker. Safe' },
+        { location: 'Slaughterhouse', name: 'Bloody Apron', skill: 'Level 84', other: 'Industrial. Key item: credit card. Safe' },
+        { location: 'Paper Mill', name: 'Money (about $210,000 to $224,000)', skill: 'Level 92', other: 'Industrial. Key item: skeleton key. Unsafe' },
+        { location: 'Foundry', name: 'Yasukuni Sword', skill: 'Level 96', other: 'Industrial. Key item: jemmy. Moderately unsafe' },
+        { location: 'Fertilizer Plant', name: 'Truck Nuts', skill: 'Level 100', other: 'Industrial. Key item: lockpicks. Unsafe' },
+    ],
+    merits: [
+        { name: 'Breaking and Entering', rarity: null, how: 'Reach crime skill 100 in Burglary.' },
+        { name: 'Key to the City', rarity: null, how: 'Burgle every one of the 34 targets at least once. Three of them only open at CS100 (Manor House, Advertising Agency, Fertilizer Plant), so you need max skill first.' },
+    ],
+    notes: 'All attempts count as Theft crimes. Source: the community in-depth guide on the Torn forum by Emforus (updated 2025; all 34 uniques identified). The nerve for casing and burgling is not stated there (scouting is 4 nerve), so no nerve cost per attempt is shown; the 16,000 nerve is the guide\'s minimum for CS100. The risk and drop-table pictures of the guide are not included.',
+};
+
 function cgAttachData(crime) {
     if (crime.id === 'searchforcash') return { ...crime, data: SEARCH_FOR_CASH };
     if (crime.id === 'bootlegging') return { ...crime, data: BOOTLEGGING };
@@ -1016,6 +1166,7 @@ function cgAttachData(crime) {
     if (crime.id === 'shoplifting') return { ...crime, data: SHOPLIFTING };
     if (crime.id === 'pickpocketing') return { ...crime, data: PICKPOCKETING };
     if (crime.id === 'cardskimming') return { ...crime, data: CARD_SKIMMING };
+    if (crime.id === 'burglary') return { ...crime, data: BURGLARY };
     return crime;
 }
 
@@ -1117,7 +1268,7 @@ function renderCrimeTabBody(crime) {
                     <div><div style="font-size:11px;color:var(--muted);">Honor bars</div><div style="font-weight:700;">${d.merits.length}</div></div>
                     <div><div style="font-size:11px;color:var(--muted);">Est. to CS100</div><div style="font-weight:700;">
                         ${d.estimatedNerveToCS100
-                            ? `${d.estimatedNerveToCS100.min.toLocaleString()}–${d.estimatedNerveToCS100.max.toLocaleString()} nerve${crimesEst ? ` (~${crimesEst.min.toLocaleString()}–${crimesEst.max.toLocaleString()} crimes)` : ''}`
+                            ? `${d.estimatedNerveToCS100.min === d.estimatedNerveToCS100.max ? "at least " + d.estimatedNerveToCS100.min.toLocaleString() : d.estimatedNerveToCS100.min.toLocaleString() + "–" + d.estimatedNerveToCS100.max.toLocaleString()} nerve${crimesEst ? ` (~${crimesEst.min.toLocaleString()}–${crimesEst.max.toLocaleString()} crimes)` : ''}`
                             : '<span style="color:var(--muted);font-weight:400;">not specified in guide yet</span>'}
                     </div></div>
                 </div>
