@@ -25,7 +25,7 @@ const CRIMES_DATA = [
     { id: 'hustling', name: 'Hustling', icon: '🎭', category: 'Fraud', nerveCost: null, guideStatus: 'ready' },
     { id: 'disposal', name: 'Disposal', icon: '🗑️', category: 'Illicit Services', nerveCost: null, guideStatus: 'ready' },
     { id: 'cracking', name: 'Cracking', icon: '💻', category: 'Cybercrime', nerveCost: null, guideStatus: 'ready' },
-    { id: 'forgery', name: 'Forgery', icon: '📄', category: null, nerveCost: null, guideStatus: 'pending' },
+    { id: 'forgery', name: 'Forgery', icon: '📄', category: 'Counterfeiting', nerveCost: 5, guideStatus: 'ready' },
     { id: 'scamming', name: 'Scamming', icon: '☎️', category: null, nerveCost: null, guideStatus: 'pending' },
     { id: 'arson', name: 'Arson', icon: '🔥', category: null, nerveCost: null, guideStatus: 'pending' },
 ];
@@ -1468,6 +1468,135 @@ const CRACKING = {
     notes: 'All attempts count as Cybercrime offences (like Computer crimes in 1.0). Source: the community in-depth guide on the Torn forum by Emforus. The nerve for cracking itself is not given there (about two thirds of the 7 of a brute-force), so no nerve cost is shown. The guide\'s recommended rig layouts and target tables are pictures or a separate post and are not included. The Overclocked honor bar comes from the Torn wiki honor list, not from the forum guide.',
 };
 
+// ---- Forgery: from the community in-depth guide on the Torn forum (Emforus, updated 2026), written up in our own words ----
+const FORGERY = {
+    summary: 'A counterfeiting crime where you pick one of 14 projects and work through its steps (4 to 12, each 5 nerve) to fake a document or item. Every step gives the same crime skill, only the last step has a bonus. It uses the most materials of any crime, and a failure uses up the consumables of that step. Hard to level fast, because critical failures set a project back.',
+    estimatedNerveToCS100: null, // the guide gives no total
+    locationsLabel: 'Projects',
+    cycleLabel: '📋 What it needs',
+    highlightLabel: '🛡️ Safety and value',
+    uniqueLocationLabel: 'Project',
+    keyItems: [
+        { name: 'Magnifying Glass', effect: 'The enhancer: +5% crime experience and crime skill gains. Other effects are unknown.', source: 'A unique find shoplifting the Jewelry Store (with all security active)' },
+        { name: 'Tools (not used up)', effect: 'Card programmer, crucible, double cut file, embosser, fountain pen, grinding stone, graver, hammer, hand drill, hot foil stamper, lump of coal, perforator, permanent marker, a police badge, polishing pad, printer, sand, scalpel, scissors, sewing kit, a skeleton key, thimble, typewriter, wax seal stamp. Each project needs some of them.', source: 'The forum guide links a public spreadsheet of where to find every item. Most come from burgling industrial targets, city stores, overseas, or unique finds in other crimes' },
+        { name: 'Materials (used up a bit at a time)', effect: 'Adhesive plastic, PVC cards, bond paper, cardstock, toner, aluminium plate, bank statement, blowtorch, bonded latex, brass ingot, candle, certificate seal, credit card, crushed enamel, glow stick, glue, inkwell, lanyard, medical bill, spray paint. Many last for 100 uses.', source: 'The same spreadsheet and places as the tools' },
+    ],
+    locations: [
+        {
+            name: 'Driver\'s License', unlock: null,
+            cycle: ['4 steps. Tools: PC or laptop, printer, scissors. Materials: a blank PVC card and adhesive plastic (1 in 100 each)', 'Completion bonus: 200%. Safety: SAFE'],
+            highlights: ['The most basic project and the safest. Minimal material cost, and a sale value of about $5,000', 'It crits mostly in the last step'],
+            tip: 'Can be used all the way to CS100 with very few critical failures.',
+        },
+        {
+            name: 'Parking Permit', unlock: null,
+            cycle: ['4 steps. Tools: PC or laptop, printer, scissors. Materials: cardstock and adhesive plastic (1 in 100 each)', 'Completion bonus: 200%. Safety: SAFE'],
+            highlights: ['Remarkably safe, a little more profit than the licence', 'Crits often in the second-to-last step, sometimes the last'],
+            tip: 'Arguably better than the Driver\'s License for early crime skill.',
+        },
+        {
+            name: 'Concert Ticket', unlock: null,
+            cycle: ['4 steps. Tools: PC or laptop, printer, scissors, perforator. Material: cardstock (1 in 100)', 'Completion bonus: 200%. Safety: moderately unsafe'],
+            highlights: ['Crits fairly often in the second-to-last step, sometimes the last', 'The value is not much better'],
+            tip: 'Better avoided.',
+        },
+        {
+            name: 'License Plate', unlock: 'CS25',
+            cycle: ['6 steps. Tools: embosser, lump of coal, scissors, hand drill, permanent marker. Materials: aluminium plate (1), white spray paint (5%), bond paper, black spray paint (2%)', 'Completion bonus: 400%. Safety: RISKY'],
+            highlights: ['Step 4 (stencil cutting) crits about one in three attempts', 'Cheap materials and worth a good price; likely needed for a future crime', 'Gets safer: unsafe at CS75, moderately unsafe at CS100'],
+            tip: 'Ten of these give the Assembly Line honor bar: step 2 (background painting) has a 1 hour cooldown.',
+        },
+        {
+            name: 'Birth Certificate', unlock: 'CS25',
+            cycle: ['5 steps. Tools: PC or laptop, printer, typewriter, wax seal stamp, fountain pen. Materials: bond paper, a candle, ink', 'Completion bonus: 300%. Safety: UNSAFE'],
+            highlights: ['Surprisingly safe except step 4 (sealing): fails 1 in 4, crits 1 in 20', 'Safer with skill: moderately unsafe at CS75, safe at CS100', 'The most financially viable if you already own the wax seal stamp'],
+            tip: 'Surprisingly good for crime skill.',
+        },
+        {
+            name: 'Diploma', unlock: 'CS25',
+            cycle: ['4 steps. Tools: PC or laptop, printer, fountain pen. Materials: bond paper, a certificate seal (1), glue (20%), ink', 'Completion bonus: 250%. Safety: moderately unsafe'],
+            highlights: ['The last two steps are equally risky: about one failure in 30', 'Certificate seals are pricey, so it can make a loss'],
+            tip: 'The bonus makes it fairly good for crime skill and the crit rate is not bad.',
+        },
+        {
+            name: 'Skeleton Key', unlock: 'CS50',
+            cycle: ['4 steps. Tools: a skeleton key, sand, crucible, double cut file, hand drill, polishing pad. Material: a brass ingot (1)', 'Completion bonus: 300%. Safety: RISKY'],
+            highlights: ['Few steps, but step 3 is risky', 'Sand limits you the most. It only uses brass ingots, which are plentiful, so it is profitable'],
+            tip: 'The way to get skeleton keys.',
+        },
+        {
+            name: 'Prescription', unlock: 'CS50',
+            cycle: ['4 steps. Tools: PC or laptop, printer, typewriter, fountain pen. Materials: a medical bill, bond paper, ink', 'Completion bonus: 250%. Safety: SAFE'],
+            highlights: ['No risky steps: arguably the safest with the Driver\'s License', 'Quite profitable when sold to the city, more so since medical bills turn up in wallets'],
+            tip: 'A good safe choice from CS50.',
+        },
+        {
+            name: 'Travel Visa', unlock: 'CS50',
+            cycle: ['5 steps. Tools: PC or laptop, printer, embosser, scissors. Materials: bond paper, a glow stick, adhesive plastic', 'Completion bonus: 350%. Safety: UNSAFE'],
+            highlights: ['Step 3 is risky, the rest extremely safe. The most profitable in this bracket, about 4,000 per nerve', 'Safer with skill: moderately unsafe at CS75', 'The best crime skill per nerve'],
+            tip: 'The author\'s pick from CS50 to CS100.',
+        },
+        {
+            name: 'ID Badge', unlock: 'CS50',
+            cycle: ['5 steps. Tools: PC or laptop, printer, scalpel, graver, card programmer. Materials: PVC cards, a credit card, glue (20%), a lanyard', 'Completion bonus: 350%. Safety: UNSAFE'],
+            highlights: ['Steps 3, 4 and 5 are somewhat risky', 'Used in the Organized Crimes 2.0 crimes'],
+            tip: 'Make them when an OC needs them.',
+        },
+        {
+            name: 'Bank Check', unlock: 'CS75',
+            cycle: ['6 steps. Tools: PC or laptop, printer, scissors, embosser, perforator, fountain pen. Materials: a bank statement, bond paper, ink', 'Completion bonus: 350%. Safety: UNSAFE'],
+            highlights: ['Step 4 is dangerous, and steps 3 and 5 are not safe either', 'Very good for progress and profit at this level, more so since checks turn up in wallets'],
+            tip: 'Fine once your skill is higher.',
+        },
+        {
+            name: 'Police Badge', unlock: 'CS75',
+            cycle: ['7 steps. Tools: a police badge, sand, crucible, double cut file, graver, hand drill, grinding stone, polishing pad. Materials: a brass ingot, crushed enamel (4%), a blowtorch (25%)', 'Completion bonus: 450%. Safety: RISKY'],
+            highlights: ['Step 4 is dangerous and step 6 risky', 'Poor for progress and low value for the effort, but may be used in a future crime'],
+            tip: 'Only if you need one.',
+        },
+        {
+            name: 'ATM Key', unlock: 'CS75',
+            cycle: ['6 steps. Tools: thimble, sand, crucible, hammer, double cut file, graver, hand drill, polishing pad. Materials: a brass ingot and a blowtorch (25%)', 'Completion bonus: unknown. Safety: RISKY'],
+            highlights: ['Steps 3 and 5 fail a lot, but the low material cost makes up for it', 'Needs sand, which is a pain to get'],
+            tip: 'Only if you need one.',
+        },
+        {
+            name: 'Passport', unlock: 'CS75',
+            cycle: ['12 steps. Tools: scissors, embosser, hot foil stamper, PC or laptop, printer, sewing kit. Materials: cardstock, bonded latex (1), glue (40%), bond paper, adhesive plastic', 'Completion bonus: 750%, the highest. Safety: UNSAFE'],
+            highlights: ['Steps 3, 4, 7, 8 and 12 are dangerous or risky', 'The highest payout, about 9,000 per nerve, but bonded latex can eat the profit', 'Becomes much safer: great for crime skill per nerve from about CS85', 'Likely needed for a future crime'],
+            tip: 'Creating one gives the Papers Please honor bar.',
+        },
+    ],
+    dropTables: null,
+    sections: [
+        { id: 'steps', label: 'Steps & crits', blocks: [
+            { title: 'How a project works', items: ['Pick a project, then do its steps: 4 to 12 steps, all 5 nerve. Each step uses one or two tools or consumables, so one project can need 4 to 20 items. Get them first to keep going.', 'Risky and dangerous steps carry a warning icon and fail more often.', 'Some steps have a cooldown (printing, drying): the project waits until it is over.', 'Printers (during printing) and Sand (during mold forming and casting) are locked while in use, so you need several if you want parallel projects.'] },
+            { title: 'Crime skill', items: ['Every step gives exactly the same crime skill, whatever the project, risk, step or material. Only the last step has a bonus multiplier (200% to 750%), higher for longer projects. Normal steps count as 100%.', 'The multiplier also applies to crits, so a crit on the last step costs more skill than one during the project.'] },
+            { title: 'Failures and critical failures', items: ['A failure uses up the consumables of the step, with no other effect.', 'A critical failure usually sets the project back: a crit at the end may scrap the project (or, for documents, send you back to printing), a crit in the forging may undo one or two steps. Sometimes the tool is lost (a printer while printing, a perforator on a concert ticket).', 'There are no jail outcomes in this crime, and none are expected.'] },
+            { title: 'Skill makes it safer', items: ['Success rates rise with skill, so waiting for a higher skill before the harder projects may be better.'] },
+        ] },
+        { id: 'levelling', label: 'Levelling', blocks: [
+            { title: 'The two options (author, after prices dropped)', items: ['Option 1: Driver\'s Licenses all the way to CS100. Very few crits and almost no material cost, but more nerve overall and none of the products that crimes and OCs may need.', 'Option 2: Driver\'s Licenses until CS50, then Travel Visas to CS100 (and License Plates from CS90 if you want some for future crimes). The best mix of profit and progress without paying for Passports.', 'Driver\'s Licenses stay the best for almost the whole crime. Prescriptions or Bank Checks are good if you want components for future crimes; Travel Visas give the best progress but need a fairly expensive item each time.'] },
+            { title: 'Last step multipliers (approximate)', items: ['Driver\'s License, Parking Permit, Concert Ticket 200%', 'Diploma and Prescription 250%', 'Birth Certificate and Skeleton Key 300%', 'Travel Visa, ID Badge and Bank Check 350%', 'License Plate 400%', 'Police Badge 450%', 'Passport 750%', 'ATM Key unknown'] },
+        ] },
+    ],
+    tips: [
+        'Avoid projects with risky steps unless your skill is high. The first three projects are the safe way to level.',
+        'Safe, low-crit projects with a good last-step multiplier are the quickest way to skill.',
+        'Ten License Plates in a row give the Assembly Line honor bar: reach CS25 and the 1 hour cooldown of the background painting step does the rest.',
+        'Passports become great from about CS85 and give the Papers Please honor bar.',
+        'The crime shares the Counterfeiting offences medals with Bootlegging, which is much better for grinding them.',
+    ],
+    uniques: [],
+    merits: [
+        { name: 'Documented Success', rarity: null, how: 'Reach crime skill 100 in Forgery.' },
+        { name: 'Assembly Line', rarity: null, how: 'Have ten projects of the same type in cooldown at the same time. Printing does not count; the easiest is ten License Plates (step 2 has a 1 hour cooldown) from CS25.' },
+        { name: 'Papers Please', rarity: null, how: 'Create a passport (listed on Torn\'s honor list; the forum guide does not mention it).' },
+    ],
+    uniqueCount: 0,
+    notes: 'All attempts count as Counterfeiting crimes. Source: the community in-depth guide on the Torn forum by Emforus (updated 2026). Projects, tools and materials are as the guide lists them; the guide links a spreadsheet with where to find every item, and its risk and progression tables are pictures, none of which are included. The Papers Please honor bar comes from the Torn honor list.',
+};
+
 function cgAttachData(crime) {
     if (crime.id === 'searchforcash') return { ...crime, data: SEARCH_FOR_CASH };
     if (crime.id === 'bootlegging') return { ...crime, data: BOOTLEGGING };
@@ -1479,6 +1608,7 @@ function cgAttachData(crime) {
     if (crime.id === 'hustling') return { ...crime, data: HUSTLING };
     if (crime.id === 'disposal') return { ...crime, data: DISPOSAL };
     if (crime.id === 'cracking') return { ...crime, data: CRACKING };
+    if (crime.id === 'forgery') return { ...crime, data: FORGERY };
     return crime;
 }
 
