@@ -29,9 +29,9 @@ async function loadMentoring() {
         mtData = r;
         st.textContent = ''; st.className = 'status';
         // showing up in the menu at all already means you're in a pair (or a leader) — kept as a safety net for a direct link
-        $('nav-mentoring').style.display = (r.isMentor || r.isPupil || r.allPairs !== undefined) ? '' : 'none';
         $('mt-empty').style.display = (r.pairs.length || r.allPairs?.length) ? 'none' : 'block';
         renderMentoringPairs();
+        renderMtJoin(); renderMtRequests(); loadMtCandidates();
         $('mt-oversight-wrap').style.display = r.allPairs !== undefined ? 'block' : 'none';
         if (r.allPairs !== undefined) renderMentoringOversight();
         const allPairIds = [...r.pairs.map(p => p.pairId), ...(r.allPairs || []).map(p => p.pairId)];
@@ -159,6 +159,9 @@ const mtaMentorAccessors = { name: ([id, m]) => (m.name || `#${id}`).toLowerCase
 let mtaPupilSort = { key: null, dir: 'asc' };
 const mtaPupilAccessors = { name: ([id, p]) => (p.name || `#${id}`).toLowerCase(), mentor: ([, p]) => (mtaProgram.mentors[p.mentorId]?.name || '').toLowerCase() };
 function renderMta() {
+    { const bar = $('mta-open-bar'); if (bar) { const open = mtaProgram.open === true;
+        bar.innerHTML = `<b>Self sign-up for members is ` + (open ? '<span style="color:var(--reagent);">OPEN</span>' : '<span style="color:var(--danger);">CLOSED</span>') + `.</b> <span style="color:var(--muted);">` + (open ? 'Members can sign up, tick their online hours and ask each other.' : 'Only leaders can use it, to test it. Open it when the newsletter goes out.') + `</span> <button class="small" id="mta-open-toggle">` + (open ? 'Close it' : 'Open it for members') + `</button>`;
+        $('mta-open-toggle').onclick = async () => { const r = await mtFetch({ action: 'mentor-open-set', open: !open }); if (r.error) { toast(r.error); return; } mtaProgram.open = r.open; toast(r.open ? 'Sign-up is open for members' : 'Sign-up is closed'); renderMta(); }; } }
     $('mta-oh-bar').innerHTML = `<label style="display:inline-flex;gap:6px;align-items:center;cursor:pointer;"><input type="checkbox" id="mta-oh-tz" style="width:auto;" ${ohLocal && ohOffsetOk() ? 'checked' : ''} ${ohOffsetOk() ? '' : 'disabled'}> Show online hours in my own time zone</label> <span>— hours are members\x27 own, set on their dashboard (${Object.keys(mtaHours).length} of ${mtaRoster.length} have set them). Shown in ${ohZone()}.</span>`;
     $('mta-oh-tz').addEventListener('change', () => { ohLocal = $('mta-oh-tz').checked; try { localStorage.setItem(OH_TZ_KEY, ohLocal ? '1' : '0'); } catch (e) { /* not critical */ } renderMta(); });
     const mentors = sortRows(Object.entries(mtaProgram.mentors), mtaMentorSort, mtaMentorAccessors);
@@ -252,14 +255,107 @@ $('mta-p-add').addEventListener('click', async () => {
     toast('Pupil added');
 });
 
-// A member who is a mentor or pupil gets the 🎓 Mentoring nav item revealed, the same way Labs Funds reveals
-// itself to an owner — checked once at login (see core.js), cheap (one request, answered from our own database).
-async function checkMentoringAccess() {
-    try {
-        const r = await mtFetch({ action: 'mentor-my-status' });
-        const nav = document.getElementById('nav-mentoring');
-        // `allPairs` only ever comes back for a leader (see lib/mentoring.js) — so a leader gets the menu item
-        // too, purely to look in on the program, even with no pairing of their own.
-        if (nav) nav.style.display = (!r.error && (r.isMentor || r.isPupil || r.allPairs !== undefined)) ? '' : 'none';
-    } catch (e) { /* nav item just stays hidden */ }
+// The 🎓 Mentoring menu item is there for everybody now: anyone can sign up (as a pupil, or as a mentor from Lab Rat up), so no request is needed at login any more.
+function checkMentoringAccess() {
+    const nav = document.getElementById('nav-mentoring');
+    if (nav) nav.style.display = '';
+}
+
+// ============================================================================================
+// ==========  Self service: sign up, see who fits by online hours, ask, accept or decline  ===========
+// ============================================================================================
+async function mtDo(body, okText) {
+    const r = await mtFetch(body);
+    if (r.error) { toast(r.error); return false; }
+    if (okText) toast(okText);
+    await loadMentoring();
+    return true;
+}
+
+function renderMtJoin() {
+    const el = $('mt-join'), d = mtData;
+    const isLeaderView = d.allPairs !== undefined;
+    if (!d.signupOpen && !isLeaderView) { // the leaders open the sign-up with the newsletter: until then members only see this
+        el.innerHTML = '<h3 style="margin-top:0;">🎓 Mentoring sign-up opens soon</h3><p style="margin:0;font-size:13px;color:var(--muted);">You will be able to sign up as a pupil or as a mentor here, tick your online hours and ask someone who fits. Watch the next newsletter.</p>';
+        return;
+    }
+    if (!d.signupOpen) el.dataset.test = '1';
+    const waiting = d.myMentor && !d.myMentor.mentorId;
+    if (d.isMentor) {
+        const p = d.myMentorProfile || { capacity: d.capacity || 1, free: 0, note: '' };
+        el.innerHTML = `<h3 style="margin-top:0;">🎓 You are signed up as a mentor</h3>
+            <p style="margin:0 0 8px;font-size:13px;">Room for <b>${p.capacity}</b> pupil${p.capacity === 1 ? '' : 's'} (<b>${p.free}</b> free).${p.note ? ` <span style="color:var(--muted);">“${esc(p.note)}”</span>` : ''}</p>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+                <label style="font-size:13px;">Pupils I can take <select id="mt-cap" style="width:auto;">${[1, 2, 3].map(n => `<option value="${n}" ${n === p.capacity ? 'selected' : ''}>${n}</option>`).join('')}</select></label>
+                <input type="text" id="mt-note" maxlength="200" placeholder="A line about yourself (optional)" value="${esc(p.note)}" style="flex:1;min-width:200px;">
+                <button class="small" id="mt-save-mentor">Save</button>
+                <button class="ghost small" id="mt-step-out">Step out</button>
+            </div>`;
+        $('mt-save-mentor').onclick = () => mtDo({ action: 'mentor-apply', as: 'mentor', capacity: $('mt-cap').value, note: $('mt-note').value }, 'Saved');
+        $('mt-step-out').onclick = () => { if (confirm('Step out as a mentor? Your pupils go back to waiting for a mentor.')) mtDo({ action: 'mentor-withdraw', as: 'mentor' }, 'You are no longer a mentor'); };
+    } else if (d.myMentor) {
+        el.innerHTML = `<h3 style="margin-top:0;">🎓 You are signed up for a mentor</h3>
+            <p style="margin:0 0 8px;font-size:13px;">${waiting ? 'You are waiting for a mentor: pick one below and ask them. They have to accept first.' : 'You have a mentor, see your pairing below.'}</p>
+            <input type="text" id="mt-note" maxlength="200" placeholder="What do you want help with? (optional)" value="${esc(d.myMentor.note)}" style="max-width:420px;">
+            <div style="display:flex;gap:8px;margin-top:8px;"><button class="small" id="mt-save-pupil">Save</button><button class="ghost small" id="mt-step-out">Step out</button></div>`;
+        $('mt-save-pupil').onclick = () => mtDo({ action: 'mentor-apply', as: 'pupil', note: $('mt-note').value }, 'Saved');
+        $('mt-step-out').onclick = () => { if (confirm('Step out? You would lose your pairing.')) mtDo({ action: 'mentor-withdraw', as: 'pupil' }, 'You stepped out'); };
+    } else {
+        const can = d.canMentor || { ok: false, reasons: [] };
+        el.innerHTML = `<h3 style="margin-top:0;">🎓 Join the mentoring</h3>
+            <p style="color:var(--muted);font-size:12px;margin:0 0 10px;">Tick your usual online hours above first: they decide who is suggested to you.</p>
+            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px;">
+                <div class="stat"><div class="k">I want a mentor</div>
+                    <input type="text" id="mt-note-pupil" maxlength="200" placeholder="What do you want help with? (optional)" style="margin:6px 0;">
+                    <button class="small" id="mt-join-pupil">Sign up for a mentor</button></div>
+                <div class="stat"><div class="k">I want to be a mentor</div>
+                    ${can.ok ? `<label style="font-size:13px;display:block;margin:6px 0;">Pupils I can take <select id="mt-cap" style="width:auto;">${[1, 2, 3].map(n => `<option value="${n}">${n}</option>`).join('')}</select></label>
+                    <input type="text" id="mt-note-mentor" maxlength="200" placeholder="A line about yourself (optional)" style="margin-bottom:6px;">
+                    <button class="small" id="mt-join-mentor">Sign up as a mentor</button>`
+                    : `<p style="font-size:12px;color:var(--muted);margin:6px 0 0;">${can.reasons.map(esc).join('<br>') || 'Not available yet.'}</p>`}</div>
+            </div>`;
+        $('mt-join-pupil').onclick = () => mtDo({ action: 'mentor-apply', as: 'pupil', note: $('mt-note-pupil').value }, 'You are signed up. Pick a mentor below.');
+        if (can.ok) $('mt-join-mentor').onclick = () => mtDo({ action: 'mentor-apply', as: 'mentor', capacity: $('mt-cap').value, note: $('mt-note-mentor').value }, 'You are signed up as a mentor.');
+    }
+    if (!d.signupOpen && isLeaderView) el.insertAdjacentHTML('afterbegin', '<div style="font-size:12px;color:var(--reagent);margin-bottom:6px;">Sign-up is closed for members. You can test it as a leader. Open it on the Mentoring admin page.</div>');
+}
+
+function renderMtRequests() {
+    const el = $('mt-requests'), rq = mtData.requests || { incoming: [], outgoing: [] };
+    if (!rq.incoming.length && !rq.outgoing.length) { el.style.display = 'none'; el.innerHTML = ''; return; }
+    el.style.display = 'block';
+    const roleWord = role => role === 'pupil' ? 'to be their mentor' : 'to be their pupil'; // what the asker wants from the one who is asked
+    el.innerHTML = `${rq.incoming.length ? `<h3 style="margin-top:0;color:var(--reagent);">🔔 ${rq.incoming.length} ask${rq.incoming.length === 1 ? '' : 's'} waiting for your answer</h3>
+        ${rq.incoming.map(q => `<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:8px 10px;margin-bottom:6px;border:1px solid var(--reagent);border-radius:var(--radius);">
+            <span style="flex:1;min-width:200px;"><b>${esc(q.from.name)}</b> asks you ${roleWord(q.from.role)}.</span>
+            <button class="small mt-accept" data-m="${esc(q.mentorId)}" data-p="${esc(q.pupilId)}">Accept</button>
+            <button class="ghost small mt-decline" data-m="${esc(q.mentorId)}" data-p="${esc(q.pupilId)}">Decline</button></div>`).join('')}` : ''}
+        ${rq.outgoing.length ? `<h3 style="${rq.incoming.length ? '' : 'margin-top:0;'}">Your open asks</h3>
+        ${rq.outgoing.map(q => `<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:6px 0;border-top:1px solid var(--line);">
+            <span style="flex:1;font-size:13px;">You asked <b>${esc(q.to.name)}</b> ${q.to.role === 'mentor' ? 'to be your mentor' : 'to be your pupil'}. Waiting for an answer.</span>
+            <button class="ghost small mt-cancel" data-m="${esc(q.mentorId)}" data-p="${esc(q.pupilId)}">Take back</button></div>`).join('')}` : ''}`;
+    el.querySelectorAll('.mt-accept').forEach(b => b.onclick = () => mtDo({ action: 'mentor-respond', mentorId: b.dataset.m, pupilId: b.dataset.p, accept: true }, 'Accepted. You are paired!'));
+    el.querySelectorAll('.mt-decline').forEach(b => b.onclick = () => mtDo({ action: 'mentor-respond', mentorId: b.dataset.m, pupilId: b.dataset.p, accept: false }, 'Declined'));
+    el.querySelectorAll('.mt-cancel').forEach(b => b.onclick = () => mtDo({ action: 'mentor-cancel', mentorId: b.dataset.m, pupilId: b.dataset.p }, 'Taken back'));
+    if (rq.incoming.length && !window.__mtToasted) { window.__mtToasted = true; toast(`🔔 You have ${rq.incoming.length} mentoring ask${rq.incoming.length === 1 ? '' : 's'} waiting for your answer`); }
+}
+
+async function loadMtCandidates() {
+    const el = $('mt-cands'), d = mtData;
+    if (!d.signupOpen && d.allPairs === undefined) { el.style.display = 'none'; return; }
+    const open = (d.myMentor && !d.myMentor.mentorId) || (d.isMentor && d.myMentorProfile && d.myMentorProfile.free > 0);
+    if (!open) { el.style.display = 'none'; el.innerHTML = ''; return; }
+    const r = await mtFetch({ action: 'mentor-candidates' });
+    if (r.error || !r.as) { el.style.display = 'none'; return; }
+    el.style.display = 'block';
+    const strip = c => `<span title="Green: you are both usually online. Dim: only ${esc(c.name)}." style="display:inline-flex;gap:1px;">${Array.from({ length: 24 }, (_, h) => { const mine = (r.myHours || []).includes(h), theirs = (c.hours || []).includes(h); return `<i style="width:7px;height:12px;border-radius:2px;background:${mine && theirs ? 'var(--reagent)' : theirs ? 'rgba(160,170,190,.45)' : 'var(--bench-2)'};"></i>`; }).join('')}</span>`;
+    el.innerHTML = `<h3 style="margin-top:0;">${r.as === 'pupil' ? 'Mentors you can ask' : 'Pupils waiting for a mentor'}</h3>
+        <p style="color:var(--muted);font-size:12px;margin:0 0 8px;">${r.myHours ? 'Sorted by the hours you are both usually online (TCT).' : 'Set your usual online hours above to see who is online at the same time as you.'}</p>
+        ${r.candidates.length ? r.candidates.map(c => `<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:8px 0;border-top:1px solid var(--line);">
+            <span style="flex:1;min-width:180px;"><b>${esc(c.name)}</b>${c.free ? ` <span style="color:var(--muted);font-size:12px;">· ${c.free} place${c.free === 1 ? '' : 's'} free</span>` : ''}${c.note ? `<div style="color:var(--muted);font-size:12px;">“${esc(c.note)}”</div>` : ''}</span>
+            <span style="font-size:12px;color:var(--muted);">${c.overlap == null ? (c.hours ? 'set your hours' : 'no hours set') : `${c.overlap} shared hour${c.overlap === 1 ? '' : 's'}`}</span>
+            ${strip(c)}
+            ${c.askedMe ? '<span style="font-size:12px;color:var(--reagent);">asked you: see above</span>' : c.asked ? '<span style="font-size:12px;color:var(--muted);">asked ✓</span>' : `<button class="small mt-ask" data-id="${esc(c.id)}">Ask</button>`}</div>`).join('')
+        : '<p style="color:var(--muted);font-size:13px;margin:0;">Nobody is available right now. Check back later.</p>'}`;
+    el.querySelectorAll('.mt-ask').forEach(b => b.onclick = () => mtDo({ action: 'mentor-request', targetId: b.dataset.id }, 'Asked. They have to accept.'));
 }

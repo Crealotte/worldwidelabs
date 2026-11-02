@@ -1684,6 +1684,17 @@ Cancel: ${cancelUrl}`, [], embeds, undefined, true);
                 }
             } catch (e) { /* skip */ }
 
+            // Mentoring: someone asked this member to be their mentor / pupil and the member has to answer (accept or decline): a line in the To do until they do.
+            try {
+                const prog = await mentoringLoadProgram(redis, factionId);
+                for (const r of Object.values(prog.requests || {})) {
+                    const toMe = r.by === 'pupil' ? String(r.mentorId) === String(playerId) : String(r.pupilId) === String(playerId);
+                    if (!toMe) continue;
+                    const fromName = (r.by === 'pupil' ? prog.pupils?.[r.pupilId]?.name : prog.mentors?.[r.mentorId]?.name) || r.byName || 'Someone';
+                    items.push({ id: `mentor-ask-${r.mentorId}-${r.pupilId}`, text: `Mentoring: ${fromName} asked you to be their ${r.by === 'pupil' ? 'mentor' : 'pupil'}. Open Mentoring to accept or decline.`, cta: 'Open Mentoring', url: site ? `${site}/mentoring` : null });
+                }
+            } catch (e) { /* skip */ }
+
             // A poll made on the site that is still open and this member has not voted in yet: a red, urgent line (the vote is on the dashboard). Only the newest poll is active.
             try {
                 const newest = (await redis(['LRANGE', `wwl:polls:list:${factionId}`, 0, 0])) || [];
@@ -1811,7 +1822,7 @@ Cancel: ${cancelUrl}`, [], embeds, undefined, true);
         if (action.startsWith('mentor-') || action.startsWith('pupil-')) {
             let leaderCache = null;
             const leaderLazy = async () => { if (leaderCache === null) leaderCache = await isLeader(key); return leaderCache; };
-            return res.status(200).json(await mentoringHandle(action, req.body, { redis, playerId, name: playerName, leaderLazy, factionId }));
+            return res.status(200).json(await mentoringHandle(action, req.body, { redis, playerId, name: playerName, leaderLazy, factionId, me: { position: profile.position, days: daysInFaction }, cycleDays: (() => { const p = require("../lib/memberOverview").currentPeriod(Math.floor(Date.now() / 1000)); return Math.max(14, Math.round((p.start - p.prevStart) / 86400)); })() }));
         }
         // Known bugs list — anyone can read it and press "I have this too"; only leaders change the list.
         if (action.startsWith('bugs-')) {

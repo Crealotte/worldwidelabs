@@ -503,7 +503,7 @@
         <a class="nav-item active" data-page="dashboard" href="/dashboard">Dashboard</a>
         <a class="nav-item" data-page="profile" href="/profile">Player profile</a>
         <a class="nav-item" data-page="awards" href="/awards">Awards</a>
-        <a class="nav-item" data-page="mentoring" href="/mentoring" id="nav-mentoring" style="display:none;">🎓 Mentoring</a>
+        <a class="nav-item" data-page="mentoring" href="/mentoring" id="nav-mentoring">🎓 Mentoring</a>
         <a class="nav-item" data-page="lab-notes" href="/lab-notes">🧪 Lab Notes</a>
         <a class="nav-item" data-page="company" href="/company" style="display:none;">🏢 My company</a>
         <a class="nav-item" data-page="investor" href="/investor" style="display:none;">📈 My investments</a>
@@ -1116,7 +1116,7 @@
         <section class="page" id="page-mentoring">
             <div class="lab-label">WWL·28 / for mentors &amp; pupils</div>
             <h2>🎓 Mentoring</h2>
-            <p class="pagedesc">Your mentoring pairing(s): a private chat with your mentor or pupil. Your welcome chapters and role path are on the Lab Notes page. A leader sets up who is paired with who — see them if you want to join in.</p>
+            <p class="pagedesc">Sign up for a mentor, or as a mentor (Lab Rat and up, one full newsletter cycle in the faction). Tick the hours you are usually online, see who fits, and ask them: they have to accept before you are paired. Once paired you get a private chat. Your welcome chapters and role path are on the Lab Notes page. Leaders can still pair people by hand.</p>
             <div class="status" id="mt-status"></div>
             <div class="panel" id="dash-oh-panel" style="display:none;margin-bottom:16px;">
                 <h3 style="margin-top:0;">🕐 When are you usually online?</h3>
@@ -1131,8 +1131,11 @@
                     <span id="oh-status" class="status"></span>
                 </div>
             </div>
+            <div class="panel" id="mt-join" style="margin-bottom:16px;"></div>
+            <div class="panel" id="mt-requests" style="display:none;margin-bottom:16px;"></div>
+            <div class="panel" id="mt-cands" style="display:none;margin-bottom:16px;"></div>
             <div class="panel" id="mt-empty" style="display:none;">
-                <p style="color:var(--muted);margin:0;">No pairing yet. If you are waiting for a mentor, set your usual online hours above: a leader matches you with someone who is online at the same time. Would you like to mentor someone, or get a mentor? Ask a leader.</p>
+                <p style="color:var(--muted);margin:0;">No pairing yet. Set your usual online hours above, sign up as a pupil or as a mentor, and ask someone who fits. They have to accept before you are paired.</p>
             </div>
             <div id="mt-pairs" class="wrap-text"></div>
             <div id="mt-oversight-wrap" style="display:none;">
@@ -1152,6 +1155,7 @@
             </div>
             <div id="mta-body" style="display:none;">
                 <div class="status" id="mta-status"></div>
+                <div id="mta-open-bar" class="panel" style="margin:6px 0 10px;font-size:13px;"></div>
                 <div id="mta-oh-bar" style="margin:6px 0 10px;font-size:13px;color:var(--muted);"></div>
 
                 <div class="panel">
