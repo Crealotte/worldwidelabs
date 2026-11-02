@@ -26,7 +26,7 @@ const CRIMES_DATA = [
     { id: 'disposal', name: 'Disposal', icon: '🗑️', category: 'Illicit Services', nerveCost: null, guideStatus: 'ready' },
     { id: 'cracking', name: 'Cracking', icon: '💻', category: 'Cybercrime', nerveCost: null, guideStatus: 'ready' },
     { id: 'forgery', name: 'Forgery', icon: '📄', category: 'Counterfeiting', nerveCost: 5, guideStatus: 'ready' },
-    { id: 'scamming', name: 'Scamming', icon: '☎️', category: null, nerveCost: null, guideStatus: 'pending' },
+    { id: 'scamming', name: 'Scamming', icon: '☎️', category: 'Fraud', nerveCost: null, guideStatus: 'ready' },
     { id: 'arson', name: 'Arson', icon: '🔥', category: null, nerveCost: null, guideStatus: 'pending' },
 ];
 
@@ -1597,6 +1597,110 @@ const FORGERY = {
     notes: 'All attempts count as Counterfeiting crimes. Source: the community in-depth guide on the Torn forum by Emforus (updated 2026). Projects, tools and materials are as the guide lists them; the guide links a spreadsheet with where to find every item, and its risk and progression tables are pictures, none of which are included. The Papers Please honor bar comes from the Torn honor list.',
 };
 
+// ---- Scamming: from the community in-depth guide on the Torn forum (Emforus), written up in our own words ----
+const SCAMMING = {
+    summary: 'A fraud crime in three stages: gather email addresses, send spam waves for different kinds of scam, and when someone replies, talk them into paying by moving a pip along a persuasion bar. It needs no tools or materials, only the enhancer. It takes a huge amount of nerve to max, and the persuasion step is by far the most efficient source of crime skill.',
+    estimatedNerveToCS100: null, // the guide gives no total
+    locationsLabel: 'The three stages',
+    cycleLabel: '⚙️ How it works',
+    highlightLabel: '📈 Crime skill and tips',
+    uniqueLocationLabel: 'Where',
+    keyItems: [
+        { name: 'Ergonomic Keyboard', effect: 'The enhancer: +5% crime experience and crime skill gains. Other effects are unknown.', source: 'A unique find shoplifting the Super Store (checkpoint disabled, CS60)' },
+        { name: 'Tools', effect: 'None are needed.', source: 'The newspaper says so' },
+        { name: 'Education: Psychology', effect: 'Interpersonal Dynamics shows the range a response will move the pip, as white brackets on the bar.', source: 'Psychology bachelor' },
+        { name: 'Education: Computer Science', effect: 'Web Design and Development unlocks the Phisher (slow email collector). Web Security and Penetration Testing adds data-breach outcomes when farming (700 to 1,000 addresses, about 10% of the time). Automated Data Mining & Processing unlocks the Scraper (fast collector).', source: 'Computer Science bachelor' },
+    ],
+    locations: [
+        {
+            name: 'Email farming (8 nerve)', unlock: null,
+            cycle: [
+                'You gather addresses from insecure sites or public lists. Sometimes you can pay $250 to $3,000 for 200 to 700 addresses',
+                'The Phisher and Scraper then collect by themselves: after the courses, every farming attempt has a chance to switch one on (it can take over a dozen attempts)',
+                'Phisher: 50 to 400 a day, lasts over a week. Scraper: about 1,000 a day, may break after 2 to 4 days. Both start slow, speed up a lot, then slow down; farm again to restart them',
+            ],
+            highlights: [
+                'Crime skill: 150% of one response to a target. At 8 nerve it is by far the least efficient source, but you need addresses for targets',
+                'Aim for 10,000 to 20,000 addresses early, then let the passive collectors do the rest while you scam',
+            ],
+            tip: 'Farm only as much as you need to spend your daily nerve.',
+        },
+        {
+            name: 'Spam waves', unlock: null,
+            cycle: [
+                'You send a type of spam to all your addresses and wait for replies. The type sets the payout range, the difficulty and the crime skill multiplier',
+                'The more addresses and waves, the faster and the more replies. Several waves can go out at once. Replies are queued ("Awaiting response...") and come over time',
+                'After several waves of the same type, diminishment makes extra waves count for less',
+                'Target exhaustion: after many waves the available victims run out. The only cure is waiting a day or more; extra waves seem to make it worse',
+            ],
+            highlights: [
+                'A spam wave cannot fail. Crime skill: 200% of one response, so it is better than farming, but still low per nerve',
+                'Some scams need under 10,000 addresses, the advanced ones nothing below 100,000 will get a reply',
+            ],
+            tip: 'Send waves through the day since they cannot fail.',
+        },
+        {
+            name: 'The scam (persuasion)', unlock: null,
+            cycle: [
+                'A target (mark) appears with a persuasion bar of 50 cells, and a pip that starts at position 1. You answer to move the pip, and aim to land in a green reward zone, then capitalise',
+                'The only step that can crit. Targets vanish 3 days after the last action (reading does not count; the timer starts when the target is made)',
+                'You can abandon a target by clicking its icon (swipe right on mobile)',
+            ],
+            highlights: [
+                'Crime skill: the best per nerve. A normal response counts 100%; capitalising gives 150%, 250% or 350%',
+                'Advanced scam types also multiply the skill (up to about 150% for a CS20 scam)',
+            ],
+            tip: 'Persuading, especially capitalising, is where the skill comes from. See the Persuasion bar tab.',
+        },
+    ],
+    dropTables: null,
+    sections: [
+        { id: 'bar', label: 'Persuasion bar', blocks: [
+            { title: 'The responses', items: ['Strong Forward (green arrows): moves the pip a lot to the right, to skip dangerous zones quickly.', 'Soft Forward (blue arrows): a small move right, for fine tuning.', 'Backward (red arrows): a small move left, to get into a better zone or into position.', 'Accelerate (yellow): does not move; boosts the next response. Up to five stacks (diminishing returns), best before a Strong Forward to skip many zones at once. Resets after any other response.', 'Capitalize: only in a reward zone. It ends the scam and pays. Low, medium or high depends on the zone (cash 100%, 200%, 300%; skill 150%, 250%, 350%).', 'The move is random within a range (all values equally likely). The Interpersonal Dynamics course shows that range.'] },
+            { title: 'Zones (cells)', items: ['Safe: neutral (nothing happens); low, medium and high reward (let you capitalise); temptation (pushes the pip right, skipping anything but neutral or reward cells, so it lands safely).', 'Soft failures: concern (you must resolve it: 3 nerve per try, likely to fail), sensitivity (pushes the pip left, skipping everything but neutral cells), hesitation (the target is blocked for 1 to 2 hours).', 'Critical failure: the red "fail" cells lose the target. Avoid at all cost.', 'If temptation or sensitivity has no safe cell to shift to, it counts as a fail.'] },
+            { title: 'Suspicion', items: ['Once the pip has left the start, each response adds suspicion, which paints red cells from the left (replacing any cell, even reward ones, but never the one you stand on). It speeds up as you go and can fill the whole bar.', 'It starts at -1, so it effectively bites from your third response. Landing on sensitivity or hesitation adds more; each attempt at resolving concern adds one and resolving it adds two. Capped at 8. Expect only 10 to 11 increases per scam.', 'You can accelerate safely at the start, before suspicion matters.'] },
+            { title: 'The mark (cash multiplier on top of the capitalisation)', items: ['Young adult 100%, middle-aged 125%, senior 150%, professional 300%, affluent 1,000%. Gender is flavour only. The mark does not change the bar or the moves, only the pay. Combinations can pay over ten times more than others.'] },
+            { title: 'When to abandon a target', items: ['Suspicion is high and you landed in concern.', 'There is no safe path ahead (almost every cell is a hazard).', 'No reward zones are left.'] },
+        ] },
+        { id: 'spam', label: 'Spam types', blocks: [
+            { title: 'Eleven types: three from the start, two more every 20 levels (average pay at low capitalisation; the real pay is 3 to 7.5 times that)', items: [
+                'Delivery (CS1, very easy, about $560): wide reward zones, great for early progress',
+                'Family (CS1, easy, about $15,460): solid early payout',
+                'Prize (CS1, very easy, about $8,825): no hazards; some red zones to avoid',
+                'Charity (CS20, easy, about $25,615): many hazards, mainly hesitation; mostly safe if you aim for medium',
+                'Tech support (CS20, moderate, about $32,800): a lot of concern, the risk is wasted nerve',
+                'Vacation (CS40, easy, about $37,950): lots of red balanced by temptation',
+                'Tax (CS40, moderate, about $80,000): slim zones, small reward zones, needs plenty of nerve',
+                'Advance-fee (CS60, difficult, about $67,000): a lot of sensitivity and slim reward zones; consider abandoning',
+                'Job (CS60, moderate, about $93,000): lots of hesitation, reward zones only 7 to 8 cells wide; very good pay',
+                'Romance (CS80, difficult, about $110,000): mostly sensitivity, very thin reward zones',
+                'Investment (CS80, challenging, about $230,000, up to $2.5 million with the right mark): lots of red and concern',
+            ] },
+        ] },
+        { id: 'levelling', label: 'Levelling & tips', blocks: [
+            { title: 'How to raise skill', items: ['It needs a massive amount of nerve. Persuading, especially capitalising in as few responses as possible, gives the most skill per nerve by far.', 'Farm as little as needed. For skill only: 10,000 to 20,000 addresses, send every available spam category, and the daily targets will use all your nerve.', 'Do the most advanced scam types you can, whatever the difficulty: the skill multiplier makes up for the extra responses.', 'Capitalise low only to avoid failing. Medium in 3 to 4 responses is as good as high in 6 to 7. When high is only two cells wide, consider medium.'] },
+            { title: 'The all-out path (if nerve is no concern)', items: ['Do only the highest-skill scam that gives you replies regularly. Get into any reward zone (higher is better), accelerate five times, then capitalise. Use soft forward and backward to fill extra actions.', 'Bonus: line up a dozen scams ready to capitalise, then accelerate five times before capitalising them all, so the crime chain is higher before the big gains.'] },
+            { title: 'How many addresses', items: ['About 10,000 is enough early if you send all categories daily until diminishment. 20,000 if you have plenty of nerve and refills.', 'From CS40 you need 100,000 or more; get them after finishing the Computer Science courses (less nerve).'] },
+            { title: 'Temptation and sensitivity', items: ['Temptation lands you on a safe cell and skips hazards and fail cells: combine it with Soft Forward to cross hazards safely. A Strong Forward between two temptation zones can still land in a fail zone.', 'Sensitivity shifts you left past reward zones, hazards and fails. It can set you back, or place you closer to a high reward zone.'] },
+        ] },
+    ],
+    tips: [
+        'Aim for 10,000 to 20,000 addresses, then let the Phisher and Scraper do the farming while you scam.',
+        'Land in the green and capitalise in as few responses as possible: that is where the crime skill is.',
+        'Never land on red. Use temptation zones with Soft Forward to skip hazards; use Accelerate for long jumps.',
+        'Abandon a target when suspicion is high and you land in concern, or when no safe path or reward zone is left.',
+        'This is the third Fraud crime (with Card Skimming and Hustling).',
+    ],
+    uniques: [],
+    merits: [
+        { name: 'Alpha Mail', rarity: null, how: 'Reach crime skill 100 in Scamming.' },
+        { name: 'Decepticon', rarity: null, how: 'Land on temptation, sensitivity, hesitation and concern, all in one successful scam. Only CS60 and CS80 scams may allow it, and it is mostly luck. Do not land twice on the same hazard, and failing to resolve concern more than three times usually ruins it.' },
+        { name: 'Grift Horse', rarity: null, how: 'Earn $1,000,000 from a single scam (listed on Torn\'s honor list; the forum guide does not mention it). Think of the Investment scam with an affluent mark.' },
+    ],
+    uniqueCount: 0,
+    notes: 'All attempts count as Fraud crimes. Source: the community in-depth guide on the Torn forum by Emforus (the numbers come from OutcomeDB logs). The nerve cost of spam waves, responses and capitalising is not stated there, so no cost per attempt is shown (farming is 8, resolving a concern is 3). The guide\'s tables of marks, bars and payouts are partly pictures and not included. Grift Horse comes from the Torn honor list.',
+};
+
 function cgAttachData(crime) {
     if (crime.id === 'searchforcash') return { ...crime, data: SEARCH_FOR_CASH };
     if (crime.id === 'bootlegging') return { ...crime, data: BOOTLEGGING };
@@ -1609,6 +1713,7 @@ function cgAttachData(crime) {
     if (crime.id === 'disposal') return { ...crime, data: DISPOSAL };
     if (crime.id === 'cracking') return { ...crime, data: CRACKING };
     if (crime.id === 'forgery') return { ...crime, data: FORGERY };
+    if (crime.id === 'scamming') return { ...crime, data: SCAMMING };
     return crime;
 }
 
