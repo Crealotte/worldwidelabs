@@ -16,7 +16,7 @@ let cgMeritCache = null; // avoid refetching honors every tab switch
 // guideStatus: 'ready' once a real guide has been turned into structured content below.
 const CRIMES_DATA = [
     { id: 'searchforcash', name: 'Search For Cash', icon: '💵', category: 'Theft', nerveCost: 2, guideStatus: 'ready' },
-    { id: 'bootlegging', name: 'Bootlegging', icon: '📀', category: null, nerveCost: null, guideStatus: 'pending' },
+    { id: 'bootlegging', name: 'Bootlegging', icon: '📀', category: 'Counterfeiting', nerveCost: null, guideStatus: 'ready' },
     { id: 'graffiti', name: 'Graffiti', icon: '🎨', category: null, nerveCost: null, guideStatus: 'pending' },
     { id: 'shoplifting', name: 'Shoplifting', icon: '🛍️', category: 'Theft', nerveCost: null, guideStatus: 'pending' },
     { id: 'pickpocketing', name: 'Pickpocketing', icon: '🤏', category: 'Theft', nerveCost: null, guideStatus: 'pending' },
@@ -252,8 +252,103 @@ const SEARCH_FOR_CASH = {
     notes: 'All attempts here count as Theft crimes — useful for Theft-category medals.',
 };
 
+// ---- Bootlegging: from the community in-depth guide on the Torn forum (Emforus, based on about 17,500 logged attempts, last updated 2025), written up in our own words ----
+const BOOTLEGGING = {
+    summary: 'The second crime of Crimes 2.0. You copy blank DVDs, sell the copies, and from CS50 can open an online store that sells them for you. Selling gives the most crime skill, the store is slow passive money and the way to two honor bars. Not a big earner, but every attempt counts towards Counterfeiting medals.',
+    estimatedNerveToCS100: null, // the guide gives no total
+    locationsLabel: 'Actions',
+    cycleLabel: '⚙️ How it works',
+    highlightLabel: '📈 Crime skill and risks',
+    uniqueLocationLabel: 'Where',
+    keyItems: [
+        { name: 'Personal Computer or Laptop', effect: 'Needed to copy DVDs. Can be lost on a critical failure while copying.', source: 'Super Store' },
+        { name: 'Blank DVDs', effect: 'The material you copy. You can load several packs at once. Can be lost on a critical failure.', source: 'Super Store (also found when searching the Junkyard)' },
+        { name: 'High-Speed Drive', effect: 'Enhancer: +5% crime skill gains and copying takes half the time. Not needed. Can be lost on a critical failure while copying.', source: 'Searching the Junkyard (crushing rate under 25%), spraying graffiti in the city centre, shoplifting the Super Store, burglarizing an apartment. It was once very expensive, now it is common.' },
+        { name: 'Courses CMT1520 (Introduction to Computing) and CMT2230 (Web Design and Development)', effect: 'Both in the Computer Science bachelor. Needed to build the online store and for its honor bar. Not needed if you only want crime skill.', source: 'Education' },
+    ],
+    locations: [
+        {
+            name: 'Copying DVDs', unlock: null,
+            cycle: [
+                'Load blank DVDs (several packs at once is fine), then copy',
+                'Every category of DVD gives the same crime skill and has the same success rate',
+                'Early on you copy about 3 to 5 DVDs per attempt; later more',
+                'Copying speed: every 5 levels of crime skill make a copy 2 seconds faster; the High-Speed Drive halves the time',
+            ],
+            highlights: [
+                'Critical failures: jail, losing blank DVDs, losing your computer or laptop, losing some money, losing a High-Speed Drive',
+                'Roughly 0.22 more DVDs per attempt for every level of crime skill, about 1.1 per 5 levels, up to CS100',
+                'The gap between the lowest and highest result grows with skill, from about 3 to almost 20',
+                'Copying gives the least crime skill per nerve of the three, but you need the stock to sell',
+            ],
+            tip: 'Copy a mix of all categories (see the genre ratio), because selling works best with variety.',
+        },
+        {
+            name: 'Selling DVDs', unlock: null,
+            cycle: [
+                'You sell from your stock; having a few of every category sells more per attempt',
+                'Categories sell at different rates, so a balanced stock runs out unevenly (see the genre ratio)',
+                'Your crime skill only decides how many DVDs are sold at a time',
+            ],
+            highlights: [
+                'All four unique finds come from selling',
+                'One sale gives about the crime skill of 4 copies, about 60% more per nerve than copying',
+                'Critical failures: jail, losing some life, losing some DVDs',
+                'A critical failure while selling can cost a lot of crime skill: players at CS13 dropped to CS8 and one at CS7 dropped to CS1',
+                'About $2,000 per sale on average over the guide\'s sample of 1,500 sales; it varies a lot with the number of DVDs sold',
+            ],
+            tip: 'This is the best way to raise crime skill: copy a varied stock, sell it in bulk, and stock up before a unique find becomes possible.',
+        },
+        {
+            name: 'The Online Store', unlock: 'CS50 and the two Computer Science courses',
+            cycle: [
+                'Setting it up: every attempt costs 10 nerve and adds 1% to 9% progress; about 80% of attempts succeed, and players needed 20 to 40 attempts to launch it',
+                'Once launched it sells the DVDs you have in stock, slowly, at about $20 each. You only collect the money (1 nerve)',
+                'More customers come over time, faster the more you already have, as long as you never run out of any category',
+                'You can switch the store off with the dial next to the collect button, handy when you want to keep DVDs to sell yourself',
+            ],
+            highlights: [
+                '10,000 customers (honor bar) takes about 15 to 16 days of keeping it stocked, and roughly 20,000 DVDs sold through the store',
+                'Critical failures: losing all the money waiting to be collected (confirmed); losing the whole store (only suspected, never proven)',
+                'Setting up gives about 6 copies of crime skill per successful attempt; collecting gives less than one copy, often 0 to 1%',
+                'Crime skill also grows slowly by itself while the store runs (a CS93 player reported about 3% in 24 hours)',
+                'Money is small: the guide estimates about $50,000 a day from natural nerve regeneration alone',
+            ],
+            tip: 'Skip the store while you grind skill, because it sells the DVDs you would sell yourself. Open it when you are happy with your skill or want the honor bar.',
+        },
+    ],
+    // no per-attempt drop tables in the guide
+    dropTables: null,
+    // an extra tab, rendered generically: [{ id, label, blocks: [{ title, items }] }]
+    sections: [
+        { id: 'ratio', label: 'Genre ratio', blocks: [
+            { title: 'How many of each category to copy (rough ratio)', items: ['Action 10', 'Fantasy 7 and Comedy 7', 'Drama 5.5', 'Thriller 4', 'Horror 3 and Romance 3', 'Sci-Fi 2'] },
+            { title: 'Notes', items: ['When selling directly you need slightly less Comedy than this.', 'The online store sells more Comedy than you would expect.', 'Keep at least a couple of every category in stock at all times.'] },
+        ] },
+    ],
+    tips: [
+        'Fastest crime skill: copy a varied stock, sell it in bulk, and leave the online store closed until you are happy with your skill.',
+        'Counterfeiting medals need 10,000 crimes of this kind and ANY attempt counts, including collecting from the online store for 1 nerve. Let a few DVDs copy and collect as soon as they are done.',
+        'The Cinephile honor bar is long term (10,000 DVDs of every genre, direct and store sales both count): start on it early, with the categories that sell worst.',
+    ],
+    uniques: [
+        { location: 'Selling', name: 'Special ammunition', skill: 'Level 55', other: 'None' },
+        { location: 'Selling', name: 'Lottery voucher', skill: 'Level 70', other: 'None' },
+        { location: 'Selling', name: 'Prayer beads', skill: 'Level 85', other: 'None' },
+        { location: 'Selling', name: 'Erotic DVD', skill: 'Level 100', other: 'None' },
+    ],
+    merits: [
+        { name: 'Box Office', rarity: 'Common', how: 'Reach crime skill 100 in Bootlegging.' },
+        { name: 'Online Entrepreneur', rarity: 'Common', how: 'Get 10,000 customers on your online counterfeit DVD store (about 15 to 16 days of a stocked store, roughly 20,000 DVDs sold there).' },
+        { name: 'Cinephile', rarity: null, how: 'Sell 10,000 DVDs of each movie genre. Direct sales and store sales both count; the Bootlegging page banner shows your progress.' },
+    ],
+    uniqueCount: 4,
+    notes: 'All attempts here count as Counterfeiting crimes, the best crime for Counterfeiting medals in Crimes 2.0. Source: community in-depth guide on the Torn forum by Emforus, based on about 17,500 logged attempts. The nerve cost per copy or sell attempt is not stated there (collecting is 1 nerve, setting up the store 10).',
+};
+
 function cgAttachData(crime) {
     if (crime.id === 'searchforcash') return { ...crime, data: SEARCH_FOR_CASH };
+    if (crime.id === 'bootlegging') return { ...crime, data: BOOTLEGGING };
     return crime;
 }
 
@@ -313,8 +408,9 @@ function renderCrimeTabs(crime) {
     const d = crime.data;
     const tabs = [
         { id: 'overview', label: 'Overview' },
-        { id: 'locations', label: `Locations (${d.locations.length})` },
-        { id: 'droprates', label: 'Drop Rates' },
+        { id: 'locations', label: `${d.locationsLabel || 'Locations'} (${d.locations.length})` },
+        ...(d.dropTables === null ? [] : [{ id: 'droprates', label: 'Drop Rates' }]),
+        ...(d.sections || []).map(sec => ({ id: 'sec-' + sec.id, label: sec.label })),
         { id: 'uniques', label: `Uniques (${d.uniques ? d.uniques.length : 0})` },
         { id: 'items', label: 'Key Items' },
         { id: 'honors', label: 'Honor Bars' },
@@ -358,6 +454,7 @@ function renderCrimeTabBody(crime) {
                             : '<span style="color:var(--muted);font-weight:400;">not specified in guide yet</span>'}
                     </div></div>
                 </div>
+                ${d.tips ? `<div class="crimes-subhead" style="margin-top:12px;">💡 Tips</div><ul class="crimes-bullets">${d.tips.map(t => `<li>${esc(t)}</li>`).join('')}</ul>` : ''}
                 <p style="font-size:12px;color:var(--muted);margin-top:10px;">${esc(d.notes)}</p>
             </div>`;
         return;
@@ -372,9 +469,9 @@ function renderCrimeTabBody(crime) {
                     <span class="chev">▾</span>
                 </div>
                 <div class="ocfit-scenario-body">
-                    <div class="crimes-subhead">⏱ Success cycle</div>
+                    <div class="crimes-subhead">${esc(d.cycleLabel || '⏱ Success cycle')}</div>
                     <ul class="crimes-bullets">${loc.cycle.map(b => `<li>${esc(b)}</li>`).join('')}</ul>
-                    <div class="crimes-subhead">💰 What you'll find</div>
+                    <div class="crimes-subhead">${esc(d.highlightLabel || "💰 What you'll find")}</div>
                     <ul class="crimes-bullets">${loc.highlights.map(b => `<li>${esc(b)}</li>`).join('')}</ul>
                     <div class="crimes-tip">💡 ${esc(loc.tip)}</div>
                 </div>
@@ -412,6 +509,16 @@ function renderCrimeTabBody(crime) {
         return;
     }
 
+    if (cgActiveTab.startsWith('sec-')) {
+        const sec = (d.sections || []).find(x => 'sec-' + x.id === cgActiveTab);
+        body.innerHTML = sec ? sec.blocks.map(b => `
+            <div class="panel" style="margin-bottom:10px;">
+                <div class="crimes-subhead">${esc(b.title)}</div>
+                <ul class="crimes-bullets">${b.items.map(i => `<li>${esc(i)}</li>`).join('')}</ul>
+            </div>`).join('') : '';
+        return;
+    }
+
     if (cgActiveTab === 'uniques') {
         if (!d.uniques) {
             body.innerHTML = '<div class="panel"><p style="color:var(--muted);">No uniques data added yet.</p></div>';
@@ -421,7 +528,7 @@ function renderCrimeTabBody(crime) {
         body.innerHTML = `
             <table style="width:100%;font-size:13px;border-collapse:collapse;">
                 <thead><tr style="color:var(--muted);text-align:left;">
-                    <th data-sort="location" style="padding:6px 8px;">Location</th><th data-sort="name" style="padding:6px 8px;">Find</th>
+                    <th data-sort="location" style="padding:6px 8px;">${esc(d.uniqueLocationLabel || 'Location')}</th><th data-sort="name" style="padding:6px 8px;">Find</th>
                     <th data-sort="skill" style="padding:6px 8px;">Skill req.</th><th style="padding:6px 8px;">Other req.</th>
                 </tr></thead>
                 <tbody>${uniquesSorted.map(u => `
