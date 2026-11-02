@@ -22,6 +22,9 @@ const TRACKED_HONORS = [
     { crime: 'graffiti', name: 'Let Us Spray' },
     { crime: 'graffiti', name: 'Fresh Blud' },
     { crime: 'graffiti', name: 'Urban Legend' },
+    { crime: 'shoplifting', name: 'Retail Therapy' },
+    { crime: 'shoplifting', name: 'Notorious' },
+    { crime: 'shoplifting', name: 'Crown Jewel' },
 ];
 
 async function redis(command) {

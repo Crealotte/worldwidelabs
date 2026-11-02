@@ -18,7 +18,7 @@ const CRIMES_DATA = [
     { id: 'searchforcash', name: 'Search For Cash', icon: '💵', category: 'Theft', nerveCost: 2, guideStatus: 'ready' },
     { id: 'bootlegging', name: 'Bootlegging', icon: '📀', category: 'Counterfeiting', nerveCost: null, guideStatus: 'ready' },
     { id: 'graffiti', name: 'Graffiti', icon: '🎨', category: 'Vandalism', nerveCost: 3, guideStatus: 'ready' },
-    { id: 'shoplifting', name: 'Shoplifting', icon: '🛍️', category: 'Theft', nerveCost: null, guideStatus: 'pending' },
+    { id: 'shoplifting', name: 'Shoplifting', icon: '🛍️', category: 'Theft', nerveCost: 4, guideStatus: 'ready' },
     { id: 'pickpocketing', name: 'Pickpocketing', icon: '🤏', category: 'Theft', nerveCost: null, guideStatus: 'pending' },
     { id: 'cardskimming', name: 'Card Skimming', icon: '💳', category: null, nerveCost: null, guideStatus: 'pending' },
     { id: 'burglary', name: 'Burglary', icon: '🏚️', category: 'Theft', nerveCost: null, guideStatus: 'pending' },
@@ -557,10 +557,221 @@ const GRAFFITI = {
     notes: 'All attempts count as Vandalism crimes, giving medals by the number of crimes done. Sources: the community in-depth guide on the Torn forum by Emforus (about 32,000 logged attempts; the author says a rewrite is due) and the Torn wiki (unique finds, edited November 2026). The forum guide counts 41 uniques, the wiki list below has 44 rows (it also lists the crew and unlock steps), and the cash amounts follow the wiki. The risk by area, money by area and colour tables of the forum guide are pictures and are not included.',
 };
 
+// ---- Shoplifting: from the community in-depth guide on the Torn forum (Emforus, updated 2025) and the Torn wiki (unique finds), written up in our own words ----
+const SHOPLIFTING = {
+    summary: 'The fourth crime of Crimes 2.0, 4 nerve per attempt, eight shops. No items are needed. The skill of the crime is timing: every attempt raises your notoriety in that shop, and each shop has security (cameras, checkpoints, guards) that switches off now and then. Shop when security is down and notoriety is low.',
+    estimatedNerveToCS100: null, // the guide gives no total
+    cycleLabel: '🛡️ Security and risk',
+    highlightLabel: '🎯 What you find',
+    uniqueLocationLabel: 'Shop',
+    keyItems: [
+        { name: 'Mountain Bike', effect: 'Enhancer: more crime experience and crime skill gains, and it unlocks some valuable outcomes. Can be lost on a critical failure.', source: 'Searching the Junkyard, pickpocketing a cyclist, or the Bits \'n\' Bobs unique at CS90' },
+        { name: 'Torn City Times', effect: 'Unlocks extra outcomes in every shop and seems to help the success rate and lower notoriety gain (not confirmed). Can be lost on a critical failure.', source: 'A unique find at the Subway in Search For Cash' },
+        { name: 'Jacket and underwear', effect: 'Only a theory: wearing them may prevent some critical failures or add outcomes. Not proven.', source: 'Your own wardrobe' },
+    ],
+    locations: [
+        {
+            name: 'Sally\'s Sweet Shop', unlock: null,
+            cycle: [
+                'Security: one camera. Minimal risk and the lowest notoriety gain',
+                'Cameras go off about 4 times a day (3 to 10 hours between breakdowns), for 30 to 60 minutes',
+                'Critical failure: life loss (51 to 1,027) or jail from 37 minutes up to about 15 hours',
+            ],
+            highlights: [
+                'Mostly candy: the common find is a 25H candy; anything 50H and up is rare and needs items or a combination',
+                'A bike, the newspaper and cameras off all help with extra candy',
+                'Nothing else comes from here, so it is for crime skill',
+            ],
+            tip: 'The safest shop. If you only want skill, spam it until notoriety hits 60%, then let it cool down.',
+        },
+        {
+            name: 'Bits \'n\' Bobs', unlock: null,
+            cycle: [
+                'Security: two cameras. Minor risk',
+                'Cameras go off about 3 times a day (4.5 to 14 hours). Try around noon and midnight',
+                'Critical failure: life loss (111 to 838) or jail for about 33 minutes',
+            ],
+            highlights: [
+                'Money ($5 to $4,981) or items; mostly junk, sometimes crime tools such as gasoline, glow sticks, jemmy bars and spray cans',
+                'The uniques are mainly enhancers for crimes released and still to come',
+            ],
+            tip: 'Good for skill, and the useful goods are gasoline and spray paint.',
+        },
+        {
+            name: 'TC Clothing', unlock: null,
+            cycle: [
+                'Security: one camera and checkpoints. Low risk',
+                'Checkpoints break down about twice a week (3 to 4 day cycles) for 8 to 12 hours',
+                'Critical failure: hospital for about 2 hours if the life lost is more than you have',
+            ],
+            highlights: [
+                'Clothing of every kind, little market value',
+                'Several uniques that only appear under certain security conditions',
+            ],
+            tip: 'One of the least profitable shops. Fine for skill, and for apparel.',
+        },
+        {
+            name: 'Super Store', unlock: null,
+            cycle: [
+                'Security: two cameras and checkpoints. Moderate risk, and security is harder to catch disabled than elsewhere',
+                'Critical failure: life loss (149 reported)',
+            ],
+            highlights: [
+                'Electronics and crime materials: blank DVDs, spy cameras, personal computers, hard drives, toner',
+                'Uniques include four crime enhancers and an Erotic DVD',
+            ],
+            tip: 'Mainly worth it for the uniques: the loot is cheap and the danger fairly high.',
+        },
+        {
+            name: 'Pharmacy', unlock: null,
+            cycle: [
+                'Security: three cameras and checkpoints. Moderate risk. Added January 2024',
+                'Triple cameras go off about twice a day (4.5 to 17 hours)',
+                'Critical failure: you may lose the Torn City Times',
+            ],
+            highlights: [
+                'Medical items and junk, plus Ipecac Syrup, which lets you hospitalise yourself without the education course, for any blood type',
+                'Some outcomes (clipboard, lab coat, stethoscope) need cameras disabled',
+            ],
+            tip: 'Mediocre with all security on, decently profitable when it is down: wait for that.',
+        },
+        {
+            name: 'Cyber Force', unlock: null,
+            cycle: [
+                'Security: two cameras and a guard. Moderate risk. Added December 2023, one day before Cracking',
+                'The guard (Marcie) takes a 10 to 15 minute break every 3.5 to 4.5 hours',
+                'Critical failure: life loss (up to 880) or losing the Torn City Times',
+            ],
+            highlights: [
+                'Only computer parts for Cracking: fans, CPUs, eCPUs, heat sinks, HPCPUs, PSUs and water blocks',
+                'Rarer parts (water blocks, HPCPUs, heat sinks) are more common when the guard is away or cameras are off',
+            ],
+            tip: 'Often the best shop to do when security is down: the efficient mining rigs need 30 to 50 HPCPUs.',
+        },
+        {
+            name: 'Jewelry Store', unlock: null,
+            cycle: [
+                'Security: three cameras and a guard (Henry). High risk and a lower success rate',
+                'Guard breaks every 3.5 to 4.5 hours',
+                'Critical failure: jail from 58 minutes up to about 16 hours',
+            ],
+            highlights: [
+                'Jewellery of little value ($500 to $3,890 or items)',
+                'The uniques are the point: two enhancers and several tools, and the Cluster Ring for the Crown Jewel honor',
+            ],
+            tip: 'Only worth it for the uniques, or when both security measures are off.',
+        },
+        {
+            name: 'Big Al\'s Gun Shop', unlock: null,
+            cycle: [
+                'Security: four cameras and two guards (Karl and Lars). Very high risk, lower success rate',
+                'The guards break about 3 times a day (7.5 to 8.5 hours), only 10 to 15 minutes each time',
+                'Critical failure: jail for about 53 minutes to 1 hour 41, or life loss (50 to 112)',
+            ],
+            highlights: [
+                'Weapons, armour, temporaries and ammo. The best place for special ammo, and the most dangerous',
+                'Most weapon and armour finds need one security measure off',
+            ],
+            tip: 'Avoid it while the guards are active unless you chase uniques. With cameras down and a guard break coming, keep notoriety low and carry only your best weapon, so the ammo goes to it.',
+        },
+    ],
+    // the full drop tables are a spreadsheet on the forum, not in the guide
+    dropTables: null,
+    sections: [
+        { id: 'security', label: 'Security', blocks: [
+            { title: 'Cameras (least effective)', items: ['Raise notoriety gain; the more cameras, the more they raise it.', 'They go off for 30 to 60 minutes. The more cameras a shop has, the longer between breakdowns.', 'One camera (Sweet Shop, TC Clothing): about 4 times a day. Two (Bits \'n\' Bobs, Super Store, Cyber Force): about 3 times. Three (Pharmacy, Jewelry Store): about twice. Four (Big Al\'s): once or twice a day.', 'With four cameras, only go in when a security measure is down.'] },
+            { title: 'Checkpoints', items: ['Stop you leaving with goods without an alarm, which can lead to failure, and raise notoriety significantly.', 'In TC Clothing and the Pharmacy. They break about twice a week for 8 to 12 hours.'] },
+            { title: 'Guards (most effective)', items: ['Only in the better shops. Failures often happen while they patrol, and they raise notoriety significantly.', 'They take a break every 3.5 to 8.5 hours, always only 10 to 15 minutes, so the window is small, but predictable if you know when the last break was.'] },
+            { title: 'Good to know', items: ['More active security means notoriety rises faster after a success and failure is more likely.', 'During a State of Emergency all shops are closed. Notoriety still decays and security still breaks as usual.'] },
+        ] },
+        { id: 'notoriety', label: 'Notoriety', blocks: [
+            { title: 'How it works', items: ['Every attempt raises notoriety in that shop: a little for a success, more for a failure, and a critical failure maxes it at once.', 'Notoriety decays 1% every 5 minutes after your last attempt there, so 100% takes about 8 hours 20 minutes to clear.', 'Higher notoriety makes you more likely to be stopped, and a critical failure can put you in jail for up to 17 hours. Higher crime skill lowers the notoriety gain.', 'Brackets: low (under 10%), moderate (over 10%), high (over 30%), very high (over 60%). They change the failure chance, the flavour text and the jail times. Stay under 60%, or under 30% to be safe.', 'Crits can still happen at 0% notoriety. One unique find needs maximum notoriety.'] },
+            { title: 'Critical failures', items: ['Lose some life, be hospitalised, go to jail, lose a Torn City Times, or lose your Mountain Bike.', 'Jail time grows with notoriety: about an hour at low notoriety, 5 to 7 hours above 30%, 10 to 17 hours above 60%.'] },
+            { title: 'The Notorious honor bar (100% notoriety in all shops at once)', items: ['It gets harder the higher your crime skill is, so go for it right when you start: about 250 to 300 nerve, up to 400 with bad luck. One player needed 600 nerve at max skill, plus days of preparation.', 'Stack nerve (drink alcohol when full), or roll nerve refills around the day change.', 'Job points in a pub (best), meat warehouse or candle store help; so does a CBD stock increment.', 'Taking the bike and the newspaper out of your inventory lowers your success chance, which helps here.'] },
+        ] },
+    ],
+    tips: [
+        'Every shop gives the same crime skill, whatever your notoriety or the security. So for skill, use the shops with the least notoriety gain and risk: Sweet Shop and Bits \'n\' Bobs, when their cameras are down.',
+        'Rob a shop when security is down: the loot is better and the notoriety gain lower. Cyber Force (HPCPUs) and the Pharmacy (Ipecac) pay best then.',
+        'Keep notoriety under 60% (30% to be safe) to avoid very long jail times. Have friends ready to bust you, or lawyer business cards.',
+        'Do the Notorious honor bar early: it takes more nerve the higher your skill.',
+        'Crown Jewel needs the Cluster Ring from the Jewelry Store: CS100, zero notoriety, cameras off and the guard off duty.',
+    ],
+    uniques: [
+        { location: 'Sally\'s Sweet Shop', name: 'Jawbreaker', skill: 'Level 20', other: 'Camera disabled' },
+        { location: 'Sally\'s Sweet Shop', name: 'Empty Box, 2 Bags of Chocolate Truffles, 2 Jawbreakers', skill: 'Level 40', other: 'Camera enabled' },
+        { location: 'Sally\'s Sweet Shop', name: '2 Pixie Sticks', skill: 'Level 60', other: 'Camera disabled' },
+        { location: 'Sally\'s Sweet Shop', name: '4 Bags of Sherbet', skill: 'Level 70', other: 'Camera enabled' },
+        { location: 'Sally\'s Sweet Shop', name: 'Tin of Treats', skill: 'Level 80', other: 'Camera disabled' },
+        { location: 'Bits \'n\' Bobs', name: '8 Bottles of Champagne', skill: 'Level 1', other: 'Camera disabled' },
+        { location: 'Bits \'n\' Bobs', name: 'Cut-Throat Razor, Shaving Foam', skill: 'Level 1', other: 'None' },
+        { location: 'Bits \'n\' Bobs', name: 'Flashlight', skill: 'Level 20', other: 'None' },
+        { location: 'Bits \'n\' Bobs', name: 'Duct Tape', skill: 'Level 30', other: 'Camera disabled' },
+        { location: 'Bits \'n\' Bobs', name: '24 Bottles of Beer', skill: 'Level 60', other: 'None' },
+        { location: 'Bits \'n\' Bobs', name: 'Money ($12,890 to $57,340)', skill: 'Level 80', other: 'Camera disabled' },
+        { location: 'Bits \'n\' Bobs', name: 'Mountain Bike', skill: 'Level 90', other: 'None' },
+        { location: 'TC Clothing', name: 'Raincoat', skill: 'Level 20', other: 'Checkpoint disabled' },
+        { location: 'TC Clothing', name: 'Fisherman Hat, Fishing Rod', skill: 'Level 30', other: 'None' },
+        { location: 'TC Clothing', name: 'Tailor\'s Dummy, Scissors', skill: 'Level 40', other: 'Camera disabled' },
+        { location: 'TC Clothing', name: 'Trench Coat', skill: 'Level 50', other: 'None' },
+        { location: 'TC Clothing', name: 'Mackintosh', skill: 'Level 60', other: 'None' },
+        { location: 'TC Clothing', name: 'Coat Hanger', skill: 'Level 70', other: 'Maximum notoriety only' },
+        { location: 'TC Clothing', name: 'Bush Hat', skill: 'Level 80', other: 'Camera disabled and checkpoint enabled' },
+        { location: 'TC Clothing', name: 'Crop Top, Coin Purse, Lipstick', skill: 'Level 90', other: 'None' },
+        { location: 'TC Clothing', name: 'Poncho', skill: 'Level 100', other: 'Checkpoint disabled' },
+        { location: 'Super Store', name: 'DSLR Camera', skill: 'Level 1', other: 'Checkpoint disabled' },
+        { location: 'Super Store', name: 'DVD Player, Erotic DVD', skill: 'Level 1', other: 'Cameras and checkpoint disabled' },
+        { location: 'Super Store', name: 'Tracking Device', skill: 'Level 20', other: 'None' },
+        { location: 'Super Store', name: 'Wireless Dongle', skill: 'Level 40', other: 'Cameras disabled' },
+        { location: 'Super Store', name: 'Ergonomic Keyboard', skill: 'Level 60', other: 'Checkpoint disabled' },
+        { location: 'Super Store', name: 'High-Speed Drive', skill: 'Level 80', other: 'None' },
+        { location: 'Super Store', name: 'Laptop', skill: 'Level 100', other: 'None' },
+        { location: 'Super Store', name: 'Voice Recorder', skill: 'Unknown', other: 'Unknown' },
+        { location: 'Pharmacy', name: 'Melatonin', skill: 'Level 5', other: 'Cameras enabled' },
+        { location: 'Pharmacy', name: 'Tyrosine', skill: 'Level 10', other: 'Cameras disabled and checkpoint enabled' },
+        { location: 'Pharmacy', name: '4 Serotonin, 4 Syringes', skill: 'Level 1', other: 'Cameras and checkpoint disabled' },
+        { location: 'Pharmacy', name: 'Box of Medical Supplies', skill: 'Level 100', other: 'Checkpoint enabled' },
+        { location: 'Pharmacy', name: 'Epinephrine', skill: 'Level 100', other: 'Checkpoint disabled and cameras enabled' },
+        { location: 'Cyber Force', name: '3 to 9 points', skill: 'Level 1', other: 'Guard off duty' },
+        { location: 'Cyber Force', name: 'Money ($220,000 to $299,000)', skill: 'Level 1', other: 'Cameras enabled and guard on duty' },
+        { location: 'Cyber Force', name: 'RF Detector', skill: 'Level 1', other: 'Cameras disabled' },
+        { location: 'Cyber Force', name: '3 HPCPUs', skill: 'Level 5', other: 'Cameras disabled' },
+        { location: 'Cyber Force', name: '5 CPUs, HPCPU, 2 Computer Fans, Water Block', skill: 'Level 15', other: 'Cameras disabled and guard off duty' },
+        { location: 'Cyber Force', name: 'Office Chair', skill: 'Level 60', other: 'Guard off duty' },
+        { location: 'Jewelry Store', name: '12 Gold Teeth', skill: 'Level 20', other: 'Guard on duty' },
+        { location: 'Jewelry Store', name: 'Diamond Ring, Latex Gloves', skill: 'Level 40', other: 'Guard on duty' },
+        { location: 'Jewelry Store', name: 'Raw Ivory', skill: 'Level 40', other: 'Cameras enabled and guard on duty' },
+        { location: 'Jewelry Store', name: 'Diamond Bladed Knife', skill: 'Level 60', other: 'Guard on break' },
+        { location: 'Jewelry Store', name: 'Vanity Hand Mirror', skill: 'Level 10', other: 'Cameras disabled and guard off duty' },
+        { location: 'Jewelry Store', name: 'Magnifying Glass', skill: 'Level 1', other: 'None' },
+        { location: 'Jewelry Store', name: 'Gold Ring, Graver', skill: 'Level 1', other: 'None' },
+        { location: 'Jewelry Store', name: 'Diamond Ring, Grinding Stone', skill: 'Level 1', other: 'Cameras disabled' },
+        { location: 'Jewelry Store', name: '2 Gold Rings, Drill, Polishing Pad', skill: 'Level 1', other: 'Cameras disabled' },
+        { location: 'Jewelry Store', name: 'Cluster Ring', skill: 'Level 100', other: 'Zero notoriety, cameras disabled and guard off duty' },
+        { location: 'Big Al\'s Gun Shop', name: '2,500 special ammo', skill: 'Level 1', other: 'Cameras disabled and guards on break' },
+        { location: 'Big Al\'s Gun Shop', name: 'Full Body Armor', skill: 'Level 1', other: 'Cameras disabled and guards on break' },
+        { location: 'Big Al\'s Gun Shop', name: '9 Ninja Stars', skill: 'Level 30', other: 'Cameras disabled' },
+        { location: 'Big Al\'s Gun Shop', name: 'Desert Eagle', skill: 'Level 40', other: 'Cameras enabled and guards on duty' },
+        { location: 'Big Al\'s Gun Shop', name: '6 Stick Grenades', skill: 'Level 50', other: 'Guards on break' },
+        { location: 'Big Al\'s Gun Shop', name: 'Steyr AUG', skill: 'Level 60', other: 'Guards on break' },
+        { location: 'Big Al\'s Gun Shop', name: '4 Throwing Knives', skill: 'Level 70', other: 'Cameras disabled' },
+        { location: 'Big Al\'s Gun Shop', name: '8 HEG', skill: 'Level 80', other: 'Cameras enabled and guards on duty' },
+        { location: 'Big Al\'s Gun Shop', name: 'Box of Grenades', skill: 'Level 100', other: 'None' },
+    ],
+    merits: [
+        { name: 'Retail Therapy', rarity: null, how: 'Reach crime skill 100 in Shoplifting.' },
+        { name: 'Notorious', rarity: null, how: 'Reach 100% notoriety in all shops at the same time. Easier the lower your crime skill is (see the Notoriety tab).' },
+        { name: 'Crown Jewel', rarity: null, how: 'Steal a Cluster Ring from the Jewelry Store: CS100, zero notoriety, cameras disabled and the guard off duty.' },
+    ],
+    uniqueCount: 65,
+    notes: 'All attempts count as Theft crimes. Sources: the community in-depth guide on the Torn forum by Emforus (updated 2025) and the Torn wiki (unique finds and crits). The full drop tables are a spreadsheet linked from the forum guide and are not included.',
+};
+
 function cgAttachData(crime) {
     if (crime.id === 'searchforcash') return { ...crime, data: SEARCH_FOR_CASH };
     if (crime.id === 'bootlegging') return { ...crime, data: BOOTLEGGING };
     if (crime.id === 'graffiti') return { ...crime, data: GRAFFITI };
+    if (crime.id === 'shoplifting') return { ...crime, data: SHOPLIFTING };
     return crime;
 }
 
@@ -658,7 +869,7 @@ function renderCrimeTabBody(crime) {
             <div class="panel">
                 <p style="margin:0 0 10px;">${esc(d.summary)}</p>
                 <div style="display:flex;gap:16px;flex-wrap:wrap;">
-                    <div><div style="font-size:11px;color:var(--muted);">Unique finds</div><div style="font-weight:700;">${d.uniqueCount}</div></div>
+                    <div><div style="font-size:11px;color:var(--muted);">Unique finds</div><div style="font-weight:700;">${d.uniques ? d.uniques.length : d.uniqueCount}</div></div>
                     <div><div style="font-size:11px;color:var(--muted);">Honor bars</div><div style="font-weight:700;">${d.merits.length}</div></div>
                     <div><div style="font-size:11px;color:var(--muted);">Est. to CS100</div><div style="font-weight:700;">
                         ${d.estimatedNerveToCS100
