@@ -12,6 +12,19 @@
 
 const WHATS_NEW = [
     {
+        version: '1.47', date: '2026-11-02',
+        title: 'Script 1.53: Bidding War OC, perk roadmap and energy goal',
+        everyone: [
+            'Organized crimes: the Bidding War crime now only needs 50 percent success chance to join, while the rest of level 6 stays at 70 percent. The WWL script (update to 1.53) greys out the Join button of a Bidding War slot only below 50 percent. Leaders can add more crimes with their own range in Leader settings, OC join rules.',
+            'The Perk roadmap page now shows everything the faction has unlocked, with the day it was unlocked, in a tab that is closed by default. Below it the new plan: Addiction XIV to XXV, Booster cooldown XVI to XXIV, the chain upgrade, Travel capacity V to VIII and Rehab cost I to III.',
+            'Training goal of the period of 4 October: the Halloween week counts as a week without training, so the energy goal is one week lower. What you trained stays exactly as it was.',
+        ],
+        leaders: [
+            'Member Overview has a new row under the period line: Weeks without training in this period. It lowers the energy goal on Member Overview and on the Evaluation page. Chain events now take their dates from the chains placed in them, and a chain event counts in the period it started in. A new button Re-read the chain numbers refreshes the stored chain numbers.',
+            'Consumption Tracker: chain events are in the By war list, interrupted reads of the armory log keep the days that were complete and retry by themselves, and the nightly saving now keeps the finished days of the armory log, so the war pay calculator and the tracker agree.',
+        ],
+    },
+    {
         version: '1.46', date: '2026-10-30',
         title: 'Script 1.52: chain watching limit, onboarding and OC overview',
         everyone: [
