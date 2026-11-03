@@ -2,7 +2,7 @@
 // @name         World Wide Labs
 // @namespace    https://worldwidelabs.vercel.app
 // @author       CreaLotte
-// @version      1.54
+// @version      1.54.1
 // @updateURL    __WWL_BASE__/worldwidelabs.user.js
 // @downloadURL  __WWL_BASE__/worldwidelabs.user.js
 // @description  Shows your WorldWideLabs weekly energy plan (the checklist from the Energy planner) inside Torn, a To do tab with small personal reminders (revive setting, feedback, timezone map, availability, Discord/Intel/CAT), your My Targets list, a simplified energy/war standing strip, and — if you are in the Mentoring Platform — your mentoring checklist too. Also shows faction banners at the top of every Torn page. A small ⚙ in the header shows the installed version, flags when a newer one is out, lets you set/replace your API key, and — for a leader — add or remove your faction's banners right from Torn. On a computer it is a small window you can drag around and close; in TornPDA it is a menu. Ticks are shared with the WWL site.
@@ -27,7 +27,7 @@
     const KEY_NAME = 'wwl_api_key', POS_NAME = 'wwl_plan_pos', STATE_NAME = 'wwl_plan_state';
     // GM_info gives the version Tampermonkey actually has installed right now — falls back to a
     // hardcoded copy (kept in sync with @version above) for TornPDA, which doesn't grant GM_info.
-    const SCRIPT_VERSION = (typeof GM_info !== 'undefined' && GM_info.script?.version) || '1.54';
+    const SCRIPT_VERSION = (typeof GM_info !== 'undefined' && GM_info.script?.version) || '1.54.1';
     const versionGreater = (a, b) => {
         const pa = String(a).split('.').map(Number), pb = String(b).split('.').map(Number);
         for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
@@ -443,9 +443,16 @@
             </div>`;
         }
         const cards = r.cards || [];
-        html += cards.length ? cards.map(c => `<details class="wwl-w-det" data-k="labcard:${esc(c.id)}" ${welOpen[`labcard:${c.id}`] ? 'open' : ''} style="margin:5px 0;border:1px solid #3a4352;border-radius:6px;padding:3px 8px;"><summary style="cursor:pointer;font-weight:700;">${esc(c.title)} <span style="font-weight:400;color:#9aa4b5;font-size:11px;">${c.doneCount}/${c.total}${c.complete ? ' · done ✓' : ''}</span></summary>
+        const cardHtml = c => `<details class="wwl-w-det" data-k="labcard:${esc(c.id)}" ${welOpen[`labcard:${c.id}`] ? 'open' : ''} style="margin:5px 0;border:1px solid #3a4352;border-radius:6px;padding:3px 8px;"><summary style="cursor:pointer;font-weight:700;">${esc(c.title)} <span style="font-weight:400;color:#9aa4b5;font-size:11px;">${c.doneCount}/${c.total}${c.complete ? ' · done ✓' : ''}</span></summary>
             ${c.intro ? `<div style="color:#9aa4b5;font-size:12px;white-space:pre-wrap;margin:4px 0;">${weRich(c.intro)}</div>` : ''}${c.tasks.map(t => weTask(t, 'wwl-lab-check', '')).join('')}
-            ${c.canRemind ? `<label style="display:flex;gap:8px;align-items:center;margin-top:6px;padding-top:6px;border-top:1px solid #3a4352;font-size:12px;"><input type="checkbox" class="wwl-lab-remind" data-id="${esc(c.id)}" ${c.remindersOn ? 'checked' : ''}> Put the daily steps of this note on my To do</label>` : ''}</details>`).join('')
+            ${c.canRemind ? `<label style="display:flex;gap:8px;align-items:center;margin-top:6px;padding-top:6px;border-top:1px solid #3a4352;font-size:12px;"><input type="checkbox" class="wwl-lab-remind" data-id="${esc(c.id)}" ${c.remindersOn ? 'checked' : ''}> Put the daily steps of this note on my To do</label>` : ''}</details>`;
+        // notes with a main title (e.g. Finances, Merits) sit together under it, like on the site; the others stand on their own below
+        const groups = [];
+        for (const c of cards) if (c.group && !groups.includes(c.group)) groups.push(c.group);
+        html += cards.length ? groups.map(g => {
+            const list = cards.filter(c => c.group === g), gDone = list.reduce((s, c) => s + c.doneCount, 0), gTotal = list.reduce((s, c) => s + c.total, 0);
+            return `<details class="wwl-w-det" data-k="labgroup:${esc(g)}" ${welOpen[`labgroup:${g}`] ? 'open' : ''} style="margin:8px 0;border:1px solid #3a4352;border-radius:8px;padding:4px 8px;"><summary style="cursor:pointer;font-weight:700;font-size:14px;">${esc(g)} <span style="font-weight:400;color:#9aa4b5;font-size:11px;">${list.length} note${list.length === 1 ? '' : 's'} · ${gDone}/${gTotal} steps</span></summary>${list.map(cardHtml).join('')}</details>`;
+        }).join('') + cards.filter(c => !c.group).map(cardHtml).join('')
             : `<div style="color:#9aa4b5;font-size:12px;padding:4px 0;">More notes will show up here when they are written.</div>`;
         return html + `<div style="margin-top:10px;color:#9aa4b5;font-size:12px;">The same notes are on the site: <a href="${WWL}/lab-notes" target="_blank" rel="noopener" style="color:#35d99b;">${esc(WWL)}/lab-notes</a>. Your mentor and the chat with them are on the site too: <a href="${WWL}/mentoring" target="_blank" rel="noopener" style="color:#35d99b;">${esc(WWL)}/mentoring</a></div>`;
     }
