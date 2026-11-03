@@ -12,6 +12,15 @@
 
 const WHATS_NEW = [
     {
+        version: '1.52', date: '2026-11-03',
+        title: 'Script 1.55: Lab Notes in groups',
+        everyone: [
+            'The Notes tab in the Labs Assistant now shows the Lab Notes in groups, like the site: Finances, Merits and Education, each one to open and close. Update the script to get it: the update banner shows when a new version is ready.',
+            'The faction radar setting now says who made it: Solo050. Thank you!',
+        ],
+        leaders: [],
+    },
+    {
         version: '1.51', date: '2026-11-03',
         title: 'Lab Notes guides and the Growth simulator',
         everyone: [
