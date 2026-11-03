@@ -15,7 +15,7 @@ Members get `energy-plan.user.js` (the **release** file). Every change from now 
 Queue changes below instead of releasing each one. Nothing here is live for members until a release.
 
 ### Queued for the next release
-- DEV 1.54.1 (2026-11-03): the Notes tab shows the Lab Notes under their main titles (Finances, Merits), collapsible, like the site.
+- DEV 1.54.2 (2026-11-03): the Notes tab shows the Lab Notes under their main titles (Finances, Merits, Education), collapsible, like the site; the faction radar setting says it was made by Solo050.
 - Last release: script 1.54 (2026-11-02): Labs Assistant name inside Torn (the Tampermonkey name stays World Wide Labs, a new name would reinstall), released together with the mentoring sign-up (live on the site, open by default, switch on the Mentoring admin page). Before that, script 1.53 (2026-11-02): OC join rules with exceptions per crime (Bidding War 50 percent). Before that, script 1.52 (2026-10-30): the Award tracker can be opened and closed, clean links in the reminder messages, the leader To do sections (Recruit to Experiment B, to Guinea Pig / Lab Rat, Organized crimes) with a toggle per line, a message to copy and Notified, the faction radar every 5 minutes, and the chain watching limit message (4 hours in any 12 hours). Before that, script 1.51 (2026-10-25): the OC join rules, the OC numbers refresh and the availability calendar redraw.
 
 ## Releasing (when the list is done and tested)

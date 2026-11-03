@@ -12,6 +12,16 @@
 
 const WHATS_NEW = [
     {
+        version: '1.51', date: '2026-11-03',
+        title: 'Lab Notes guides and the Growth simulator',
+        everyone: [
+            'Lab Notes now has three guide groups you can open and close: Finances (your first millions, making your money work, your first company job), Merits (where to spend them and how to get them fast) and Education (your first courses, picking a direction, the courses for directors). Tick the steps as you go and switch on the daily reminders.',
+            'The Gym stats page has a new Growth simulator, built on the Compounding Gains Simulator by ArcaneReaper. It starts from your own stat and shows how many days a milestone takes when your gains compound, next to your real pace of the last 28 days.',
+            'The Tools and links page has a new Credits box: Solo050 made the faction radar and ArcaneReaper made the simulator. Thank you both!',
+        ],
+        leaders: [],
+    },
+    {
         version: '1.50', date: '2026-11-03',
         title: 'Overseas Stock: best trip for your own setup',
         everyone: [
