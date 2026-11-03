@@ -38,12 +38,12 @@ async function loadWelcomeMine() {
     renderLabCards(r.cards || [], r.days);
 }
 // the other cards: each its own window, closed to begin with, no lock between them; after finishing one a member can put its daily habits on their own to-do
-const lnOpen = {};
+const lnOpen = {}, lnOpenGroup = {};
 function renderLabCards(cards, days) {
     const panel = $('ln-cards-panel');
     if (!panel) return;
     panel.style.display = cards.length ? 'block' : 'none';
-    $('ln-cards').innerHTML = cards.map(c => `<details class="ln-card" data-id="${esc(c.id)}" ${lnOpen[c.id] ? 'open' : ''} style="margin:6px 0;border:1px solid var(--line);border-radius:8px;padding:6px 12px;">
+    const cardHtml = c => `<details class="ln-card" data-id="${esc(c.id)}" ${lnOpen[c.id] ? 'open' : ''} style="margin:6px 0;border:1px solid var(--line);border-radius:8px;padding:6px 12px;">
         <summary class="av-sum"><span style="font-size:14px;font-weight:700;color:${c.complete ? 'var(--reagent)' : 'var(--text)'};">${c.complete ? '✓' : '○'} ${esc(c.title)}</span> <span style="color:var(--muted);font-size:12px;">${c.doneCount}/${c.total}</span></summary>
         <div style="font-size:13px;color:var(--muted);white-space:pre-wrap;margin:8px 0;">${weRich(c.intro)}</div>
         ${c.tasks.map(t => `<div style="display:flex;gap:10px;align-items:flex-start;padding:7px 0;border-top:1px solid var(--line);${t.waiting ? 'opacity:.6;' : ''}">
@@ -51,7 +51,17 @@ function renderLabCards(cards, days) {
             <div style="flex:1;font-size:13px;white-space:pre-wrap;">${weRich(t.text)}${t.auto ? ' <span style="color:var(--muted);font-size:11px;">· ticks itself</span>' : ''}${t.remind ? ' <span style="color:var(--muted);font-size:11px;">· daily habit</span>' : ''}${t.waiting ? ` <span style="color:#f0b432;font-size:11px;">· available from day ${t.fromDay + 1} in the faction (you are on day ${(days || 0) + 1})</span>` : ''}</div>
             ${weLinkBtn(t)}</div>`).join('')}
         ${c.canRemind ? `<label style="display:flex;gap:8px;align-items:center;margin-top:8px;padding-top:8px;border-top:1px solid var(--line);font-size:13px;${c.complete ? 'cursor:pointer;' : 'opacity:.55;'}"><input type="checkbox" class="ln-remind" data-id="${esc(c.id)}" ${c.remindersOn ? 'checked' : ''} ${c.complete ? '' : 'disabled'} style="width:auto;"> 🔔 Put the daily habits of this Lab Note on my daily to-do${c.complete ? '' : ' <span style="color:var(--muted);font-size:11px;">(finish every step first)</span>'}</label>` : ''}
-    </details>`).join('');
+    </details>`;
+    // Lab Notes with a group (e.g. Finances) sit together under that main title, in the order the groups first appear; the rest stand on their own below
+    const groups = [];
+    for (const c of cards) if (c.group && !groups.includes(c.group)) groups.push(c.group);
+    $('ln-cards').innerHTML = groups.map(g => {
+        const list = cards.filter(c => c.group === g), done = list.reduce((s, c) => s + c.doneCount, 0), total = list.reduce((s, c) => s + c.total, 0);
+        return `<details class="ln-group" data-g="${esc(g)}" ${lnOpenGroup[g] ? 'open' : ''} style="margin:10px 0;border:1px solid var(--line);border-radius:10px;padding:8px 12px;">
+            <summary class="av-sum"><span style="font-size:16px;font-weight:700;">${esc(g)}</span> <span style="color:var(--muted);font-size:12px;">${list.length} Lab Note${list.length === 1 ? '' : 's'} · ${done}/${total} steps</span></summary>
+            ${list.map(cardHtml).join('')}</details>`;
+    }).join('') + cards.filter(c => !c.group).map(cardHtml).join('');
+    $('ln-cards').querySelectorAll('.ln-group').forEach(d => d.addEventListener('toggle', () => { lnOpenGroup[d.dataset.g] = d.open; }));
     $('ln-cards').querySelectorAll('.ln-card').forEach(d => d.addEventListener('toggle', () => { lnOpen[d.dataset.id] = d.open; }));
     $('ln-cards').querySelectorAll('.ln-check').forEach(cb => cb.addEventListener('change', async () => {
         const d = await weFetch({ action: 'wel-done', id: cb.dataset.id, done: cb.checked });
@@ -197,6 +207,7 @@ function renderLabAdmin() {
         <summary class="av-sum"><b style="font-size:15px;">${esc(c.title || 'New Lab Note')}</b> <span style="color:var(--muted);font-size:12px;">${c.tasks.length} step${c.tasks.length === 1 ? '' : 's'}${c.tasks.some(t => t.remind) ? ` · ${c.tasks.filter(t => t.remind).length} daily habit${c.tasks.filter(t => t.remind).length === 1 ? '' : 's'}` : ''}</span></summary>
         <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-top:8px;">
             <div class="field" style="margin:0;flex:1;min-width:220px;"><label>Title</label><input class="wc-title" maxlength="80" value="${esc(c.title)}"></div>
+            <div class="field" style="margin:0;width:220px;"><label>Main title (group, optional)</label><input class="wc-group" list="wa-groups" maxlength="60" placeholder="e.g. Finances" value="${esc(c.group || '')}"></div>
             <button class="ghost small wc-del" style="color:var(--danger);">Remove this Lab Note</button>
         </div>
         <div class="field" style="margin:8px 0;"><label>Intro (put links as [text](https://...))</label><textarea class="wc-intro" rows="3" maxlength="1200">${esc(c.intro)}</textarea></div>
@@ -210,11 +221,11 @@ function renderLabAdmin() {
                 <div class="field" style="margin:0;width:120px;"><label>From faction day</label><input type="number" class="wc-tday" min="0" max="60" value="${esc(t.fromDay || 0)}"></div>
             </div>
             <div class="field" style="margin:6px 0 0;"><label>Daily reminder (only if this step is a habit worth repeating; leave empty if not)</label><input class="wc-tremind" maxlength="100" placeholder="e.g. Buy your plushies from Bits and Bobs" value="${esc(t.remind || '')}"></div></div>`).join('')}
-        <button class="ghost small wc-tadd">+ Add step</button></details>`).join('') : '<p style="color:var(--muted);font-size:13px;margin:0 0 8px;">No extra Lab Notes yet.</p>';
+        <button class="ghost small wc-tadd">+ Add step</button></details>`).join('') + `<datalist id="wa-groups">${[...new Set(weCfg.cards.map(c => c.group).filter(Boolean))].map(g => `<option value="${esc(g)}">`).join('')}</datalist>` : '<p style="color:var(--muted);font-size:13px;margin:0 0 8px;">No extra Lab Notes yet.</p>';
     weSyncCards = () => {
         document.querySelectorAll('#wa-cards .wc-card').forEach(card => {
             const c = weCfg.cards[Number(card.dataset.k)];
-            c.title = card.querySelector('.wc-title').value; c.intro = card.querySelector('.wc-intro').value;
+            c.title = card.querySelector('.wc-title').value; c.group = card.querySelector('.wc-group').value; c.intro = card.querySelector('.wc-intro').value;
             card.querySelectorAll('[data-t]').forEach(row => {
                 const t = c.tasks[Number(row.dataset.t)];
                 t.text = row.querySelector('.wc-ttext').value; t.link = row.querySelector('.wc-tlink').value; t.label = row.querySelector('.wc-tlabel').value;
@@ -229,7 +240,7 @@ function renderLabAdmin() {
     document.querySelectorAll('#wa-cards .wc-tadd').forEach(b => b.addEventListener('click', redo(() => weCfg.cards[idx(b)].tasks.push({ id: '', text: '', link: '', label: '', auto: '', autoArg: '', fromDay: 0, remind: '' }))));
     document.querySelectorAll('#wa-cards .wc-tdel').forEach(b => b.addEventListener('click', redo(() => weCfg.cards[idx(b)].tasks.splice(Number(b.closest('[data-t]').dataset.t), 1))));
 }
-$('wa-card-add').addEventListener('click', () => { weSync(); weCfg.cards.push({ id: '', title: '', intro: '', tasks: [] }); weCardOpen[weCfg.cards.length - 1] = true; renderLabAdmin(); });
+$('wa-card-add').addEventListener('click', () => { weSync(); weCfg.cards.push({ id: '', title: '', group: '', intro: '', tasks: [] }); weCardOpen[weCfg.cards.length - 1] = true; renderLabAdmin(); });
 
 // ---- leaders: who is ready for promotion ----
 function renderPromotions(list) {
