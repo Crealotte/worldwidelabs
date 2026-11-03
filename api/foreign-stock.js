@@ -80,6 +80,7 @@ module.exports = async function handler(req, res) {
                 return {
                     id: item.id,
                     name: dir?.name || item.name,
+                    type: dir?.type || '', // Torn's own item type ("Plushie", "Flower", "Drug"...): the trip planner gives plushies and flowers their own extra slots
                     quantity: item.quantity,
                     cost: item.cost,
                     marketValue,
@@ -96,7 +97,9 @@ module.exports = async function handler(req, res) {
             };
         }).sort((a, b) => a.name.localeCompare(b.name));
 
-        return res.status(200).json({ countries, payloadTimestamp: stockData.timestamp ? stockData.timestamp * 1000 : null });
+        // what one business class flight costs: the ticket's market value (the trip planner counts one ticket per flight)
+        const bct = Object.values(itemDirectory || {}).find(i => i && i.name === 'Business Class Ticket');
+        return res.status(200).json({ countries, payloadTimestamp: stockData.timestamp ? stockData.timestamp * 1000 : null, bctValue: bct ? bct.market_value || 0 : 0 });
     } catch (e) {
         return res.status(500).json({ error: String(e.message || e) });
     }
