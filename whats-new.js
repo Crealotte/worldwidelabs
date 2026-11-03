@@ -12,6 +12,15 @@
 
 const WHATS_NEW = [
     {
+        version: '1.50', date: '2026-11-03',
+        title: 'Overseas Stock: best trip for your own setup',
+        everyone: [
+            'The Overseas Stock page now has a My setup box. Tick what applies to you once: an airstrip, the WLT stock block, business class tickets, your suitcase, your company (Toy Shop, Flower Shop, Lingerie Store, Cruise Line) and the travel books. It is remembered on your device.',
+            'Under it, Best trips for you right now shows, for every country, a full trip of the most profitable items in stock: how many items you can carry, the flight time, the profit per trip and the profit per hour. Our Excursion perk is already counted for everybody. The list of all items is still below.',
+        ],
+        leaders: [],
+    },
+    {
         version: '1.49', date: '2026-11-02',
         title: 'Crimes Guide: all 13 crimes',
         everyone: [
