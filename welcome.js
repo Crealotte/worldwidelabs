@@ -212,7 +212,7 @@ function renderLabAdmin() {
         </div>
         <div class="field" style="margin:8px 0;"><label>Intro (put links as [text](https://...))</label><textarea class="wc-intro" rows="3" maxlength="1200">${esc(c.intro)}</textarea></div>
         ${c.tasks.map((t, j) => `<div style="border-top:1px solid var(--line);padding:8px 0;" data-t="${j}">
-            <div style="display:flex;gap:8px;align-items:flex-start;"><div class="field" style="margin:0;flex:1;"><label>Step (live prices: {{price:Lollipop}} = what CreaLotte pays now, {{day:Lollipop:25}} = profit on 100 with a shop price of 25)</label><textarea class="wc-ttext" rows="2" maxlength="600">${esc(t.text)}</textarea></div><button class="ghost small wc-tdel" style="color:var(--danger);margin-top:20px;">✕</button></div>
+            <div style="display:flex;gap:8px;align-items:flex-start;"><div class="field" style="margin:0;flex:1;"><label>Step (live prices: {{price:Lollipop}} = what CreaLotte pays now, {{day:Lollipop:25}} = profit on 100 with a shop price of 25, {{can}} = an average Sweet Shop premium can, {{canweek:7}} = a week of cans at 7 stars)</label><textarea class="wc-ttext" rows="2" maxlength="600">${esc(t.text)}</textarea></div><button class="ghost small wc-tdel" style="color:var(--danger);margin-top:20px;">✕</button></div>
             <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:6px;">
                 <div class="field" style="margin:0;flex:1;min-width:200px;"><label>Link (WWL page or full link, optional)</label><input class="wc-tlink" maxlength="300" value="${esc(t.link)}"></div>
                 <div class="field" style="margin:0;width:150px;"><label>Button text</label><input class="wc-tlabel" maxlength="40" value="${esc(t.label)}"></div>
