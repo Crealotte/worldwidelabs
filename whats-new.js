@@ -17,6 +17,7 @@ const WHATS_NEW = [
         everyone: [
             'Lab Notes now has three guide groups you can open and close: Finances (your first millions, making your money work, your first company job), Merits (where to spend them and how to get them fast) and Education (your first courses, picking a direction, the courses for directors). Tick the steps as you go and switch on the daily reminders.',
             'The Gym stats page has a new Growth simulator, built on the Compounding Gains Simulator by ArcaneReaper. It starts from your own stat and shows how many days a milestone takes when your gains compound, next to your real pace of the last 28 days.',
+            'There is a new Growth planner page under Training. Pick an example (a standard new member to 100k total stats, or to 100k and then 250k) or fill in your own numbers, with phases like up to 100k, then up to 250k. It follows the real gyms, the monthly Steadfast perk and how you split your energy over the four stats, and shows how long each phase takes. You can save your own plan.',
             'The Tools and links page has a new Credits box: Solo050 made the faction radar and ArcaneReaper made the simulator. Thank you both!',
         ],
         leaders: [],

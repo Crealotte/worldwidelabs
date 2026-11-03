@@ -1391,7 +1391,7 @@ Cancel: ${cancelUrl}`, [], embeds, undefined, true);
 
 
         // Gym stats page (history graph + goals) — open to every member, only ever about the caller. See lib/gymStats.js.
-        if (action.startsWith('gym-')) return res.status(200).json(await gymHandle(action, req.body, { redis, key, playerId }));
+        if (action.startsWith('gym-')) return res.status(200).json(await gymHandle(action, req.body, { redis, key, playerId, factionId, isLeader: () => isLeader(key) }));
         // War reports page — every saved payout report with result and pay details (all lines for leaders, own line for members).
         if (action === 'receipts-report') return res.status(200).json(await warReports({ redis, key, factionId, playerId, leader: await isLeader(key) }));
         // Bug reports page — posts a member's report (and screenshot) to a Discord channel. See lib/bugReport.js.

@@ -461,6 +461,7 @@
         if (page === 'availability' || page === 'availability-leaders') loadAvailability();
         if (page === 'energy') loadGymPlanner();
         if (page === 'gym-stats') loadGymStats();
+        if (page === 'growth-planner') loadGrowthPlanner();
         if (page === 'energy-tracker') loadEnergyTracker();
         if (page === 'war-reports') loadWarReports();
         if (page === 'steadfast') loadFactionSteadfast();
