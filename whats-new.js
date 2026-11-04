@@ -12,6 +12,17 @@
 
 const WHATS_NEW = [
     {
+        version: '1.53', date: '2026-11-04',
+        title: 'Script 1.56: a better Faction radar',
+        everyone: [
+            'The faction radar now counts people who have been idle for more than 30 minutes as offline, because Torn keeps people on Idle for hours. You can change the minutes in the Labs Assistant settings, and idle names show how long they have been idle.',
+            'Members who are in hospital get a bed icon next to their name (hover it to see how long is left), and the title shows how many are in hospital.',
+            'The Refresh button is clearer and really asks Torn again (at most once every 30 seconds for the whole faction). The radar says when it was last updated.',
+            'You can choose where the radar shows: on every page, on faction pages only, or on pages you list yourself. Thank you for the ideas, shukolza and Solo050!',
+        ],
+        leaders: [],
+    },
+    {
         version: '1.52', date: '2026-11-03',
         title: 'Script 1.55: Lab Notes in groups',
         everyone: [

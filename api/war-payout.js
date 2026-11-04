@@ -1013,7 +1013,9 @@ module.exports = async function handler(req, res) {
         // One read from Torn per minute for the whole faction (kept in this server's memory, nothing is written to the database); the plain fetch skips lib/tornFetch's 10-minute memory of the member list.
         if (action === 'faction-radar') {
             const hit = radarMem.get(String(factionId));
-            if (hit && Date.now() - hit.at < 300000) return res.status(200).json(hit.data); // 5 minutes: the strip is asked for on every page of every member, and who is online hardly changes in that time
+            // 5 minutes: the strip is asked for on every page of every member, and who is online hardly changes in that time. The Refresh button (force) really asks Torn again,
+            // but at most once every 30 seconds for the whole faction.
+            if (hit && (Date.now() - hit.at < 30000 || (Date.now() - hit.at < 300000 && !(req.body && req.body.force)))) return res.status(200).json(hit.data);
             const rr = await fetch(`https://api.torn.com/v2/faction/members?striptags=true&key=${encodeURIComponent(key)}`, { headers: { accept: 'application/json' } });
             const dd = await rr.json();
             if (dd.error) return res.status(502).json({ error: dd.error.error || 'Torn would not give the member list' });
@@ -1034,7 +1036,13 @@ module.exports = async function handler(req, res) {
                     }
                 }
             } catch (e) { /* the radar still works without the colors */ }
-            const pick = st => list.filter(m => m.last_action && String(m.last_action.status).toLowerCase() === st).sort((a, b) => (b.last_action.timestamp || 0) - (a.last_action.timestamp || 0)).map(m => ({ id: String(m.id), name: String(m.name || '').slice(0, 24), a: state[String(m.id)] || '' }));
+            // per person: m = minutes since the last action (Torn keeps people on "Idle" for many hours, the strip lets each member choose when idle counts as offline), h = in hospital (until when, in seconds)
+            const nowSec = Date.now() / 1000;
+            const pick = st => list.filter(m => m.last_action && String(m.last_action.status).toLowerCase() === st).sort((a, b) => (b.last_action.timestamp || 0) - (a.last_action.timestamp || 0)).map(m => {
+                const o = { id: String(m.id), name: String(m.name || '').slice(0, 24), a: state[String(m.id)] || '', m: Math.max(0, Math.round((nowSec - (m.last_action.timestamp || 0)) / 60)) };
+                if (m.status && String(m.status.state || '').toLowerCase() === 'hospital') o.h = Number(m.status.until) || 1;
+                return o;
+            });
             const data = { online: pick('online'), idle: pick('idle'), total: list.length, planName, at: Date.now() };
             if (radarMem.size > 50) radarMem.clear();
             radarMem.set(String(factionId), { at: Date.now(), data });

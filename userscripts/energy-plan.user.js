@@ -2,7 +2,7 @@
 // @name         World Wide Labs
 // @namespace    https://worldwidelabs.vercel.app
 // @author       CreaLotte
-// @version      1.55
+// @version      1.56
 // @updateURL    __WWL_BASE__/worldwidelabs.user.js
 // @downloadURL  __WWL_BASE__/worldwidelabs.user.js
 // @description  Shows your WorldWideLabs weekly energy plan (the checklist from the Energy planner) inside Torn, a To do tab with small personal reminders (revive setting, feedback, timezone map, availability, Discord/Intel/CAT), your My Targets list, a simplified energy/war standing strip, and — if you are in the Mentoring Platform — your mentoring checklist too. Also shows faction banners at the top of every Torn page. A small ⚙ in the header shows the installed version, flags when a newer one is out, lets you set/replace your API key, and — for a leader — add or remove your faction's banners right from Torn. On a computer it is a small window you can drag around and close; in TornPDA it is a menu. Ticks are shared with the WWL site.
@@ -27,7 +27,7 @@
     const KEY_NAME = 'wwl_api_key', POS_NAME = 'wwl_plan_pos', STATE_NAME = 'wwl_plan_state';
     // GM_info gives the version Tampermonkey actually has installed right now — falls back to a
     // hardcoded copy (kept in sync with @version above) for TornPDA, which doesn't grant GM_info.
-    const SCRIPT_VERSION = (typeof GM_info !== 'undefined' && GM_info.script?.version) || '1.55';
+    const SCRIPT_VERSION = (typeof GM_info !== 'undefined' && GM_info.script?.version) || '1.56';
     const versionGreater = (a, b) => {
         const pa = String(a).split('.').map(Number), pb = String(b).split('.').map(Number);
         for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
@@ -861,6 +861,12 @@
             <button type="button" id="wwl-change-key" style="margin-top:4px;padding:6px 12px;border-radius:6px;border:1px solid #3a4352;background:transparent;color:#e6e9ef;cursor:pointer;">Change API key</button>
             ${undismissHtml}`;
         html += `<label style="display:flex;gap:8px;align-items:center;margin-top:10px;font-size:13px;cursor:pointer;"><input type="checkbox" id="wwl-radar-on" ${radarOn() ? 'checked' : ''}> Show the faction radar (who is online and idle) at the top of Torn pages <span style="color:#9aa4b5;font-size:11px;">(radar made by Solo050)</span></label>`;
+        const rin = 'background:#12161c;color:#e6e9ef;border:1px solid #3a4352;border-radius:4px;padding:3px 6px;font-size:12px;';
+        const rmode = store.get(RADAR_PAGES) || 'all';
+        html += `<div style="margin:6px 0 0 22px;font-size:12px;color:#9aa4b5;">
+            <div style="margin-bottom:6px;">Show the radar on <select id="wwl-radar-pages" style="${rin}"><option value="all" ${rmode === 'all' ? 'selected' : ''}>every page</option><option value="faction" ${rmode === 'faction' ? 'selected' : ''}>faction pages only</option><option value="custom" ${rmode === 'custom' ? 'selected' : ''}>pages I choose</option></select>
+                ${rmode === 'custom' ? `<input id="wwl-radar-list" placeholder="parts of the address, e.g. factions.php, loader.php" value="${esc(store.get(RADAR_LIST) || '')}" style="${rin}width:230px;margin-top:4px;">` : ''}</div>
+            <div>Count people idle for more than <input id="wwl-radar-idle" type="number" min="5" max="600" value="${radarIdleMin()}" style="${rin}width:58px;"> minutes as offline</div></div>`;
         html += `<label style="display:flex;gap:8px;align-items:center;margin-top:8px;font-size:13px;cursor:pointer;"><input type="checkbox" id="wwl-oc-debug" ${store.get('wwl_oc_debug') === '1' ? 'checked' : ''}> Show what the OC check reads on every slot (for testing, reload the page after)</label>`;
         html += myRemindersBlock();
         if (settingsData === null) {
@@ -913,6 +919,9 @@
         body.querySelector('#wwl-back')?.addEventListener('click', () => { tab = lastTab; render(); });
         body.querySelector('#wwl-oc-debug')?.addEventListener('change', e => store.set('wwl_oc_debug', e.target.checked ? '1' : '0'));
         body.querySelector('#wwl-radar-on')?.addEventListener('change', e => { store.set(RADAR_ON, e.target.checked ? '1' : '0'); if (e.target.checked) { radarLast = 0; refreshRadar(true); } else renderRadar(); });
+        body.querySelector('#wwl-radar-pages')?.addEventListener('change', e => { store.set(RADAR_PAGES, e.target.value); renderRadar(); render(); }); // render(): the list box shows only for "pages I choose"
+        body.querySelector('#wwl-radar-list')?.addEventListener('input', e => { store.set(RADAR_LIST, e.target.value); renderRadar(); });
+        body.querySelector('#wwl-radar-idle')?.addEventListener('change', e => { const n = Math.max(5, Math.min(600, parseInt(e.target.value, 10) || 30)); e.target.value = n; store.set(RADAR_IDLE, String(n)); renderRadar(); });
         body.querySelector('#wwl-change-key')?.addEventListener('click', () => {
             const current = store.get(KEY_NAME) || '';
             const masked = current ? `${current.slice(0, 4)}…${current.slice(-4)}` : 'not set';
@@ -1220,33 +1229,54 @@
 
     // ---- Faction radar: who of the faction is online or idle right now, in a strip under the banner on every Torn page (switch in ⚙ Settings) ----
     // One call at most once a minute per page load (the server keeps its answer for a minute for the whole faction), and only the Refresh link asks again sooner (not before 15 seconds).
-    const RADAR_ON = 'wwl_radar_on', RADAR_CACHE = 'wwl_radar_cache';
+    const RADAR_ON = 'wwl_radar_on', RADAR_CACHE = 'wwl_radar_cache', RADAR_IDLE = 'wwl_radar_idle', RADAR_PAGES = 'wwl_radar_pages', RADAR_LIST = 'wwl_radar_list';
     const radarOn = () => store.get(RADAR_ON) !== '0';
+    // Torn keeps people on "Idle" for many hours, so each member picks when idle counts as offline (30 minutes to start with)
+    const radarIdleMin = () => { const n = parseInt(store.get(RADAR_IDLE), 10); return n >= 5 && n <= 600 ? n : 30; };
+    // where the strip shows: on every page, only on faction pages, or on the pages a member listed (parts of the address, separated by commas)
+    function radarPageOk() {
+        const mode = store.get(RADAR_PAGES) || 'all', here = location.href;
+        if (mode === 'faction') return location.pathname.indexOf('factions.php') >= 0;
+        if (mode === 'custom') return String(store.get(RADAR_LIST) || '').split(',').map(s => s.trim()).filter(Boolean).some(s => here.indexOf(s) >= 0);
+        return true;
+    }
+    const RADAR_BED = '<svg width="15" height="12" viewBox="0 0 24 16" style="vertical-align:-1px;" aria-hidden="true"><path fill="#e05555" d="M1 1h2.4v7H23v7h-2.4v-2.6H3.4V15H1z"/><circle fill="#e05555" cx="7.6" cy="5.2" r="2.3"/></svg>';
+    // what the strip shows, from the server's list: idle people past the cutoff count as offline, people in hospital get a bed (hover for the time left)
+    function radarView(data, cutoff, nowSec) {
+        // the dot is the status (green online, orange idle); the name is coloured by what that member said about this hour in the availability plan
+        const NAME_COLOR = { yes: '#35d99b', maybe: '#ff922b', watch: '#4da3ff' };
+        const idle = data.idle.filter(p => p.m == null || p.m <= cutoff), shown = [...data.online, ...idle];
+        const bed = p => {
+            if (!p.h) return '';
+            const left = p.h > 1 ? Math.max(0, p.h - nowSec) : 0, t = left >= 3600 ? `${Math.floor(left / 3600)}h ${Math.floor(left % 3600 / 60)}m` : left > 0 ? `${Math.ceil(left / 60)}m` : '';
+            return ` <span title="In hospital${t ? `, ${t} left` : ''}">${RADAR_BED}</span>`;
+        };
+        const one = (p, c, minutes) => `<a href="https://www.torn.com/profiles.php?XID=${esc(p.id)}" style="color:${NAME_COLOR[p.a] || '#e6e9ef'};${p.a === 'watch' ? 'font-weight:700;' : ''}text-decoration:none;white-space:nowrap;"><span style="color:${c};">●</span> ${esc(p.name)}${minutes && p.m >= 5 ? ` <span style="color:#9aa4b5;font-size:10px;">${p.m}m</span>` : ''}${bed(p)}</a>`;
+        return { names: [...data.online.map(p => one(p, '#35d99b', false)), ...idle.map(p => one(p, '#f0a030', true))], online: data.online.length, idle: idle.length, hosp: shown.filter(p => p.h).length, anyPlan: shown.some(p => p.a) };
+    }
     let radarData = null, radarBusy = false, radarLast = 0;
     function renderRadar() {
-        if (!radarOn() || !radarData) { radarBar.style.display = 'none'; repositionForBanner(); return; }
-        // the dot is the status (green online, orange idle); the name is coloured by what that member said about this hour in the availability plan
-        const NAME_COLOR = { yes: '#35d99b', maybe: '#ff922b', watch: '#4da3ff' }, anyPlan = [...radarData.online, ...radarData.idle].some(p => p.a);
-        const one = (p, c) => `<a href="https://www.torn.com/profiles.php?XID=${esc(p.id)}" style="color:${NAME_COLOR[p.a] || '#e6e9ef'};${p.a === 'watch' ? 'font-weight:700;' : ''}text-decoration:none;white-space:nowrap;"><span style="color:${c};">●</span> ${esc(p.name)}</a>`;
-        const names = [...radarData.online.map(p => one(p, '#35d99b')), ...radarData.idle.map(p => one(p, '#f0a030'))];
+        if (!radarOn() || !radarData || !radarPageOk()) { radarBar.style.display = 'none'; repositionForBanner(); return; }
+        const v = radarView(radarData, radarIdleMin(), Date.now() / 1000), ago = Math.max(0, Math.round((Date.now() - (radarData.at || radarLast)) / 60000));
         radarBar.style.display = 'block';
-        radarBar.innerHTML = `<div style="display:flex;justify-content:space-between;gap:8px;"><b style="color:#4da3ff;">FACTION RADAR (Online: ${radarData.online.length} | Idle: ${radarData.idle.length})</b><a href="#" id="wwl-radar-refresh" style="color:#9aa4b5;">Refresh</a></div>
-            <div style="display:flex;flex-wrap:wrap;gap:4px 12px;margin-top:2px;">${names.join('') || '<span style="color:#9aa4b5;">Nobody is online right now.</span>'}</div>
-            ${radarData.planName !== undefined && (anyPlan || radarData.planName) ? `<div style="margin-top:3px;color:#9aa4b5;font-size:11px;">Name colour, this hour in the plan${radarData.planName ? ` (${esc(radarData.planName)})` : ''}: <span style="color:#35d99b;">available</span> · <span style="color:#ff922b;">maybe</span> · <b style="color:#4da3ff;">watching</b></div>` : ''}`;
-        radarBar.querySelector('#wwl-radar-refresh').addEventListener('click', e => { e.preventDefault(); refreshRadar(true); });
+        radarBar.innerHTML = `<div style="display:flex;justify-content:space-between;gap:8px;align-items:center;"><b style="color:#4da3ff;">FACTION RADAR (Online: ${v.online} | Idle: ${v.idle}${v.hosp ? ` | In hospital: ${v.hosp}` : ''})</b><span style="color:#9aa4b5;font-size:11px;white-space:nowrap;">updated ${ago < 1 ? 'just now' : `${ago} min ago`} <a href="#" id="wwl-radar-refresh" style="color:#e6e9ef;border:1px solid #3a4352;border-radius:4px;padding:1px 8px;text-decoration:none;margin-left:4px;">↻ Refresh</a></span></div>
+            <div style="display:flex;flex-wrap:wrap;gap:4px 12px;margin-top:2px;">${v.names.join('') || '<span style="color:#9aa4b5;">Nobody is online right now.</span>'}</div>
+            ${radarData.planName !== undefined && (v.anyPlan || radarData.planName) ? `<div style="margin-top:3px;color:#9aa4b5;font-size:11px;">Name colour, this hour in the plan${radarData.planName ? ` (${esc(radarData.planName)})` : ''}: <span style="color:#35d99b;">available</span> · <span style="color:#ff922b;">maybe</span> · <b style="color:#4da3ff;">watching</b></div>` : ''}`;
+        radarBar.querySelector('#wwl-radar-refresh').addEventListener('click', e => { e.preventDefault(); e.target.textContent = 'Refreshing…'; refreshRadar(true); });
         repositionForBanner();
     }
+    setInterval(() => { if (radarData && radarOn() && radarBar.style.display !== 'none') renderRadar(); }, 60000); // only redraws the "updated … ago" text, no call to the server
     function refreshRadar(force) {
         if (!getKey() || radarBusy) return;
         if (!radarOn()) { renderRadar(); return; }
-        if (Date.now() - radarLast < (force ? 15000 : 300000)) return; // at most every 5 minutes (it was 1: every page of every member asks, and the free hosting time is limited)
+        if (Date.now() - radarLast < (force ? 15000 : 300000)) { if (force) renderRadar(); return; } // at most every 5 minutes (it was 1: every page of every member asks, and the free hosting time is limited); the Refresh button not before 15 seconds
         radarBusy = true;
-        api({ action: 'faction-radar' }).then(r => {
+        api({ action: 'faction-radar', force: !!force }).then(r => {
             if (!r || !Array.isArray(r.online)) return;
             radarData = r; radarLast = Date.now();
             store.set(RADAR_CACHE, JSON.stringify({ at: radarLast, data: r }));
             renderRadar();
-        }).catch(() => { /* the strip just keeps what it had */ }).finally(() => { radarBusy = false; });
+        }).catch(() => { renderRadar(); /* the strip just keeps what it had */ }).finally(() => { radarBusy = false; });
     }
     try { const c = JSON.parse(store.get(RADAR_CACHE) || 'null'); if (c && c.data && Array.isArray(c.data.online)) { radarData = c.data; radarLast = c.at || 0; renderRadar(); } } catch (e) { /* nothing cached */ }
     refreshRadar(false);
