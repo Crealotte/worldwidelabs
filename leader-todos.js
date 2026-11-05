@@ -65,7 +65,7 @@ function ltWireInvites(panel) {
 const LT_OB_OPEN = {};
 const LT_OB = {
     1: { title: 'Recruit → Experiment B', reqs: [['wwl', 'not on WWL'], ['script', 'on WWL without the script']] },
-    2: { title: 'To Guinea Pig / Lab Rat', reqs: [['discord', 'without Discord'], ['intel', 'without Intel'], ['cat', 'without CAT']] },
+    2: { title: 'Discord, Intel and CAT', reqs: [['discord', 'without Discord'], ['intel', 'without Intel'], ['cat', 'without CAT']] },
     3: { title: 'Organized crimes', reqs: [['ocout', 'not in an OC now'], ['ocnever', 'with no OC in the last 30 days']] },
 };
 const ltObDate = ts => new Date(ts).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });

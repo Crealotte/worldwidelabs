@@ -294,7 +294,13 @@ function welDeps(key, factionId) {
             if ((await verifyOf(id)).discordExempt) return true; // a leader excused them from Discord
             try { const { status } = await discordStatus([String(id)], { key, redis, guildMap: null, resolve: !!self, limit: 1 }); return status[String(id)] === 'yes' ? true : status[String(id)] === 'no' ? false : null; } catch (e) { return null; }
         },
-        discordMany: async ids => (await discordStatus(ids.map(String), { key, redis, guildMap: null, resolve: false })).status,
+        // When the bot can see the faction's Discord server, "on the server or not" is known for sure. Without it only the remembered answers are used, and a remembered "no" is kept for a day only: after that
+        // the member counted as "unknown" and silently passed the Discord check (while Who's on board, which reads the server, still said "not found").
+        discordMany: async ids => {
+            let guildMap = null;
+            if (isSharedServerFaction(factionId)) { try { guildMap = await tornToDiscordIds(); } catch (e) { /* fall back to what was remembered */ } }
+            return (await discordStatus(ids.map(String), { key, redis, guildMap, resolve: false })).status;
+        },
         warOk: members => moWarOk({ redis, factionId, members }),
         // who has logged into WWL (for the onboarding overview of the leader to do)
         wwlIds: async () => { const f = (await redis(['HGETALL', 'wwl:logins'])) || [], ids = new Set(); for (let i = 0; i < f.length; i += 2) if (f[i + 1] && f[i + 1] !== '0') ids.add(String(f[i])); return ids; },
@@ -495,7 +501,7 @@ async function leaderTodos(key, factionId) {
         if (ob) {
             const n = a => (a || []).length, s1 = ob.s1, s2 = ob.s2;
             if (n(s1.wwl) + n(s1.script) + n(s1.past)) todos.push({ id: 'onboard-1', ob: { stage: 1, ...s1 }, text: `Recruit to Experiment B: ${n(s1.wwl)} not on WWL, ${n(s1.script)} without the script${n(s1.past) ? `, ${n(s1.past)} past their ${s1.days} days` : ''}.`, cta: 'Open', page: 'dashboard', anchor: 'leader-todos' });
-            if (n(s2.discord) + n(s2.intel) + n(s2.cat) + n(s2.past)) todos.push({ id: 'onboard-2', ob: { stage: 2, ...s2 }, text: `To Guinea Pig or Lab Rat: ${n(s2.discord)} without Discord, ${n(s2.intel)} Intel, ${n(s2.cat)} CAT${n(s2.past) ? `, ${n(s2.past)} past their ${s2.days} days` : ''}.`, cta: 'Open', page: 'dashboard', anchor: 'leader-todos' });
+            if (n(s2.discord) + n(s2.intel) + n(s2.cat) + n(s2.past)) todos.push({ id: 'onboard-2', ob: { stage: 2, ...s2 }, text: `Discord, Intel and CAT: ${n(s2.discord)} without Discord, ${n(s2.intel)} Intel, ${n(s2.cat)} CAT${n(s2.past) ? `, ${n(s2.past)} past their ${s2.days} days` : ''}.`, cta: 'Open', page: 'dashboard', anchor: 'leader-todos' });
         }
     } catch (e) { /* skip */ }
 
