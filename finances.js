@@ -14,6 +14,8 @@ const finBankProfit = b => (b.status === 'active' && b.bank && b.bank.amount > b
 const finBuddy = b => { const profit = b.profit > 0 ? b.profit : finBankProfit(b) || Math.round(b.amount * finBankRate(b.term)); const mine = Math.round(profit * b.share / 100); // her share of the profit; the buddy reinvests the money given (unless the line says otherwise), so only her share comes to her at the end of a round
     return { profit, mine, back: b.amount + mine, cash: b.reinvest !== false ? mine : b.amount + mine, due: finAdd(b.given, b.term) }; };
 let finData = null, finSrv = null, finAhead = 16, finShowPlan = '', finTimer = null, finSaving = false;
+let finKnown = {}; // the ids of the investor and buddy lines this page loaded: sent with a save so the server keeps lines that were added elsewhere in the meantime
+const finKnownNow = () => ({ investors: ((finData && finData.investors) || []).map(x => x.id), buddies: ((finData && finData.buddies) || []).map(x => x.id) });
 let finPage = 'finances'; const FIN_PAGES = {}, finBound = {}; // the pages that share this file: Finances, Investment fund, Buddy banking (each registers itself with its render, status line and the lists it saves)
 
 async function finFetch(body) {
@@ -555,13 +557,17 @@ async function finSaveNow() {
     finSaving = true;
     const P = FIN_PAGES[finPage];
     // the Finances page saves everything except the lists of the investment fund and buddy banking pages; those pages save only their own lists
-    const r = P.parts ? await finFetch({ action: 'fin-part-save', parts: Object.fromEntries(P.parts.map(k => [k, finData[k]])) })
+    const r = P.parts ? await finFetch({ action: 'fin-part-save', parts: Object.fromEntries(P.parts.map(k => [k, finData[k]])), known: finKnown })
         : await finFetch({ action: 'fin-save', data: Object.fromEntries(Object.entries(finData).filter(([k]) => !['investors', 'buddies', 'roi', 'invRequests', 'paidOffset', 'terms', 'fundings', 'fundingCap'].includes(k))) });
     finSaving = false;
     const st = finStatusEl();
     if (r.error) { st.className = 'status err'; st.textContent = `Not saved: ${r.error}`; return; }
     st.className = 'status ok'; st.textContent = 'Saved.';
     setTimeout(() => { if (st.textContent === 'Saved.') { st.textContent = ''; st.className = 'status'; } }, 2500);
+    if (P.parts) {
+        if (r.kept && Object.keys(r.kept).length) { toast('New lines were added elsewhere while this page was open: the list is reloaded'); if (typeof finLoadLight === 'function') finLoadLight(finPage, P.status); }
+        else finKnown = finKnownNow();
+    }
 }
 
 function finWire(bodyId) {

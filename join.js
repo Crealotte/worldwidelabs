@@ -114,7 +114,9 @@ async function loadJoinRequests() {
     joinRequestsRender();
 }
 function joinRequestsRender() {
-    const r = joinReqs, m = n => finMoney(n), open = r.reqs.filter(q => q.status === 'open'), done = r.reqs.filter(q => q.status !== 'open').slice(0, 25);
+    const r = joinReqs, m = n => finMoney(n), open = r.reqs.filter(q => q.status === 'open');
+    const isWait = q => q.program === 'buddy' && q.status === 'approved'; // approved, but the money is not sent yet: no line on the Buddy banking page until it is
+    const waiting = r.reqs.filter(isWait).sort((a, b) => (a.createdOn < b.createdOn ? -1 : 1)), done = r.reqs.filter(q => q.status !== 'open' && !isWait(q)).slice(0, 25);
     const line = q => {
         const who = `<b>${esc(q.name)}</b> <span style="color:var(--muted);font-size:12px;">[${esc(q.tornId)}]</span>`;
         if (q.program === 'invest') { const t = finTierOf(q.details.amount); return `${who} wants to invest <b>${m(q.details.amount)}</b>${t ? ` (${t[2]} ${t[1]})` : ''}, ${q.details.mode === 'weekly' ? 'weekly' : 'monthly'} payouts`; }
@@ -124,15 +126,20 @@ function joinRequestsRender() {
     };
     const buttons = q => q.program === 'invest'
         ? `<button class="small" data-jr="${esc(q.id)}" data-dec="received" type="button" title="Their money has arrived: the deposit is created with their plan and a 180-day term">Money received</button><button class="ghost small" data-jr="${esc(q.id)}" data-dec="approve" type="button" title="Mark as handled without creating a deposit">Handled</button>`
-        : q.program === 'buddy' ? `<button class="small" data-jr="${esc(q.id)}" data-dec="approve" type="button" title="Approves the request and adds the buddy to the Buddy banking page (a Bronze line of today)">Approve and add the buddy</button>`
-        : `<button class="small" data-jr="${esc(q.id)}" data-dec="approve" type="button">Approve</button>`;
+        : `<button class="small" data-jr="${esc(q.id)}" data-dec="approve" type="button"${q.program === 'buddy' ? ' title="Approve first; after that the request waits under Approved buddies until you press Money sent"' : ''}>Approve</button>`;
+    const waitHtml = waiting.length ? `<div class="panel"><h3 style="margin-top:0;">Approved buddies, money not sent yet <span style="font-size:13px;color:#e0a030;">(${waiting.length})</span></h3>
+        <p style="color:var(--muted);font-size:12px;margin:0 0 8px;">Press <b>Money sent</b> when you have really given them the cash: only then they appear on the Buddy banking page (a Bronze line starting today, which you can change there). Oldest request first. Check before you send that they have no City Bank investment running: WWL cannot see that from here, so ask them (they can also open WWL with their own key and use the City Bank check).</p>
+        ${waiting.map(q => `<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:6px 0;border-top:1px solid var(--line);font-size:13px;"><span style="flex:1;min-width:240px;">${line(q)}<br><span style="font-size:11px;color:var(--muted);">asked ${esc(finDate(q.createdOn))} · approved ${esc(finDate(q.resolvedOn || q.createdOn))}</span></span><button class="small" data-jr="${esc(q.id)}" data-dec="sent" type="button" title="You gave them the cash: adds the buddy to the Buddy banking page">Money sent</button><button class="ghost small" data-jr="${esc(q.id)}" data-dec="withdraw" type="button" title="They still have a bank investment, or changed their mind: the request is closed and no line is made">Not going ahead</button></div>`).join('')}</div>` : '';
     $('jr-body').innerHTML = `<div class="panel"><h3 style="margin-top:0;">Open requests ${open.length ? `<span style="font-size:13px;color:#e0a030;">(${open.length})</span>` : ''}</h3>
         ${open.length ? open.map(q => `<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:6px 0;border-top:1px solid var(--line);font-size:13px;"><span style="flex:1;min-width:240px;">${line(q)}<br><span style="font-size:11px;color:var(--muted);">${esc(JOIN_PROGRAM_NAME[q.program])} · asked ${esc(finDate(q.createdOn))} · accepted the terms ${esc(finDate(q.termsOn))}</span></span>${buttons(q)}<button class="ghost small" data-jr="${esc(q.id)}" data-dec="decline" type="button">Decline</button></div>`).join('') : '<div style="color:var(--muted);font-size:13px;">No requests waiting.</div>'}</div>
+        ${waitHtml}
         ${done.length ? `<details class="panel"><summary class="av-sum"><b>Handled (${done.length})</b></summary>${done.map(q => `<div style="font-size:12px;padding:3px 0;color:var(--muted);">${line(q)} · ${q.status} ${esc(finDate(q.resolvedOn || q.createdOn))}</div>`).join('')}</details>` : ''}`;
     document.querySelectorAll('[data-jr]').forEach(b => b.addEventListener('click', async () => {
         if (b.dataset.dec === 'decline' && !confirm('Decline this request?')) return;
+        if (b.dataset.dec === 'withdraw' && !confirm('Close this request without sending money?')) return;
+        if (b.dataset.dec === 'sent' && !confirm('Have you really sent them the money? They will be added to the Buddy banking page.')) return;
         b.disabled = true;
-        const res = await joinFetch({ action: 'join-resolve', id: b.dataset.jr, decision: b.dataset.dec });
+        const res = await joinFetch(b.dataset.dec === 'withdraw' ? { action: 'join-buddy-withdraw', id: b.dataset.jr } : { action: 'join-resolve', id: b.dataset.jr, decision: b.dataset.dec });
         if (res.error) { toast(res.error); b.disabled = false; return; }
         toast('Done'); loadJoinRequests(); if (typeof loadLeaderTodos === 'function') loadLeaderTodos();
     }));
