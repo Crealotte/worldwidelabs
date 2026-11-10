@@ -50,6 +50,7 @@ const { runCompanyReports } = require('../lib/companyReports');
 const { ltHandle, leaseTodos, tenHandle, isTenant } = require('../lib/labstracking');
 const { finHandle, invHandle, isInvestor, isBuddy, finRoles, budHandle, fundRequestTodos } = require('../lib/finances');
 const { joinHandle, joinTodos } = require('../lib/joinlabs');
+const { mkeyHandle } = require('../lib/keyvault');
 const { serviceView, setKnown } = require('../lib/todoKnown');
 const { ledHandle, pricelistPublic, pricelistVote, tradeReceiptPublic } = require('../lib/ledger');
 const { recHandle, whoOf: recWhoOf } = require('../lib/recruit');
@@ -772,7 +773,7 @@ module.exports = async function handler(req, res) {
             if (dev) src = devizeScript(src);
             const host = String(req.headers['x-forwarded-host'] || req.headers.host || '').replace(/[^\w.:-]/g, '');
             res.setHeader('Content-Type', 'text/javascript; charset=utf-8');
-            res.setHeader('Cache-Control', dev ? 'no-store' : 'public, max-age=300');
+            res.setHeader('Cache-Control', dev ? 'no-store' : 'public, max-age=300, s-maxage=300'); // s-maxage: Vercel's own cache serves it for 5 minutes too, so update checks do not each run the function (hosting CPU)
             return res.status(200).send(src.split('__WWL_BASE__').join(`https://${host}`).split('__WWL_HOST__').join(host));
         }
         if (!REDIS_URL || !REDIS_TOKEN) {
@@ -954,7 +955,7 @@ module.exports = async function handler(req, res) {
                 return res.status(200).json(await recHandle(action, req.body, { redis, who, key }));
             } catch (e) { return res.status(e.code === 402 ? 402 : /only|owner/i.test(e.message) ? 403 : 400).json({ error: e.message }); }
         }
-        if (action === 'access-check' || action.startsWith('co-') || action.startsWith('lt-') || action.startsWith('fin-') || action.startsWith('inv-') || action.startsWith('ten-') || action.startsWith('join-') || action.startsWith('bud-') || action.startsWith('led-') || action.startsWith('lic-') || action === 'todo-known' || action === 'test-seed') {
+        if (action === 'access-check' || action.startsWith('co-') || action.startsWith('lt-') || action.startsWith('fin-') || action.startsWith('inv-') || action.startsWith('ten-') || action.startsWith('join-') || action.startsWith('bud-') || action.startsWith('mkey-') || action.startsWith('led-') || action.startsWith('lic-') || action === 'todo-known' || action === 'test-seed') {
             const who = await (async () => {
                 const r = await tornFetch(`https://api.torn.com/user/?selections=profile&key=${encodeURIComponent(key)}`);
                 const p = await r.json();
@@ -978,6 +979,9 @@ module.exports = async function handler(req, res) {
             }
             if (action.startsWith('led-') || action.startsWith('lic-')) { // the trader ledger and VIP: a trader sees their own, the owner sees every trader's (lib/ledger.js)
                 try { return res.status(200).json(await ledHandle(action, req.body, { redis, who, key, owner })); } catch (e) { return res.status(/only|owner/i.test(e.message) ? 403 : 400).json({ error: e.message }); }
+            }
+            if (action.startsWith('mkey-')) { // a member's own optional stored key (lib/keyvault.js): status, store (opt-in) and delete
+                try { return res.status(200).json(await mkeyHandle(action, req.body, { redis, who, key })); } catch (e) { return res.status(400).json({ error: e.message }); }
             }
             if (action.startsWith('bud-')) return res.status(200).json(await budHandle(action, req.body, { redis, who })); // a buddy sees only their own buddy banking plan
             if (action.startsWith('join-')) { // Labs services: anybody with a Torn key may look at the programs and ask to join one; the list and the decisions are for the owner (lib/joinlabs.js)

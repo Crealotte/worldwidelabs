@@ -488,6 +488,7 @@
         if (page === 'join') loadJoin();
         if (page === 'join-requests') loadJoinRequests();
         if (page === 'owner-dash') loadOwnerDash();
+        if ((page === 'join' || page === 'buddy' || page === 'profile') && typeof mkeyMount === 'function') mkeyMount(page); // the optional "Store my Torn API key" panel (keystore.js)
         if (typeof wwlTrackPage === 'function') wwlTrackPage(page); // counted for the owner dashboard (ownerdash.js), sent in batches
         if (page === 'buddybank') loadBuddyBank();
         if (page === 'funding') loadFunding();
