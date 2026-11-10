@@ -487,6 +487,8 @@
         if (page === 'buddy') loadBuddy();
         if (page === 'join') loadJoin();
         if (page === 'join-requests') loadJoinRequests();
+        if (page === 'owner-dash') loadOwnerDash();
+        if (typeof wwlTrackPage === 'function') wwlTrackPage(page); // counted for the owner dashboard (ownerdash.js), sent in batches
         if (page === 'buddybank') loadBuddyBank();
         if (page === 'funding') loadFunding();
         if (page === 'ledger') { loadLedger(); if (typeof loadTrading === 'function') loadTrading(); }

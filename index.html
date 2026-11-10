@@ -644,6 +644,7 @@
                 <svg class="nav-chevron" width="10" height="10" viewBox="0 0 10 10"><path d="M2 3.5L5 6.5L8 3.5" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
             </div>
             <div class="nav-group-items" data-group-items="crealotte">
+                <a class="nav-item" data-page="owner-dash" href="/owner-dash">📈 Owner dashboard</a>
                 <a class="nav-item" data-page="company" href="/company">📊 Company view</a>
                 <a class="nav-item" data-page="access" href="/access">🔒 Allowed factions</a>
                 <a class="nav-item" data-page="companies" href="/companies">🏢 Companies</a>
@@ -2168,6 +2169,14 @@
             <div id="join-body"></div>
         </section>
 
+        <section class="page" id="page-owner-dash">
+            <div class="lab-label">WWL·48 / owner</div>
+            <h2>📈 Owner dashboard</h2>
+            <p class="pagedesc">Who uses WWL: which role of which faction opens which pages, how many people a day, and what each server action costs in hosting CPU.</p>
+            <div class="status" id="od-status"></div>
+            <div id="od-body"></div>
+        </section>
+
         <section class="page" id="page-join-requests">
             <div class="lab-label">WWL·47 / owner</div>
             <h2>📨 Join requests</h2>
@@ -3120,6 +3129,7 @@
 <script src="trading.js"></script>
 <script src="recruitment.js"></script>
 <script src="join.js"></script>
+<script src="ownerdash.js"></script>
 <script src="app-init.js"></script>
 </body>
 </html>

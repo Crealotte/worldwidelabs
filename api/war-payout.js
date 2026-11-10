@@ -90,6 +90,39 @@ async function actStats(days) {
     return Object.entries(out).map(([action, o]) => ({ action, calls: o.n * 10, avgMs: o.n ? Math.round(o.ms / o.n) : 0, avgCpuMs: o.n ? Math.round(o.cpu / o.n / 1000) : 0, cpuSec: Math.round(o.cpu * 10 / 1e6) })).sort((a, b) => b.cpuSec - a.cpuSec).slice(0, 40);
 }
 
+// Owner dashboard: which role (of which faction) opens which page. The pages send their visits in batches (ownerdash.js), one call writes them all:
+// wwl:pagestats:<day> hash "<factionId>|<role>|<page>" -> views, wwl:pagepeople:<day> set "<factionId>|<role>|<playerId>" (who was there), wwl:trackfac: factionId -> name. Kept 40 days.
+const TRACK_LUA = "redis.call('SADD',KEYS[2],ARGV[1]) redis.call('HSET',KEYS[3],ARGV[3],ARGV[4]) redis.call('EXPIRE',KEYS[1],ARGV[2]) redis.call('EXPIRE',KEYS[2],ARGV[2]) for i=5,#ARGV,2 do redis.call('HINCRBY',KEYS[1],ARGV[i],ARGV[i+1]) end return 1";
+async function trackWrite({ factionId, factionName, playerId, role, pages }) {
+    const day = new Date().toISOString().slice(0, 10), args = [];
+    for (const [p, n] of Object.entries(pages || {}).slice(0, 40)) {
+        const pg = String(p).replace(/[^a-z0-9_-]/gi, '').slice(0, 40), c = Math.max(1, Math.min(500, Number(n) | 0));
+        if (pg) args.push(`${factionId}|${role}|${pg}`, String(c));
+    }
+    if (!args.length) return 0;
+    await redis(['EVAL', TRACK_LUA, '3', `wwl:pagestats:${day}`, `wwl:pagepeople:${day}`, 'wwl:trackfac', `${factionId}|${role}|${playerId}`, String(40 * 86400), String(factionId), String(factionName || '').slice(0, 60), ...args]);
+    return args.length / 2;
+}
+async function dashStats(days) {
+    const rows = {}, people = {}, daily = [], names = {};
+    const nm = await redis(['HGETALL', 'wwl:trackfac']);
+    if (Array.isArray(nm)) for (let j = 0; j + 1 < nm.length; j += 2) names[nm[j]] = nm[j + 1];
+    for (let i = 0; i < days; i++) {
+        const day = new Date(Date.now() - i * 86400000).toISOString().slice(0, 10);
+        const [h, s] = [await redis(['HGETALL', `wwl:pagestats:${day}`]), await redis(['SMEMBERS', `wwl:pagepeople:${day}`])];
+        if (Array.isArray(h)) for (let j = 0; j + 1 < h.length; j += 2) rows[h[j]] = (rows[h[j]] || 0) + (Number(h[j + 1]) || 0);
+        const perFaction = {};
+        if (Array.isArray(s)) s.forEach(m => { const [f, r, id] = String(m).split('|'); (people[`${f}|${r}`] = people[`${f}|${r}`] || new Set()).add(id); (perFaction[f] = perFaction[f] || new Set()).add(id); });
+        Object.entries(perFaction).forEach(([f, set]) => daily.push({ day, f, n: set.size }));
+    }
+    return {
+        names,
+        rows: Object.entries(rows).map(([k, n]) => { const [f, r, p] = k.split('|'); return { f, r, p, n }; }),
+        people: Object.entries(people).map(([k, set]) => { const [f, r] = k.split('|'); return { f, r, n: set.size }; }),
+        daily: daily.reverse(),
+    };
+}
+
 const restockedKey = (factionId) => `wwl:restocked-wars:${factionId}`;
 const SVC_BUG_ACTIONS = new Set(['bugs-list', 'bugs-metoo', 'bugs-shot', 'sug-list', 'sug-add', 'sug-vote', 'bug-report']); // what a service user (investor, tenant, director) can do on Bugs & suggestions
 const OWNER_VIEW_ACTIONS = new Set(['mo-get', 'mo-energy', 'mo-consumption', 'mo-war', 'mo-reg-get', 'verify-get', 'userscript-get', 'owner-roster']); // what the owner can read of another faction
@@ -1490,6 +1523,16 @@ Cancel: ${cancelUrl}`, [], embeds, undefined, true);
         if (action === 'target-status' || action.startsWith('mytargets-')) return res.status(200).json(await targetsHandle(action, req.body, { redis, key, playerId }));
         // How many calls WWL made to Torn with the caller's own key (see lib/tornFetch.js) — shown in Member Overview → Checks for the developer.
         if (action === 'torn-usage') return res.status(200).json(await usageFor(key));
+        if (action === 'track') { // a batch of page visits from the person's browser (ownerdash.js), written for the owner dashboard; a test person is not counted
+            const role = (await labsIsOwner(redis, playerId)) ? 'Owner' : String(profile.position || 'Member').replace(/[|]/g, '').slice(0, 24) || 'Member';
+            await trackWrite({ factionId: profile.factionId, factionName: profile.factionName, playerId, role, pages: req.body.pages });
+            return res.status(200).json({ ok: true });
+        }
+        if (action === 'dash-stats') { // owner dashboard numbers: page views by faction, role and page, people per day, and the sampled CPU per action
+            if (!(await labsIsOwner(redis, playerId))) return res.status(403).json({ error: 'Owner only' });
+            const days = Math.min(30, Math.max(1, Number(req.body.days) || 7));
+            return res.status(200).json({ days, ...(await dashStats(days)), cpu: await actStats(Math.min(12, days)) });
+        }
         if (action === 'act-stats') { // which actions use the most hosting CPU (sampled), owner only
             if (!(await labsIsOwner(redis, playerId))) return res.status(403).json({ error: 'Owner only' });
             return res.status(200).json({ days: Math.min(12, Math.max(1, Number(req.body.days) || 3)), rows: await actStats(Math.min(12, Math.max(1, Number(req.body.days) || 3))) });
