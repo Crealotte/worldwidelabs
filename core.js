@@ -360,6 +360,13 @@
         $('login-btn').textContent = 'Checking key…';
         try {
             await login(key);
+            // the optional "store my key" tick on the login page (lib/keyvault.js): asked for only now that the key is known to work; the tick is not remembered
+            if ($('login-store-ok') && $('login-store-ok').checked) {
+                $('login-store-ok').checked = false;
+                fetch('/api/war-payout', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key, action: 'mkey-save', accept: true }) })
+                    .then(r => r.json()).then(r => { if (typeof toast === 'function') toast(r.error ? `Your key was not stored: ${r.error}` : 'Your key is stored (delete it any time under Profile)'); })
+                    .catch(() => { if (typeof toast === 'function') toast('Your key was not stored: no connection.'); });
+            }
         } catch (e) {
             err.textContent = e.message;
             err.style.display = 'block';

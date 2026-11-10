@@ -477,6 +477,16 @@
             <input type="password" id="login-key" placeholder="Paste your API key" autocomplete="off">
         </div>
         <label for="login-remember" style="display:flex;gap:8px;align-items:center;margin:0 0 12px;font-size:13px;color:var(--muted);cursor:pointer;"><input type="checkbox" id="login-remember" checked style="width:auto;margin:0;"> Keep me logged in on this device</label>
+        <div id="login-store" style="margin:0 0 12px;font-size:13px;color:var(--muted);">
+            <label for="login-store-ok" style="display:flex;gap:8px;align-items:flex-start;cursor:pointer;"><input type="checkbox" id="login-store-ok" style="width:auto;margin:3px 0 0;"> <span>🔑 <b>Optional:</b> also store my key, encrypted, so WWL can update my own data while I am away</span></label>
+            <details style="margin:4px 0 0 24px;"><summary style="cursor:pointer;">What does this mean?</summary>
+                <ul style="margin:6px 0 0 16px;padding:0;line-height:1.5;">
+                    <li><b>What is stored:</b> only your API key, encrypted. WWL shows you a short preview and never the whole key: not to you, not to leaders, not to the owner.</li>
+                    <li><b>When it is used:</b> the server decrypts it only at the moment it asks Torn for your data. It is never sent back to your browser and never written to logs.</li>
+                    <li><b>What it can do:</b> read the data your key's access level allows (for example your City Bank, plan and energy). An API key cannot do anything in your Torn account.</li>
+                    <li><b>Access level:</b> please create the key with the lowest access level that WWL asks for.</li>
+                    <li><b>Control:</b> delete it at any time under <i>Profile → Delete my key</i> and it is removed at once. You can also revoke the key in your Torn settings.</li></ul></details>
+        </div>
         <button id="login-btn" style="width:100%;">Enter the lab</button>
         <div id="login-error"></div>
         <p class="login-note">
