@@ -70,6 +70,26 @@ async function redis(command) {
     return data.result;
 }
 
+// Sampled cost per action for the Vercel CPU limit: wwl:actstats:<day> is a hash of "<action>|n" (timed requests), "|ms" (wall time) and "|cpu" (CPU microseconds), kept 12 days.
+const actStatsKey = day => `wwl:actstats:${day}`;
+async function actRecord(action, ms, cpu) {
+    const k = actStatsKey(new Date().toISOString().slice(0, 10));
+    await redis(['HINCRBY', k, `${action}|n`, '1']);
+    await redis(['HINCRBY', k, `${action}|ms`, String(Math.round(ms))]);
+    await redis(['HINCRBY', k, `${action}|cpu`, String(Math.round((cpu.user + cpu.system))) ]);
+    await redis(['EXPIRE', k, String(12 * 86400), 'NX']);
+}
+async function actStats(days) {
+    const out = {};
+    for (let i = 0; i < days; i++) {
+        const day = new Date(Date.now() - i * 86400000).toISOString().slice(0, 10), h = await redis(['HGETALL', actStatsKey(day)]);
+        if (!Array.isArray(h)) continue;
+        for (let j = 0; j + 1 < h.length; j += 2) { const [a, f] = String(h[j]).split('|'), o = (out[a] = out[a] || { n: 0, ms: 0, cpu: 0 }); o[f] += Number(h[j + 1]) || 0; }
+    }
+    // the sample is 1 request in 10: "calls" is the estimate for all requests, "cpuSec" the estimated CPU seconds over the days asked for
+    return Object.entries(out).map(([action, o]) => ({ action, calls: o.n * 10, avgMs: o.n ? Math.round(o.ms / o.n) : 0, avgCpuMs: o.n ? Math.round(o.cpu / o.n / 1000) : 0, cpuSec: Math.round(o.cpu * 10 / 1e6) })).sort((a, b) => b.cpuSec - a.cpuSec).slice(0, 40);
+}
+
 const restockedKey = (factionId) => `wwl:restocked-wars:${factionId}`;
 const SVC_BUG_ACTIONS = new Set(['bugs-list', 'bugs-metoo', 'bugs-shot', 'sug-list', 'sug-add', 'sug-vote', 'bug-report']); // what a service user (investor, tenant, director) can do on Bugs & suggestions
 const OWNER_VIEW_ACTIONS = new Set(['mo-get', 'mo-energy', 'mo-consumption', 'mo-war', 'mo-reg-get', 'verify-get', 'userscript-get', 'owner-roster']); // what the owner can read of another faction
@@ -818,6 +838,8 @@ module.exports = async function handler(req, res) {
         }
         if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
         let { key, action } = req.body || {};
+        // Which actions cost the hosting's CPU time: 1 request in 10 is timed (wall time and CPU time) and added to a per-day count (read with 'act-stats', owner only)
+        if (typeof action === 'string' && action.length < 40 && Math.random() < 0.1) { const t0 = Date.now(), c0 = process.cpuUsage(), a0 = action; res.on('finish', () => { actRecord(a0, Date.now() - t0, process.cpuUsage(c0)).catch(() => {}); }); }
 
         // Receipts are readable by anyone with the link — genuinely public, no key or login
         // required, since the whole point is being shareable outside the faction too.
@@ -1468,6 +1490,10 @@ Cancel: ${cancelUrl}`, [], embeds, undefined, true);
         if (action === 'target-status' || action.startsWith('mytargets-')) return res.status(200).json(await targetsHandle(action, req.body, { redis, key, playerId }));
         // How many calls WWL made to Torn with the caller's own key (see lib/tornFetch.js) — shown in Member Overview → Checks for the developer.
         if (action === 'torn-usage') return res.status(200).json(await usageFor(key));
+        if (action === 'act-stats') { // which actions use the most hosting CPU (sampled), owner only
+            if (!(await labsIsOwner(redis, playerId))) return res.status(403).json({ error: 'Owner only' });
+            return res.status(200).json({ days: Math.min(12, Math.max(1, Number(req.body.days) || 3)), rows: await actStats(Math.min(12, Math.max(1, Number(req.body.days) || 3))) });
+        }
 
         // Manual verification for tools WWL can't check by itself (Torn Intel, CAT — no API to ask them whether a
         // member has joined/verified there, unlike Discord). A leader ticks it by hand on the Who's on board list;
