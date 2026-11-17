@@ -207,7 +207,7 @@ $('wp-calculate').addEventListener('click', async () => {
             st.className = 'status ok';
             st.textContent = `${result.members.length} hitter(s) found`
                 + (meta?.rateLimited ? ' (Torn rate-limited the war attack fetch partway through — counts may be incomplete, try again in a minute).' : '.')
-                + (meta?.assists ? ` ${meta.assists} assist(s) are counted apart (tick the box to pay for them).` : '') + (meta?.notCounted ? ` ${meta.notCounted} failed attack(s) (lost, stalemate, escaped) were not counted.` : '');
+                + (meta?.assists ? ` ${meta.assists} assist(s) are counted apart (tick the box to pay for them).` : '') + (meta?.notCounted ? ` ${meta.notCounted} failed attack(s) (lost, stalemate, escaped) were not counted.` : '') + (meta?.noScore ? ` ${meta.noScore} hit(s) that gave no war score (0 respect) were not counted either, like Torn's own war report.` : '');
         }
         $('wp-results-panel').style.display = 'block';
         $('wp-config-panel').style.display = 'block';

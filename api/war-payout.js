@@ -1564,6 +1564,7 @@ Cancel: ${cancelUrl}`, [], embeds, undefined, true);
                     const kind = String(a.result ?? '');
                     if (!a.is_ranked_war) { if (!/lost|stalemate|escape|timeout|interrupt|assist|none/i.test(kind)) o.notFlaggedWins++; continue; }
                     o.byResult[kind] = (o.byResult[kind] || 0) + 1;
+                    if (!/assist/i.test(kind) && Number(a.respect_gain) > 0) o.scored = (o.scored || 0) + 1; // the rule WWL counts war hits by now: it scored (respect above 0)
                     if (/lost|stalemate|escape|timeout|interrupt|assist|none/i.test(kind)) continue;
                     o.wins++;
                     if (!(Number(a.respect_gain) > 0)) o.rgZero++;
@@ -2866,7 +2867,7 @@ Cancel: ${cancelUrl}`, [], embeds, undefined, true);
             // Lets the UI flag a suspicious result, or tell the leader the fallback kicked in
             // (meaning: only chain-covered hits are counted this time, same limits as before).
             const warHitsMeta = {
-                scanned: warHitsResult.scanned, matched: warHitsResult.ownAttacks, notCounted: warHitsResult.failed || 0, assists: warHitsResult.assists || 0,
+                scanned: warHitsResult.scanned, matched: warHitsResult.ownAttacks, notCounted: warHitsResult.failed || 0, noScore: warHitsResult.noScore || 0, assists: warHitsResult.assists || 0,
                 rateLimited: warHitsResult.rateLimited, pagesFetched: warHitsResult.pagesFetched,
                 usedFallback, brokenWithNoChains: warHitsLookedBroken && !chains.length,
             };
