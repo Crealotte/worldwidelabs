@@ -126,7 +126,7 @@ async function dashStats(days) {
 
 const restockedKey = (factionId) => `wwl:restocked-wars:${factionId}`;
 const SVC_BUG_ACTIONS = new Set(['bugs-list', 'bugs-metoo', 'bugs-shot', 'sug-list', 'sug-add', 'sug-vote', 'bug-report']); // what a service user (investor, tenant, director) can do on Bugs & suggestions
-const OWNER_VIEW_ACTIONS = new Set(['mo-get', 'mo-energy', 'mo-consumption', 'mo-war', 'mo-reg-get', 'verify-get', 'userscript-get', 'owner-roster']); // what the owner can read of another faction
+const OWNER_VIEW_ACTIONS = new Set(['mo-get', 'mo-energy', 'mo-consumption', 'mo-war', 'mo-reg-get', 'verify-get', 'userscript-get', 'owner-roster', 'war-diag']); // what the owner can read of another faction
 const radarMem = new Map(); // factionId -> { at, data }: the faction radar answer of the last minute
 const manualVerifyKey = (factionId) => `wwl:manual-verify:${factionId}`; // hash: playerId -> { intel, cat, updatedAt } — Torn Intel / CAT have no API to check, so a leader ticks it by hand
 const userscriptSeenKey = (factionId) => `wwl:userscript-seen:${factionId}`; // hash: playerId -> last-seen epoch ms, stamped by the userscript itself (see 'script-checkin') for Who's on board
@@ -1536,6 +1536,45 @@ Cancel: ${cancelUrl}`, [], embeds, undefined, true);
             if (!(await labsIsOwner(redis, playerId))) return res.status(403).json({ error: 'Owner only' });
             const days = Math.min(30, Math.max(1, Number(req.body.days) || 7));
             return res.status(200).json({ days, ...(await dashStats(days)), cpu: await actStats(Math.min(12, days)) });
+        }
+        if (action === 'war-diag') { // owner only, read-only: why WWL's war hits differ from Torn's ranked war report. Per member: the report's attack count next to what the attack log holds (results, respect 0, war modifier)
+            if (!(await labsIsOwner(redis, playerId))) return res.status(403).json({ error: 'Owner only' });
+            const warId = String(req.body.warId || '').replace(/\D/g, '');
+            if (!warId) return res.status(400).json({ error: 'Give the ranked war id (warId).' });
+            const rr = await (await tornFetch(`https://api.torn.com/v2/faction/${warId}/rankedwarreport?key=${encodeURIComponent(key)}`, { headers: { accept: 'application/json' } })).json();
+            const rw = rr.rankedwarreport || rr;
+            if (rr.error || !rw.factions) return res.status(400).json({ error: `War report: ${(rr.error && rr.error.error) || 'not found'}` });
+            const us = rw.factions.find(f => String(f.id) === String(factionId));
+            if (!us) return res.status(400).json({ error: 'That faction was not in this war.' });
+            const per = {};
+            (us.members || []).forEach(m => { per[String(m.id)] = { name: m.name, report: m.attacks, reportScore: m.score, wins: 0, byResult: {}, rgZero: 0, warMod: {}, notFlaggedWins: 0, outside: 0, repeats: 0, _seen: {} }; });
+            let from = rw.start, pages = 0, scanned = 0;
+            while (from <= rw.end && pages < 30) {
+                if (pages > 0) await sleep(1100);
+                const d = await (await tornFetch(`https://api.torn.com/v2/faction/attacks?from=${from}&to=${rw.end}&sort=ASC&limit=100&key=${encodeURIComponent(key)}`, { headers: { accept: 'application/json' } })).json();
+                if (d.error) return res.status(400).json({ error: `Attacks: ${d.error.error}` });
+                const list = Array.isArray(d.attacks) ? d.attacks : Object.values(d.attacks || {});
+                if (!list.length) break;
+                pages++; let newest = from;
+                for (const a of list) {
+                    const ts = a.ended ?? a.started ?? from; if (ts > newest) newest = ts; scanned++;
+                    if (String(a.attacker?.faction?.id ?? '') !== String(factionId)) continue;
+                    const id = String(a.attacker?.id ?? ''); if (!id) continue;
+                    const o = per[id] || (per[id] = { name: a.attacker?.name, report: null, reportScore: null, wins: 0, byResult: {}, rgZero: 0, warMod: {}, notFlaggedWins: 0, outside: 0, repeats: 0, _seen: {} });
+                    const kind = String(a.result ?? '');
+                    if (!a.is_ranked_war) { if (!/lost|stalemate|escape|timeout|interrupt|assist|none/i.test(kind)) o.notFlaggedWins++; continue; }
+                    o.byResult[kind] = (o.byResult[kind] || 0) + 1;
+                    if (/lost|stalemate|escape|timeout|interrupt|assist|none/i.test(kind)) continue;
+                    o.wins++;
+                    if (!(Number(a.respect_gain) > 0)) o.rgZero++;
+                    const wm = String(a.modifiers?.war ?? 'none'); o.warMod[wm] = (o.warMod[wm] || 0) + 1;
+                    if (ts < rw.start || ts > rw.end) o.outside++;
+                    const dk = String(a.defender?.id ?? ''); if (o._seen[dk]) o.repeats++; o._seen[dk] = 1;
+                }
+                if (newest <= from) break; from = newest + 1;
+            }
+            const rows = Object.entries(per).map(([id, o]) => { const { _seen, ...rest } = o; return { id, ...rest, diff: rest.report === null ? null : rest.wins - rest.report }; }).sort((a, b) => Math.abs(b.diff || 0) - Math.abs(a.diff || 0));
+            return res.status(200).json({ war: { id: warId, start: rw.start, end: rw.end }, scanned, pages, rows });
         }
         if (action === 'act-stats') { // which actions use the most hosting CPU (sampled), owner only
             if (!(await labsIsOwner(redis, playerId))) return res.status(403).json({ error: 'Owner only' });
